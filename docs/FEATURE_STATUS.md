@@ -24,6 +24,9 @@ Three states, never mixed:
 | UX | Overview with a "Get started" checklist, progress per language, attention items, usage warnings from 80 %; 12 navigation entries | Yes | Server + UI | No | — |
 | Editor | Right-to-left input with the language set; question before leaving with unpublished changes | Yes | UI (desktop and phone) | No (admin navigation and reloads inside the admin frame) | C1 |
 | AI | Translation style: form of address per language, store description as context; wrong-script warning | Yes | Server + UI (Settings); DeepL request shape stubbed | No (no key) | C7 |
+| Editor | Rendered HTML preview (server sanitiser + sandboxed frames), original and translation side by side, in the editor and on Review | Yes | Security (35 XSS vectors) + UI (desktop and phone) | No | C1 |
+| Foundation | Time limit on every Shopify Admin API call (pages: clear 504 page; worker: retry); race-free first open; unexpected server errors logged | Yes | Unit, integration (race reproduced), UI (hanging Shopify) | No | A1 |
+| UX | Keyboard operation, slow-network behaviour, screenshot comparisons of 7 pages | Yes | UI | No (real admin and devices) | — |
 | Security | HTTP security headers, dependency audit in CI | Yes | Unit + production build | No (headers inside the admin frame) | A1 |
 | Editor | Outdated detection and "still correct" confirmation | Yes | Server | No | C4 |
 | SEO | SEO title/description checks, search result preview, "SEO fields only" (editor and bulk) | Yes | Server | No | D1–D3 |
@@ -50,7 +53,6 @@ Three states, never mixed:
 | Feature | Notes |
 |---|---|
 | Images and metafields in bulk jobs and the coverage report | Editor only for now |
-| Rendered (sanitised) preview of HTML texts | Raw HTML in the editor and Review |
 | App interface in other languages | English only |
 | Review text search through an index | Linear scan under RLS (PERFORMANCE.md §1) |
 | Rich text, JSON, list, link and file metafields | Need structure-aware editing |

@@ -25,6 +25,8 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `ui-nocatalog` | German enabled, no products, no jobs, no drafts |
 | `ui-failing` | Admin API answers 503 for resource queries (Shopify outage) |
 | `ui-owner` | Owner complimentary access (granted by the operator tool in the setup) |
+| `ui-visual` | Fixed content for screenshot comparisons; no test changes it |
+| `ui-slow` | Shopify answers translation queries only after 20 s (longer than the app's time limit, 3 s in these tests) |
 | `ui-fresh` | Not seeded: installs during the test |
 
 ## Suites
@@ -34,11 +36,32 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `install.spec.ts` | Install through token exchange, shop GID stored, tokens encrypted; forged session tokens and cross-store requests get no data |
 | `pages.spec.ts` | Overview, Languages, Products, Editor, Review, Jobs, Plan: content, axe (WCAG 2.1 A/AA, no serious or critical findings), accessible tables, no horizontal scrolling on desktop and phone (`@responsive`) |
 | `states.spec.ts` | Empty states, Shopify outage (clear message, Try again, no internal details), not found, loading state of AI translation, admin loading bar on navigation |
-| `flows.spec.ts` | Translate with AI → edit → publish → read back; alt text; Plan page for subscribed, unsubscribed and complimentary stores |
+| `flows.spec.ts` | Translate with AI → edit → publish → read back; history; alt text; Plan page for subscribed, unsubscribed and complimentary stores |
+| `preview.spec.ts` | Rendered HTML in sandboxed frames (editor and Review), live preview with an attack payload that must not run, original and translation side by side (desktop) or stacked (phone), HTML code toggle |
+| `content.spec.ts` | All content overview, menu flow, theme texts with search and pages, permission prompt, invalid references |
+| `settings.spec.ts` | Translation style saved per language; usage figures from the plan |
+| `tools.spec.ts` | Glossary (language by name, market number validation), translation memory, coverage report, Markets |
+| `rtl.spec.ts` / `unsaved.spec.ts` | Right-to-left input; question before losing unpublished changes |
+| `keyboard.spec.ts` | Translate, edit and publish with the keyboard only; visible focus; focus on "Stay" when leaving; Review checkboxes with Space |
+| `network.spec.ts` | Hanging Shopify ends in a clear page within the time limit; loading bar on slow navigation; AI translation can't be sent twice |
+| `timings.spec.ts` | Server response times of the main pages (PERFORMANCE.md) |
+| `visual.spec.ts` | Screenshot comparison of 7 pages on desktop and phone (see below) |
 
 ## Accessibility rule note
 
 Polaris web components set ARIA roles through `ElementInternals`, which axe-core can't read, so axe reports `aria-required-children` on every `<s-table>`. That rule is replaced by `expectAccessibleTables`, which reads Chromium's accessibility tree and requires grid → row → columnheader/gridcell on desktop, or headed items with labelled values where Polaris renders tables as lists (phones). All other WCAG 2.1 A/AA rules apply.
+
+## Visual comparisons
+
+`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings and Plan pages, desktop and phone, with reviewed images in `tests/ui/visual.spec.ts-snapshots/` (up to 1 % of pixels may differ). It uses the `ui-visual` store and replaces dates with a fixed one. Polaris text has no box of its own, so masking can't cover it.
+
+When a change is intended, or when Shopify updates Polaris (it loads from Shopify's CDN, so its look can change without a change here):
+
+```bash
+pnpm test:visual:update    # rewrites the images
+```
+
+Then look at every changed image before committing it. A changed image is a review item, not a formality.
 
 ## Running
 

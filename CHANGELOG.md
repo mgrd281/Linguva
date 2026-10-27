@@ -58,6 +58,10 @@
 - Editor: right-to-left languages are typed right to left with the language set on the fields; a question before leaving the page with unpublished changes.
 - Performance tests for a large shop (50,000 drafts, 5,000 jobs, a 5,000-product bulk job) and page response times; docs/PERFORMANCE.md.
 - docs/QUALITY_AUDIT.md: criteria, evidence and scores per area, with an improvement plan.
+- Rendered HTML previews (server-side allowlist sanitiser and sandboxed frames) and original next to translation in the editor and on Review.
+- Design pass across all pages (screenshot review on desktop and phone): field actions under the translation, consistent side-by-side layouts, filters in rows, languages chosen by name in the glossary and memory, readable metafield names, a Linguva start page.
+- Time limit on every Shopify Admin API call (`SHOPIFY_TIMEOUT_MS`, default 15 s) with a clear page in the app and retries in the worker; logging of unexpected server errors.
+- Keyboard, slow-network, timeout and screenshot-comparison browser tests (`pnpm test:visual:update` to accept intended changes).
 - Phase 0 documentation set.
 
 ### Security
@@ -71,6 +75,10 @@
 - CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
 
 ### Fixed
+- First open after install could fail (race between the install and parallel page loads writing settings, languages or the subscription cache).
+- Settings showed the server's default AI allowance instead of the plan's.
+- Polaris layouts with several breakpoints were ignored (wrong responsive syntax).
+- Glossary and translation memory showed no languages to a merchant who opened them before other pages.
 - First open after install could fail when the app's loaders created the shop in parallel; reinstalls were recorded once per parallel request.
 - `.env` wasn't loaded under `shopify app dev`; `.dockerignore` didn't exclude `.env` files.
 - Shopify API errors showed a bare status code; language codes instead of names on Jobs and Review; SEO preview notes ran together.

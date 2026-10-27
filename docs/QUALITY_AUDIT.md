@@ -17,32 +17,32 @@ Rules:
 - **No area gets 10/10 without verification on a development store.** Every Shopify-facing criterion counts as ◐ at most until it is Verified on Shopify (FEATURE_STATUS.md).
 - The criteria were written before scoring. Evidence names the test or document.
 - There is **no measured comparison with competitor apps yet**. Their features were not tested, so "best in class" here means these criteria, not a benchmark.
-- Test basis for this audit: 452 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance) and 47 Playwright browser tests on the production build. All pass locally and in GitHub CI.
+- Test basis (update after phase A): 513 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance) and 81 Playwright browser tests on the production build, including 14 screenshot comparisons. All pass locally; CI status per commit in the PR.
 
 ## 2. Summary
 
-| Area | Score before this round | Score now | Biggest gap |
-|---|---|---|---|
-| Design and modernity | 5.5 | **6.5** | No rendered HTML preview; not checked inside the real admin |
-| Usability for beginners | 5.5 | **8** | App interface only in English; no test with real merchants |
-| Desktop and mobile | 5 | **7.5** | No check on real devices or in the Shopify mobile app |
-| AI translation | 5 | **7** | No real provider tested (no DeepL key), no measured quality |
-| Content coverage | 3 | **5** | Images and metafields only one by one; no automatic translation of new products |
-| SEO | 7 | **7** | Storefront output (hreflang, translated URLs) not verified |
-| Performance | 4.5 | **6.5** | Real Shopify latency not measured; Review text search not indexed |
-| Security | 6.5 | **8** | No external review; branch protection off; no production operations |
-| Billing | 5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
-| Shopify integration | 6.5 | **6.5** | Not verified on a development store |
-| Error handling and loading states | 6 | **7** | No error tracking service |
-| **Average** | **5.4** | **6.8** | |
+| Area | Before (9a89523) | Round 1 | **Phase A** | Biggest gap now |
+|---|---|---|---|---|
+| Design and modernity | 5.5 | 6.5 | **7.5** | Not checked inside the real admin; no native save bar; no App Store assets |
+| Usability for beginners | 5.5 | 8 | **8** | App interface only in English; no test with real merchants |
+| Desktop and mobile | 5 | 7.5 | **8.5** | No check on real devices or in the Shopify mobile app |
+| AI translation | 5 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
+| Content coverage | 3 | 5 | **5** | Images and metafields only one by one; no automatic translation of new products |
+| SEO | 7 | 7 | **7** | Storefront output (hreflang, translated URLs) not verified |
+| Performance | 4.5 | 6.5 | **6.5** | Real Shopify latency not measured; Review text search not indexed |
+| Security | 6.5 | 8 | **8** | No external review; branch protection off; no production operations |
+| Billing | 5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
+| Shopify integration | 6.5 | 6.5 | **6.5** | Not verified on a development store |
+| Error handling and loading states | 6 | 7 | **8.5** | Errors are logged, but no error tracking service |
+| **Average** | **5.4** | **6.8** | **7.1** | |
 
-"Before" is the state before this round (commit 9a89523), scored against the same criteria. The changes are in §4. Billing rose through the usage warnings; SEO and Shopify integration didn't change in this round.
+Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a. A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
-**Honest overall verdict: 6.8/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
+**Honest overall verdict: 7.1/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
 
 ## 3. Areas in detail
 
-### 3.1 Design and modernity: 6.5/10
+### 3.1 Design and modernity: 7.5/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -50,14 +50,14 @@ Rules:
 | 2 | Consistent page structure: title, primary action, sections | ✅ | Every app page; `tests/ui/pages.spec.ts` |
 | 3 | Progress and status are visible: progress bars, badges | ✅ | `ProgressBar` (role=progressbar), Overview; `tests/integration/overview.test.ts` |
 | 4 | Source and translation side by side in the editor | ✅ | `ResourceTranslationEditor`; `tests/ui/flows.spec.ts` |
-| 5 | HTML texts shown rendered (sanitised), not as raw HTML | ❌ | Raw HTML in the editor and Review (BETA_READINESS §4) |
+| 5 | HTML texts shown rendered (sanitised), not as raw HTML | ✅ | Phase A: sanitiser + sandboxed frames; `tests/security/sanitize-html.test.ts`, `tests/ui/preview.spec.ts` |
 | 6 | Search result preview like on Google | ✅ | `SeoPreview`; `tests/ui/pages.spec.ts` (Editor) |
 | 7 | Empty states with guidance and a next step | ✅ | `tests/ui/states.spec.ts` |
 | 8 | Native admin elements: title bar, save bar, toasts, modals (App Bridge) | ◐ | Admin loading bar and navigation only |
 | 9 | Checked visually inside the real Shopify admin | ❌ | Needs a development store |
 | 10 | App Store assets: icon, screenshots, listing text | ❌ | Not created |
 
-**Plan:** (5) sanitised HTML preview with a server-side allowlist sanitiser, plus security tests. (8) After the dev store check: the App Bridge save bar in the editor and toasts for publishing. (9) Screenshot review in the admin, light and dark. (10) Listing assets once the design is confirmed in the admin.
+**Plan:** (8) After the dev store check: the App Bridge save bar in the editor and toasts for publishing. (9) Screenshot review in the admin, light and dark. (10) Listing assets once the design is confirmed in the admin.
 
 ### 3.2 Usability for beginners: 8/10
 
@@ -76,7 +76,7 @@ Rules:
 
 **Plan:** (9) Move interface texts into message catalogues and use the admin's language from the session token; German first. This is a large change, so it goes in its own step. (10) 3–5 beta merchants with a short task list. That needs the owner.
 
-### 3.3 Desktop and mobile: 7.5/10
+### 3.3 Desktop and mobile: 8.5/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -87,11 +87,11 @@ Rules:
 | 5 | Right-to-left languages are typed right to left | ✅ | New: `tests/ui/rtl.spec.ts` |
 | 6 | Checked on real devices and in the Shopify mobile app | ❌ | Needs a development store |
 | 7 | Accessibility: axe WCAG 2.1 A/AA without serious findings | ✅ | `expectAccessible` on every tested page |
-| 8 | Keyboard-only operation tested | ❌ | Not tested yet |
+| 8 | Keyboard-only operation tested | ✅ | Phase A: `tests/ui/keyboard.spec.ts` (main flow, focus, Review) |
 | 9 | Language set on input fields for screen readers | ✅ | New: `lang` on the editor fields (`tests/ui/rtl.spec.ts`) |
 | 10 | Small download for mobile networks | ✅ | 122 KB gzipped JavaScript, split by page (PERFORMANCE.md §4) |
 
-**Plan:** (8) Keyboard test for the main flow (tab order, focus after the "Leave?" question). (4) Measure touch targets in the mobile project. (6) Dev store check in the Shopify mobile app.
+**Plan:** (4) Measure touch targets in the mobile project. (6) Dev store check in the Shopify mobile app.
 
 ### 3.4 AI translation: 7/10
 
@@ -212,7 +212,7 @@ Rules:
 
 **Plan:** owner: `pnpm config:link`, a development store, then `pnpm test:live` and DEV_STORE_TEST_PLAN A–N. That one step changes the most scores in this audit.
 
-### 3.11 Error handling and loading states: 7/10
+### 3.11 Error handling and loading states: 8.5/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -223,11 +223,11 @@ Rules:
 | 5 | Empty states | ✅ | UI tests |
 | 6 | Failed job items visible and retryable | ✅ | Bulk tests |
 | 7 | Limits and AI errors explained in plain words | ✅ | Error messages in the editor; usage tests |
-| 8 | Errors reported to an error tracking service | ❌ | Not set up |
-| 9 | Lost connection and timeouts handled in the browser | ❌ | Not tested |
+| 8 | Errors reported to an error tracking service | ◐ | Phase A: unexpected server errors are logged (`handleError`); no tracking service yet |
+| 9 | Lost connection and timeouts handled | ✅ | Phase A: time limit on every Shopify call, `tests/ui/network.spec.ts` (hanging Shopify, slow navigation, no double submit) |
 | 10 | Real error cases checked on a development store | ❌ | Needs a dev store |
 
-**Plan:** (9) a test with the simulated Shopify answering slowly or not at all. (8) error tracking with the hosting, needing the owner's approval (data protection: no merchant content in reports).
+**Plan:** (8) error tracking with the hosting, needing the owner's approval (data protection: no merchant content in reports).
 
 ## 4. Changes in this round (all Tested Locally)
 
@@ -240,16 +240,29 @@ Rules:
 | Large-shop performance tests and page timings | Performance | PERFORMANCE.md |
 | Right-to-left input, language on fields; warning before losing unpublished changes | Usability, mobile | e90d967 |
 
+## 4a. Phase A: premium UI/UX (all Tested Locally)
+
+| Change | Evidence |
+|---|---|
+| Rendered, safe HTML previews (server allowlist sanitiser + sandboxed frames), original and translation side by side | 545bd9a; 35 XSS vectors, browser tests, mutation-checked |
+| Design pass from screenshot review: field actions under the translation, consistent layouts, filters side by side, languages by name, readable metafield names | b1d2311 |
+| **Bug:** Settings showed the server default allowance instead of the plan's | b1d2311, UI test |
+| **Bug:** Polaris layouts with several breakpoints were silently ignored | b1d2311, unit test of the syntax |
+| **Bug:** Glossary and memory showed no languages to a merchant who opened them first | b1d2311, UI test |
+| **Bug:** first open after install failed with a 500 in about 1 of 3 runs (race between install and page loads) | e178fe8; integration test reproduces it on the old code |
+| **Bug:** Shopify calls without a time limit (a hanging Shopify blocked pages and worker slots) | e178fe8; unit and UI tests, mutation-checked |
+| **Bug:** the public start page was still the template placeholder | e178fe8, UI test |
+| Unexpected server errors logged (no request data) | e178fe8 |
+| Keyboard, slow network, timeout and 14 screenshot tests | e178fe8 |
+
 ## 5. Next steps, in order of effect
 
 **Without external access (I can continue):**
 
 1. Images and metafields in bulk jobs and the coverage report (coverage, SEO)
-2. Sanitised HTML preview in the editor and Review (design), with security tests
-3. Keyboard and slow-network tests (mobile, error handling)
-4. Load test with many shops in parallel (performance)
-5. Automatic translation of changed products as drafts (coverage), as a design first
-6. App interface in German (usability), as a design first because of its size
+2. Load test with many shops in parallel (performance)
+3. Automatic translation of changed products as drafts (coverage)
+4. App interface in German (usability)
 
 **Need the owner (accounts, decisions, money):**
 

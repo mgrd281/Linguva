@@ -2,7 +2,7 @@
 
 Review date: 2026-10-27, branch `claude/gallant-pasteur-8opy75` (draft PR, not merged, not deployed). Feature states are in FEATURE_STATUS.md, test cases in DEV_STORE_TEST_PLAN.md.
 
-**Verdict: not ready for a beta yet.** The code is feature-complete for a first beta and tested locally: 452 unit, integration, security and performance tests and 47 browser tests, all in CI. What is missing is verification on Shopify and the operator's accounts and decisions, listed below. **No feature is Verified on Shopify.**
+**Verdict: not ready for a beta yet.** The code is feature-complete for a first beta and tested locally: 513 unit, integration, security and performance tests and 81 browser tests, all in CI. What is missing is verification on Shopify and the operator's accounts and decisions, listed below. **No feature is Verified on Shopify.**
 
 ## 1. Blockers
 
@@ -49,13 +49,12 @@ None open. The defects found in this round are fixed (§3). The remaining engine
 | No `<title>`, language codes instead of names, Review actions only at the end of long lists, SEO preview notes run together | Accessibility and usability | Fixed (8733b64) |
 | An empty Redis snapshot was committed by accident | None (no data) | Removed, `*.rdb` ignored (79ae979) |
 
-Quality scores per area with evidence: QUALITY_AUDIT.md (6.8/10 on average, Tested Locally only).
+Quality scores per area with evidence: QUALITY_AUDIT.md (7.1/10 on average after phase A, Tested Locally only).
 
 ## 4. Known non-blocking items
 
 | Item | Notes |
 |---|---|
-| Source text of HTML fields is shown as raw HTML in the editor and Review | Readable for now; a rendered preview needs a sanitiser |
 | Images and metafields aren't in bulk jobs or the coverage report | Editor only |
 | Rich text, JSON and list metafields aren't editable | Need structure-aware editing |
 | Market-specific translations | Markets page is read-only |

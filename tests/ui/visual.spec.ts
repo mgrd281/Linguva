@@ -22,7 +22,16 @@ const PAGES: Array<[string, string]> = [
 const DATE = /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b|\b[A-Z][a-z]{2} \d{1,2}, \d{4}/;
 
 async function settle(page: Page) {
-  await page.evaluate(() => document.fonts.ready);
+  // Polaris uses the Inter web font. `document.fonts.ready` doesn't wait for
+  // faces that haven't been requested yet: load every weight the admin uses,
+  // and fail clearly if the font isn't there (a fallback font changes every
+  // pixel of text, which is what CI showed before this).
+  const loaded = await page.evaluate(async () => {
+    await Promise.all(["400", "450", "500", "550", "600", "650", "700"].map((w) => document.fonts.load(`${w} 14px Inter`)));
+    await document.fonts.ready;
+    return document.fonts.check("600 14px Inter") && document.fonts.check("400 14px Inter");
+  });
+  expect(loaded, "Inter web font loaded").toBe(true);
   // Dates change every day: replace them with a fixed one (Polaris text has
   // no box of its own, so masking can't cover it).
   await page.evaluate((source) => {

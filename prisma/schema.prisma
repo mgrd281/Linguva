@@ -71,6 +71,7 @@ model Shop {
   coverageStats   CoverageStat[]
   coverageGaps    CoverageGap[]
   coverageTitles  CoverageTitleHash[]
+  subscription    ShopSubscription?
 }
 
 enum InstallationEventType {
@@ -570,4 +571,26 @@ model CoverageTitleHash {
 
   @@id([reportId, locale, hash])
   @@index([shopId])
+}
+
+enum SubscriptionState {
+  ACTIVE
+  NONE
+}
+
+/// Cache of the shop's Shopify App Pricing subscription (Partner API). Shopify
+/// is authoritative; this only avoids a Partner API call per request.
+model ShopSubscription {
+  shopId             String            @id @db.Uuid
+  state              SubscriptionState
+  planHandle         String?
+  pendingPlanHandle  String?
+  billingPeriod      String?
+  trialEndsAt        DateTime?         @db.Timestamptz(3)
+  cancelAtEndOfCycle Boolean           @default(false)
+  currentPeriodEnd   DateTime?         @db.Timestamptz(3)
+  checkedAt          DateTime          @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }

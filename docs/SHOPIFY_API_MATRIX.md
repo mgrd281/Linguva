@@ -92,6 +92,8 @@ Legend:
 | Plan types | Free, monthly, yearly, monthly+yearly, usage-based. Free trials. Proration handled by Shopify | VERIFIED |
 | Public plans | Up to 8 | VERIFIED |
 | Private plans | Available only to selected stores (`*.myshopify.com`). Since 2026-09-21: unlimited private plans and unlimited target stores | VERIFIED |
+| Billing webhooks | Shopify App Pricing sends **no** subscription webhooks (`app_subscriptions/update` is Billing API only). After plan approval Shopify redirects to the welcome link with `plan_handle`; other changes are read from the Partner API | VERIFIED (shopify.dev/docs/apps/launch/billing/shopify-app-pricing) |
+| Plan testing | Dev stores of the same Partner org can select every plan at $0; a $0 private test plan exists | VERIFIED |
 | Subscription state | Query `activeSubscription` in the **Partner API** (status: active, pending, cancelled, frozen). Persists beyond uninstall. Historical Events API available | VERIFIED |
 | Usage charges | **App Events API**. Billing meters are defined in the Partner Dashboard and matched to an `event_handle`. Requests carry an `idempotency_key`. The blog example uses an `/app/unstable/events` path | VERIFIED (concept). **ASSUMPTION**: endpoint stability and auth method; re-check before Phase 5 |
 | Dev stores | On dev stores in the same Partner org, any plan can be selected at no charge ($0 contract) | VERIFIED |

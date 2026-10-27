@@ -22,6 +22,7 @@ import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { finishItem, isBulkResourceType, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
+import type { Entitlements } from "../../lib/plans";
 
 export type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -39,6 +40,12 @@ export interface JobDependencies {
   /** Optional daily caps (shop and platform), see aiUsageLimits. */
   dailyLimit?: number;
   platformDailyLimit?: number;
+  /**
+   * The shop's billing status (Shopify App Pricing). When billing is on, the
+   * plan's monthly allowance replaces `monthlyLimit`, and bulk jobs and
+   * automatic publishing need a plan that includes them.
+   */
+  billingFor?(shopId: string): Promise<{ configured: boolean; entitlements: Entitlements }>;
   keyPrefix: string;
   shopifyLimiter?: Limiter;
   /** Resources per discovery page (default DISCOVERY_PAGE_SIZE). */
@@ -221,6 +228,10 @@ export async function processItem(
 
   const settings = await getShopSettings(payload.shopId, deps.prisma);
   if (!hasCurrentAiConsent(settings)) throw new JobStopError("CONSENT_REQUIRED");
+  // Plans can change while a job runs: check before every item.
+  const billing = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
+  if (billing && !billing.entitlements.bulk) throw new JobStopError("PLAN_REQUIRED");
+  const monthlyLimit = billing?.configured ? billing.entitlements.monthlyChars : deps.monthlyLimit;
 
   const admin = await deps.adminFor(shop.shopDomain);
   const resource = await getTranslatableResource(admin, item.resourceGid, job.targetLocale);
@@ -269,7 +280,7 @@ export async function processItem(
           shopId: payload.shopId,
           key: `job-item:${item.id}:${attempt}`,
           chars: prepared.providerChars,
-          limit: deps.monthlyLimit,
+          limit: monthlyLimit,
           dailyLimit: deps.dailyLimit,
           platformDailyLimit: deps.platformDailyLimit,
           provider: deps.provider.id,
@@ -309,7 +320,10 @@ export async function processItem(
   // shop's settings: switching back to review stops running jobs publishing.
   // Even then only results without quality warnings go live; flagged ones
   // wait in Review.
-  const autoPublish = job.publishMode === "AUTO_PUBLISH" && settings.bulkPublishMode === "AUTO_PUBLISH";
+  const autoPublish =
+    job.publishMode === "AUTO_PUBLISH" &&
+    settings.bulkPublishMode === "AUTO_PUBLISH" &&
+    (billing ? billing.entitlements.autoPublish : true);
   const toPublish = autoPublish ? translated.filter((o) => o.issues.length === 0) : [];
   const toDraft = autoPublish ? translated.filter((o) => o.issues.length > 0) : translated;
 

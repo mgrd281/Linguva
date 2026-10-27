@@ -3,6 +3,11 @@
 /* eslint-disable */
 import type * as AdminTypes from './admin.types.js';
 
+export type LinguvaShopIdQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
+
+
+export type LinguvaShopIdQuery = { shop: Pick<AdminTypes.Shop, 'id'> };
+
 export type LinguvaShopLocalesQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
 
 
@@ -124,6 +129,7 @@ export type LinguvaLiveMarketsQuery = { markets: { nodes: Array<(
     )> } };
 
 interface GeneratedQueryTypes {
+  "#graphql\n  query LinguvaShopId {\n    shop {\n      id\n    }\n  }\n": {return: LinguvaShopIdQuery, variables: LinguvaShopIdQueryVariables},
   "#graphql\n  query LinguvaShopLocales {\n    shopLocales {\n      locale\n      name\n      primary\n      published\n    }\n  }\n": {return: LinguvaShopLocalesQuery, variables: LinguvaShopLocalesQueryVariables},
   "#graphql\n  query LinguvaTranslatableResources(\n    $resourceType: TranslatableResourceType!\n    $first: Int!\n    $after: String\n    $locale: String!\n  ) {\n    translatableResources(resourceType: $resourceType, first: $first, after: $after) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourcesQuery, variables: LinguvaTranslatableResourcesQueryVariables},
   "#graphql\n  query LinguvaTranslatableResource($resourceId: ID!, $locale: String!) {\n    translatableResource(resourceId: $resourceId) {\n      resourceId\n      translatableContent {\n        key\n        value\n        digest\n        locale\n        type\n      }\n      translations(locale: $locale) {\n        key\n        value\n        outdated\n        updatedAt\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourceQuery, variables: LinguvaTranslatableResourceQueryVariables},

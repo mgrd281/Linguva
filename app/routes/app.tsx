@@ -4,9 +4,21 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { requireShop } from "../.server/shopify/require-shop";
+import { shopBilling } from "../.server/billing/billing";
+import { getConfig } from "../.server/lib/config";
+import { planSelectionUrl } from "../lib/plans";
+
+// Pages a shop without a subscription may still open.
+const PLAN_FREE_PATHS = ["/app/plan", "/app/welcome"];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await requireShop(request);
+  const { admin, shop, redirect } = await requireShop(request);
+  const billing = await shopBilling(admin, shop);
+  const path = new URL(request.url).pathname;
+  if (billing.mustChoosePlan && !PLAN_FREE_PATHS.includes(path)) {
+    const appHandle = getConfig().SHOPIFY_APP_HANDLE!;
+    return redirect(planSelectionUrl(shop.shopDomain, appHandle), { target: "_top" });
+  }
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
@@ -30,6 +42,7 @@ export default function App() {
         <s-link href="/app/review">Review</s-link>
         <s-link href="/app/glossary">Glossary</s-link>
         <s-link href="/app/memory">Translation memory</s-link>
+        <s-link href="/app/plan">Plan</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>
       <Outlet />

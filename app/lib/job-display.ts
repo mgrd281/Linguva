@@ -11,6 +11,7 @@ export const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = 
 
 export const JOB_ERROR_MESSAGES: Record<string, string> = {
   QUOTA_EXCEEDED: "This month's AI translation allowance is used up.",
+  PLAN_REQUIRED: "Your plan doesn't include bulk translation any more. See Plan to change it, then resume.",
   DAILY_LIMIT: "Today's AI translation allowance is used up. Resume the job tomorrow (after midnight UTC).",
   PLATFORM_LIMIT: "AI translation is paused for today because of high demand. Resume the job tomorrow.",
   CONSENT_REQUIRED: "AI processing was not allowed. Allow it under Settings, then resume.",

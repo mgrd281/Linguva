@@ -45,7 +45,16 @@ export function ResourceList() {
           <s-paragraph>
             {bulkError === "JOBS_UNAVAILABLE"
               ? "Background processing isn't configured for this app yet."
-              : "Please reload the page and try again."}
+              : bulkError === "PLAN_BULK" || bulkError === "PLAN_LANGUAGE"
+                ? "Your plan doesn't include this. See Plan to change it."
+                : "Please reload the page and try again."}
+          </s-paragraph>
+        </s-banner>
+      ) : null}
+      {!data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale ? (
+        <s-banner tone="info" heading={!data.bulk.planAllowsBulk ? "Bulk translation is part of paid plans" : `Your plan doesn't include ${data.target.name}`}>
+          <s-paragraph>
+            You can still translate {data.kind.plural} one by one in the editor. <s-link href="/app/plan">See plans</s-link>
           </s-paragraph>
         </s-banner>
       ) : null}
@@ -78,7 +87,7 @@ export function ResourceList() {
               <s-button
                 type="submit"
                 variant="primary"
-                disabled={!data.bulk.available || !data.bulk.consent}
+                disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
                 {...(bulk.state !== "idle" ? { loading: true } : {})}
               >
                 Translate all into {data.target.name}

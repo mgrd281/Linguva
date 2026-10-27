@@ -1,14 +1,30 @@
 # Billing Design
 
-Status: **Phase 0 — proposal.** Plan prices and limits are **assumptions** for discussion. They require owner approval and cost validation (see COST_MODEL.md).
+Status: **Implemented and tested locally against a simulated Partner API; not verified on Shopify.** Plan prices and limits are still **proposals** for the owner to decide (see COST_MODEL.md). Plans themselves are created in the Partner Dashboard, not in code.
 
-## 1. Authority
+## 1. How Shopify App Pricing works (VERIFIED, shopify.dev, 2026-10)
 
-- **Shopify App Pricing is authoritative** for subscription state (VERIFIED as the default for new public apps).
-- Our `Subscription` table is a cache, refreshed (a) after the plan-selection welcome redirect, (b) on `app_subscriptions/update` webhook (ASSUMPTION — confirm the topic still fires under App Pricing), and (c) by a reconciliation job every 6h through Partner API `activeSubscription`.
-- If the cache and Shopify disagree, Shopify wins, and the mismatch raises an alert.
+- Plans, prices and trials live in the Partner Dashboard. Shopify hosts the plan selection page (`https://admin.shopify.com/store/<store>/charges/<app-handle>/pricing_plans`) and creates the subscription when the merchant approves. The app **never creates charges** (no `appSubscriptionCreate`, no `billing.request`).
+- Subscription state comes from the **Partner API** `activeSubscription(appId, shopId)`, which returns `null` without a subscription. It needs a Partner API client with "Manage apps" permission, and the app must be public.
+- There are **no billing webhooks**. After a plan is approved, Shopify redirects to the plan's welcome link with `plan_handle`. Changes outside a redirect (cancellation, freeze) must be read from the Partner API.
+- **Testing is free:** on development stores of the same Partner organization every plan can be selected at $0, and a $0 private test plan exists.
 
-## 2. Plans (proposed)
+## 1a. Implementation
+
+| Part | File | State |
+|---|---|---|
+| Plan handle → entitlements (characters, languages, bulk, glossary, automatic publishing); unknown handles get the free plan | `app/lib/plans.ts` | Implemented, Tested locally |
+| Partner API client: errors, timeouts and throttling raise "couldn't check", never "not subscribed"; token only in the header | `app/.server/billing/partner-api.ts` | Implemented, Tested locally |
+| Cache `ShopSubscription` (RLS) with a 6-hour TTL; forced refresh after the welcome link; the last known state is kept when the Partner API fails | `app/.server/billing/subscription.ts` | Implemented, Tested locally |
+| Redirect to the plan selection page only with a **verified** "no subscription" and `BILLING_REQUIRED=true` | `app/routes/app.tsx` | Implemented |
+| Welcome link `/app/welcome` (re-checks; `plan_handle` isn't trusted), Plan page | `app/routes/app.welcome.tsx`, `app.plan.tsx` | Implemented |
+| Enforcement: monthly characters from the plan (editor and worker), languages, bulk jobs (route and worker, checked per item), automatic publishing, glossary editing | editor, list, coverage, settings, glossary, processors | Implemented, Tested locally |
+| Billing off (no Partner API settings): unmetered, environment limits | — | Implemented, Tested locally |
+| Owner complimentary access (§4), usage-based overage via App Events | — | Planned |
+
+Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE`, `BILLING_REQUIRED`. The plan handles in the Partner Dashboard must be `free`, `starter`, `pro`, `business`, or `app/lib/plans.ts` must be changed to match them.
+
+## 2. Plans (proposed; the values in `app/lib/plans.ts` follow this table)
 
 | Plan | Price (USD/mo) | Monthly characters | Languages | Features |
 |---|---|---|---|---|

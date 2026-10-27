@@ -28,5 +28,7 @@ export async function requireShop(request: Request) {
     (sessionToken?.sub ? String(sessionToken.sub) : null) ??
     session.onlineAccessInfo?.associated_user?.id?.toString() ??
     null;
-  return { admin, session, shop, actorId };
+  // Redirects outside the app frame (for example to the plan selection page).
+  const redirect = context.redirect;
+  return { admin, session, shop, actorId, redirect };
 }

@@ -6,6 +6,8 @@ import { unauthenticated } from "../app/shopify.server";
 import { aiUsageLimits, getConfig } from "../app/.server/lib/config";
 import { prisma } from "../app/.server/lib/db";
 import { ensureDatabasePosture } from "../app/.server/lib/db-guard";
+import { billingDeps } from "../app/.server/billing/billing";
+import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
 import { createQueues, createWorkers, requeueStalledItems } from "../app/.server/jobs/queues";
@@ -32,6 +34,11 @@ async function main() {
     monthlyLimit: limits.limit,
     dailyLimit: limits.dailyLimit,
     platformDailyLimit: limits.platformDailyLimit,
+    // The plan (cached Partner API state); billing off: unmetered.
+    billingFor: async (shopId) => {
+      const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+      return getBillingStatus(billingDeps(config), shop);
+    },
     keyPrefix: prefix,
     shopifyLimiter: new TokenBucket(connection, {
       capacity: config.SHOPIFY_JOB_BUCKET_SIZE,

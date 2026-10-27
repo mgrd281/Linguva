@@ -35,6 +35,15 @@ const schema = z.object({
   AI_SHOP_REQUESTS_PER_MINUTE: z.coerce.number().int().positive().default(30),
   // Translation memory suggestions per minute and staff member.
   MEMORY_SUGGESTIONS_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  // Shopify App Pricing. Without these, billing is off and every shop gets
+  // all features (development, before plans exist in the Partner Dashboard).
+  SHOPIFY_PARTNER_ORG_ID: z.string().regex(/^\d+$/).optional(),
+  SHOPIFY_PARTNER_API_TOKEN: z.string().min(10).optional(),
+  SHOPIFY_APP_GID: z.string().regex(/^gid:\/\/shopify\/App\/\d+$/).optional(),
+  SHOPIFY_APP_HANDLE: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
+  SHOPIFY_PARTNER_API_VERSION: z.string().regex(/^\d{4}-\d{2}$|^unstable$/).default("2026-10"),
+  // "true": shops without a subscription are sent to the plan selection page.
+  BILLING_REQUIRED: z.enum(["true", "false"]).default("false"),
   // "mock" returns marked pseudo-translations for development and tests.
   TRANSLATION_PROVIDER: z.enum(["deepl", "mock"]).default("deepl"),
   // Background jobs are disabled when no Redis is configured.
@@ -46,7 +55,15 @@ const schema = z.object({
 }).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock"), {
   message: "the mock translation provider can't be used in production",
   path: ["TRANSLATION_PROVIDER"],
-}).refine((c) => !(c.NODE_ENV === "production" && !c.REDIS_URL), {
+}).refine(
+  (c) =>
+    c.BILLING_REQUIRED === "false" ||
+    Boolean(c.SHOPIFY_PARTNER_ORG_ID && c.SHOPIFY_PARTNER_API_TOKEN && c.SHOPIFY_APP_GID && c.SHOPIFY_APP_HANDLE),
+  {
+    message: "needs SHOPIFY_PARTNER_ORG_ID, SHOPIFY_PARTNER_API_TOKEN, SHOPIFY_APP_GID and SHOPIFY_APP_HANDLE",
+    path: ["BILLING_REQUIRED"],
+  },
+).refine((c) => !(c.NODE_ENV === "production" && !c.REDIS_URL), {
   // Rate limits must be shared by all app instances.
   message: "is required in production (shared rate limits)",
   path: ["REDIS_URL"],
@@ -80,4 +97,15 @@ export function getConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
   if (env === process.env) cached = result.data;
   return result.data;
+}
+
+/** Partner API settings, or null when billing isn't configured. */
+export function partnerApiSettings(config: AppConfig) {
+  if (!config.SHOPIFY_PARTNER_ORG_ID || !config.SHOPIFY_PARTNER_API_TOKEN || !config.SHOPIFY_APP_GID) return null;
+  return {
+    orgId: config.SHOPIFY_PARTNER_ORG_ID,
+    token: config.SHOPIFY_PARTNER_API_TOKEN,
+    appGid: config.SHOPIFY_APP_GID,
+    version: config.SHOPIFY_PARTNER_API_VERSION,
+  };
 }

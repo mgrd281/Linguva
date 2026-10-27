@@ -16,6 +16,8 @@ import { getQueues } from "../.server/queue/client";
 import { getTranslationProvider } from "../.server/providers";
 import { getShopSettings, hasCurrentAiConsent } from "../.server/settings/shop-settings";
 import { editorPath, numericId, RESOURCE_KINDS } from "../lib/resource-kinds";
+import { shopBilling } from "../.server/billing/billing";
+import { allowedTargetLocales } from "../.server/billing/subscription";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -79,6 +81,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const locale = String(form.get("locale") ?? "");
       const resourceType = String(form.get("resourceType") ?? "");
       if (!locales.some((l) => l.locale === locale) || !isBulkResourceType(resourceType)) return { error: "INVALID_REQUEST" };
+      const billing = await shopBilling(admin, shop);
+      if (!billing.entitlements.bulk) return { error: "PLAN_BULK" };
+      if (!allowedTargetLocales(billing.entitlements, locales.map((l) => l.locale)).includes(locale)) {
+        return { error: "PLAN_LANGUAGE" };
+      }
       const { job } = await startBulkJob({
         shopId: shop.id,
         resourceType,
@@ -103,6 +110,8 @@ const ERRORS: Record<string, string> = {
   NO_LANGUAGES: "Add a language under Settings → Languages first.",
   SHOP_AUTH: "Shopify rejected the app's access. Open the app again to re-authorise it.",
   STALLED: "The last report stopped making progress. Run it again.",
+  PLAN_BULK: "Bulk translation is part of paid plans. See Plan to change your plan.",
+  PLAN_LANGUAGE: "Your plan doesn't include this language. See Plan to change your plan.",
   SCAN_FAILED: "Shopify didn't answer reliably. Run the report again later.",
 };
 

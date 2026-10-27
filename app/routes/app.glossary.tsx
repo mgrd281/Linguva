@@ -7,6 +7,7 @@ import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { ZodError } from "zod";
 import { requireShop } from "../.server/shopify/require-shop";
+import { shopBilling } from "../.server/billing/billing";
 import {
   deleteTerm,
   GlossaryLimitError,
@@ -46,7 +47,10 @@ type Result =
   | { kind: "error"; message: string };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Result> => {
-  const { shop } = await requireShop(request);
+  const { admin, shop } = await requireShop(request);
+  if (!(await shopBilling(admin, shop)).entitlements.glossary) {
+    return { kind: "error", message: "The glossary is part of the Pro and Business plans. See Plan to change your plan." };
+  }
   // Refuse oversized uploads before the body is read into memory.
   const length = Number(request.headers.get("content-length") ?? "0");
   if (length > MAX_IMPORT_BYTES + 64 * 1024) return { kind: "error", message: "The upload is larger than 1 MB." };

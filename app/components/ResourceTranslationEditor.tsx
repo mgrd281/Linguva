@@ -21,6 +21,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   DAILY_LIMIT: "Today's AI translation allowance is used up. It resets at midnight UTC.",
   PLATFORM_LIMIT: "AI translation is paused for today because of high demand. Please try again tomorrow.",
   REQUEST_TOO_LARGE: "This is too much text for one request. Translate fewer fields at a time, or use bulk translation.",
+  PLAN_LANGUAGE: "Your plan doesn't include AI translation into this language. Change your plan under Plan, or translate by hand.",
   RATE_LIMITED_USER: "You're translating very quickly. Please wait a moment and try again.",
   RATE_LIMITED_SHOP: "Your team is sending many AI requests right now. Please wait a moment and try again.",
   PROVIDER_RETRYABLE: "The translation service is busy. Please try again in a moment.",

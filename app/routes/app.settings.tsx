@@ -16,6 +16,7 @@ import {
   setReuseMachineMemory,
 } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
+import { shopBilling } from "../.server/billing/billing";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -37,10 +38,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, actorId } = await requireShop(request);
+  const { admin, shop, actorId } = await requireShop(request);
   const form = await request.formData();
   const intent = form.get("intent");
   if (intent === "publish-mode") {
+    if (form.get("mode") === "AUTO_PUBLISH" && !(await shopBilling(admin, shop)).entitlements.autoPublish) {
+      return { ok: false, error: "PLAN_AUTO_PUBLISH" };
+    }
     try {
       await setBulkPublishMode({
         shopId: shop.id,
@@ -156,9 +160,17 @@ export default function Settings() {
             )}
           </modeFetcher.Form>
           {modeFetcher.data && "error" in modeFetcher.data ? (
-            <s-banner tone="critical" heading="Please confirm">
-              <s-paragraph>Tick the confirmation box to enable automatic publishing.</s-paragraph>
-            </s-banner>
+            modeFetcher.data.error === "PLAN_AUTO_PUBLISH" ? (
+              <s-banner tone="info" heading="Automatic publishing is part of the Pro and Business plans">
+                <s-paragraph>
+                  <s-link href="/app/plan">See plans</s-link>
+                </s-paragraph>
+              </s-banner>
+            ) : (
+              <s-banner tone="critical" heading="Please confirm">
+                <s-paragraph>Tick the confirmation box to enable automatic publishing.</s-paragraph>
+              </s-banner>
+            )
           ) : null}
         </s-stack>
       </s-section>

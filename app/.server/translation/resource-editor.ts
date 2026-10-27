@@ -15,6 +15,8 @@ import { fuzzyMatches } from "../memory/translation-memory";
 import { resolveGlossary } from "../glossary/glossary";
 import { getDailyUsage, getMonthlyUsage, QuotaExceededError } from "../usage/usage-ledger";
 import { getRequestLimiter, RequestRateLimitedError } from "../usage/request-limits";
+import { aiLimitsFor, shopBilling } from "../billing/billing";
+import { allowedTargetLocales, type BillingStatus } from "../billing/subscription";
 import { fieldLabel } from "../../lib/field-labels";
 import { RESOURCE_KINDS, resourceGid, type ResourceKind } from "../../lib/resource-kinds";
 import {
@@ -45,6 +47,10 @@ export interface EditorContext {
   resourceId: string;
   target: { locale: string; name: string; rtl: boolean };
   sourceName: string | null;
+  /** Billing status (absent: billing not checked, as in tests). */
+  billing?: BillingStatus;
+  /** The shop's additional languages in Shopify's order (for plan limits). */
+  targetLocales?: string[];
 }
 
 /** Authenticates the request and resolves the resource and target language. */
@@ -54,6 +60,7 @@ export async function resolveEditorContext(
   id: string | undefined,
 ): Promise<EditorContext> {
   const { admin, shop, actorId } = await requireShop(request);
+  const billing = await shopBilling(admin, shop);
   const resourceId = resourceGid(kind, id ?? "");
   if (!resourceId) throw new Response("Not found", { status: 404 });
 
@@ -71,7 +78,15 @@ export async function resolveEditorContext(
     resourceId,
     target: { locale: target.locale, name: target.name, rtl: target.rtl },
     sourceName: locales.primary?.name ?? null,
+    billing,
+    targetLocales: locales.locales.filter((l) => !l.primary).map((l) => l.locale),
   };
+}
+
+/** Plan limits for this editor request (config limits when billing isn't checked). */
+function editorLimits(ctx: EditorContext) {
+  const config = getConfig();
+  return ctx.billing ? aiLimitsFor(config, ctx.billing) : aiUsageLimits(config);
 }
 
 export async function loadEditorData(ctx: EditorContext) {
@@ -79,7 +94,6 @@ export async function loadEditorData(ctx: EditorContext) {
   const resource = await getTranslatableResource(admin, resourceId, target.locale);
   if (!resource) throw new Response("Not found", { status: 404 });
 
-  const config = getConfig();
   const settings = await getShopSettings(shopId);
   const translations = new Map(resource.translations.map((t) => [t.key, t]));
   const digests = new Map(resource.content.map((c) => [c.key, c.digest]));
@@ -126,9 +140,9 @@ export async function loadEditorData(ctx: EditorContext) {
       available: getTranslationProvider() !== null,
       consent: hasCurrentAiConsent(settings),
       used: await getMonthlyUsage(shopId),
-      limit: config.AI_MONTHLY_CHAR_LIMIT,
+      limit: editorLimits(ctx).limit,
       usedToday: await getDailyUsage(shopId),
-      dailyLimit: aiUsageLimits(config).dailyLimit,
+      dailyLimit: editorLimits(ctx).dailyLimit,
     },
   };
 }
@@ -195,13 +209,16 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
   }
 
   if (intent === "ai-translate") {
+    if (ctx.billing && ctx.targetLocales && !allowedTargetLocales(ctx.billing.entitlements, ctx.targetLocales).includes(target.locale)) {
+      return { kind: "error", code: "PLAN_LANGUAGE" } satisfies EditorActionResult;
+    }
     const provider = getTranslationProvider();
     if (!provider) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
     const keys = form.getAll("key").map(String).slice(0, 100);
     try {
       await getRequestLimiter().consume(shopId, actorId, "ai-translate");
       const config = getConfig();
-      const limits = aiUsageLimits(config);
+      const limits = editorLimits(ctx);
       const result = await aiTranslateResource({
         admin,
         shopId,

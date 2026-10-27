@@ -51,9 +51,18 @@
 - Playwright UI tests (`pnpm test:ui`, in CI) of the production build with real authentication and Polaris against a simulated Shopify: pages, empty, error and loading states, accessibility (axe WCAG 2.1 AA), phone layout.
 - Clear error pages with "Try again" on every page, the admin loading bar during navigation, page title, empty catalog state.
 - docs/BETA_READINESS.md.
+- Every Shopify content type that can be translated (30 of 30; was 8): store search listing, policies, menus and links, filters, product options, subscription plans, metaobjects, theme content, shipping and payment methods, notification templates, packing slip. "All content" overview with optional, read-only permissions asked for on the page; one list and editor for all; search and pages for theme content; bulk jobs for the safe types; Liquid kept unchanged.
+- Overview for beginners and daily use: a 5-step "Get started" checklist from the store's real state, translation progress per language, items needing attention, AI usage with warnings from 80 %. Navigation reduced from 15 to 12 entries.
+- Translation style: form of address per language (formal, informal, automatic; DeepL `formality` with a safe fallback) and a short store description sent as context with every AI translation.
+- Quality warning for results mostly outside the target language's script (e.g. Latin text for Arabic); such results always go to Review.
+- Editor: right-to-left languages are typed right to left with the language set on the fields; a question before leaving the page with unpublished changes.
+- Performance tests for a large shop (50,000 drafts, 5,000 jobs, a 5,000-product bulk job) and page response times; docs/PERFORMANCE.md.
+- docs/QUALITY_AUDIT.md: criteria, evidence and scores per area, with an improvement plan.
 - Phase 0 documentation set.
 
 ### Security
+- HTTP security headers on every page and data response (nosniff, Referrer-Policy, Permissions-Policy, `base-uri` and `object-src` in the CSP, HSTS in production over HTTPS). Pages requested without a shop parameter had no framing protection; they can now only be framed by the Shopify admin.
+- CI fails on high or critical advisories in production dependencies (`pnpm audit --prod`), with one reviewed, documented exception (SECURITY_MODEL.md §5f).
 - Review of `linguva_memory_fuzzy()` (docs/SECURITY_REVIEW_MEMORY_FUZZY.md): fixed `search_path` (`pg_catalog, pg_temp`) with schema-qualified names, input bound, migrations refuse to run as a superuser, and a database posture check that stops the app and worker in production if tenant isolation could be weakened.
 - The runtime role can no longer read the audit log (entries of all shops).
 - Adversarial PostgreSQL tests with three roles (runtime, owner, a user without grants).

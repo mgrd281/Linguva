@@ -20,6 +20,11 @@ Three states, never mixed:
 | Editor | Products, collections, pages, blog posts, blogs: list with coverage, editor, digest-checked publish with read-back | Yes | Server; UI for products (list, editor, publish, read-back) | No | C1–C6 |
 | Editor | AI drafts (never published without the merchant), consent, error messages | Yes | Server + UI (loading state, drafts not published) | No | C2, C7 |
 | UX | Clear error pages (Shopify outage, not found) with Try again; admin loading bar; empty states; accessibility (axe WCAG 2.1 AA) and phone layout of the main pages | Yes | UI | No | — |
+| Content | All 30 translatable content types (menus, links, theme content, policies, filters, metaobjects, product options, subscription plans, shipping and payment methods, notification templates, packing slip, store listing): overview with permissions, list, editor (search and pages for theme texts), bulk for safe types | Yes | Server + UI (overview, menu flow, theme paging, permission prompt) | No (live test probes all types) | C1–C6 |
+| UX | Overview with a "Get started" checklist, progress per language, attention items, usage warnings from 80 %; 12 navigation entries | Yes | Server + UI | No | — |
+| Editor | Right-to-left input with the language set; question before leaving with unpublished changes | Yes | UI (desktop and phone) | No (admin navigation and reloads inside the admin frame) | C1 |
+| AI | Translation style: form of address per language, store description as context; wrong-script warning | Yes | Server + UI (Settings); DeepL request shape stubbed | No (no key) | C7 |
+| Security | HTTP security headers, dependency audit in CI | Yes | Unit + production build | No (headers inside the admin frame) | A1 |
 | Editor | Outdated detection and "still correct" confirmation | Yes | Server | No | C4 |
 | SEO | SEO title/description checks, search result preview, "SEO fields only" (editor and bulk) | Yes | Server | No | D1–D3 |
 | SEO | URL handle suggestion, format check, confirmation before changing a published handle | Yes | Server | No | D4 |
@@ -45,8 +50,10 @@ Three states, never mixed:
 | Feature | Notes |
 |---|---|
 | Images and metafields in bulk jobs and the coverage report | Editor only for now |
+| Rendered (sanitised) preview of HTML texts | Raw HTML in the editor and Review |
+| App interface in other languages | English only |
+| Review text search through an index | Linear scan under RLS (PERFORMANCE.md §1) |
 | Rich text, JSON, list, link and file metafields | Need structure-aware editing |
-| Metaobjects, menus, theme content, shop policies, product options and variants | Not started |
 | Market-specific translations (`marketId`), changing markets or web presences | Markets page is read-only |
 | Usage-based overage (App Events) | Planned |
 | Automation on product updates (webhooks + reconciliation) | Planned |

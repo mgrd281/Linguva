@@ -2,7 +2,7 @@
 
 Review date: 2026-10-27, branch `claude/gallant-pasteur-8opy75` (draft PR, not merged, not deployed). Feature states are in FEATURE_STATUS.md, test cases in DEV_STORE_TEST_PLAN.md.
 
-**Verdict: not ready for a beta yet.** The code is feature-complete for a first beta and tested locally: 417 unit, integration, security and performance tests and 30 browser tests, all in CI. What is missing is verification on Shopify and the operator's accounts and decisions, listed below. **No feature is Verified on Shopify.**
+**Verdict: not ready for a beta yet.** The code is feature-complete for a first beta and tested locally: 452 unit, integration, security and performance tests and 47 browser tests, all in CI. What is missing is verification on Shopify and the operator's accounts and decisions, listed below. **No feature is Verified on Shopify.**
 
 ## 1. Blockers
 
@@ -48,6 +48,8 @@ None open. The defects found in this round are fixed (§3). The remaining engine
 | Shopify API errors showed a bare "503" page | Merchants were left without explanation or a way forward | Clear error pages with Try again on every page (8733b64) |
 | No `<title>`, language codes instead of names, Review actions only at the end of long lists, SEO preview notes run together | Accessibility and usability | Fixed (8733b64) |
 | An empty Redis snapshot was committed by accident | None (no data) | Removed, `*.rdb` ignored (79ae979) |
+
+Quality scores per area with evidence: QUALITY_AUDIT.md (6.8/10 on average, Tested Locally only).
 
 ## 4. Known non-blocking items
 

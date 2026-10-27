@@ -1,6 +1,6 @@
 # Roadmap, Risks and Decisions
 
-Status as of 2026-10-27: **M1, M2, M4 and most of M5 are implemented and tested (locally and in GitHub CI) against a simulated Admin API, real PostgreSQL and real Redis. Collections are supported alongside products. Nothing is verified on a real dev store yet: no dev store is connected (see DEV_STORE_SETUP.md for what is missing). Guarded live contract tests are ready to run.**
+Status as of 2026-10-27: **All features listed in FEATURE_STATUS.md are implemented and tested locally (and in GitHub CI) against simulated Shopify, Partner and DeepL APIs, real PostgreSQL and real Redis. Nothing is verified on a real Shopify store yet: no development store is connected. FEATURE_STATUS.md is the single source of truth for feature states; the table below is the history of the work.**
 
 ## 1. Progress checklist
 
@@ -46,6 +46,10 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M4 | Pages, blog posts and blogs (PAGE, ARTICLE, BLOG): list, editor, bulk, review, coverage | Implemented, Tested (fake store). GID format to be confirmed by the live read test |
 | M6 | Coverage report (SEO S5): background scan per language and type, counts by field group, SEO findings, duplicate SEO titles, worst items, "translate gaps" / "SEO only" actions | Implemented, Tested (unit, integration incl. BullMQ worker, security: isolation and no stored text; mutation-checked). Not verified on a dev store |
 | M6 | SEO S1: SEO title/description checks (width-based limits, untranslated), editor "Search engine listing" with live counters and result preview, "SEO fields only" AI and bulk jobs | Implemented, Tested (unit, integration, mutation-checked). Not verified on a dev store |
+| M7 | Shopify App Pricing: entitlements, Partner API subscription check with cache, plan selection redirect, welcome link, gating | Implemented, Tested (simulated Partner API). Not verified |
+| M6 | Image alt text and text metafields in the editor | Implemented, Tested (fake store, security tests). Not verified |
+| M6 | Read-only Markets page (optional scope `read_markets`) | Implemented, Tested (unit). Not verified |
+| M8 | Review guard for SECURITY DEFINER changes; CI checks for hidden files and orphan test files | Implemented, Tested |
 | — | CI on GitHub | Implemented, green on the first push |
 | — | SEO_ARCHITECTURE, DEV_STORE_SETUP | Written |
 | — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, DEPLOYMENT, TEST_PLAN | Planned |
@@ -108,7 +112,10 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | Protection of existing translations, EXTERNAL history, restore | Yes (fake) | Yes | No (live test prepared) |
 | Shopify error codes and `outdated` behaviour assumed by the fakes | Schema only | — | No (live test prepared) |
 | DeepL | Stubbed HTTP only | — | No key configured |
-| Markets, metafields, SEO checks, handles, image alt text | Not implemented | — | — |
+| SEO checks, handles, coverage report | Yes (fake) | Yes (coverage) | No |
+| Image alt text, text metafields | Yes (fake) | Yes | No (live test prepared) |
+| Markets page (read-only) | Yes (fake) | — | No (live read test prepared) |
+| Shopify App Pricing | Yes (simulated Partner API) | — | No |
 
 ## 6. Open issues
 
@@ -117,7 +124,8 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | O1 | No dev store connected; nothing verified live | High | Owner provides store and credentials (DEV_STORE_SETUP §1), then `pnpm test:live` |
 | O2 | ~~Fuzzy memory search slow at scale~~ | Fixed | Under RLS no index could serve the trigram operator (not LEAKPROOF), so every search scanned the shop's whole memory (446 ms at 100k). Now a hardened SECURITY DEFINER function uses a shop + trigram GIN index: median 37 ms, p95 49 ms, recall 10/10 at 100,000 entries (performance test in CI) |
 | O3 | ~~No per-user rate limit on interactive AI endpoints~~ | Fixed | Request limits per user and shop, daily and platform caps (SECURITY_MODEL §5a) |
-| O4 | Metafields, metaobjects, pages, articles and Markets are not part of jobs or editors | Medium | After live verification; Markets per SEO_ARCHITECTURE S4 |
+| O4 | Images and metafields are in the editor only (not in bulk jobs or the coverage report); metaobjects, menus, theme content and market-specific translations are missing | Medium | After live verification |
+| O10 | CODEOWNERS only blocks merges when branch protection requires code owner review on `main` | Medium | Owner: enable "Require review from Code Owners" in the branch protection rule |
 | O5 | ~~Deleting a translation from the UI isn't supported~~ | Fixed | Editor "Remove translation" (two-step), removed value kept as a revision, audit entry |
 | O6 | ~~No pagination on Review and Jobs~~ | Fixed | Keyset pagination, filters (status, language, type, field group, warnings) and search (wildcards escaped) |
 | O9 | Search on Review (ILIKE) can't use an index under RLS either | Low | Fine at 20,000 drafts (tested). Revisit with the same function approach if shops exceed ~100k pending drafts |
@@ -126,7 +134,7 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 
 ## 7. Next steps
 
-1. Owner: create the dev store and the "Linguva live tests" Dev Dashboard app, run `pnpm test:live` locally (read-only first, then with `LIVE_ALLOW_WRITES=yes`), and do the manual checklist. Report results, or share them so the results log is updated.
-2. Fix whatever the live run shows, before any new feature.
-3. Then SEO S1 (SEO fields and checks) and S5 (audit), per SEO_ARCHITECTURE.md.
-4. O3 rate limiting of interactive endpoints.
+1. Owner: connect a development store and run DEV_STORE_TEST_PLAN.md (live tests first). Log the results there.
+2. Fix whatever the live run shows before building anything new; update FEATURE_STATUS.md to "Verified on Shopify" only for cases that passed.
+3. Owner decisions for the beta: plan prices and limits (BILLING_DESIGN §2), AI provider key and budget, hosting.
+4. Then: images and metafields in bulk jobs and coverage, market-specific translations, automation on product updates.

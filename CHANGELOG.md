@@ -42,12 +42,19 @@
 - Online store pages, blog posts and blogs: lists with coverage, editor, bulk jobs, review filters and the coverage report, sharing the product code paths.
 - URL handles per language: suggestion from the translated title, format check, and a required confirmation before changing a published handle.
 - "Remove translation" in the editor; the removed value stays in the history and can be restored.
+- Shopify App Pricing: plan entitlements (characters, languages, bulk, glossary, automatic publishing), subscription check through the Partner API with a 6-hour cache that never locks out a paying shop when the API fails, redirect to Shopify's plan selection page only for a verified "no subscription", welcome link and Plan page, enforcement in the editor, bulk jobs, settings, glossary and worker. The app creates no charges.
+- Image alt text (product, collection and blog post images) and text metafields that Shopify marks translatable, in a new "Images and custom fields" section of the editor: AI drafts for missing or outdated values, publishing with digest checks and history.
+- Read-only Markets page with the optional `read_markets` scope (asked for only when the page is opened): languages, addresses and published state per market, and checks for unpublished or unreachable languages.
+- `docs/FEATURE_STATUS.md` (Implemented / Tested Locally / Verified on Shopify) and `docs/DEV_STORE_TEST_PLAN.md`.
 - Phase 0 documentation set.
 
 ### Security
 - Review of `linguva_memory_fuzzy()` (docs/SECURITY_REVIEW_MEMORY_FUZZY.md): fixed `search_path` (`pg_catalog, pg_temp`) with schema-qualified names, input bound, migrations refuse to run as a superuser, and a database posture check that stops the app and worker in production if tenant isolation could be weakened.
 - The runtime role can no longer read the audit log (entries of all shops).
 - Adversarial PostgreSQL tests with three roles (runtime, owner, a user without grants).
+- Any change to a SECURITY DEFINER function must be reviewed: the posture check compares each function's definition with a reviewed hash; CODEOWNERS and a PR checklist cover migrations and tenancy code.
+- Images and metafields can only be written for the resource being edited: the server lists them from Shopify and reads form values only under those names.
+- CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
 
 ### Fixed
 - A replaced or removed translation that was already outdated is kept in the history as written for an older source, so restoring it can't mark it current for the new text.

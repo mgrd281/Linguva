@@ -70,6 +70,9 @@ jobs:
           pnpm graphql-codegen
           git diff --exit-code -- app/types/admin.generated.d.ts
 
+      - name: No source files hidden by .gitignore
+        run: pnpm check:ignored
+
       - name: Typecheck
         run: pnpm typecheck
 

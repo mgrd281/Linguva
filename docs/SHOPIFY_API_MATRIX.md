@@ -1,6 +1,6 @@
 # Shopify API Compatibility Matrix
 
-Status: **Phase 0 — research findings.** Nothing in this file is implemented yet.
+Status: research findings, kept current. What is implemented is listed in FEATURE_STATUS.md; "VERIFIED" here means confirmed in Shopify's documentation or schema, **not** on a real store.
 
 Research date: 2026-10-27. Sources: shopify.dev (docs search + page fetches) and the npm registry.
 
@@ -71,7 +71,8 @@ Legend:
 | PAGE | title, body_html, handle, meta_title, meta_description | MVP |
 | BLOG | title, handle, meta_title, meta_description | MVP |
 | ARTICLE | title, body_html, summary_html, handle, meta_title, meta_description | MVP |
-| MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Phase 3 |
+| MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Implemented in the editor. Product images: `product.media` (MediaImage ids) → `translatableResourcesByIds`. Collection and blog post images: `nestedTranslatableResources(resourceType: COLLECTION_IMAGE / ARTICLE_IMAGE)` of the parent (schema-valid; how Shopify nests them is ASSUMPTION until the live test runs) |
+| Metafields (2026-10) | value | Implemented in the editor for text types. `Metafield.translatable: Boolean!` on the owner's `metafields` (`HasMetafields`), then `translatableResourcesByIds`. The `METAFIELD` resource type for `translatableResources` is deprecated (VERIFIED, schema) |
 | MENU / LINK | title | Phase 3 |
 | FILTER | label | Phase 3 |
 | METAOBJECT | depends on definition | Phase 3 |
@@ -123,9 +124,13 @@ Legend:
 | Security check | `shopify app security check` flags missing compliance webhooks (`MISSING_COMPLIANCE_WEBHOOKS`) | VERIFIED. Add it to CI |
 | Protected customer data | Only needed if we read customer/order data. **Linguva doesn't need customer data.** Don't request those scopes | VERIFIED (requirement). The design choice is ours |
 
-## 6. Proposed minimal access scopes (ASSUMPTION — confirm per feature)
+## 6. Access scopes
 
-`read_products, read_content, read_online_store_pages, read_themes, read_translations, write_translations, read_locales, write_locales, read_markets`
+In use (`shopify.app.toml`): `read_products, read_content, read_online_store_pages, read_translations, write_translations, read_locales, write_locales`.
+
+Optional (`optional_scopes`, requested at runtime with `scopes.request` and revocable by the merchant, VERIFIED shopify.dev "Manage access scopes"): `read_markets`, asked for only on the Markets page. Optional scopes must be deployed with `shopify app deploy` before they can be requested.
+
+Markets read model (VERIFIED, 2026-10 schema via codegen): `markets { id name handle status webPresences { subfolderSuffix domain { host } defaultLocale alternateLocales rootUrls { locale url } } }`; `ShopLocale.published` tells whether a language is visible.
 
 - No customer or order scopes.
 - `read_online_store_navigation`, `read_metaobjects`, and `read_legal_policies` are added only when those resource types ship.

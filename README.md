@@ -2,7 +2,7 @@
 
 AI translation and multilingual SEO app for Shopify merchants (public app, planned for the Shopify App Store).
 
-**Status:** foundation (authentication, multi-tenant database with row-level security, encrypted tokens, compliance webhooks) and interactive product and collection translation (AI drafts via DeepL, review, digest-checked publishing, usage metering), bulk translation (BullMQ worker with retries, rate limiting and tenant isolation), translation memory, glossary, bulk review with drafts, protection of manual translations and revision history with restore are implemented and tested. Nothing has been verified on a real development store yet (none is connected); guarded live contract tests are ready, see [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md). See [docs/ROADMAP.md](docs/ROADMAP.md) for exactly what is implemented, tested, and verified.
+**Status:** commercial feature set in development on a draft PR (not merged, not deployed). Implemented and tested locally against simulated Shopify, Partner and DeepL APIs: tenancy with row-level security, encrypted tokens, compliance webhooks, translation editor for products, collections, pages, blog posts and blogs (including image alt text and text metafields), SEO checks and handles, coverage report, bulk jobs with review, translation memory, glossary, history and restore, cost limits, Shopify App Pricing and a read-only Markets page. **Nothing is verified on a real Shopify store yet.** See [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) for the exact state of each feature and [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) for the verification plan.
 
 ## Stack
 
@@ -86,6 +86,8 @@ docs/               architecture, security, billing, roadmap
 | [docs/TRANSLATION_ENGINE.md](docs/TRANSLATION_ENGINE.md) | Feasibility matrix, translation pipeline |
 | [docs/BILLING_DESIGN.md](docs/BILLING_DESIGN.md) | Shopify App Pricing, entitlements, metering |
 | [docs/COST_MODEL.md](docs/COST_MODEL.md) | Unit economics (assumptions) |
+| [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) | Implemented / Tested Locally / Verified on Shopify, per feature |
+| [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) | Test cases on a development store, beta exit criteria, results log |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Progress, milestones, risks, decisions |
 | [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
 | [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |

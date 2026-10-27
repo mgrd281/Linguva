@@ -38,7 +38,7 @@ Secrets are only ever set as local environment variables. They never go into the
 Shopify no longer allows creating new custom apps in the Shopify admin. Use a Dev Dashboard app in the **same organization** as the dev store (client credentials grant, token valid for 24 hours):
 
 1. In the Dev Dashboard, create an app "Linguva live tests" (separate from the Linguva app).
-2. In its version, select these scopes: `read_products`, `write_products` (fixtures only), `read_translations`, `write_translations`, `read_locales`, and optionally `read_markets`. Release the version.
+2. In its version, select these scopes: `read_products`, `write_products` (fixtures only), `read_content` and `read_online_store_pages` (pages, blogs, blog posts), `read_translations`, `write_translations`, `read_locales`, and optionally `read_markets`. Release the version.
 3. Install it on the dev store.
 4. Copy the client ID and secret into local environment variables only.
 
@@ -71,9 +71,13 @@ LIVE_ALLOW_WRITES=yes pnpm test:live # adds fixture writes
 | With explicit permission, the translation is replaced and the old value is kept as an EXTERNAL revision | Overwrite permission and history |
 | A collection is translated, and its handle is never machine-translated | Collections in bulk jobs |
 | A manual edit is published, and the previous version is restored | Editor history and restore |
-| Markets and web presences are readable (with `read_markets`) | Input for the SEO and Markets plan |
+| Markets and web presences are readable with the app's query (with `read_markets`) | Markets page |
+| Product, collection and blog post images expose `alt` as their only translatable key | Image alt text (MEDIA_IMAGE, nested COLLECTION_IMAGE / ARTICLE_IMAGE) |
+| A text metafield on the fixture product is reported translatable, with key `value`, and its translation reads back | Metafield translation |
 
 ## 3. Manual checks in the embedded admin
+
+The full list of test cases, with expected results and the beta exit criteria, is in DEV_STORE_TEST_PLAN.md. The short list below is the minimum.
 
 Run `pnpm dev` (Shopify CLI tunnel) with the dev store and `TRANSLATION_PROVIDER=mock`, and Redis for bulk jobs. Record each result in §4.
 

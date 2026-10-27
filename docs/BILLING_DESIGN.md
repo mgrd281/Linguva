@@ -22,6 +22,8 @@ Status: **Implemented and tested locally against a simulated Partner API; not ve
 | Billing off (no Partner API settings): unmetered, environment limits | — | Implemented, Tested locally |
 | Owner complimentary access (§4), usage-based overage via App Events | — | Planned |
 
+Testing without charges: locally, every subscription state (none, active plan, trial, pending downgrade, cancellation at period end, unknown plan handle, Partner API errors, throttling, timeouts) is simulated by `tests/support/fake-partner-api.ts` (`tests/unit/billing.test.ts`, `tests/integration/billing.test.ts`). On Shopify, DEV_STORE_TEST_PLAN.md §L walks through the same states on a development store, where every plan costs $0.
+
 Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE`, `BILLING_REQUIRED`. The plan handles in the Partner Dashboard must be `free`, `starter`, `pro`, `business`, or `app/lib/plans.ts` must be changed to match them.
 
 ## 2. Plans (proposed; the values in `app/lib/plans.ts` follow this table)

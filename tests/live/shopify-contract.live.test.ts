@@ -26,12 +26,12 @@ import { restoreRevision } from "../../app/.server/translation/history";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
 import { RESOURCE_KINDS } from "../../app/lib/resource-kinds";
 import { listImageResources, listTranslatableMetafields } from "../../app/.server/shopify/attached-resources";
+import { fetchMarkets, MarketsAccessError } from "../../app/.server/markets/markets";
 import { createLiveAdmin } from "./admin-client";
 import {
   createFixtureCollection,
   createFixtureProduct,
   deleteFixture,
-  listMarkets,
   removeTranslations,
   shopFacts,
   updateFixtureProductTitle,
@@ -112,18 +112,20 @@ live("read contract (no writes)", () => {
     }
   });
 
-  it("reads markets and their web presences (needs read_markets)", async (context) => {
+  it("reads markets and their web presences with the app's query (needs read_markets)", async (context) => {
     let markets;
     try {
-      markets = await listMarkets(admin);
+      markets = await fetchMarkets(admin);
     } catch (error) {
-      if (/access denied|read_markets/i.test(String(error))) context.skip();
+      if (error instanceof MarketsAccessError) context.skip();
       throw error;
     }
     for (const m of markets) {
-      for (const wp of m.webPresences.nodes) {
+      expect(m.status).toMatch(/^[A-Z_]+$/);
+      for (const wp of m.webPresences) {
         expect(wp.defaultLocale.locale).toBeTruthy();
-        expect(Array.isArray(wp.alternateLocales)).toBe(true);
+        expect(typeof wp.defaultLocale.published).toBe("boolean");
+        for (const u of wp.rootUrls) expect(u.url).toMatch(/^https:\/\//);
       }
     }
   });

@@ -30,5 +30,7 @@ export async function requireShop(request: Request) {
     null;
   // Redirects outside the app frame (for example to the plan selection page).
   const redirect = context.redirect;
-  return { admin, session, shop, actorId, redirect };
+  // Optional scopes (for example read_markets) are queried and requested here.
+  const scopes = context.scopes;
+  return { admin, session, shop, actorId, redirect, scopes };
 }

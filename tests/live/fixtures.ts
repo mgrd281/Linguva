@@ -103,36 +103,6 @@ const TRANSLATIONS_REMOVE = `#graphql
   }
 `;
 
-const MARKETS = `#graphql
-  query LinguvaLiveMarkets {
-    markets(first: 10) {
-      nodes {
-        id
-        name
-        webPresences(first: 5) {
-          nodes {
-            id
-            defaultLocale {
-              locale
-            }
-            alternateLocales {
-              locale
-            }
-            subfolderSuffix
-            domain {
-              host
-            }
-            rootUrls {
-              locale
-              url
-            }
-          }
-        }
-      }
-    }
-  }
-`;
-
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 async function run(admin: LiveAdmin, query: string, variables: Record<string, unknown> = {}): Promise<Json> {
@@ -205,20 +175,3 @@ export async function deleteFixture(admin: LiveAdmin, gid: string, created: Read
   }
 }
 
-export async function listMarkets(admin: LiveAdmin) {
-  const { markets } = await run(admin, MARKETS);
-  return markets.nodes as Array<{
-    id: string;
-    name: string;
-    webPresences: {
-      nodes: Array<{
-        id: string;
-        defaultLocale: { locale: string };
-        alternateLocales: Array<{ locale: string }>;
-        subfolderSuffix: string | null;
-        domain: { host: string } | null;
-        rootUrls: Array<{ locale: string; url: string }>;
-      }>;
-    };
-  }>;
-}

@@ -38,6 +38,7 @@ export default function App() {
         <s-link href="/app/articles">Blog posts</s-link>
         <s-link href="/app/blogs">Blogs</s-link>
         <s-link href="/app/coverage">Coverage</s-link>
+        <s-link href="/app/markets">Markets</s-link>
         <s-link href="/app/jobs">Translation jobs</s-link>
         <s-link href="/app/review">Review</s-link>
         <s-link href="/app/glossary">Glossary</s-link>

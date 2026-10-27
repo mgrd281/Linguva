@@ -13,6 +13,19 @@ export type LinguvaShopLocalesQueryVariables = AdminTypes.Exact<{ [key: string]:
 
 export type LinguvaShopLocalesQuery = { shopLocales: Array<Pick<AdminTypes.ShopLocale, 'locale' | 'name' | 'primary' | 'published'>> };
 
+export type LinguvaMarketsQueryVariables = AdminTypes.Exact<{
+  after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+}>;
+
+
+export type LinguvaMarketsQuery = { markets: { nodes: Array<(
+      Pick<AdminTypes.Market, 'id' | 'name' | 'handle' | 'status'>
+      & { webPresences: { nodes: Array<(
+          Pick<AdminTypes.MarketWebPresence, 'id' | 'subfolderSuffix'>
+          & { domain?: AdminTypes.Maybe<Pick<AdminTypes.Domain, 'host'>>, defaultLocale: Pick<AdminTypes.ShopLocale, 'locale' | 'name' | 'published'>, alternateLocales: Array<Pick<AdminTypes.ShopLocale, 'locale' | 'name' | 'published'>>, rootUrls: Array<Pick<AdminTypes.MarketWebPresenceRootUrl, 'locale' | 'url'>> }
+        )> } }
+    )>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } };
+
 export type LinguvaProductMediaQueryVariables = AdminTypes.Exact<{
   id: AdminTypes.Scalars['ID']['input'];
 }>;
@@ -157,20 +170,10 @@ export type LinguvaLiveTranslationsRemoveMutationVariables = AdminTypes.Exact<{
 
 export type LinguvaLiveTranslationsRemoveMutation = { translationsRemove?: AdminTypes.Maybe<{ translations?: AdminTypes.Maybe<Array<Pick<AdminTypes.Translation, 'key' | 'locale'>>>, userErrors: Array<Pick<AdminTypes.TranslationUserError, 'field' | 'message' | 'code'>> }> };
 
-export type LinguvaLiveMarketsQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
-
-
-export type LinguvaLiveMarketsQuery = { markets: { nodes: Array<(
-      Pick<AdminTypes.Market, 'id' | 'name'>
-      & { webPresences: { nodes: Array<(
-          Pick<AdminTypes.MarketWebPresence, 'id' | 'subfolderSuffix'>
-          & { defaultLocale: Pick<AdminTypes.ShopLocale, 'locale'>, alternateLocales: Array<Pick<AdminTypes.ShopLocale, 'locale'>>, domain?: AdminTypes.Maybe<Pick<AdminTypes.Domain, 'host'>>, rootUrls: Array<Pick<AdminTypes.MarketWebPresenceRootUrl, 'locale' | 'url'>> }
-        )> } }
-    )> } };
-
 interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaShopId {\n    shop {\n      id\n    }\n  }\n": {return: LinguvaShopIdQuery, variables: LinguvaShopIdQueryVariables},
   "#graphql\n  query LinguvaShopLocales {\n    shopLocales {\n      locale\n      name\n      primary\n      published\n    }\n  }\n": {return: LinguvaShopLocalesQuery, variables: LinguvaShopLocalesQueryVariables},
+  "#graphql\n  query LinguvaMarkets($after: String) {\n    markets(first: 50, after: $after) {\n      nodes {\n        id\n        name\n        handle\n        status\n        webPresences(first: 10) {\n          nodes {\n            id\n            subfolderSuffix\n            domain {\n              host\n            }\n            defaultLocale {\n              locale\n              name\n              published\n            }\n            alternateLocales {\n              locale\n              name\n              published\n            }\n            rootUrls {\n              locale\n              url\n            }\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMarketsQuery, variables: LinguvaMarketsQueryVariables},
   "#graphql\n  query LinguvaProductMedia($id: ID!) {\n    product(id: $id) {\n      media(first: 50) {\n        nodes {\n          ... on MediaImage {\n            id\n            image {\n              url\n            }\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaProductMediaQuery, variables: LinguvaProductMediaQueryVariables},
   "#graphql\n  query LinguvaTranslatableByIds($ids: [ID!]!, $locale: String!) {\n    translatableResourcesByIds(resourceIds: $ids, first: 100) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n    }\n  }\n": {return: LinguvaTranslatableByIdsQuery, variables: LinguvaTranslatableByIdsQueryVariables},
   "#graphql\n  query LinguvaNestedImages($id: ID!, $type: TranslatableResourceType!, $locale: String!) {\n    translatableResource(resourceId: $id) {\n      nestedTranslatableResources(resourceType: $type, first: 10) {\n        nodes {\n          resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n        }\n      }\n    }\n  }\n": {return: LinguvaNestedImagesQuery, variables: LinguvaNestedImagesQueryVariables},
@@ -179,7 +182,6 @@ interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaTranslatableResource($resourceId: ID!, $locale: String!) {\n    translatableResource(resourceId: $resourceId) {\n      resourceId\n      translatableContent {\n        key\n        value\n        digest\n        locale\n        type\n      }\n      translations(locale: $locale) {\n        key\n        value\n        outdated\n        updatedAt\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourceQuery, variables: LinguvaTranslatableResourceQueryVariables},
   "#graphql\n        query LinguvaShopIdentity {\n          shop {\n            id\n            name\n          }\n        }": {return: LinguvaShopIdentityQuery, variables: LinguvaShopIdentityQueryVariables},
   "#graphql\n  query LinguvaLiveShopFacts {\n    shop {\n      myshopifyDomain\n      plan {\n        partnerDevelopment\n        publicDisplayName\n      }\n    }\n  }\n": {return: LinguvaLiveShopFactsQuery, variables: LinguvaLiveShopFactsQueryVariables},
-  "#graphql\n  query LinguvaLiveMarkets {\n    markets(first: 10) {\n      nodes {\n        id\n        name\n        webPresences(first: 5) {\n          nodes {\n            id\n            defaultLocale {\n              locale\n            }\n            alternateLocales {\n              locale\n            }\n            subfolderSuffix\n            domain {\n              host\n            }\n            rootUrls {\n              locale\n              url\n            }\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaLiveMarketsQuery, variables: LinguvaLiveMarketsQueryVariables},
 }
 
 interface GeneratedMutationTypes {

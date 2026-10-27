@@ -10,9 +10,20 @@ import type { PrismaClient } from "@prisma/client";
 export const NOT_FORCED_TABLES = ["TranslationMemory"] as const;
 /** Tables without RLS by design: global records, or no tenant data. */
 export const GLOBAL_TABLES = ["Shop", "Session", "WebhookEvent", "PrivacyRequest", "AuditLog", "PlatformUsageDay", "_prisma_migrations"] as const;
-/** The reviewed SECURITY DEFINER functions and their required search_path. */
-export const DEFINER_FUNCTIONS: Record<string, string> = {
-  linguva_memory_fuzzy: "search_path=pg_catalog, pg_temp",
+/**
+ * The reviewed SECURITY DEFINER functions: required search_path, and the
+ * SHA-256 of the reviewed definition (body, settings, security, volatility,
+ * arguments; see DEFINITION_HASH_SQL). Changing a definer function changes
+ * its hash, so the posture check and CI fail until the new version has had
+ * a security review and this value is updated with it
+ * (docs/SECURITY_REVIEW_MEMORY_FUZZY.md, "Changing the function").
+ */
+export const DEFINER_FUNCTIONS: Record<string, { searchPath: string; sha256: string }> = {
+  linguva_memory_fuzzy: {
+    searchPath: "search_path=pg_catalog, pg_temp",
+    // Reviewed 2026-10-28, migration 20261028090000_security_hardening.
+    sha256: "55e38bfad0045f64601731c59b9885020e4eb4f9a496a5d3dd3c5b017941f364",
+  },
 };
 
 export interface PostureIssue {
@@ -67,9 +78,13 @@ export async function checkDatabasePosture(client: PrismaClient): Promise<Postur
     if (p.qual !== expected || p.check !== expected || p.cmd !== "*") add("UNEXPECTED_POLICY", p.table);
   }
 
-  const definers = await client.$queryRaw<Array<{ name: string; config: string[] | null; owner_super: boolean; owner_bypass: boolean; public_exec: boolean }>>`
+  const definers = await client.$queryRaw<
+    Array<{ name: string; config: string[] | null; owner_super: boolean; owner_bypass: boolean; public_exec: boolean; sha256: string }>
+  >`
     SELECT p.proname AS name, p.proconfig AS config, r.rolsuper AS owner_super, r.rolbypassrls AS owner_bypass,
-           has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec
+           has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec,
+           encode(sha256(convert_to(p.prosrc || '|' || coalesce(array_to_string(p.proconfig, ','), '') || '|' || p.prosecdef::text
+             || '|' || p.provolatile::text || '|' || pg_get_function_identity_arguments(p.oid), 'UTF8')), 'hex') AS sha256
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace JOIN pg_roles r ON r.oid = p.proowner
     WHERE p.prosecdef AND n.nspname NOT IN ('pg_catalog', 'information_schema')`;
   for (const d of definers) {
@@ -78,7 +93,8 @@ export async function checkDatabasePosture(client: PrismaClient): Promise<Postur
       add("UNREVIEWED_SECURITY_DEFINER", d.name);
       continue;
     }
-    if (!d.config?.includes(required)) add("DEFINER_SEARCH_PATH", d.name);
+    if (!d.config?.includes(required.searchPath)) add("DEFINER_SEARCH_PATH", d.name);
+    if (d.sha256 !== required.sha256) add("DEFINER_CHANGED_WITHOUT_REVIEW", d.name);
     if (d.owner_super || d.owner_bypass) add("DEFINER_OWNER_PRIVILEGED", d.name);
     if (d.public_exec) add("DEFINER_PUBLIC_EXECUTE", d.name);
   }

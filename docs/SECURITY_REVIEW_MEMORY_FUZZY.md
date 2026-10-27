@@ -92,7 +92,14 @@ All tests are in `tests/security/postgres-privileges.test.ts` (and `memory-gloss
 
 Revisit if: the function needs a second caller, managed PostgreSQL offers leakproof trigram operators, or memory per shop exceeds ~1M entries.
 
-## 8. Verification
+## 8. Changing the function (or adding a definer function)
+
+1. Write the change as a new migration (`CREATE OR REPLACE`), keeping the hardening of §2.
+2. The posture check and CI then fail with `DEFINER_CHANGED_WITHOUT_REVIEW` (or `UNREVIEWED_SECURITY_DEFINER` for a new function). A comment-only edit counts too (tested).
+3. Run a security review of the new version: the threats in §3, plus anything the change introduces. Record it in this document.
+4. Update the reviewed SHA-256 in `app/.server/lib/db-posture.ts` (`DEFINER_FUNCTIONS`) in the same PR. `CODEOWNERS` routes these files to the owner. Once branch protection requires code owner review on `main`, the PR can't be merged without the owner's approval.
+
+## 9. Verification
 
 - **CI** runs the security suite (including this review's tests), the performance suite (100,000 entries) and the posture check against PostgreSQL 16 with the three roles created by `scripts/db/init-roles.sql`, on a clean checkout.
 - **Locally,** `pnpm check:ignored` fails if a source file is hidden by `.gitignore`. That is the class of mistake that once left `app/.server/coverage` out of the repository.

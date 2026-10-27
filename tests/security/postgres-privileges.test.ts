@@ -62,6 +62,21 @@ describe("database posture", () => {
     expect(await checkDatabasePosture(app)).toEqual([]);
   });
 
+  it("flags any change to a definer function until it is reviewed", async () => {
+    // A harmless-looking edit (a comment) is enough to require a new review.
+    const [original] = await ownerDb.$queryRaw<Array<{ src: string }>>`
+      SELECT prosrc AS src FROM pg_proc WHERE proname = 'linguva_memory_fuzzy'`;
+    const fn = "linguva_memory_fuzzy(text, text, text, text, integer, integer, real, integer)";
+    const definition = (await ownerDb.$queryRawUnsafe<Array<{ def: string }>>(`SELECT pg_get_functiondef('${fn}'::regprocedure) AS def`))[0]!.def;
+    try {
+      await ownerDb.$executeRawUnsafe(definition.replace(original!.src, `${original!.src}\n-- edited`));
+      expect((await checkDatabasePosture(app)).map((i) => i.code)).toEqual(["DEFINER_CHANGED_WITHOUT_REVIEW"]);
+    } finally {
+      await ownerDb.$executeRawUnsafe(definition);
+    }
+    expect(await checkDatabasePosture(app)).toEqual([]);
+  });
+
   it("detects a privileged connection (the check isn't vacuous)", async () => {
     const codes = (await checkDatabasePosture(ownerDb)).map((i) => i.code);
     expect(codes).toContain("RUNTIME_OWNS_TABLE");

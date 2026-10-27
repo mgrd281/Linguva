@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
+import { DEFINER_FUNCTIONS } from "../../app/.server/lib/db-posture";
+
+const reviewed = DEFINER_FUNCTIONS.linguva_memory_fuzzy!.sha256;
 
 /** A client whose catalog says the runtime role is a superuser. */
 const privileged = {
@@ -9,7 +12,9 @@ const privileged = {
       return [{ name: "app", superuser: true, bypassrls: false, createrole: false }];
     }
     if (sql.includes("has_schema_privilege")) return [{ create: false }];
-    if (sql.includes("prosecdef")) return [{ name: "linguva_memory_fuzzy", config: ["search_path=pg_catalog, pg_temp"], owner_super: false, owner_bypass: false, public_exec: false }];
+    if (sql.includes("prosecdef")) {
+      return [{ name: "linguva_memory_fuzzy", config: ["search_path=pg_catalog, pg_temp"], owner_super: false, owner_bypass: false, public_exec: false, sha256: reviewed }];
+    }
     return [];
   }),
 } as unknown as PrismaClient;

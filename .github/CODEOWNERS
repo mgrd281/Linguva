@@ -1,0 +1,11 @@
+# Changes here affect tenant isolation or the database security posture and
+# need the owner's review (enforced once branch protection requires code
+# owner reviews on main).
+/prisma/migrations/                     @mgrd281
+/prisma/schema.prisma                   @mgrd281
+/app/.server/lib/db-posture.ts          @mgrd281
+/app/.server/tenancy/                   @mgrd281
+/scripts/db/                            @mgrd281
+/docs/SECURITY_REVIEW_MEMORY_FUZZY.md   @mgrd281
+/docs/SECURITY_MODEL.md                 @mgrd281
+/.github/                               @mgrd281

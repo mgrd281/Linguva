@@ -1,0 +1,124 @@
+# Shopify API Compatibility Matrix
+
+Status: **Phase 0 — research findings.** Nothing in this file is implemented yet.
+
+Research date: 2026-10-27. Sources: shopify.dev (docs search + page fetches) and the npm registry.
+
+Legend:
+
+- **VERIFIED**: confirmed against current shopify.dev documentation or the npm registry on the research date.
+- **ASSUMPTION**: believed true but not yet confirmed. Must be verified (usually against a dev store) before we rely on it.
+
+---
+
+## 1. Platform baseline
+
+| Topic | Finding | Status | Source |
+|---|---|---|---|
+| Latest stable Admin API | `2026-10`, released 2026-10-01, available until at least 2027-10-16 15:00 UTC | VERIFIED | shopify.dev/changelog/release-notes/2026-10 |
+| Release cadence | Quarterly. Each stable version is supported for about 12 months | VERIFIED | shopify.dev/docs/api/usage/versioning |
+| REST Admin API | Legacy since 2024-10-01. All new apps must use GraphQL | VERIFIED | shopify.dev/docs/api/admin-rest/usage/versioning |
+| Recommended framework | Shopify CLI + React Router app template (`shopify app init`) | VERIFIED | shopify.dev/docs/apps/build/scaffold-app |
+| App package | `@shopify/shopify-app-react-router` latest = `4.0.0` | VERIFIED (npm) | npm registry |
+| Core API library | `@shopify/shopify-api` latest = `15.0.1` (2026-10-08) | VERIFIED (npm) | npm registry |
+| Shopify CLI | `@shopify/cli` latest = `4.9.4` | VERIFIED (npm) | npm registry |
+| Session storage | `@shopify/shopify-app-session-storage-prisma` latest = `11.0.1` | VERIFIED (npm) | npm registry |
+| UI layer | Polaris **web components** (`<s-page>`, `<s-section>`, …), versioned under "App Home". The React `@shopify/polaris` package (13.9.5) is not the current recommendation for App Home | VERIFIED | shopify.dev/docs/api/app-home/v2.0 |
+| App Bridge | Loaded from `cdn.shopify.com/shopifycloud/app-bridge.js` (always latest). Types come from `@shopify/app-bridge-types`. App Bridge is not versioned with Polaris | VERIFIED | shopify.dev/docs/api/app-home/v2.0/app-bridge-web-components |
+| Authentication | `authenticate.admin(request)` validates the ID (session) token and performs **token exchange** | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/cli-app-authentication |
+| Offline tokens | **Expiring offline access tokens are required for all public apps as of 2027-01-01.** The template enables `future.expiringOfflineAccessTokens: true` | VERIFIED | Shopify changelog + CLI auth docs |
+| Scopes | Declared in `shopify.app.toml` `[access_scopes]`. Deploy with `shopify app deploy` | VERIFIED | CLI auth docs |
+| Prisma | npm `latest` tag currently points to `8.0.0-rc.27` (a release candidate). The last stable line is `7.10.1` | VERIFIED (npm) | npm registry. **Decision needed**: pin a stable version (see ROADMAP, D-05) |
+
+## 2. Translation APIs
+
+| Operation | Finding | Status |
+|---|---|---|
+| `translatableResources(resourceType:)` | Paginated connection. Returns `translatableContent` entries (key, value, digest, locale, type) | VERIFIED |
+| `translatableResourcesByIds` | Exists, returns a `TranslatableResourceConnection` | VERIFIED |
+| `translatableResource(resourceId:)` | Single-resource read used to fetch digests before writing | VERIFIED |
+| `TranslatableResource.nestedTranslatableResources` | Exists (for example, product → options) | VERIFIED |
+| `translationsRegister(resourceId, translations[])` | Creates or updates translations. Each `TranslationInput` needs a `translatableContentDigest`. Optional `marketId` scopes a translation to one market | VERIFIED |
+| `translationsRemove(resourceId, translationKeys, locales, marketIds)` | Deletes translations. Only locales returned by `shopLocales` are valid | VERIFIED |
+| `Translation.outdated` | Boolean that is true when the source changed after the translation was last updated | VERIFIED |
+| `Translation.market` | `null` means the translation applies to all markets | VERIFIED |
+| `LocalizableContentType` | HTML, RICH_TEXT_FIELD, INLINE_RICH_TEXT, JSON, JSON_STRING, URL/URI/LINK, LIST_*, FILE_REFERENCE, SINGLE/MULTI_LINE_TEXT_FIELD, STRING | VERIFIED. Drives which normalizer runs (see TRANSLATION_ENGINE) |
+| `availableLocales`, `shopLocales`, `shopLocaleEnable`, `shopLocaleUpdate`, `shopLocaleDisable` | Exist. `availableLocales` lists the locales that can be enabled | VERIFIED (`availableLocales`). Others: ASSUMPTION on exact args, check schema at implementation |
+| Locale limits | "Shops are limited to 20 enabled locales." "Shops are limited to 20 published locales." | VERIFIED |
+| Primary locale | Can only be changed in the Shopify admin, not through the API | VERIFIED |
+| Tags | Can't be translated | VERIFIED |
+| Metafields | Only publicly accessible metafields can be translated. `METAFIELD` resource type is deprecated (use the owning resource / `METAOBJECT`) | VERIFIED |
+| Handles | Translatable for PRODUCT, COLLECTION, PAGE, ARTICLE, BLOG. If a merchant later changes a product handle, URL redirects aren't supported for language-specific URLs | VERIFIED |
+| Theme content per market | Renders on the storefront only for shops whose plan includes market-specific theme customization | VERIFIED |
+| App proxies | Not supported for translation | VERIFIED |
+| Max input array size | 250 items for any array input (bounds the `translations` array per call) | VERIFIED |
+| Bulk operations | `bulkOperationRunQuery` needs a Node connection, max 5 connections, max 2 nesting levels. `bulkOperations` query replaces `currentBulkOperation` (2026-01+) | VERIFIED (general rules). **ASSUMPTION**: whether `translatableResources` can run inside a bulk query must be tested on a dev store |
+| Translation-specific webhooks | No dedicated "translation changed" webhook was found. Change detection uses resource webhooks (`products/update`, `collections/update`, …) plus periodic reconciliation | ASSUMPTION — confirm the topic list against the 2026-10 webhook reference |
+
+### 2.1 Translatable resource types (Admin API 2026-10, VERIFIED)
+
+| Resource type | Translatable fields | Product scope |
+|---|---|---|
+| PRODUCT | title, body_html, handle, product_type, meta_title, meta_description | MVP |
+| PRODUCT_OPTION / PRODUCT_OPTION_VALUE | name | MVP |
+| COLLECTION | title, body_html, handle, meta_title, meta_description | MVP |
+| PAGE | title, body_html, handle, meta_title, meta_description | MVP |
+| BLOG | title, handle, meta_title, meta_description | MVP |
+| ARTICLE | title, body_html, summary_html, handle, meta_title, meta_description | MVP |
+| MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Phase 3 |
+| MENU / LINK | title | Phase 3 |
+| FILTER | label | Phase 3 |
+| METAOBJECT | depends on definition | Phase 3 |
+| SHOP | meta_title, meta_description | Phase 4 (SEO) |
+| SHOP_POLICY | body | Phase 3 (legal-review warning in UI) |
+| ONLINE_STORE_THEME* (7 types) | dynamic keys from theme data | Phase 3 (Theme Content) |
+| DELIVERY_METHOD_DEFINITION | name, description | Later |
+| PAYMENT_GATEWAY | name, message, before_payment_instructions | Later |
+| SELLING_PLAN / SELLING_PLAN_GROUP | name, option1-3, description | Later |
+| EMAIL_TEMPLATE / PACKING_SLIP_TEMPLATE | title/body_html, body | Later. Contains Liquid, so it needs strict placeholder protection |
+
+## 3. Billing
+
+| Topic | Finding | Status |
+|---|---|---|
+| Default for new public apps | **Shopify App Pricing** (formerly "Managed Pricing"). Plans are defined in the Partner Dashboard, Shopify hosts the plan selection page, and the app doesn't call `appSubscriptionCreate` / `billing.request` | VERIFIED |
+| Billing API | Now "Manual Pricing (Legacy)". Only for unsupported models such as one-time purchases | VERIFIED |
+| Plan types | Free, monthly, yearly, monthly+yearly, usage-based. Free trials. Proration handled by Shopify | VERIFIED |
+| Public plans | Up to 8 | VERIFIED |
+| Private plans | Available only to selected stores (`*.myshopify.com`). Since 2026-09-21: unlimited private plans and unlimited target stores | VERIFIED |
+| Subscription state | Query `activeSubscription` in the **Partner API** (status: active, pending, cancelled, frozen). Persists beyond uninstall. Historical Events API available | VERIFIED |
+| Usage charges | **App Events API**. Billing meters are defined in the Partner Dashboard and matched to an `event_handle`. Requests carry an `idempotency_key`. The blog example uses an `/app/unstable/events` path | VERIFIED (concept). **ASSUMPTION**: endpoint stability and auth method; re-check before Phase 5 |
+| Dev stores | On dev stores in the same Partner org, any plan can be selected at no charge ($0 contract) | VERIFIED |
+| Discounts / trial extensions | Applied per merchant from the Partner Dashboard | VERIFIED |
+| App Store rule | All App Store apps must use a Shopify-provided billing solution | VERIFIED |
+
+## 4. Rate limits
+
+| Plan | GraphQL Admin restore rate |
+|---|---|
+| Standard | 100 points/s |
+| Advanced | 200 points/s |
+| Plus | 1,000 points/s |
+| Enterprise (Commerce Components) | 2,000 points/s |
+
+- Limits apply per app + store pair (leaky bucket). VERIFIED.
+- A single query can cost at most 1,000 points. A mutation costs 10 by default. VERIFIED.
+- Every response returns `extensions.cost.throttleStatus` (`currentlyAvailable`, `restoreRate`). The worker's per-shop limiter must read it. VERIFIED.
+
+## 5. Compliance
+
+| Requirement | Finding | Status |
+|---|---|---|
+| Mandatory topics | `customers/data_request`, `customers/redact`, `shop/redact`, declared as `compliance_topics` in `shopify.app.toml` | VERIFIED |
+| Response | 2xx to confirm. Complete the action within 30 days. Return **401** for an invalid HMAC | VERIFIED |
+| Data retention exception | If the law requires retaining data, don't complete the redaction | VERIFIED (needs legal review) |
+| Security check | `shopify app security check` flags missing compliance webhooks (`MISSING_COMPLIANCE_WEBHOOKS`) | VERIFIED. Add it to CI |
+| Protected customer data | Only needed if we read customer/order data. **Linguva doesn't need customer data.** Don't request those scopes | VERIFIED (requirement). The design choice is ours |
+
+## 6. Proposed minimal access scopes (ASSUMPTION — confirm per feature)
+
+`read_products, read_content, read_online_store_pages, read_themes, read_translations, write_translations, read_locales, write_locales, read_markets`
+
+- No customer or order scopes.
+- `read_online_store_navigation`, `read_metaobjects`, and `read_legal_policies` are added only when those resource types ship.
+- Each scope must be justified in `SECURITY_MODEL.md` before it is added.

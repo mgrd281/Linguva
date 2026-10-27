@@ -1,0 +1,33 @@
+# Cost Model
+
+Status: **Phase 0 — assumptions only.** Every provider price below is an **unverified assumption** and must be checked against current official pricing pages before any plan is published.
+
+## 1. Inputs (to verify)
+
+| Variable | Assumed value | Status |
+|---|---|---|
+| DeepL API Pro, per 1M characters | ≈ $25 (€20) + monthly base fee | ASSUMPTION |
+| Premium LLM, per 1M source characters (input + output tokens, incl. prompt overhead) | $5–$40 depending on model | ASSUMPTION — benchmark in Phase 3 |
+| Shopify revenue share | 0% on the first $1M lifetime, then 15% (registration conditions apply) | ASSUMPTION — verify current Partner terms |
+| Infra (Railway web + worker + Postgres + Redis), staging+prod | $60–$150/month at launch | ASSUMPTION |
+| Average characters per product (title + body + SEO + options) | ~2,000 | ASSUMPTION — measure on dev-store fixtures |
+| Translation memory hit rate after first full pass | 20–40% for repeated specs/boilerplate | ASSUMPTION |
+
+## 2. Unit economics per plan (100% utilization, DeepL-only worst case)
+
+| Plan | Price | Chars | Provider cost @ $25/1M | Gross margin before infra |
+|---|---|---|---|---|
+| STARTER | $19 | 300k | $7.50 | ~61% |
+| PRO | $59 | 1.2M | $30.00 | ~49% |
+| BUSINESS | $179 | 4M | $100.00 | ~44% |
+| Overage | $40/1M | — | $25.00 | ~37% |
+
+- Real utilization is usually well below 100%, and TM hits aren't billed by the provider either, so the expected margin is higher.
+- Premium LLM routing must be cost-capped per plan (BUSINESS only by default) so the margin never goes negative.
+- Example scenario: 1,000 products × 2,000 chars × 5 languages = **10M characters ≈ $250 provider cost** for a first full pass. This is above every self-serve plan, so a large first pass must use overage or ENTERPRISE, and the UI must show an estimate before starting.
+
+## 3. Guardrails
+
+- Per-shop monthly cost cap (`Entitlement.costCapMicros`) and a global daily provider spend alert.
+- Cost estimate is shown and confirmed before every bulk job.
+- `ProviderUsage` feeds a per-shop gross margin view in the admin center.

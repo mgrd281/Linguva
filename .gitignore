@@ -1,0 +1,11 @@
+node_modules/
+build/
+.cache/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.shopify/
+coverage/
+playwright-report/

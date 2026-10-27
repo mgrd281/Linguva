@@ -16,11 +16,13 @@ import {
   getShopSettings,
   hasCurrentAiConsent,
   setAiConsent,
+  setAutoTranslate,
   setBulkPublishMode,
   setReuseMachineMemory,
   setTranslationStyle,
 } from "../.server/settings/shop-settings";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
+import { getQueues } from "../.server/queue/client";
 import { requireShop } from "../.server/shopify/require-shop";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 
@@ -46,6 +48,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     publishMode: settings.bulkPublishMode,
     autoPublishEnabledAt: settings.autoPublishEnabledAt?.toISOString() ?? null,
     reuseMachineMemory: settings.reuseMachineMemory,
+    auto: {
+      enabled: settings.autoTranslateNew,
+      locales: settings.autoTranslateLocales,
+      // Needs AI, background jobs and a plan that includes bulk translation.
+      available: getTranslationProvider() !== null && getQueues() !== null,
+      planIncludes: billing.entitlements.bulk,
+    },
     aiAvailable: getTranslationProvider() !== null,
     period: periodKey(),
     used: await getMonthlyUsage(shop.id),
@@ -90,6 +99,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       throw error;
     }
   }
+  if (intent === "auto") {
+    const enabled = form.get("enabled") === "true";
+    if (enabled) {
+      if (!hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "CONSENT_REQUIRED" };
+      if (!(await shopBilling(admin, shop)).entitlements.bulk) return { ok: false, error: "PLAN_BULK" };
+    }
+    const locales = await fetchAndSyncShopLocales(admin, shop.id);
+    const result = await setAutoTranslate({
+      shopId: shop.id,
+      enabled,
+      // s-choice-list submits its selected values as one comma-separated value.
+      locales: form.getAll("locale").flatMap((v) => String(v).split(",")).map((v) => v.trim()).filter(Boolean),
+      allowedLocales: locales.locales.filter((l) => !l.primary).map((l) => l.locale),
+      actorId,
+    });
+    if (enabled && !result.enabled) return { ok: false, error: "NO_LANGUAGE" };
+    return { ok: true, saved: "auto" as const, autoEnabled: result.enabled };
+  }
   if (intent === "reuse-memory") {
     await setReuseMachineMemory({ shopId: shop.id, enabled: form.get("enabled") === "true" });
     return { ok: true };
@@ -107,6 +134,8 @@ export default function Settings() {
   const modeFetcher = useFetcher<typeof action>();
   const memoryFetcher = useFetcher<typeof action>();
   const styleFetcher = useFetcher<typeof action>();
+  const autoFetcher = useFetcher<typeof action>();
+  const autoError = autoFetcher.data && "error" in autoFetcher.data ? autoFetcher.data.error : null;
   const busy = fetcher.state !== "idle";
   const percent = data.limit ? Math.min(100, Math.round((data.used / data.limit) * 100)) : 0;
 
@@ -247,6 +276,93 @@ export default function Settings() {
                 <s-paragraph>Tick the confirmation box to enable automatic publishing.</s-paragraph>
               </s-banner>
             )
+          ) : null}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Automatic translation">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Translates new and changed products and collections about a minute after you save them. Only missing or
+            outdated texts are translated, translations you wrote or approved are kept, and results follow the
+            publishing setting above{data.publishMode === "AUTO_PUBLISH" ? " (currently: published automatically)" : " (currently: wait in Review)"}.
+            It uses your AI allowance.
+          </s-paragraph>
+          {data.auto.enabled ? (
+            <s-paragraph>
+              <s-badge tone="success">On</s-badge>{" "}
+              {data.style.languages
+                .filter((l) => data.auto.locales.includes(l.locale))
+                .map((l) => l.name)
+                .join(", ")}
+            </s-paragraph>
+          ) : (
+            <s-paragraph>
+              <s-badge>Off</s-badge> Changes are translated when you start a translation.
+            </s-paragraph>
+          )}
+          {!data.auto.available ? (
+            <s-banner tone="info" heading="Not available on this installation">
+              <s-paragraph>Automatic translation needs AI translation and background jobs to be set up.</s-paragraph>
+            </s-banner>
+          ) : !data.auto.planIncludes ? (
+            <s-banner tone="info" heading="Automatic translation is part of the plans with bulk translation">
+              <s-paragraph>
+                <s-link href="/app/plan">See plans</s-link>
+              </s-paragraph>
+            </s-banner>
+          ) : data.style.languages.length === 0 ? (
+            <s-paragraph>Add a language first.</s-paragraph>
+          ) : (
+            <autoFetcher.Form method="post">
+              <input type="hidden" name="intent" value="auto" />
+              <input type="hidden" name="enabled" value="true" />
+              <s-stack direction="block" gap="small">
+                <s-choice-list name="locale" label="Languages to translate automatically" multiple>
+                  {data.style.languages.map((l) => (
+                    <s-choice key={l.locale} value={l.locale} defaultSelected={data.auto.locales.includes(l.locale)}>
+                      {l.name}
+                    </s-choice>
+                  ))}
+                </s-choice-list>
+                <s-stack direction="inline" gap="small">
+                  <s-button type="submit" variant="secondary" {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
+                    {data.auto.enabled ? "Save languages" : "Turn on automatic translation"}
+                  </s-button>
+                  {data.auto.enabled ? (
+                    <s-button
+                      type="button"
+                      onClick={() => autoFetcher.submit({ intent: "auto", enabled: "false" }, { method: "post" })}
+                    >
+                      Turn off
+                    </s-button>
+                  ) : null}
+                </s-stack>
+              </s-stack>
+            </autoFetcher.Form>
+          )}
+          {autoError === "CONSENT_REQUIRED" ? (
+            <s-banner tone="critical" heading="Allow AI translation first">
+              <s-paragraph>Automatic translation sends texts to the AI service. Allow it in the section above.</s-paragraph>
+            </s-banner>
+          ) : autoError === "NO_LANGUAGE" ? (
+            <s-banner tone="critical" heading="Choose at least one language">
+              <s-paragraph>Tick the languages new and changed content should be translated into.</s-paragraph>
+            </s-banner>
+          ) : autoError === "PLAN_BULK" ? (
+            <s-banner tone="info" heading="Automatic translation is part of the plans with bulk translation">
+              <s-paragraph>
+                <s-link href="/app/plan">See plans</s-link>
+              </s-paragraph>
+            </s-banner>
+          ) : autoFetcher.data && "autoEnabled" in autoFetcher.data ? (
+            <s-banner tone="success" heading="Saved">
+              <s-paragraph>
+                {autoFetcher.data.autoEnabled
+                  ? "Products and collections you save from now on are translated about a minute later."
+                  : "Automatic translation is off."}
+              </s-paragraph>
+            </s-banner>
           ) : null}
         </s-stack>
       </s-section>

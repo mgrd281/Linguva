@@ -7,7 +7,7 @@ import type {
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { cancelJob, getJobForShop, isBulkResourceType, listProblemItems } from "../.server/jobs/bulk-jobs";
+import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, isBulkResourceType, listProblemItems } from "../.server/jobs/bulk-jobs";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
 import { editorPathFor, numericId, kindMeta } from "../lib/resource-kinds";
 import {
@@ -36,6 +36,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       targetLocale: job.targetLocale,
       kind: kindInfo(job.resourceType),
       fieldScope: job.fieldScope,
+      automatic: job.requestedBy === AUTO_REQUESTED_BY,
       errorCode: job.errorCode,
       charsBilled: job.charsBilled,
       memoryHits: job.memoryHits,
@@ -133,6 +134,12 @@ export default function JobDetail() {
             or skipped: {job.skipped} · Failed: {job.failed}
           </s-paragraph>
           {job.fieldScope === "SEO" ? <s-paragraph>Scope: search engine listings only.</s-paragraph> : null}
+          {job.automatic ? (
+            <s-paragraph>
+              Started automatically for {job.kind.plural.toLowerCase()} you created or changed today (Settings, automatic
+              translation).
+            </s-paragraph>
+          ) : null}
           <s-paragraph>
             AI characters: {job.charsBilled.toLocaleString()} · Reused from memory: {job.memoryHits.toLocaleString()}{" "}
             segments ({job.charsSaved.toLocaleString()} characters saved)

@@ -59,7 +59,9 @@ Legend:
 | App proxies | Not supported for translation | VERIFIED |
 | Max input array size | 250 items for any array input (bounds the `translations` array per call) | VERIFIED |
 | Bulk operations | `bulkOperationRunQuery` needs a Node connection, max 5 connections, max 2 nesting levels. `bulkOperations` query replaces `currentBulkOperation` (2026-01+) | VERIFIED (general rules). **ASSUMPTION**: whether `translatableResources` can run inside a bulk query must be tested on a dev store |
-| Translation-specific webhooks | No dedicated "translation changed" webhook was found. Change detection uses resource webhooks (`products/update`, `collections/update`, …) plus periodic reconciliation | ASSUMPTION — confirm the topic list against the 2026-10 webhook reference |
+| Translation-specific webhooks | No dedicated "translation changed" webhook was found. Automatic translation uses `products/create`, `products/update`, `collections/create`, `collections/update` (`shopify.app.toml`, scope `read_products`) | Topics: VERIFIED (app config). No-translation-webhook: ASSUMPTION |
+| Webhook `include_fields` | Narrows the payload; Shopify drops a delivery whose payload equals one sent shortly before, so a field that always changes (`updated_at`) must be included. Linguva requests `admin_graphql_api_id` and `updated_at` | VERIFIED (shopify.dev, "Webhooks delivery structure") |
+| Webhooks caused by our own writes | Whether `translationsRegister` triggers `products/update` is not documented. If it does, the automatic check finds nothing to translate (source unchanged) and spends no AI allowance | ASSUMPTION, tested only with the fake store |
 
 ### 2.1 Translatable resource types (Admin API 2026-10, VERIFIED)
 
@@ -71,8 +73,8 @@ Legend:
 | PAGE | title, body_html, handle, meta_title, meta_description | MVP |
 | BLOG | title, handle, meta_title, meta_description | MVP |
 | ARTICLE | title, body_html, summary_html, handle, meta_title, meta_description | MVP |
-| MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Implemented in the editor. Product images: `product.media` (MediaImage ids) → `translatableResourcesByIds`. Collection and blog post images: `nestedTranslatableResources(resourceType: COLLECTION_IMAGE / ARTICLE_IMAGE)` of the parent (schema-valid; how Shopify nests them is ASSUMPTION until the live test runs) |
-| Metafields (2026-10) | value | Implemented in the editor for text types. `Metafield.translatable: Boolean!` on the owner's `metafields` (`HasMetafields`), then `translatableResourcesByIds`. The `METAFIELD` resource type for `translatableResources` is deprecated (VERIFIED, schema) |
+| MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Implemented in the editor, bulk jobs and the coverage report (top-level `translatableResources` per image type; ASSUMPTION for collection and blog post images until the live test). Product images: `product.media` (MediaImage ids) → `translatableResourcesByIds`. Collection and blog post images: `nestedTranslatableResources(resourceType: COLLECTION_IMAGE / ARTICLE_IMAGE)` of the parent (schema-valid; how Shopify nests them is ASSUMPTION until the live test runs) |
+| Metafields (2026-10) | value | Implemented in the editor and bulk jobs for text and rich text types. `Metafield.translatable: Boolean!` on the owner's `metafields` (`HasMetafields`), then `translatableResourcesByIds`. The `METAFIELD` resource type for `translatableResources` is deprecated (VERIFIED, schema) |
 | MENU / LINK | title | Phase 3 |
 | FILTER | label | Phase 3 |
 | METAOBJECT | depends on definition | Phase 3 |
@@ -83,6 +85,18 @@ Legend:
 | PAYMENT_GATEWAY | name, message, before_payment_instructions | Later |
 | SELLING_PLAN / SELLING_PLAN_GROUP | name, option1-3, description | Later |
 | EMAIL_TEMPLATE / PACKING_SLIP_TEMPLATE | title/body_html, body | Later. Contains Liquid, so it needs strict placeholder protection |
+
+### 2.2 Technical Shopify limits that shape features
+
+| Limit | Effect in Linguva | Source |
+|---|---|---|
+| `METAFIELD` resource type deprecated for `translatableResources` | Custom fields are found through their owner only: the editor and bulk jobs (with the option on) check each owner; the coverage report can't count them without one request per resource | VERIFIED (schema) |
+| Rich text metafields are JSON (`RICH_TEXT_FIELD`) | Translated through markup and converted back; documents with node types Linguva doesn't know are left to Shopify's editor rather than guessed at | VERIFIED (type); node set per Shopify's rich text editor, unknown types refused |
+| JSON, list, link and file metafields | Counted, not translated (no reliable text to translate, risk of breaking data) | Linguva decision |
+| Market-specific translations (`marketId`) | Not written; all translations apply to all markets | Not implemented |
+| No webhook for pages, blog posts, menus, theme content | Automatic translation covers products and collections only; other types need a bulk job or a later reconciliation | ASSUMPTION (topic list reviewed for the types Linguva uses) |
+| Webhook delivery is at least once, and can be late or missed | Duplicate deliveries are suppressed by webhook id; a missed delivery means the change is translated by the next bulk job (no reconciliation yet) | VERIFIED (Shopify docs: at-least-once) |
+| 20 languages per shop; primary language only in the admin | Settings and the database refuse more than 20 automatic languages | VERIFIED |
 
 ## 3. Billing
 

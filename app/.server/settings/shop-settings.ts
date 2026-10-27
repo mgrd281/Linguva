@@ -156,3 +156,28 @@ export function translationContext(storeContext: string | null | undefined, item
   const parts = [storeContext ? `Store: ${storeContext}` : null, itemContext ?? null].filter(Boolean);
   return parts.length ? parts.join(". ").slice(0, 1000) : undefined;
 }
+
+/**
+ * Automatic translation of new and changed products and collections. Only
+ * the shop's additional languages are kept; turning it on without a
+ * language turns it off. Recorded in the audit log (it spends AI allowance
+ * without someone starting each run).
+ */
+export async function setAutoTranslate(
+  input: { shopId: string; enabled: boolean; locales: readonly string[]; allowedLocales: readonly string[]; actorId: string | null },
+  client: PrismaClient = defaultClient,
+) {
+  const locales = [...new Set(input.locales)].filter((l) => input.allowedLocales.includes(l)).slice(0, 20);
+  const enabled = input.enabled && locales.length > 0;
+  await updateSettings(input.shopId, { autoTranslateNew: enabled, autoTranslateLocales: enabled ? locales : [] }, client);
+  await client.auditLog.createMany({
+    data: [{
+      shopId: input.shopId,
+      actorType: "MERCHANT_USER",
+      actorId: input.actorId,
+      action: enabled ? "auto_translate.enabled" : "auto_translate.disabled",
+      metadata: { locales: enabled ? locales : [] },
+    }],
+  });
+  return { enabled, locales: enabled ? locales : [] };
+}

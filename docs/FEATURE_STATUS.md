@@ -40,7 +40,11 @@ Three states, never mixed:
 | Review | Review page: filters, search, pagination, approve, reject | Yes | Server; UI (content, empty state, accessibility) | No | H1–H2 |
 | History | Revisions, restore, remove translation | Yes | Server | No | H3–H5 |
 | Images | Image alt text for product images (MEDIA_IMAGE) and collection / blog post images (nested COLLECTION_IMAGE, ARTICLE_IMAGE): editor, AI drafts, publish | Yes | Server (incl. security tests) | No (live test prepared) | I1–I3 |
-| Metafields | Metafields Shopify marks translatable (single and multi-line text): editor, AI drafts, publish. Rich text, JSON, lists, links and files are counted, not edited | Yes | Server (incl. security tests) | No (live test prepared) | I4–I6 |
+| Metafields | Metafields Shopify marks translatable (single and multi-line text): editor, AI drafts, publish. JSON, lists, links and files are counted, not edited | Yes | Server (incl. security tests) | No (live test prepared) | I4–I6 |
+| Metafields | Rich text metafields (`rich_text_field`): translated with structure, heading levels and link targets kept (any change is refused), rendered preview in editor and Review | Yes | Unit + server (tampered links, malformed JSON refused) | No | I4–I6 |
+| Bulk | Option "Also translate image alt text and custom fields" in bulk jobs (products, collections, pages, blog posts, blogs): drafts linked to their product, same protection and review rules | Yes | Server (incl. tenant isolation); UI (option shown) | No | E1, I1–I6 |
+| SEO | Coverage report includes product, collection and blog post image alt text; "Translate gaps" starts the owner's job with images | Yes | Server | No (nesting of collection / blog post images unconfirmed) | K1–K3 |
+| Automation | Automatic translation of new and changed products and collections (webhooks `products/*`, `collections/*`; off by default, per language in Settings): one check about a minute after the last save, same rules as bulk jobs (drafts, protected translations kept, allowance, plan, consent), shown as "Automatic" jobs | Yes | Server (real PostgreSQL, Redis, BullMQ) + UI (Settings) | No (webhook delivery not tested on a store) | P1–P5 |
 | Markets | Read-only Markets page (optional scope `read_markets`): languages and addresses per market, checks | Yes | Server | No (live read test prepared) | J1–J4 |
 | Billing | Owner complimentary access: shop GID in server configuration AND an operator grant (owner database role), metered AI usage, internal cost estimate, audit | Yes | Server (incl. security tests) + UI (Plan page) | No | L10 |
 | Billing | Shopify App Pricing: plan entitlements, Partner API subscription check (6 h cache, never locks out a paying shop on API errors), plan selection redirect, welcome link, gating in editor, bulk, settings, glossary, worker | Yes | Server (simulated Partner API) + UI (Plan page states) | No | L1–L9 |
@@ -52,12 +56,12 @@ Three states, never mixed:
 
 | Feature | Notes |
 |---|---|
-| Images and metafields in bulk jobs and the coverage report | Editor only for now |
 | App interface in other languages | English only |
 | Review text search through an index | Linear scan under RLS (PERFORMANCE.md §1) |
-| Rich text, JSON, list, link and file metafields | Need structure-aware editing |
+| JSON, list, link and file metafields | Need structure-aware editing; not plain text |
+| Custom fields in the coverage report | Shopify lists metafields only through their owner (the `METAFIELD` resource type is deprecated), so a scan would need one request per resource |
 | Market-specific translations (`marketId`), changing markets or web presences | Markets page is read-only |
 | Usage-based overage (App Events) | Planned |
-| Automation on product updates (webhooks + reconciliation) | Planned |
+| Automatic translation for pages, blog posts and other types; periodic reconciliation for missed webhooks | Planned. Products and collections are implemented |
 | Admin center for the operator (MFA, roles) | Planned |
 | Production hosting, backups, monitoring | Not set up; needs the owner's approval |

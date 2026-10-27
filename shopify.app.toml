@@ -41,6 +41,13 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
+  # Handled by: /app/routes/webhooks.content.tsx
+  # Automatic translation of new and changed content (off unless the merchant turns it on).
+  [[webhooks.subscriptions]]
+  topics = ["products/create", "products/update", "collections/create", "collections/update"]
+  uri = "/webhooks/content"
+  include_fields = ["admin_graphql_api_id", "updated_at"]
+
   # Mandatory compliance topics for public apps.
   # See: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
   [[webhooks.subscriptions]]

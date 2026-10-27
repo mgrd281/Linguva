@@ -7,6 +7,8 @@ import { prisma as defaultClient } from "../lib/db";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 
 export const ACTIVE_JOB_STATUSES = ["PENDING", "DISCOVERING", "RUNNING"] as const;
+/** requestedBy of jobs created by automatic translation (webhooks). */
+export const AUTO_REQUESTED_BY = "system:auto";
 const TERMINAL_ITEM_STATUSES: TranslationJobItemStatus[] = [
   "SUCCEEDED",
   "SKIPPED",
@@ -87,6 +89,25 @@ export async function createBulkJob(
           status: { in: [...ACTIVE_JOB_STATUSES] },
         },
       });
+      const fieldScope = input.fieldScope ?? "ALL";
+      const includeAttached = Boolean(input.includeAttached) && fieldScope === "ALL" && ATTACHED_BULK_TYPES.has(input.resourceType);
+      if (active?.requestedBy === AUTO_REQUESTED_BY) {
+        // An automatic job holds a few changed resources: it becomes the
+        // requested bulk job (its items stay, discovery adds the rest).
+        const job = await tx.translationJob.update({
+          where: { id: active.id },
+          data: {
+            requestedBy: input.requestedBy,
+            idempotencyKey: input.idempotencyKey,
+            overwriteProtected: input.overwriteProtected ?? false,
+            fieldScope,
+            includeAttached,
+            discoveryDone: false,
+            discoveryCursor: null,
+          },
+        });
+        return { job, created: true };
+      }
       if (active) return { job: active, created: false };
       const settings = await tx.shopSettings.findUnique({ where: { shopId: input.shopId } });
       const job = await tx.translationJob.create({
@@ -99,9 +120,8 @@ export async function createBulkJob(
           // Draft unless the merchant explicitly enabled automatic publishing.
           publishMode: settings?.bulkPublishMode ?? "DRAFT",
           overwriteProtected: input.overwriteProtected ?? false,
-          fieldScope: input.fieldScope ?? "ALL",
-          includeAttached:
-            Boolean(input.includeAttached) && (input.fieldScope ?? "ALL") === "ALL" && ATTACHED_BULK_TYPES.has(input.resourceType),
+          fieldScope,
+          includeAttached,
         },
       });
       return { job, created: true };

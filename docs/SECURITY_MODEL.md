@@ -45,6 +45,7 @@ Status: **Phase 0 — proposal and threat model.** Controls listed here aren't i
 - Duplicate suppression: `unique(webhookId)` on `WebhookEvent`. A duplicate gets a 200 and is not processed again.
 - Replay window: reject events whose `X-Shopify-Triggered-At` is older than a configurable window (the default must allow Shopify retries, which can take up to ~48h — **ASSUMPTION, verify**). Duplicates are still caught by the ID check.
 - Handlers only persist and enqueue. They respond within a few hundred ms.
+- The delivery log keeps finished entries for 14 days (`purgeWebhookLog`, run by the worker's sweep): long enough for Shopify's retries, short enough that frequent product webhooks don't grow the table. It stores topic, shop domain and a payload hash, never the payload.
 
 ## 5c. RLS and indexes: the fuzzy search function
 
@@ -128,6 +129,17 @@ Development-only tools (not shipped, not run on user input) also have advisories
 | `TranslationDraft.parentGid TEXT NULL` with a CHECK on the GID format | Written only by the worker, from the job item's own resource (never from request input). Used for the Review page's editor link and type filter (`startsWith` a fixed GID prefix; no user text reaches it). |
 | Row-level security | Unchanged: both tables keep `ENABLE` + `FORCE ROW LEVEL SECURITY` and their `tenant_isolation` policy on `shopId`, which covers new columns. No new grants, functions or roles. |
 | Cross-tenant risk | A draft's `resourceGid`/`parentGid` come from Shopify for the job's own shop; approval re-reads the resource from that shop's Admin API and checks the source digest before publishing. Security tests for drafts and bulk jobs cover cross-shop access (`tests/security/bulk-jobs-security.test.ts`, `memory-glossary-review-security.test.ts`). |
+
+## 5h. Database change review: automatic translation (migration 20261029180000)
+
+| Change | Review |
+|---|---|
+| `ShopSettings.autoTranslateLocales TEXT[] NOT NULL DEFAULT '{}'` with a CHECK (at most 20 entries, locale code format) | Written only by `setAutoTranslate`, which keeps only the shop's own additional languages (from Shopify) and records an audit log entry (`auto_translate.enabled`/`disabled`, actor id, languages). `autoTranslateNew` already existed and stays false by default; turning it on without a language turns it off. The CHECK refuses malformed or too many values even if a later code path skipped the filter (tested). |
+| Row-level security | Unchanged: `ShopSettings` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy on `shopId`, which covers the new column. No new grants, functions or roles. |
+| New webhook topics (`products/create|update`, `collections/create|update`) | Same route action as the other webhooks: HMAC verified by the Shopify library, duplicate deliveries suppressed by `webhookId`. The shop comes from the verified delivery; the resource id from the payload is accepted only when it is a numeric GID of the topic's type. `include_fields` limits the payload to the id and `updated_at` (no product data is stored). Nothing is queued unless the shop turned automatic translation on. |
+| Queue `translation-auto` | Payload is ids only (`shopId`, resource GID, type), validated by a strict schema in the worker (`INVALID_PAYLOAD` otherwise, tested). The check re-reads consent, settings and plan for that shop, then creates items in that shop's tenant transaction; the item runs through the normal item queue, so publishing, protection of translations a person wrote or approved, AI allowance and daily caps apply unchanged. |
+| Unintended publishing or overwriting | Automatic items never join a running job that only translates search listings or may replace protected translations (`overwriteProtected`); they wait for it. Results are drafts unless the shop enabled automatic publishing (§5b). A bulk job the merchant starts while an automatic job runs takes it over with the merchant's own settings. |
+| Cross-tenant risk | Store B's webhooks never read store A's settings; an automatic check reads only its own shop's Admin API. Covered by `tests/integration/auto-translate.test.ts` ("stay within their store", RLS counts under the other tenant). |
 
 ## 6. Admin control center
 

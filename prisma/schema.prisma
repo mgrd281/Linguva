@@ -96,7 +96,10 @@ model ShopInstallation {
 
 model ShopSettings {
   shopId                    String          @id @db.Uuid
+  /// Automatic translation of new and changed products and collections
+  /// (webhooks), into the languages in autoTranslateLocales.
   autoTranslateNew          Boolean         @default(false)
+  autoTranslateLocales      String[]        @default([])
   protectManualEdits        Boolean         @default(true)
   reviewRequired            Boolean         @default(true)
   aiDataProcessingConsentAt DateTime?       @db.Timestamptz(3)

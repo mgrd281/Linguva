@@ -2,7 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { isBulkResourceType, listJobsPage } from "../.server/jobs/bulk-jobs";
+import { AUTO_REQUESTED_BY, isBulkResourceType, listJobsPage } from "../.server/jobs/bulk-jobs";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { JOB_STATUS_LABELS, jobProgress } from "../lib/job-display";
 import { kindMeta, RESOURCE_KINDS } from "../lib/resource-kinds";
@@ -25,6 +25,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       type: isBulkResourceType(j.resourceType) ? kindMeta(j.resourceType).label : j.resourceType,
       status: j.status,
       createdAt: j.createdAt.toISOString(),
+      automatic: j.requestedBy === AUTO_REQUESTED_BY,
       progress: jobProgress(j),
     })),
   };
@@ -118,7 +119,15 @@ export default function Jobs() {
                       })}
                     </s-link>
                   </s-table-cell>
-                  <s-table-cell>{job.type}</s-table-cell>
+                  <s-table-cell>
+                    {job.type}
+                    {job.automatic ? (
+                      <>
+                        {" "}
+                        <s-badge>Automatic</s-badge>
+                      </>
+                    ) : null}
+                  </s-table-cell>
                   <s-table-cell>{languageName(job.targetLocale)}</s-table-cell>
                   <s-table-cell>
                     <s-badge tone={JOB_STATUS_LABELS[job.status].tone}>

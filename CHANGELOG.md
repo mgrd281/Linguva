@@ -62,6 +62,10 @@
 - Design pass across all pages (screenshot review on desktop and phone): field actions under the translation, consistent side-by-side layouts, filters in rows, languages chosen by name in the glossary and memory, readable metafield names, a Linguva start page.
 - Time limit on every Shopify Admin API call (`SHOPIFY_TIMEOUT_MS`, default 15 s) with a clear page in the app and retries in the worker; logging of unexpected server errors.
 - Keyboard, slow-network, timeout and screenshot-comparison browser tests (`pnpm test:visual:update` to accept intended changes).
+- Image alt text and custom fields in bulk jobs (option per job) and image alt text in the coverage report.
+- Rich text custom fields: translated with their structure and links kept; rendered preview in the editor and on Review.
+- Automatic translation of new and changed products and collections (Settings, per language, off by default): webhooks `products/create|update` and `collections/create|update` with `include_fields`, a debounced queue (`translation-auto`), items through the normal item queue, "Automatic" jobs (one per day, type and language), a bulk job started meanwhile takes the automatic job over with the merchant's settings.
+- Webhook delivery log retention (14 days, deleted by the worker's sweep).
 - Phase 0 documentation set.
 
 ### Security

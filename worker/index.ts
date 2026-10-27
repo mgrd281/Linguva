@@ -15,6 +15,7 @@ import type { JobDependencies } from "../app/.server/jobs/processors";
 import { createRedis, keyPrefix } from "../app/.server/queue/redis";
 import { TokenBucket } from "../app/.server/queue/rate-limiter";
 import { withShopifyTimeout } from "../app/.server/shopify/admin-timeout";
+import { purgeWebhookLog } from "../app/.server/webhooks/process-webhook";
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -57,6 +58,8 @@ async function main() {
     try {
       const requeued = await requeueStalledItems(deps, queues);
       if (requeued) logger.warn({ requeued }, "re-enqueued stalled items");
+      const purged = await purgeWebhookLog(prisma);
+      if (purged) logger.info({ purged }, "old webhook log entries deleted");
     } catch (error) {
       logger.error({ err: (error as Error).name }, "stalled-item sweep failed");
     }

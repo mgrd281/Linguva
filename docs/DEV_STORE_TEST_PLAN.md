@@ -75,7 +75,8 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **I2** Publish alt text → the storefront image `alt` attribute on `/de/products/…` is German (check the page source).
 - **I3** Collection image and blog post featured image → alt text listed and publishable (confirms the nested resource assumption).
 - **I4** `custom.care` and `custom.subtitle` → listed as translatable, publishable, shown in German on the storefront where the theme displays them.
-- **I5** Rich text metafield → counted as "can't be edited here yet", no text box.
+- **I5** Rich text metafield with a heading, bold text and a link → AI draft keeps heading level, bold and the link target; published value renders correctly on the storefront and in Shopify's editor (confirms the node set).
+- **I7** Bulk job with "Also translate image alt text and custom fields" → drafts for alt text and custom fields appear on Review under their product.
 - **I6** An image without alt text → "has no alt text" notice.
 
 ### J. Markets
@@ -110,6 +111,13 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **N1** Uninstall → sessions deleted, running jobs cancelled, `Shop` marked uninstalled.
 - **N2** Reinstall → works without old sessions; data handling per DATABASE_SCHEMA.md.
 - **N3** `shopify app webhook trigger` for `customers/data_request`, `customers/redact`, `shop/redact` → 200, recorded; `shop/redact` deletes the shop's data.
+
+### P. Automatic translation (webhooks)
+- **P1** Settings → Automatic translation: German on. Edit a product's description and save → about a minute later an "Automatic" job appears on Jobs and a draft on Review; nothing is published while "Review first" is set.
+- **P2** Save the same product three times within a minute → one check (one item), not three.
+- **P3** Translate a product title by hand, then change the English title → the automatic check keeps the hand-written translation (counted as "protected kept").
+- **P4** Publish a Linguva translation → if Shopify sends `products/update` for it, the check ends "up to date" and the AI usage doesn't change. Record whether the webhook arrives at all (see SHOPIFY_API_MATRIX §2).
+- **P5** Turn automatic translation off → saving a product queues nothing (no new job).
 
 ### S. Security spot checks
 - **S1** Change an id in a form request (another product's image or metafield GID) with the browser's dev tools → nothing is written to the other resource.

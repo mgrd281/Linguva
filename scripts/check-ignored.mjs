@@ -5,7 +5,11 @@ import { execFileSync } from "node:child_process";
 
 const SOURCE_DIRS = ["app", "prisma", "tests", "worker", "scripts", "extensions", "docs", ".github"];
 // Generated or downloaded files that are ignored on purpose.
-const ALLOWED = [/^app\/types\/admin-\d{4}-\d{2}\.schema\.json$/];
+const ALLOWED = [
+  /^app\/types\/admin-\d{4}-\d{2}\.schema\.json$/,
+  // Screenshot references of the local machine; CI compares against the committed *-ci.png.
+  /^tests\/ui\/[\w.-]+-snapshots\/[\w-]+-local\.png$/,
+];
 
 const output = execFileSync("git", ["ls-files", "--others", "--ignored", "--exclude-standard", "--", ...SOURCE_DIRS], {
   encoding: "utf8",

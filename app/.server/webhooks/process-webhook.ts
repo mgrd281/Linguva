@@ -115,3 +115,18 @@ export async function processWebhook(
 export function webhookResponse(outcome: WebhookOutcome): Response {
   return new Response(null, { status: outcome === "failed" ? 500 : 200 });
 }
+
+/** Duplicate suppression only needs recent deliveries (Shopify retries for hours, not weeks). */
+export const WEBHOOK_LOG_RETENTION_DAYS = 14;
+
+/**
+ * Deletes delivery log entries older than the retention period (product
+ * webhooks arrive often). Entries still PROCESSING are kept.
+ */
+export async function purgeWebhookLog(client: PrismaClient = defaultClient, now = new Date()) {
+  const cutoff = new Date(now.getTime() - WEBHOOK_LOG_RETENTION_DAYS * 86_400_000);
+  const { count } = await client.webhookEvent.deleteMany({
+    where: { status: { in: ["PROCESSED", "FAILED"] }, receivedAt: { lt: cutoff } },
+  });
+  return count;
+}

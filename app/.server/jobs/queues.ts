@@ -22,6 +22,7 @@ import {
   type ItemPayload,
   type JobDependencies,
 } from "./processors";
+import { createAutoItems, type AutoTranslatePayload } from "./auto-translate";
 import {
   failCoverageReport,
   runCoveragePage,
@@ -32,6 +33,7 @@ export const QUEUE_NAMES = {
   discovery: "translation-discovery",
   items: "translation-items",
   coverage: "translation-coverage",
+  auto: "translation-auto",
 } as const;
 
 export const ITEM_JOB_OPTIONS: JobsOptions = {
@@ -58,11 +60,23 @@ const coveragePayloadSchema = z
     cursor: z.string().max(1000).nullable(),
   })
   .strict();
+const autoPayloadSchema = z
+  .object({
+    shopId: uuid,
+    resourceGid: z.string().regex(/^gid:\/\/shopify\/(Product|Collection)\/\d{1,20}$/),
+    resourceType: z.enum(["PRODUCT", "COLLECTION"]),
+  })
+  .strict()
+  .refine((p) => p.resourceGid.startsWith(p.resourceType === "PRODUCT" ? "gid://shopify/Product/" : "gid://shopify/Collection/"));
+
+/** How long an automatic check waits for a running job with other settings. */
+const AUTO_BUSY_WAIT_MS = 5 * 60 * 1000;
 
 export interface Queues {
   discovery: Queue<DiscoveryPayload>;
   items: Queue<ItemPayload>;
   coverage: Queue<CoveragePagePayload>;
+  auto: Queue<AutoTranslatePayload>;
   itemJobOptions: JobsOptions;
   discoveryJobOptions: JobsOptions;
   close(): Promise<void>;
@@ -76,14 +90,16 @@ export function createQueues(
   const discovery = new Queue<DiscoveryPayload>(QUEUE_NAMES.discovery, { connection, prefix });
   const items = new Queue<ItemPayload>(QUEUE_NAMES.items, { connection, prefix });
   const coverage = new Queue<CoveragePagePayload>(QUEUE_NAMES.coverage, { connection, prefix });
+  const auto = new Queue<AutoTranslatePayload>(QUEUE_NAMES.auto, { connection, prefix });
   return {
     discovery,
     items,
     coverage,
+    auto,
     itemJobOptions: { ...ITEM_JOB_OPTIONS, ...overrides.itemJobOptions },
     discoveryJobOptions: { ...DISCOVERY_JOB_OPTIONS, ...overrides.discoveryJobOptions },
     async close() {
-      await Promise.all([discovery.close(), items.close(), coverage.close()]);
+      await Promise.all([discovery.close(), items.close(), coverage.close(), auto.close()]);
     },
   };
 }
@@ -266,10 +282,31 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
   };
 }
 
+/**
+ * Automatic translation check of one changed resource: creates its items
+ * (one per chosen language) and puts them on the item queue.
+ */
+export function createAutoProcessor(deps: JobDependencies, queues: Queues) {
+  return async (job: Job<AutoTranslatePayload>, token?: string) => {
+    const parsed = autoPayloadSchema.safeParse(job.data);
+    if (!parsed.success) throw new UnrecoverableError("INVALID_PAYLOAD");
+    const payload = parsed.data;
+    const log = logger.child({ queue: QUEUE_NAMES.auto, queueJobId: job.id, shopId: payload.shopId });
+    const result = await createAutoItems(deps.prisma, payload, deps.billingFor);
+    await enqueueItems(queues, payload.shopId, result.itemIds, undefined, deps.prisma);
+    // A finished item checked again needs a fresh queue job id.
+    await enqueueItems(queues, payload.shopId, result.reused, `auto${Date.now()}`, deps.prisma);
+    log.info({ items: result.itemIds.length + result.reused.length, busy: result.busy }, "automatic translation checked");
+    if (result.busy) return delay(job, token, AUTO_BUSY_WAIT_MS);
+    return { items: result.itemIds.length + result.reused.length };
+  };
+}
+
 export interface WorkerSet {
   discovery: Worker<DiscoveryPayload>;
   items: Worker<ItemPayload>;
   coverage: Worker<CoveragePagePayload>;
+  auto: Worker<AutoTranslatePayload>;
   close(): Promise<void>;
 }
 
@@ -294,15 +331,21 @@ export function createWorkers(
     // Pages of one report run one after another; this only spreads shops.
     concurrency: Math.max(1, Math.floor(options.concurrency / 2)),
   });
-  for (const worker of [discovery, items, coverage]) {
+  const auto = new Worker<AutoTranslatePayload>(QUEUE_NAMES.auto, createAutoProcessor(deps, queues), {
+    connection: options.connection,
+    prefix: options.prefix,
+    concurrency: Math.max(1, Math.floor(options.concurrency / 2)),
+  });
+  for (const worker of [discovery, items, coverage, auto]) {
     worker.on("error", (error) => logger.error({ err: error.name }, "worker error"));
   }
   return {
     discovery,
     items,
     coverage,
+    auto,
     async close() {
-      await Promise.all([discovery.close(), items.close(), coverage.close()]);
+      await Promise.all([discovery.close(), items.close(), coverage.close(), auto.close()]);
     },
   };
 }

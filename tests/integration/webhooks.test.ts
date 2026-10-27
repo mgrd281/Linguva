@@ -5,6 +5,8 @@ import { action as uninstalled } from "../../app/routes/webhooks.app.uninstalled
 import { action as dataRequest } from "../../app/routes/webhooks.customers.data_request";
 import { action as customersRedact } from "../../app/routes/webhooks.customers.redact";
 import { action as shopRedact } from "../../app/routes/webhooks.shop.redact";
+import { action as content } from "../../app/routes/webhooks.content";
+import { purgeWebhookLog, WEBHOOK_LOG_RETENTION_DAYS } from "../../app/.server/webhooks/process-webhook";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { syncShopLocales } from "../../app/.server/locales/shop-locales";
 import { countAsOwner, ownerDb, resetDatabase } from "../support/db";
@@ -37,6 +39,7 @@ describe("webhook authentication", () => {
     ["customers/redact", "/webhooks/customers/redact", customersRedact],
     ["shop/redact", "/webhooks/shop/redact", shopRedact],
     ["app/uninstalled", "/webhooks/app/uninstalled", uninstalled],
+    ["products/update", "/webhooks/content", content],
   ])("returns 401 for %s with an invalid HMAC and does nothing", async (topic, path, handler) => {
     const response = await call(
       handler as Action,
@@ -190,5 +193,44 @@ describe("duplicate deliveries", () => {
       status: "PROCESSED",
       attempts: 2,
     });
+  });
+});
+
+describe("content webhooks (automatic translation)", () => {
+  it("accept a signed products/update and queue nothing while automatic translation is off", async () => {
+    await upsertInstalledShop({ shopDomain: SHOP }, app);
+    const response = await call(
+      content as Action,
+      signedWebhookRequest({
+        path: "/webhooks/content",
+        topic: "products/update",
+        shop: SHOP,
+        body: { admin_graphql_api_id: "gid://shopify/Product/1", updated_at: "2026-10-27T10:00:00Z" },
+        webhookId: "content-1",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await app.webhookEvent.findUniqueOrThrow({ where: { webhookId: "content-1" } })).toMatchObject({ status: "PROCESSED", topic: "PRODUCTS_UPDATE" });
+  });
+});
+
+describe("webhook log retention", () => {
+  it("deletes finished entries older than the retention period and keeps the rest", async () => {
+    const now = new Date("2026-10-27T12:00:00Z");
+    const old = new Date(now.getTime() - (WEBHOOK_LOG_RETENTION_DAYS + 1) * 86_400_000);
+    const recent = new Date(now.getTime() - 86_400_000);
+    const row = (webhookId: string, status: "PROCESSED" | "FAILED" | "PROCESSING", receivedAt: Date) => ({
+      webhookId,
+      topic: "PRODUCTS_UPDATE",
+      shopDomain: SHOP,
+      payloadHash: "x",
+      status,
+      receivedAt,
+    });
+    await app.webhookEvent.createMany({
+      data: [row("old-done", "PROCESSED", old), row("old-failed", "FAILED", old), row("old-running", "PROCESSING", old), row("recent", "PROCESSED", recent)],
+    });
+    expect(await purgeWebhookLog(app, now)).toBe(2);
+    expect((await app.webhookEvent.findMany({ orderBy: { webhookId: "asc" } })).map((e) => e.webhookId)).toEqual(["old-running", "recent"]);
   });
 });

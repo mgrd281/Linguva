@@ -38,3 +38,29 @@ test("usage on Settings uses the plan's allowance, like the Overview and Plan pa
   await expect(usage.getByRole("progressbar", { name: "AI characters used this month" })).toHaveCount(1);
 });
 
+
+test("automatic translation is off by default and turned on per language @responsive", async ({ page }) => {
+  await openApp(page, "full", "/app/settings");
+  const section = page.locator('s-section[heading="Automatic translation"]');
+  await expect(section.getByText("Changes are translated when you start a translation.")).toBeVisible();
+  await expect(section.getByText(/only missing or\s+outdated texts are translated/i)).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  // Turning it on without a language is refused.
+  await section.getByRole("button", { name: "Turn on automatic translation" }).click();
+  await expect(section.locator('s-banner[heading="Choose at least one language"]')).toBeVisible();
+
+  await section.getByRole("checkbox", { name: "German", exact: true }).check();
+  await section.getByRole("checkbox", { name: "French", exact: true }).check();
+  await section.getByRole("button", { name: "Turn on automatic translation" }).click();
+  await expect(section.locator('s-banner[heading="Saved"]')).toBeVisible();
+  await page.reload();
+  await expect(section.getByText("French, German")).toBeVisible();
+  await expect(section.getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
+  await expect(section.getByRole("checkbox", { name: "Arabic", exact: true })).not.toBeChecked();
+
+  // Off again (other tests use this store).
+  await section.getByRole("button", { name: "Turn off" }).click();
+  await expect(section.getByText("Changes are translated when you start a translation.")).toBeVisible();
+});

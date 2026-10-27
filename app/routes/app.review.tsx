@@ -16,6 +16,7 @@ import {
 } from "../.server/review/drafts";
 import { editorPath } from "../lib/resource-kinds";
 import { fieldLabel } from "../lib/field-labels";
+import { issueLabel } from "../lib/issue-labels";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { shop } = await requireShop(request);
@@ -117,7 +118,7 @@ export default function Review() {
                   rows={d.value.length > 200 ? 6 : 2}
                 />
                 <s-stack direction="inline" gap="small">
-                  {d.issues.length ? <s-badge tone="warning">Check: {d.issues.join(", ")}</s-badge> : null}
+                  {d.issues.length ? <s-badge tone="warning">Check: {d.issues.map(issueLabel).join(", ")}</s-badge> : null}
                   {d.href ? <s-link href={d.href}>Open in editor</s-link> : null}
                 </s-stack>
               </s-stack>

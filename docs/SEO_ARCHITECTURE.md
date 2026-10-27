@@ -1,6 +1,6 @@
 # Multilingual SEO and Markets: architecture and plan
 
-Status: **Plan.** No SEO-specific feature is implemented yet. By decision, SEO features are built only after the existing translation pipeline is verified on a real development store (docs/DEV_STORE_SETUP.md). That hasn't happened yet, so every phase below is **Blocked** on that verification.
+Status: **S1 implemented and tested against the simulated Admin API** (at the owner's request, ahead of live verification). S2–S5 are planned. Nothing SEO-related is verified on a real development store yet (docs/DEV_STORE_SETUP.md); the live contract tests already check that `meta_title` and `meta_description` are translatable keys of products and collections.
 
 Labels: **VERIFIED (schema)** = present in the downloaded Admin API 2026-10 schema; **VERIFIED (docs)** = stated on shopify.dev; **TESTED (fake)** = covered by automated tests against the simulated Admin API; **ASSUMPTION** = to be confirmed on a dev store.
 
@@ -40,7 +40,9 @@ Labels: **VERIFIED (schema)** = present in the downloaded Admin API 2026-10 sche
 
 ## 3. Features and design
 
-### S1 SEO fields: titles and meta descriptions
+### S1 SEO fields: titles and meta descriptions — Implemented, Tested (fake store)
+
+Implemented as described below, in `app/lib/seo.ts` (rules shared by server and editor), `translate-fields.ts` (warnings on AI output), `components/SeoPanel.tsx` (live counter and preview) and `TranslationJob.fieldScope` (`ALL` | `SEO`). Limits: title 15–60, description 50–155 width units (one per grapheme, two for CJK/fullwidth). Findings are warnings: in the editor they show next to the field, in review they show on the draft, and with automatic publishing a flagged result waits in Review. Duplicate titles across resources are left to the S5 audit.
 - Show `meta_title` and `meta_description` as their own "Search engine listing" group in the editor, with a SERP preview (title, URL from `rootUrls` plus the translated handle, description).
 - SEO checks per language as validation issues (warnings, never blocking): title over 60 characters, description over 155 characters, under 15% of the limit, the same as the source text (untranslated), the same title on several resources in one language, forbidden glossary terms. Pixel-width estimation is optional later.
 - Fallback rule: if the source has no `meta_title`, Shopify uses the title. Linguva shows "uses translated title" instead of reporting a missing field.

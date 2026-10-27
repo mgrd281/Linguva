@@ -7,6 +7,7 @@ import {
 } from "./html-segmenter";
 import type { ProtectOptions } from "./protect";
 import { markupToPlainText, SegmentStructureError } from "./segment-markup";
+import { checkSeoField } from "../../lib/seo";
 import {
   hasBlockingIssue,
   validateTranslation,
@@ -205,6 +206,8 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
     if (!structureError) {
       try {
         const value = doc.render(segmentTargets);
+        // Search engine titles and descriptions: length and "untranslated" warnings.
+        issues.push(...checkSeoField(field.key, field.value ?? "", value));
         if (!hasBlockingIssue(issues)) {
           outcomes.push({
             key: field.key,

@@ -21,7 +21,7 @@ import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings"
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { finishItem, isBulkResourceType, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
-import { planResourceWork } from "./needs-work";
+import { planResourceWork, scopeKeys } from "./needs-work";
 
 export type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -119,7 +119,12 @@ export async function runDiscoveryPage(
   const gids = page.resources
     .filter(
       (r) =>
-        planResourceWork(r, { latest, pendingDrafts, overwriteProtected: job.overwriteProtected }).fields.length > 0,
+        planResourceWork(r, {
+          latest,
+          pendingDrafts,
+          overwriteProtected: job.overwriteProtected,
+          onlyKeys: scopeKeys(job.fieldScope),
+        }).fields.length > 0,
     )
     .map((r) => r.resourceId);
 
@@ -231,6 +236,7 @@ export async function processItem(
     latest,
     pendingDrafts,
     overwriteProtected: job.overwriteProtected,
+    onlyKeys: scopeKeys(job.fieldScope),
   });
   if (fields.length === 0) {
     const errorCode = protectedKeys.length ? "PROTECTED" : "UP_TO_DATE";

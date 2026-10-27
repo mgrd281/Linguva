@@ -35,6 +35,7 @@
 - Guarded live contract tests for a Shopify development store (`pnpm test:live`, never in CI) with a dev-store gate, deny list, fixture-only writes and cleanup; setup guide `docs/DEV_STORE_SETUP.md`.
 - SEO and Markets architecture plan (`docs/SEO_ARCHITECTURE.md`).
 - AI cost limits: daily cap per shop, platform-wide daily cap, maximum characters per interactive request, and request rate limits per staff member and per shop (Redis token buckets). Usage today is shown in the editor and Settings.
+- SEO: checks for SEO titles and descriptions (length by display width, incl. CJK; unchanged from the source), a "Search engine listing" section in the editor with live counters and a search result preview, "Translate SEO fields only" in the editor, and SEO-only bulk jobs. Readable names for quality warnings in the editor and Review.
 - Phase 0 documentation set.
 
 ### Fixed

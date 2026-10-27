@@ -5,6 +5,7 @@ import {
   type LatestRevisions,
 } from "../translation/revisions";
 import { isMachineTranslatable } from "../translation/translate-fields";
+import { SEO_KEYS } from "../../lib/seo";
 
 export interface WorkOptions {
   /** Latest Linguva revision per field (from latestRevisions). */
@@ -13,6 +14,13 @@ export interface WorkOptions {
   overwriteProtected?: boolean;
   /** Fields that already have a pending draft, mapped to its source digest. */
   pendingDrafts?: ReadonlyMap<string, string>;
+  /** Restricts the job to these keys (for example only search engine fields). */
+  onlyKeys?: readonly string[];
+}
+
+/** Keys a job's field scope is limited to, or undefined for all fields. */
+export function scopeKeys(scope: "ALL" | "SEO"): readonly string[] | undefined {
+  return scope === "SEO" ? SEO_KEYS : undefined;
 }
 
 /**
@@ -31,6 +39,7 @@ export function planResourceWork(resource: TranslatableResourceData, options: Wo
 
   for (const field of resource.content) {
     if (!field.value || !field.value.trim() || !field.digest) continue;
+    if (options.onlyKeys && !options.onlyKeys.includes(field.key)) continue;
     if (!isMachineTranslatable(field)) continue;
     const existing = translations.get(field.key);
     const hasValue = Boolean(existing?.value && existing.value.trim());

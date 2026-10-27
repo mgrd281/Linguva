@@ -35,6 +35,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       status: job.status,
       targetLocale: job.targetLocale,
       kind: kindInfo(job.resourceType),
+      fieldScope: job.fieldScope,
       errorCode: job.errorCode,
       charsBilled: job.charsBilled,
       memoryHits: job.memoryHits,
@@ -131,6 +132,7 @@ export default function JobDetail() {
             {job.publishMode === "DRAFT" ? "Drafted for review" : "Translated"}: {job.succeeded} · Already up to date
             or skipped: {job.skipped} · Failed: {job.failed}
           </s-paragraph>
+          {job.fieldScope === "SEO" ? <s-paragraph>Scope: search engine listings only.</s-paragraph> : null}
           <s-paragraph>
             AI characters: {job.charsBilled.toLocaleString()} · Reused from memory: {job.memoryHits.toLocaleString()}{" "}
             segments ({job.charsSaved.toLocaleString()} characters saved)

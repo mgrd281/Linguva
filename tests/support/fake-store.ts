@@ -61,6 +61,12 @@ export class FakeShopifyStore {
     this.translations.set(`${gid}|${locale}|${key}`, { value, digest: digestOf(field.value) });
   }
 
+  /** Adds (or replaces) a translatable field on a resource. */
+  setField(gid: string, key: string, value: string, type = "SINGLE_LINE_TEXT_FIELD") {
+    const fields = (this.products.get(gid) ?? []).filter((f) => f.key !== key);
+    this.products.set(gid, [...fields, { key, value, type }]);
+  }
+
   updateSource(gid: string, key: string, value: string) {
     this.products.set(
       gid,

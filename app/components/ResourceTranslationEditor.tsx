@@ -6,6 +6,10 @@ import { useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
+import { SeoCounter, SeoPreview } from "./SeoPanel";
+import { isSeoKey } from "../lib/seo";
+import { issueLabel } from "../lib/issue-labels";
+
 type EditorLoader = () => ReturnType<typeof loadEditorData>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
 
@@ -51,6 +55,23 @@ export function ResourceTranslationEditor() {
   const translating = aiFetcher.state !== "idle";
   const saving = saveFetcher.state !== "idle";
   const machineKeys = data.fields.filter((f) => f.machine).map((f) => f.key);
+  const seoMachineKeys = machineKeys.filter(isSeoKey);
+  const seoFields = data.fields.filter((f) => isSeoKey(f.key));
+
+  // What the merchant has typed, for live SEO checks and the preview. It
+  // belongs to the drafts it was typed over, so new drafts start fresh.
+  const [typedState, setTyped] = useState<{ base: unknown; values: Record<string, string> }>({ base: null, values: {} });
+  const typed = typedState.base === ai ? typedState.values : {};
+  const fieldByKey = new Map(data.fields.map((f) => [f.key, f]));
+  const currentValue = (key: string) => typed[key] ?? ai?.drafts[key] ?? fieldByKey.get(key)?.translation ?? "";
+  const onFormInput = (event: { target: EventTarget | null }) => {
+    const el = event.target as (Element & { value?: string }) | null;
+    const name = el?.getAttribute?.("name");
+    if (name?.startsWith("value:") && typeof el?.value === "string") {
+      const key = name.slice("value:".length);
+      setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), [key]: el.value! } }));
+    }
+  };
   const remaining = Math.max(0, Math.min(data.ai.limit - data.ai.used, data.ai.dailyLimit - data.ai.usedToday));
 
   return (
@@ -143,6 +164,17 @@ export function ResourceTranslationEditor() {
               Translate with AI
             </s-button>
           </aiFetcher.Form>
+          {seoMachineKeys.length ? (
+            <aiFetcher.Form method="post" onSubmit={() => setFilledFrom("ai")}>
+              <input type="hidden" name="intent" value="ai-translate" />
+              {seoMachineKeys.map((k) => (
+                <input key={k} type="hidden" name="key" value={k} />
+              ))}
+              <s-button type="submit" disabled={!data.ai.available || !data.ai.consent}>
+                Translate SEO fields only
+              </s-button>
+            </aiFetcher.Form>
+          ) : null}
           <memoryFetcher.Form method="post" onSubmit={() => setFilledFrom("memory")}>
             <input type="hidden" name="intent" value="memory-suggest" />
             <s-button type="submit" {...(memoryFetcher.state !== "idle" ? { loading: true } : {})}>
@@ -166,102 +198,32 @@ export function ResourceTranslationEditor() {
         ) : null}
       </s-section>
 
-      <saveFetcher.Form method="post">
+      <saveFetcher.Form method="post" onInput={onFormInput} onChange={onFormInput}>
         <input type="hidden" name="intent" value="save" />
         {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
-        {data.fields.map((field) => {
-          const draft = ai?.drafts[field.key];
-          const value = draft ?? field.translation;
-          const status = saveStatus.get(field.key);
-          const rejected = ai?.rejected[field.key];
-          const warnings = ai?.warnings[field.key];
-          const multiline = field.type === "HTML" || field.type === "MULTI_LINE_TEXT_FIELD" || field.source.length > 120;
-          const error =
-            status?.status === "conflict"
-              ? "The source text changed in Shopify. Reload and translate again."
-              : status?.status === "error"
-                ? status.message ?? "Not saved."
-                : rejected
-                  ? REJECTION_MESSAGES[rejected] ?? "The AI result was discarded."
-                  : undefined;
-
-          return (
-            <s-section key={field.key} heading={field.label}>
-              <input type="hidden" name={`digest:${field.key}`} value={field.digest} />
-              {draft !== undefined ? <input type="hidden" name={`origin:${field.key}`} value="AI" /> : null}
-              <s-stack direction="block" gap="base">
-                <s-box padding="base" background="subdued" borderRadius="base">
-                  <s-text color="subdued">{data.sourceName}</s-text>
-                  <s-paragraph>{field.source}</s-paragraph>
-                </s-box>
-                {multiline ? (
-                  <s-text-area
-                    key={`${field.key}:${draft ?? "base"}`}
-                    name={`value:${field.key}`}
-                    label={data.target.name}
-                    value={value}
-                    rows={field.type === "HTML" ? 8 : 3}
-                    {...(error ? { error } : {})}
-                    {...(field.type === "HTML" ? { details: "HTML. Formatting must match the source." } : {})}
-                  />
-                ) : (
-                  <s-text-field
-                    key={`${field.key}:${draft ?? "base"}`}
-                    name={`value:${field.key}`}
-                    label={data.target.name}
-                    value={value}
-                    {...(error ? { error } : {})}
-                    {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
-                  />
-                )}
-                {field.outdated && draft === undefined && field.translation ? (
-                  <s-checkbox
-                    name={`confirm:${field.key}`}
-                    label="The source changed, but this translation is still correct"
-                  />
-                ) : null}
-                <s-stack direction="inline" gap="small">
-                  {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
-                  {draft !== undefined ? (
-                    <s-badge tone="info">
-                      {ai?.provider === "memory" ? `Memory ${ai.scores?.[field.key] ?? ""}% match` : "AI draft"}
-                    </s-badge>
-                  ) : null}
-                  {warnings?.length ? <s-badge tone="warning">Review: {warnings.join(", ")}</s-badge> : null}
-                  {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
-                  {!field.machine ? <s-badge>Manual only</s-badge> : null}
-                </s-stack>
-                {field.history.length ? (
-                  <details>
-                    <summary>History ({field.history.length})</summary>
-                    <s-stack direction="block" gap="small">
-                      {field.history.map((h) => (
-                        <s-box key={h.id} padding="small" borderWidth="base" borderRadius="base">
-                          <s-text color="subdued">
-                            {new Date(h.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                            {" · "}
-                            {h.origin === "EXTERNAL" ? "Before Linguva" : h.origin === "AI" ? (h.approved ? "AI, approved" : "AI") : "Manual"}
-                          </s-text>
-                          <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
-                          {h.restorable ? (
-                            <s-button
-                              variant="tertiary"
-                              onClick={() =>
-                                restoreFetcher.submit({ intent: "restore", revisionId: h.id }, { method: "post" })
-                              }
-                            >
-                              Restore this version
-                            </s-button>
-                          ) : null}
-                        </s-box>
-                      ))}
-                    </s-stack>
-                  </details>
-                ) : null}
-              </s-stack>
-            </s-section>
-          );
-        })}
+        {data.fields.filter((f) => !isSeoKey(f.key)).map((field) => renderField(field))}
+        <s-section heading="Search engine listing">
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              How this {data.kind.singular} may appear in search results in {data.target.name}.
+            </s-paragraph>
+            <SeoPreview
+              value={currentValue}
+              source={(k) => fieldByKey.get(k)?.source ?? ""}
+              hasField={(k) => fieldByKey.has(k)}
+              shopDomain={data.shopDomain}
+              locale={data.target.locale}
+              pathSegment={data.kind.plural}
+            />
+            {seoFields.length === 0 ? (
+              <s-paragraph>
+                This {data.kind.singular} has no SEO title or description of its own. Add them in Shopify to
+                control search results per language.
+              </s-paragraph>
+            ) : null}
+          </s-stack>
+        </s-section>
+        {seoFields.map((field) => renderField(field))}
         <s-stack direction="inline" gap="base">
           <s-button type="submit" variant="primary" {...(saving ? { loading: true } : {})}>
             Publish translations
@@ -270,5 +232,103 @@ export function ResourceTranslationEditor() {
       </saveFetcher.Form>
     </s-page>
   );
-}
 
+  function renderField(field: (typeof data.fields)[number]) {
+    const draft = ai?.drafts[field.key];
+    const value = draft ?? field.translation;
+    const status = saveStatus.get(field.key);
+    const rejected = ai?.rejected[field.key];
+    const warnings = ai?.warnings[field.key];
+    const multiline = field.type === "HTML" || field.type === "MULTI_LINE_TEXT_FIELD" || field.source.length > 120;
+    const error =
+      status?.status === "conflict"
+        ? "The source text changed in Shopify. Reload and translate again."
+        : status?.status === "error"
+          ? status.message ?? "Not saved."
+          : rejected
+            ? REJECTION_MESSAGES[rejected] ?? "The AI result was discarded."
+            : undefined;
+
+    return (
+      <s-section key={field.key} heading={field.label}>
+        <input type="hidden" name={`digest:${field.key}`} value={field.digest} />
+        {draft !== undefined ? <input type="hidden" name={`origin:${field.key}`} value="AI" /> : null}
+        <s-stack direction="block" gap="base">
+          <s-box padding="base" background="subdued" borderRadius="base">
+            <s-text color="subdued">{data.sourceName}</s-text>
+            <s-paragraph>{field.source}</s-paragraph>
+          </s-box>
+          {multiline ? (
+            <s-text-area
+              key={`${field.key}:${draft ?? "base"}`}
+              name={`value:${field.key}`}
+              label={data.target.name}
+              value={value}
+              rows={field.type === "HTML" ? 8 : 3}
+              {...(error ? { error } : {})}
+              {...(field.type === "HTML" ? { details: "HTML. Formatting must match the source." } : {})}
+            />
+          ) : (
+            <s-text-field
+              key={`${field.key}:${draft ?? "base"}`}
+              name={`value:${field.key}`}
+              label={data.target.name}
+              value={value}
+              {...(error ? { error } : {})}
+              {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
+            />
+          )}
+          {isSeoKey(field.key) ? (
+            <SeoCounter fieldKey={field.key} value={currentValue(field.key)} source={field.source} />
+          ) : null}
+          {field.outdated && draft === undefined && field.translation ? (
+            <s-checkbox
+              name={`confirm:${field.key}`}
+              label="The source changed, but this translation is still correct"
+            />
+          ) : null}
+          <s-stack direction="inline" gap="small">
+            {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
+            {draft !== undefined ? (
+              <s-badge tone="info">
+                {ai?.provider === "memory" ? `Memory ${ai.scores?.[field.key] ?? ""}% match` : "AI draft"}
+              </s-badge>
+            ) : null}
+            {warnings?.length ? (
+                <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge>
+              ) : null}
+            {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
+            {!field.machine ? <s-badge>Manual only</s-badge> : null}
+          </s-stack>
+          {field.history.length ? (
+            <details>
+              <summary>History ({field.history.length})</summary>
+              <s-stack direction="block" gap="small">
+                {field.history.map((h) => (
+                  <s-box key={h.id} padding="small" borderWidth="base" borderRadius="base">
+                    <s-text color="subdued">
+                      {new Date(h.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                      {" · "}
+                      {h.origin === "EXTERNAL" ? "Before Linguva" : h.origin === "AI" ? (h.approved ? "AI, approved" : "AI") : "Manual"}
+                    </s-text>
+                    <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
+                    {h.restorable ? (
+                      <s-button
+                        variant="tertiary"
+                        onClick={() =>
+                          restoreFetcher.submit({ intent: "restore", revisionId: h.id }, { method: "post" })
+                        }
+                      >
+                        Restore this version
+                      </s-button>
+                    ) : null}
+                  </s-box>
+                ))}
+              </s-stack>
+            </details>
+          ) : null}
+        </s-stack>
+      </s-section>
+    );
+  }
+}

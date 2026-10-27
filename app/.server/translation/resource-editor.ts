@@ -35,6 +35,8 @@ type Admin = Pick<AdminApiContext, "graphql">;
 export interface EditorContext {
   admin: Admin;
   shopId: string;
+  /** For previews only. */
+  shopDomain?: string;
   actorId: string | null;
   kind: ResourceKind;
   resourceId: string;
@@ -60,6 +62,7 @@ export async function resolveEditorContext(
   return {
     admin,
     shopId: shop.id,
+    shopDomain: shop.shopDomain,
     actorId,
     kind,
     resourceId,
@@ -98,7 +101,8 @@ export async function loadEditorData(ctx: EditorContext) {
 
   const meta = RESOURCE_KINDS[ctx.kind];
   return {
-    kind: { label: meta.label, singular: meta.singular, path: meta.path },
+    kind: { label: meta.label, singular: meta.singular, path: meta.path, plural: meta.plural },
+    shopDomain: ctx.shopDomain ?? "",
     title: resource.content.find((c) => c.key === "title")?.value ?? "(untitled)",
     target,
     sourceName: ctx.sourceName ?? resource.content[0]?.locale ?? "",

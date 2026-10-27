@@ -4,7 +4,10 @@
  * translation to review.
  */
 
+import type { SeoIssueCode } from "../../lib/seo";
+
 export type IssueCode =
+  | SeoIssueCode
   | "EMPTY_TRANSLATION"
   | "NUMBERS_CHANGED"
   | "FORBIDDEN_TERM"

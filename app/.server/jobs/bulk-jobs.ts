@@ -35,6 +35,8 @@ export async function createBulkJob(
     idempotencyKey: string;
     /** Explicit permission to replace manual or approved translations. */
     overwriteProtected?: boolean;
+    /** ALL fields (default) or only search engine listings. */
+    fieldScope?: "ALL" | "SEO";
   },
   client: PrismaClient = defaultClient,
 ): Promise<{ job: TranslationJob; created: boolean }> {
@@ -70,6 +72,7 @@ export async function createBulkJob(
           // Draft unless the merchant explicitly enabled automatic publishing.
           publishMode: settings?.bulkPublishMode ?? "DRAFT",
           overwriteProtected: input.overwriteProtected ?? false,
+          fieldScope: input.fieldScope ?? "ALL",
         },
       });
       return { job, created: true };

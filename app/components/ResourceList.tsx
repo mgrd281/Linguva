@@ -67,6 +67,10 @@ export function ResourceList() {
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
             <s-stack direction="block" gap="small">
+              <s-select name="fieldScope" label="What to translate">
+                <s-option value="ALL">All fields</s-option>
+                <s-option value="SEO">Only search engine listings (SEO title and description)</s-option>
+              </s-select>
               <s-checkbox
                 name="overwriteProtected"
                 label="Also replace outdated translations that were written or approved by a person"

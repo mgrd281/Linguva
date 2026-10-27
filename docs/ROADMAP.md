@@ -37,7 +37,8 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M3 | Guarded live contract tests (`pnpm test:live`): dev-store gate (`plan.partnerDevelopment`), deny list, fixture-only writes with cleanup, mock provider; operations schema-validated in CI | Implemented; guard unit-tested. **Not run: no dev store connected (Blocked on owner)** |
 | M7 | AI cost limits: daily cap per shop, platform-wide daily cap, per-request size cap, per-user and per-shop request rate limits (Redis) | Implemented, Tested (integration with real Redis/PostgreSQL incl. concurrency, security suite) |
 | M5 | Draft protection: publishing only while automatic publishing is still enabled; flagged results always go to Review | Implemented, Tested (security suite, mutation-checked) |
-| M6 | SEO and Markets plan (SEO_ARCHITECTURE.md) | Planned. Implementation **Blocked** until the live checks pass |
+| M6 | SEO and Markets plan (SEO_ARCHITECTURE.md) | Written |
+| M6 | SEO S1: SEO title/description checks (width-based limits, untranslated), editor "Search engine listing" with live counters and result preview, "SEO fields only" AI and bulk jobs | Implemented, Tested (unit, integration, mutation-checked). Not verified on a dev store |
 | — | CI on GitHub | Implemented, green on the first push |
 | — | SEO_ARCHITECTURE, DEV_STORE_SETUP | Written |
 | — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, DEPLOYMENT, TEST_PLAN | Planned |

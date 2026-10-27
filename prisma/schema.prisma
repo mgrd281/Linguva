@@ -288,6 +288,11 @@ enum TranslationJobItemStatus {
 }
 
 // A bulk translation run for one resource type into one target locale.
+enum JobFieldScope {
+  ALL
+  SEO
+}
+
 model TranslationJob {
   id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   shopId             String               @db.Uuid
@@ -307,6 +312,8 @@ model TranslationJob {
   publishMode        BulkPublishMode      @default(DRAFT)
   // Explicit permission to replace manual or approved translations.
   overwriteProtected Boolean              @default(false)
+  // Which fields the job translates (ALL, or only search engine listings).
+  fieldScope         JobFieldScope        @default(ALL)
   memoryHits         Int                  @default(0)
   charsSaved         Int                  @default(0)
   protectedSkipped   Int                  @default(0)

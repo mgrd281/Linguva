@@ -80,6 +80,7 @@ export async function runResourceListAction(request: Request, kind: ResourceKind
       requestedBy: actorId,
       idempotencyKey,
       overwriteProtected: form.get("overwriteProtected") === "on",
+      fieldScope: form.get("fieldScope") === "SEO" ? "SEO" : "ALL",
     });
     return redirect(`/app/jobs/${job.id}`);
   } catch (error) {

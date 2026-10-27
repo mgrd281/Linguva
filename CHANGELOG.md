@@ -46,6 +46,11 @@
 - Image alt text (product, collection and blog post images) and text metafields that Shopify marks translatable, in a new "Images and custom fields" section of the editor: AI drafts for missing or outdated values, publishing with digest checks and history.
 - Read-only Markets page with the optional `read_markets` scope (asked for only when the page is opened): languages, addresses and published state per market, and checks for unpublished or unreachable languages.
 - `docs/FEATURE_STATUS.md` (Implemented / Tested Locally / Verified on Shopify) and `docs/DEV_STORE_TEST_PLAN.md`.
+- Owner complimentary access for the operator's own stores: every feature without a subscription when the store's Shopify GID is in `COMPLIMENTARY_SHOP_GIDS` and the operator tool (`pnpm ops:complimentary`, owner database role) granted it; AI usage stays metered with an internal cost estimate; audited.
+- Shopify CLI readiness: complete `shopify.app.toml`, `.env` loading in development, `pnpm preflight`, `pnpm worker:dev`, docs/SHOPIFY_CLI_SETUP.md.
+- Playwright UI tests (`pnpm test:ui`, in CI) of the production build with real authentication and Polaris against a simulated Shopify: pages, empty, error and loading states, accessibility (axe WCAG 2.1 AA), phone layout.
+- Clear error pages with "Try again" on every page, the admin loading bar during navigation, page title, empty catalog state.
+- docs/BETA_READINESS.md.
 - Phase 0 documentation set.
 
 ### Security
@@ -57,6 +62,9 @@
 - CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
 
 ### Fixed
+- First open after install could fail when the app's loaders created the shop in parallel; reinstalls were recorded once per parallel request.
+- `.env` wasn't loaded under `shopify app dev`; `.dockerignore` didn't exclude `.env` files.
+- Shopify API errors showed a bare status code; language codes instead of names on Jobs and Review; SEO preview notes ran together.
 - A replaced or removed translation that was already outdated is kept in the history as written for an older source, so restoring it can't mark it current for the new text.
 - Fuzzy memory search couldn't use its index under row-level security and scanned the whole memory (446 ms at 100,000 entries); it now uses a shop + trigram index through a narrow security definer function (37 ms median).
 - Review search treated `%` and `_` as wildcards.

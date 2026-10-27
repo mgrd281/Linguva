@@ -10,7 +10,7 @@ Purpose: move features from **Tested Locally** to **Verified on Shopify** (FEATU
 | P2 | Test catalog: at least 30 products (Shopify's sample data), 3 collections with images, 2 pages, 1 blog with 2 posts with featured images. Some product images with alt text, one without |
 | P3 | Two text metafield definitions on products (`custom.care`, multi-line text; `custom.subtitle`, single-line text) and one rich text definition, with values on a few products |
 | P4 | Markets: the primary market plus one market (for example Germany) with a German subfolder or domain |
-| P5 | App: `shopify app config link`, `shopify app dev` against the dev store, local `.env` (never committed), Redis and PostgreSQL running, worker started (`pnpm worker`) |
+| P5 | App: follow SHOPIFY_CLI_SETUP.md (`pnpm config:link`, `pnpm preflight` without ✗, `pnpm dev` against the dev store, `pnpm worker:dev`). Local `.env` only, never committed |
 | P6 | AI: `TRANSLATION_PROVIDER=mock` for every case except C7. A DeepL Free key only with the owner's approval |
 | P7 | Billing (section L): the four plans `free`, `starter`, `pro`, `business` created in the Partner Dashboard, Partner API client with "Manage apps", the variables from `.env.example` set locally. On development stores every plan costs $0: **no real charges** |
 | P8 | Run the automated live tests first: `pnpm test:live` (read-only), then `LIVE_ALLOW_WRITES=yes pnpm test:live`. Log the result in §3 |
@@ -24,6 +24,7 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **A2** Database → one `Shop` row; `Session` access and refresh tokens are encrypted (no `shpat_` / `shpua_` visible); the runtime role is `linguva_app`.
 - **A3** Open the app in a second browser / another staff account → works; the audit log records that staff member's id, not a name or email.
 - **A4** Reload after 24 h (expiring offline token) → still works, token refreshed.
+- **A5** First open right after install (layout and page load in parallel) → no error page; one `INSTALLED` entry in `ShopInstallation` (regression of the bug fixed in 7d8de34).
 
 ### B. Languages
 - **B1** Languages page → German (published) and Arabic (unpublished) listed, with the 20-language limit.
@@ -98,6 +99,7 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **L7** Cancel the subscription → Partner API reports none → after the 6 h cache (or the welcome link) the plan page is shown again.
 - **L8** Wrong Partner API token → paying shop keeps its plan (stale state), no redirect; warning in the logs only.
 - **L9** Partner Dashboard: confirm that no charge or invoice was created for the dev store.
+- **L10** Owner complimentary access (BILLING_DESIGN §4), on a second dev store standing in for an own store: without a plan, `pnpm ops:complimentary grant --shop-gid …` plus the GID in `COMPLIMENTARY_SHOP_GIDS` → Plan page shows "Complimentary access", all features work, no redirect to plan selection with `BILLING_REQUIRED=true`; AI usage appears in `pnpm ops:complimentary report`; revoke → plan selection again. The first dev store (not granted) is unaffected.
 
 ### M. Cost limits
 - **M1** Daily limit set low → AI refused with the daily message; resets at midnight UTC.
@@ -112,6 +114,13 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 ### S. Security spot checks
 - **S1** Change an id in a form request (another product's image or metafield GID) with the browser's dev tools → nothing is written to the other resource.
 - **S2** Two dev stores (if available) → no data of one is visible in the other (memory, glossary, jobs, review, coverage).
+
+## 1a. Already covered by automated tests (simulated Shopify)
+
+These run in CI on every push and should pass on the dev store too; the dev store run confirms Shopify's real behaviour:
+
+- `pnpm test:live` (dev store only): API contract (digests, outdated, error codes, handles, removal, images, metafields, markets).
+- `pnpm test:ui` (Playwright, simulated Shopify): A1/A2 install and auth, B1, C1–C3, D1, H1 (content), I1–I2, L-pages, empty and error states, accessibility and phone layout (docs/UI_TESTING.md).
 
 ## 2. Beta exit criteria
 

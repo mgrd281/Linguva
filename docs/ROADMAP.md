@@ -50,6 +50,10 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M6 | Image alt text and text metafields in the editor | Implemented, Tested (fake store, security tests). Not verified |
 | M6 | Read-only Markets page (optional scope `read_markets`) | Implemented, Tested (unit). Not verified |
 | M8 | Review guard for SECURITY DEFINER changes; CI checks for hidden files and orphan test files | Implemented, Tested |
+| M7 | Owner complimentary access (allowlist + operator grant, metered, audited) | Implemented, Tested (unit, integration, security, UI) |
+| M3 | Shopify CLI readiness (app config, .env in development, preflight) | Implemented; dev server start checked. Blocked on `config:link` (owner) |
+| M8 | Playwright UI tests (production build, simulated Shopify, axe, phone layout); UX error/empty/loading states | Implemented, Tested (CI) |
+| — | Beta readiness review (BETA_READINESS.md) | Done: blockers need the owner |
 | — | CI on GitHub | Implemented, green on the first push |
 | — | SEO_ARCHITECTURE, DEV_STORE_SETUP | Written |
 | — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, DEPLOYMENT, TEST_PLAN | Planned |
@@ -134,7 +138,7 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 
 ## 7. Next steps
 
-1. Owner: connect a development store and run DEV_STORE_TEST_PLAN.md (live tests first). Log the results there.
+1. Owner: link the app and connect a development store (SHOPIFY_CLI_SETUP.md), then run DEV_STORE_TEST_PLAN.md (live tests first). Log the results there. The blockers are listed in BETA_READINESS.md.
 2. Fix whatever the live run shows before building anything new; update FEATURE_STATUS.md to "Verified on Shopify" only for cases that passed.
 3. Owner decisions for the beta: plan prices and limits (BILLING_DESIGN §2), AI provider key and budget, hosting.
 4. Then: images and metafields in bulk jobs and coverage, market-specific translations, automation on product updates.

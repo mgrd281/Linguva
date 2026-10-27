@@ -42,7 +42,9 @@ pnpm test               # unit tests
 pnpm test:integration   # needs PostgreSQL (scripts/db/init-roles.sql applied) and Redis
 pnpm test:security      # tenant isolation, payload and XSS tests (same services)
 pnpm test:performance   # fuzzy memory search with 100,000 entries (same services)
+pnpm test:ui            # Playwright: production build in Chromium, simulated Shopify, accessibility (docs/UI_TESTING.md)
 pnpm test:live          # optional: guarded contract tests on a dev store (docs/DEV_STORE_SETUP.md), never in CI
+pnpm preflight          # checks a local setup before `pnpm dev` (no Shopify calls)
 pnpm build
 pnpm graphql-codegen    # re-validates GraphQL operations against the Admin API schema
 pnpm check:ignored      # before pushing: no source file hidden by .gitignore
@@ -93,6 +95,8 @@ docs/               architecture, security, billing, roadmap
 | [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) | Test cases on a development store, beta exit criteria, results log |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Progress, milestones, risks, decisions |
 | [docs/SHOPIFY_CLI_SETUP.md](docs/SHOPIFY_CLI_SETUP.md) | Install on a development store with Shopify CLI: setup, preflight, scopes, webhooks |
+| [docs/BETA_READINESS.md](docs/BETA_READINESS.md) | Beta readiness review: blockers, defects fixed, open items |
+| [docs/UI_TESTING.md](docs/UI_TESTING.md) | Playwright UI tests: what is real, what is simulated |
 | [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
 | [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
 | [docs/SECURITY_REVIEW_MEMORY_FUZZY.md](docs/SECURITY_REVIEW_MEMORY_FUZZY.md) | Security review of the fuzzy search function, roles and grants |

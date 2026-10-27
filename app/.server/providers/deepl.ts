@@ -141,6 +141,8 @@ export class DeepLProvider implements TranslationProvider {
           ignore_tags: ["x"],
           show_billed_characters: true,
           ...(request.context ? { context: request.context } : {}),
+          // prefer_*: falls back to the default for languages without formal/informal forms.
+          ...(request.formality ? { formality: `prefer_${request.formality}` } : {}),
         }),
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });

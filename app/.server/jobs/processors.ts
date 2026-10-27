@@ -17,7 +17,7 @@ import { loadTranslationContext } from "../translation/translation-context";
 import { latestRevisions } from "../translation/revisions";
 import { recordMemoryUse } from "../memory/translation-memory";
 import { pendingDraftDigests, saveDrafts } from "../review/drafts";
-import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { finishItem, isBulkResourceType, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
@@ -297,7 +297,8 @@ export async function processItem(
       sourceLocale,
       targetLocale: job.targetLocale,
       glossary: context.glossary.rules,
-      context: providerContext(resource.resourceId, title, job.resourceType),
+      context: translationContext(settings.aiStoreContext, providerContext(resource.resourceId, title, job.resourceType)),
+      formality: formalityFor(settings, job.targetLocale),
     });
   } catch (error) {
     if (reservation) await releaseUsage(reservation, deps.prisma);

@@ -7,7 +7,7 @@ import { logger } from "../lib/logger";
 import { alignDocuments, type SegmentPair } from "../memory/alignment";
 import { recordMemoryUse, storeMemory } from "../memory/translation-memory";
 import type { TranslationProvider } from "../providers/types";
-import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import {
   getTranslatableResource,
   registerTranslations,
@@ -71,6 +71,8 @@ export async function aiTranslateResource(
     admin: Admin;
     shopId: string;
     resourceId: string;
+    /** Content type (for the AI context), e.g. "MENU". */
+    resourceType?: string;
     targetLocale: string;
     keys: readonly string[];
     provider: TranslationProvider;
@@ -124,7 +126,8 @@ export async function aiTranslateResource(
       sourceLocale: sourceLocaleOf(resource),
       targetLocale: input.targetLocale,
       glossary: context.glossary.rules,
-      context: providerContext(resource.resourceId, titleField?.value),
+      context: translationContext(settings.aiStoreContext, providerContext(resource.resourceId, titleField?.value, input.resourceType)),
+      formality: formalityFor(settings, input.targetLocale),
     });
     if (reservation) await settleUsage(reservation, result.billedCharacters, client);
     await recordMemoryUse(input.shopId, result.memoryEntryIds, client);

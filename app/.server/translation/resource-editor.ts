@@ -296,6 +296,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
         admin,
         shopId,
         resourceId,
+        resourceType: ctx.kind,
         targetLocale: target.locale,
         keys,
         provider,

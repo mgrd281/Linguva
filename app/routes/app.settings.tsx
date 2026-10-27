@@ -8,21 +8,33 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiUsageLimits, getConfig } from "../.server/lib/config";
 import { getTranslationProvider } from "../.server/providers";
 import {
+  AI_STORE_CONTEXT_MAX,
   ConfirmationRequiredError,
+  formalityFor,
   getShopSettings,
   hasCurrentAiConsent,
   setAiConsent,
   setBulkPublishMode,
   setReuseMachineMemory,
+  setTranslationStyle,
 } from "../.server/settings/shop-settings";
+import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { requireShop } from "../.server/shopify/require-shop";
 import { shopBilling } from "../.server/billing/billing";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { shop } = await requireShop(request);
+  const { admin, shop } = await requireShop(request);
   const settings = await getShopSettings(shop.id);
+  const locales = await fetchAndSyncShopLocales(admin, shop.id);
   return {
+    style: {
+      languages: locales.locales
+        .filter((l) => !l.primary)
+        .map((l) => ({ locale: l.locale, name: l.name, formality: formalityFor(settings, l.locale) ?? "default" })),
+      storeContext: settings.aiStoreContext ?? "",
+      maxContext: AI_STORE_CONTEXT_MAX,
+    },
     consent: hasCurrentAiConsent(settings),
     consentAt: settings.aiDataProcessingConsentAt?.toISOString() ?? null,
     publishMode: settings.bulkPublishMode,
@@ -41,6 +53,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, shop, actorId } = await requireShop(request);
   const form = await request.formData();
   const intent = form.get("intent");
+  if (intent === "style") {
+    const locales = await fetchAndSyncShopLocales(admin, shop.id);
+    const allowed = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
+    const formality: Record<string, string> = {};
+    for (const locale of allowed) formality[locale] = String(form.get(`formality:${locale}`) ?? "");
+    await setTranslationStyle({ shopId: shop.id, formality, storeContext: String(form.get("storeContext") ?? ""), allowedLocales: allowed });
+    return { ok: true, saved: "style" as const };
+  }
   if (intent === "publish-mode") {
     if (form.get("mode") === "AUTO_PUBLISH" && !(await shopBilling(admin, shop)).entitlements.autoPublish) {
       return { ok: false, error: "PLAN_AUTO_PUBLISH" };
@@ -74,6 +94,7 @@ export default function Settings() {
   const fetcher = useFetcher<typeof action>();
   const modeFetcher = useFetcher<typeof action>();
   const memoryFetcher = useFetcher<typeof action>();
+  const styleFetcher = useFetcher<typeof action>();
   const busy = fetcher.state !== "idle";
   const percent = data.limit ? Math.min(100, Math.round((data.used / data.limit) * 100)) : 0;
 
@@ -121,6 +142,45 @@ export default function Settings() {
             </s-banner>
           ) : null}
         </s-stack>
+      </s-section>
+
+      <s-section heading="Translation style">
+        <styleFetcher.Form method="post">
+          <input type="hidden" name="intent" value="style" />
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Choose how AI addresses your customers in each language. Applies where a language has formal and informal
+              forms (for example German &quot;Sie&quot; / &quot;du&quot;, French &quot;vous&quot; / &quot;tu&quot;).
+            </s-paragraph>
+            {data.style.languages.length ? (
+              data.style.languages.map((l) => (
+                <s-select key={l.locale} name={`formality:${l.locale}`} label={l.name} value={l.formality}>
+                  <s-option value="default">Automatic</s-option>
+                  <s-option value="more">Formal</s-option>
+                  <s-option value="less">Informal</s-option>
+                </s-select>
+              ))
+            ) : (
+              <s-paragraph>Add a language in Shopify first.</s-paragraph>
+            )}
+            <s-text-area
+              name="storeContext"
+              label="About your store"
+              details={`What you sell and how you speak, for example "Outdoor clothing for families, friendly and simple." Helps AI pick the right words. Up to ${data.style.maxContext} characters; not translated.`}
+              value={data.style.storeContext}
+              maxLength={data.style.maxContext}
+              rows={2}
+            />
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <s-button type="submit" {...(styleFetcher.state !== "idle" ? { loading: true } : {})}>
+                Save translation style
+              </s-button>
+              {styleFetcher.data && "saved" in styleFetcher.data && styleFetcher.state === "idle" ? (
+                <s-text tone="success">Saved. New AI translations use this style.</s-text>
+              ) : null}
+            </s-stack>
+          </s-stack>
+        </styleFetcher.Form>
       </s-section>
 
       <s-section heading="Bulk translation publishing">

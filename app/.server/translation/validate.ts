@@ -13,7 +13,8 @@ export type IssueCode =
   | "FORBIDDEN_TERM"
   | "PREFERRED_TERM_MISSING"
   | "LENGTH_RATIO"
-  | "UNTRANSLATED";
+  | "UNTRANSLATED"
+  | "WRONG_SCRIPT";
 
 export interface ValidationIssue {
   code: IssueCode;

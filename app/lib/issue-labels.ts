@@ -6,6 +6,7 @@ const LABELS: Record<string, string> = {
   PREFERRED_TERM_MISSING: "Glossary wording missing",
   LENGTH_RATIO: "Unusual length",
   UNTRANSLATED: "Looks untranslated",
+  WRONG_SCRIPT: "Not in the language's script",
   SEO_TOO_LONG: "Too long for search results",
   SEO_TOO_SHORT: "Short for search results",
   SEO_SAME_AS_SOURCE: "Same as the original",

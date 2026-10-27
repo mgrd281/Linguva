@@ -1,3 +1,4 @@
+import { isWrongScript } from "../../lib/scripts";
 import type { TranslationProvider } from "../providers/types";
 import type { SegmentPair } from "../memory/alignment";
 import {
@@ -7,7 +8,7 @@ import {
 } from "./html-segmenter";
 import type { ProtectOptions } from "./protect";
 import { markupToPlainText, SegmentStructureError } from "./segment-markup";
-import { checkSeoField } from "../../lib/seo";
+import { checkSeoField, plainText } from "../../lib/seo";
 import {
   hasBlockingIssue,
   validateTranslation,
@@ -145,6 +146,7 @@ export interface CompleteTranslationInput {
   targetLocale: string;
   glossary?: readonly GlossaryRule[];
   context?: string;
+  formality?: "more" | "less";
   signal?: AbortSignal;
 }
 
@@ -168,6 +170,7 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
         sourceLocale: input.sourceLocale,
         targetLocale: input.targetLocale,
         context: input.context,
+        ...(input.formality ? { formality: input.formality } : {}),
       },
       input.signal,
     );
@@ -208,6 +211,11 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
         const value = doc.render(segmentTargets);
         // Search engine titles and descriptions: length and "untranslated" warnings.
         issues.push(...checkSeoField(field.key, field.value ?? "", value));
+        // A result mostly outside the target language's script is likely wrong.
+        // (Mostly product names or codes can also trigger it: a warning, the merchant decides.)
+        if (isWrongScript(input.targetLocale, plainText(value))) {
+          issues.push({ code: "WRONG_SCRIPT", severity: "warning" });
+        }
         if (!hasBlockingIssue(issues)) {
           outcomes.push({
             key: field.key,

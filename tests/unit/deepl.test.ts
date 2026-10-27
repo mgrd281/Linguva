@@ -72,6 +72,16 @@ describe("DeepLProvider", () => {
     });
   });
 
+  it("asks for the configured form of address, falling back where a language has none", async () => {
+    const { impl, calls } = fakeFetch([ok, ok]);
+    const provider = new DeepLProvider({ apiKey: "key:fx", fetch: impl });
+    await provider.translate({ segments: ["Hello"], sourceLocale: "en", targetLocale: "de", formality: "less" });
+    await provider.translate({ segments: ["Hello"], sourceLocale: "en", targetLocale: "de" });
+    // prefer_*: never fails for languages without formal/informal forms (DeepL API reference).
+    expect(calls[0]!.body.formality).toBe("prefer_less");
+    expect(calls[1]!.body).not.toHaveProperty("formality");
+  });
+
   it("uses the Pro endpoint for non-free keys", async () => {
     const { impl, calls } = fakeFetch([ok]);
     await new DeepLProvider({ apiKey: "pro-key", fetch: impl }).translate({

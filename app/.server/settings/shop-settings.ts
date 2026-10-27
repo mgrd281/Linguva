@@ -125,3 +125,47 @@ export async function setReuseMachineMemory(
     client,
   );
 }
+
+export type Formality = "more" | "less";
+export const AI_STORE_CONTEXT_MAX = 300;
+
+/** The form of address configured for a language, if any. */
+export function formalityFor(settings: { formalityByLocale: unknown }, locale: string): Formality | undefined {
+  const map = settings.formalityByLocale;
+  if (!map || typeof map !== "object" || Array.isArray(map)) return undefined;
+  const value = (map as Record<string, unknown>)[locale];
+  return value === "more" || value === "less" ? value : undefined;
+}
+
+/**
+ * Translation style: form of address per language and a short description
+ * of the store for the AI. Unknown languages and values are dropped; the
+ * description is trimmed to one paragraph of at most 300 characters.
+ */
+export async function setTranslationStyle(
+  input: { shopId: string; formality: Record<string, string>; storeContext: string; allowedLocales: readonly string[] },
+  client: PrismaClient = defaultClient,
+) {
+  const formalityByLocale: Record<string, Formality> = {};
+  for (const [locale, value] of Object.entries(input.formality)) {
+    if (input.allowedLocales.includes(locale) && (value === "more" || value === "less")) formalityByLocale[locale] = value;
+  }
+  const storeContext = input.storeContext.replace(/\s+/g, " ").trim().slice(0, AI_STORE_CONTEXT_MAX) || null;
+  await withTenant(
+    input.shopId,
+    (tx) =>
+      tx.shopSettings.upsert({
+        where: { shopId: input.shopId },
+        create: { shopId: input.shopId, formalityByLocale, aiStoreContext: storeContext },
+        update: { formalityByLocale, aiStoreContext: storeContext },
+      }),
+    client,
+  );
+  return { formalityByLocale, storeContext };
+}
+
+/** Context for the provider: what the store is, then what the text belongs to. Not translated. */
+export function translationContext(storeContext: string | null | undefined, itemContext: string | undefined): string | undefined {
+  const parts = [storeContext ? `Store: ${storeContext}` : null, itemContext ?? null].filter(Boolean);
+  return parts.length ? parts.join(". ").slice(0, 1000) : undefined;
+}

@@ -6,6 +6,8 @@ export interface TranslationRequest {
   targetLocale: string;
   /** Extra context that guides but isn't translated (for example a product title). */
   context?: string;
+  /** Form of address: "more" formal (Sie, vous), "less" informal (du, tu). Ignored where a language has none. */
+  formality?: "more" | "less";
 }
 
 export interface TranslationResult {

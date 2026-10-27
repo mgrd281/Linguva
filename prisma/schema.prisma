@@ -108,6 +108,12 @@ model ShopSettings {
   autoPublishEnabledBy      String?
   // Reuse unreviewed (machine) memory entries for exact matches.
   reuseMachineMemory        Boolean         @default(true)
+  /// Form of address per target language: { "de": "less" } (informal "du"),
+  /// "more" (formal "Sie"); missing = the provider's default.
+  formalityByLocale         Json            @default("{}")
+  /// What the store sells and how it speaks; guides AI word choice (not
+  /// translated, not billed by DeepL). Max. 300 characters.
+  aiStoreContext            String?
   createdAt                 DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt                 DateTime        @updatedAt @db.Timestamptz(3)
 

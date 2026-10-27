@@ -5,6 +5,7 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { data } from "react-router";
 import { aiUsageLimits, getConfig } from "../lib/config";
+import { sanitizeHtml } from "../lib/sanitize-html";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { getTranslationProvider } from "../providers";
 import { TranslationProviderError } from "../providers/types";
@@ -180,7 +181,9 @@ export async function loadEditorData(ctx: EditorContext) {
     title: resourceTitle(ctx.kind, resource.content),
     target,
     sourceName: ctx.sourceName ?? resource.content[0]?.locale ?? "",
-    fields,
+    sourceLocale: sourceLocaleOf(resource),
+    // HTML is shown rendered: sanitised here, and in a sandboxed frame in the page.
+    fields: fields.map((f) => ({ ...f, sourcePreview: f.type === "HTML" ? sanitizeHtml(f.source) : null })),
     paging,
     caution,
     // The search result preview applies to storefront pages only.

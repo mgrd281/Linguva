@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Form, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
@@ -19,6 +19,10 @@ import {
 import { editorPathFor, RESOURCE_KINDS } from "../lib/resource-kinds";
 import { fieldLabel } from "../lib/field-labels";
 import { issueLabel } from "../lib/issue-labels";
+import { sanitizeHtml } from "../.server/lib/sanitize-html";
+import { HtmlPreview } from "../components/HtmlPreview";
+
+const looksLikeHtml = (text: string) => /<\/?[a-z][a-z0-9]*[\s>/]/i.test(text);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { shop } = await requireShop(request);
@@ -52,6 +56,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       label: fieldLabel(d.key),
       source: d.sourceValue,
       value: d.value,
+      // HTML drafts are shown rendered (sanitised here, sandboxed in the page).
+      sourcePreview: looksLikeHtml(d.sourceValue) ? sanitizeHtml(d.sourceValue) : null,
       issues: Array.isArray(d.issues) ? (d.issues as Array<{ code?: string }>).map((i) => i.code ?? "") : [],
     })),
   };
@@ -98,6 +104,16 @@ export default function Review() {
     if (after) params.set("after", after);
     const query = params.toString();
     return query ? `/app/review?${query}` : "/app/review";
+  };
+  // Edited translations, for the live preview of HTML drafts.
+  const [edited, setEdited] = useState<Record<string, string>>({});
+  const onDraftInput = (event: { target: EventTarget | null }) => {
+    const el = event.target as (Element & { value?: string }) | null;
+    const name = el?.getAttribute?.("name");
+    if (name?.startsWith("value:") && typeof el?.value === "string") {
+      const id = name.slice("value:".length);
+      setEdited((e) => ({ ...e, [id]: el.value! }));
+    }
   };
   const submit = (intent: "approve" | "reject") => {
     const form = formRef.current;
@@ -169,7 +185,7 @@ export default function Review() {
       ) : null}
 
       {data.drafts.length ? (
-        <fetcher.Form method="post" ref={formRef}>
+        <fetcher.Form method="post" ref={formRef} onInput={onDraftInput}>
           <input type="hidden" name="intent" value="approve" />
           <s-section>
             <s-stack direction="inline" gap="base" alignItems="center">
@@ -188,16 +204,31 @@ export default function Review() {
             <s-section key={d.id} heading={`${d.title} · ${d.label} · ${data.names[d.locale] ?? d.locale}`}>
               <s-stack direction="block" gap="base">
                 <s-checkbox name="draft" value={d.id} label="Include" defaultChecked />
-                <s-box padding="base" background="subdued" borderRadius="base">
-                  <s-text color="subdued">Source</s-text>
-                  <s-paragraph>{d.source}</s-paragraph>
-                </s-box>
-                <s-text-area
-                  name={`value:${d.id}`}
-                  label="Translation (you can edit before approving)"
-                  value={d.value}
-                  rows={d.value.length > 200 ? 6 : 2}
-                />
+                <s-query-container>
+                  <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
+                    <s-stack direction="block" gap="small">
+                      <s-text color="subdued">Original</s-text>
+                      {d.sourcePreview !== null ? (
+                        <HtmlPreview html={d.sourcePreview} title={`${d.title}, ${d.label}, original`} lang="" />
+                      ) : (
+                        <s-box padding="base" background="subdued" borderRadius="base">
+                          <s-paragraph>{d.source}</s-paragraph>
+                        </s-box>
+                      )}
+                    </s-stack>
+                    <s-stack direction="block" gap="small">
+                      <s-text-area
+                        name={`value:${d.id}`}
+                        label={`${data.names[d.locale] ?? d.locale} (you can edit before approving)`}
+                        value={d.value}
+                        rows={d.value.length > 200 ? 6 : 2}
+                      />
+                      {d.sourcePreview !== null ? (
+                        <HtmlPreview html={edited[d.id] ?? d.value} title={`${d.title}, ${d.label}, translation preview`} lang={d.locale} />
+                      ) : null}
+                    </s-stack>
+                  </s-grid>
+                </s-query-container>
                 <s-stack direction="inline" gap="small">
                   {d.issues.length ? <s-badge tone="warning">Check: {d.issues.map(issueLabel).join(", ")}</s-badge> : null}
                   {d.href ? <s-link href={d.href}>Open in editor</s-link> : null}

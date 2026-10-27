@@ -7,6 +7,7 @@ import { Form, useBlocker, useFetcher, useLoaderData } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
 import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
+import { HtmlPreview } from "./HtmlPreview";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
 import { HANDLE_PROBLEM_MESSAGES, suggestHandle, validateHandle } from "../lib/handles";
@@ -47,6 +48,14 @@ export function ResourceTranslationEditor() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const removed = removeFetcher.data?.kind === "removed" ? removeFetcher.data : null;
   const [filledFrom, setFilledFrom] = useState<"ai" | "memory">("ai");
+  // HTML fields show a rendered preview; the merchant can switch to the code.
+  const [codeView, setCodeView] = useState<ReadonlySet<string>>(new Set());
+  const toggleCode = (key: string) =>
+    setCodeView((v) => {
+      const next = new Set(v);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
 
   // The latest of AI translation or memory suggestions fills the form.
   const aiResult = aiFetcher.data?.kind === "ai" ? aiFetcher.data : null;
@@ -344,6 +353,7 @@ export function ResourceTranslationEditor() {
     const status = saveStatus.get(field.key);
     const rejected = ai?.rejected[field.key];
     const warnings = ai?.warnings[field.key];
+    const showCode = codeView.has(field.key);
     const multiline = field.type === "HTML" || field.type === "MULTI_LINE_TEXT_FIELD" || field.source.length > 120;
     const error =
       status?.status === "conflict"
@@ -359,32 +369,59 @@ export function ResourceTranslationEditor() {
         <input type="hidden" name={`digest:${field.key}`} value={field.digest} />
         {draft !== undefined ? <input type="hidden" name={`origin:${field.key}`} value="AI" /> : null}
         <s-stack direction="block" gap="base">
-          <s-box padding="base" background="subdued" borderRadius="base">
-            <s-text color="subdued">{data.sourceName}</s-text>
-            <s-paragraph>{field.source}</s-paragraph>
-          </s-box>
-          <div lang={data.target.locale} {...textDirection(field)}>
-            {multiline ? (
-              <s-text-area
-                key={`${field.key}:${draft ?? "base"}`}
-                name={`value:${field.key}`}
-                label={data.target.name}
-                value={value}
-                rows={field.type === "HTML" ? 8 : 3}
-                {...(error ? { error } : {})}
-                {...(field.type === "HTML" ? { details: "HTML. Formatting must match the source." } : {})}
-              />
-            ) : (
-              <s-text-field
-                key={`${field.key}:${draft ?? "base"}`}
-                name={`value:${field.key}`}
-                label={data.target.name}
-                value={field.key === "handle" ? currentValue("handle") : value}
-                {...(error ? { error } : {})}
-                {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
-              />
-            )}
-          </div>
+          <s-query-container>
+            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
+              <s-stack direction="block" gap="small">
+                <s-stack direction="inline" gap="small" alignItems="center" justifyContent="space-between">
+                  <s-text color="subdued">{data.sourceName} (original)</s-text>
+                  {field.sourcePreview !== null ? (
+                    <s-button variant="tertiary" onClick={() => toggleCode(field.key)}>
+                      {showCode ? "Show preview" : "Show HTML"}
+                    </s-button>
+                  ) : null}
+                </s-stack>
+                {field.sourcePreview !== null && !showCode ? (
+                  <HtmlPreview html={field.sourcePreview} title={`${field.label}, ${data.sourceName} original`} lang={data.sourceLocale} />
+                ) : (
+                  <s-box padding="base" background="subdued" borderRadius="base">
+                    <s-paragraph>{field.source}</s-paragraph>
+                  </s-box>
+                )}
+              </s-stack>
+              <s-stack direction="block" gap="small">
+                <div lang={data.target.locale} {...textDirection(field)}>
+                  {multiline ? (
+                    <s-text-area
+                      key={`${field.key}:${draft ?? "base"}`}
+                      name={`value:${field.key}`}
+                      label={data.target.name}
+                      value={value}
+                      rows={field.type === "HTML" ? 8 : 3}
+                      {...(error ? { error } : {})}
+                      {...(field.type === "HTML" ? { details: "HTML. Formatting must match the source." } : {})}
+                    />
+                  ) : (
+                    <s-text-field
+                      key={`${field.key}:${draft ?? "base"}`}
+                      name={`value:${field.key}`}
+                      label={data.target.name}
+                      value={field.key === "handle" ? currentValue("handle") : value}
+                      {...(error ? { error } : {})}
+                      {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
+                    />
+                  )}
+                </div>
+                {field.sourcePreview !== null && !showCode ? (
+                  <HtmlPreview
+                    html={currentValue(field.key)}
+                    title={`${field.label}, ${data.target.name} preview`}
+                    lang={data.target.locale}
+                    dir={data.target.rtl ? "rtl" : "auto"}
+                  />
+                ) : null}
+              </s-stack>
+            </s-grid>
+          </s-query-container>
           {field.key === "handle" ? (
             <s-stack direction="block" gap="small">
               <s-button

@@ -156,6 +156,21 @@ describe("shared editor for every content type", () => {
     expect(ai.drafts.body_html).toContain("{{ customer.first_name }}");
   });
 
+  it("sends HTML to the page only sanitised, for the rendered preview", async () => {
+    const s = store();
+    s.addResource("PAGE", "9", [
+      { key: "title", value: "About", type: "SINGLE_LINE_TEXT_FIELD" },
+      { key: "body_html", value: `<p onclick="steal()">Hello <b>world</b></p><script>steal()</script><img src=x onerror=steal()>`, type: "HTML" },
+    ]);
+    const sh = await shop();
+    const data = await loadEditorData(ctx(s, sh.id, "PAGE", "gid://shopify/Page/9"));
+    const body = data.fields.find((f) => f.key === "body_html")!;
+    expect(body.sourcePreview).toBe("<p>Hello <b>world</b></p>");
+    // The editable original stays exactly as in Shopify.
+    expect(body.source).toContain("<script>");
+    expect(data.fields.find((f) => f.key === "title")!.sourcePreview).toBeNull();
+  });
+
   it("shows the store's search listing without a page preview", async () => {
     const s = store();
     const sh = await shop();

@@ -92,10 +92,19 @@ export async function openApp(page: Page, shopKey: UiShopKey, path: string) {
  * checks that tree directly.
  */
 export async function expectAccessible(page: Page) {
+  // Store content previews are sandboxed frames axe can't run in (and their
+  // content is the merchant's, not the app's): the app around them is
+  // checked, including that every frame has a title.
+  const hasFrames = (await page.locator("iframe").count()) > 0;
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .disableRules(["aria-required-children"])
+    .setLegacyMode(hasFrames)
     .analyze();
+  if (hasFrames) {
+    const untitled = await page.locator("iframe:not([title]), iframe[title='']").count();
+    expect(untitled, "every preview frame has a title").toBe(0);
+  }
   const serious = results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
     .map((v) => ({ id: v.id, impact: v.impact, help: v.help, targets: v.nodes.slice(0, 3).map((n) => n.target.join(" ")) }));

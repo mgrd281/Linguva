@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
+import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
 import { HANDLE_PROBLEM_MESSAGES, suggestHandle, validateHandle } from "../lib/handles";
@@ -245,6 +246,8 @@ export function ResourceTranslationEditor() {
           </s-button>
         </s-stack>
       </saveFetcher.Form>
+
+      <AttachedResourcesPanel data={data} errorMessages={ERROR_MESSAGES} />
     </s-page>
   );
 

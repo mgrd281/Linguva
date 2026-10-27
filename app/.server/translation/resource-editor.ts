@@ -34,6 +34,13 @@ import { removeTranslation, restoreRevision } from "./history";
 import { HANDLE_PROBLEM_MESSAGES, validateHandle } from "../../lib/handles";
 import type { TranslationEdit } from "./product-translation-service";
 import type { TranslatableResourceData } from "../shopify/translations-api";
+import {
+  attachedAiTargets,
+  attachedRef,
+  collectAttachedEdits,
+  listEditorAttachments,
+  loadAttachedData,
+} from "./attached-editor";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -117,7 +124,9 @@ export async function loadEditorData(ctx: EditorContext) {
   }
 
   const meta = RESOURCE_KINDS[ctx.kind];
+  const attached = await loadAttachedData(admin, ctx.kind, resourceId, target.locale);
   return {
+    attached,
     kind: { label: meta.label, singular: meta.singular, path: meta.path, plural: meta.plural },
     shopDomain: ctx.shopDomain ?? "",
     title: resource.content.find((c) => c.key === "title")?.value ?? "(untitled)",
@@ -157,6 +166,17 @@ export type EditorActionResult =
       memoryHits?: number;
       scores?: Record<string, number>;
     }
+  | {
+      kind: "attached-ai";
+      /** Keyed by attachedRef(resourceId, key). */
+      drafts: Record<string, string>;
+      rejected: Record<string, string>;
+      warnings: Record<string, string[]>;
+      provider: string;
+      /** Set when translation stopped early (drafts so far are kept). */
+      stopped?: string;
+    }
+  | { kind: "attached-saved"; outcomes: Array<{ ref: string; status: string; message?: string }> }
   | { kind: "restored"; status: string }
   | { kind: "removed"; key: string; status: string }
   | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string }> }
@@ -169,6 +189,21 @@ function rateLimited(error: RequestRateLimitedError) {
     code: error.scope === "user" ? "RATE_LIMITED_USER" : "RATE_LIMITED_SHOP",
     retryAfterSeconds: Math.max(1, Math.ceil(error.retryAfterMs / 1000)),
   } satisfies EditorActionResult;
+}
+
+/** Error code for a failed AI translation, or undefined if the error is unexpected. */
+function aiErrorCode(error: unknown): string | undefined {
+  if (error instanceof AiConsentRequiredError) return "CONSENT_REQUIRED";
+  if (error instanceof AiRequestTooLargeError) return "REQUEST_TOO_LARGE";
+  if (error instanceof QuotaExceededError) {
+    return { monthly: "QUOTA_EXCEEDED", daily: "DAILY_LIMIT", platform: "PLATFORM_LIMIT" }[error.scope];
+  }
+  if (error instanceof TranslationProviderError) return `PROVIDER_${error.kind.toUpperCase()}`;
+  return undefined;
+}
+
+function planAllowsTarget(ctx: EditorContext) {
+  return !(ctx.billing && ctx.targetLocales && !allowedTargetLocales(ctx.billing.entitlements, ctx.targetLocales).includes(ctx.target.locale));
 }
 
 /**
@@ -209,9 +244,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
   }
 
   if (intent === "ai-translate") {
-    if (ctx.billing && ctx.targetLocales && !allowedTargetLocales(ctx.billing.entitlements, ctx.targetLocales).includes(target.locale)) {
-      return { kind: "error", code: "PLAN_LANGUAGE" } satisfies EditorActionResult;
-    }
+    if (!planAllowsTarget(ctx)) return { kind: "error", code: "PLAN_LANGUAGE" } satisfies EditorActionResult;
     const provider = getTranslationProvider();
     if (!provider) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
     const keys = form.getAll("key").map(String).slice(0, 100);
@@ -251,21 +284,90 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
         memoryHits: result.memoryHits,
       } satisfies EditorActionResult;
     } catch (error) {
-      if (error instanceof AiConsentRequiredError) {
-        return { kind: "error", code: "CONSENT_REQUIRED" } satisfies EditorActionResult;
-      }
       if (error instanceof RequestRateLimitedError) return rateLimited(error);
-      if (error instanceof AiRequestTooLargeError) return { kind: "error", code: "REQUEST_TOO_LARGE" } satisfies EditorActionResult;
-      if (error instanceof QuotaExceededError) {
-        const code = { monthly: "QUOTA_EXCEEDED", daily: "DAILY_LIMIT", platform: "PLATFORM_LIMIT" }[error.scope];
-        return { kind: "error", code } satisfies EditorActionResult;
-      }
       if (error instanceof ResourceNotFoundError) throw new Response("Not found", { status: 404 });
-      if (error instanceof TranslationProviderError) {
-        return { kind: "error", code: `PROVIDER_${error.kind.toUpperCase()}` } satisfies EditorActionResult;
-      }
+      const code = aiErrorCode(error);
+      if (code) return { kind: "error", code } satisfies EditorActionResult;
       throw error;
     }
+  }
+
+  if (intent === "ai-translate-attached") {
+    // Which images and metafields to translate is decided here, from
+    // Shopify's list for this parent: the form carries no resource ids.
+    if (!planAllowsTarget(ctx)) return { kind: "error", code: "PLAN_LANGUAGE" } satisfies EditorActionResult;
+    const provider = getTranslationProvider();
+    if (!provider) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
+    try {
+      await getRequestLimiter().consume(shopId, actorId, "ai-translate");
+    } catch (error) {
+      if (error instanceof RequestRateLimitedError) return rateLimited(error);
+      throw error;
+    }
+    const resources = await listEditorAttachments(admin, ctx.kind, resourceId, target.locale);
+    const config = getConfig();
+    const limits = editorLimits(ctx);
+    const drafts: Record<string, string> = {};
+    const rejected: Record<string, string> = {};
+    const warnings: Record<string, string[]> = {};
+    let stopped: string | undefined;
+    for (const item of attachedAiTargets(resources)) {
+      try {
+        const result = await aiTranslateResource({
+          admin,
+          shopId,
+          resourceId: item.resourceId,
+          targetLocale: target.locale,
+          keys: item.keys,
+          provider,
+          monthlyLimit: limits.limit,
+          dailyLimit: limits.dailyLimit,
+          platformDailyLimit: limits.platformDailyLimit,
+          maxRequestChars: config.AI_MAX_CHARS_PER_REQUEST,
+        });
+        for (const o of result.outcomes) {
+          const ref = attachedRef(item.resourceId, o.key);
+          if (o.status === "translated") {
+            drafts[ref] = o.value;
+            if (o.issues.length) warnings[ref] = o.issues.map((i) => i.code);
+          } else if (o.status === "rejected") {
+            rejected[ref] = o.reason;
+          }
+        }
+      } catch (error) {
+        if (error instanceof ResourceNotFoundError) continue;
+        stopped = aiErrorCode(error);
+        if (!stopped) throw error;
+        break;
+      }
+    }
+    return {
+      kind: "attached-ai",
+      drafts,
+      rejected,
+      warnings,
+      provider: provider.id,
+      ...(stopped ? { stopped } : {}),
+    } satisfies EditorActionResult;
+  }
+
+  if (intent === "save-attached") {
+    const resources = await listEditorAttachments(admin, ctx.kind, resourceId, target.locale);
+    const outcomes: Array<{ ref: string; status: string; message?: string }> = [];
+    for (const { resource, edits } of collectAttachedEdits(resources, form)) {
+      const saved = await saveResourceTranslations({
+        admin,
+        shopId,
+        actorId,
+        resourceId: resource.resourceId,
+        locale: target.locale,
+        edits,
+      });
+      for (const o of saved) {
+        outcomes.push({ ref: attachedRef(resource.resourceId, o.key), status: o.status, ...("message" in o ? { message: o.message } : {}) });
+      }
+    }
+    return data({ kind: "attached-saved", outcomes } satisfies EditorActionResult);
   }
 
   if (intent === "memory-suggest") {

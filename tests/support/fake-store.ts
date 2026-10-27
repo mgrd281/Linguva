@@ -46,6 +46,15 @@ export class FakeShopifyStore {
   /** All resources by GID (products and collections). */
   readonly products = new Map<string, Field[]>();
   readonly translations = new Map<string, { value: string; digest: string }>();
+  /** Product media (MediaImage GIDs; null = a video or 3D model). */
+  readonly media = new Map<string, Array<{ id: string; url: string } | null>>();
+  /** Nested image resources of collections and articles, by parent. */
+  readonly nestedImages = new Map<string, Array<{ id: string; type: string }>>();
+  readonly metafields = new Map<
+    string,
+    Array<{ id: string; namespace: string; key: string; type: string; translatable: boolean }>
+  >();
+  private nextSubId = 9000;
   /** Throw this error for the next N calls (any operation). */
   failNext: { count: number; error: () => Error } | null = null;
 
@@ -78,6 +87,42 @@ export class FakeShopifyStore {
   addCollections(count: number) {
     for (let i = 1; i <= count; i++) this.products.set(`gid://shopify/Collection/${i}`, collectionFields(i));
     return this;
+  }
+
+  /**
+   * Adds an image with alt text to a product (as MediaImage), collection or
+   * article (as a nested image resource). Returns the image's GID.
+   */
+  addImage(parentGid: string, alt: string) {
+    const n = ++this.nextSubId;
+    if (parentGid.includes("/Product/")) {
+      const id = `gid://shopify/MediaImage/${n}`;
+      this.media.set(parentGid, [...(this.media.get(parentGid) ?? []), { id, url: `https://cdn.example/${n}.jpg` }]);
+      this.products.set(id, [{ key: "alt", value: alt, type: "STRING" }]);
+      return id;
+    }
+    const type = parentGid.includes("/Collection/") ? "COLLECTION_IMAGE" : "ARTICLE_IMAGE";
+    const id = `gid://shopify/${type === "COLLECTION_IMAGE" ? "CollectionImage" : "ArticleImage"}/${n}`;
+    this.nestedImages.set(parentGid, [...(this.nestedImages.get(parentGid) ?? []), { id, type }]);
+    this.products.set(id, [{ key: "alt", value: alt, type: "STRING" }]);
+    return id;
+  }
+
+  /** Adds a video (not translatable here) to a product's media. */
+  addVideo(productGid: string) {
+    this.media.set(productGid, [...(this.media.get(productGid) ?? []), null]);
+  }
+
+  /** Adds a metafield; translatable ones get translatable content under key "value". */
+  addMetafield(ownerGid: string, m: { namespace: string; key: string; type: string; value: string; translatable?: boolean }) {
+    const id = `gid://shopify/Metafield/${++this.nextSubId}`;
+    const translatable = m.translatable ?? true;
+    this.metafields.set(ownerGid, [
+      ...(this.metafields.get(ownerGid) ?? []),
+      { id, namespace: m.namespace, key: m.key, type: m.type, translatable },
+    ]);
+    if (translatable) this.products.set(id, [{ key: "value", value: m.value, type: m.type.toUpperCase() }]);
+    return id;
   }
 
   asAdmin(): Pick<AdminApiContext, "graphql"> {
@@ -137,6 +182,31 @@ export class FakeShopifyStore {
       return Response.json({
         data: { translatableResource: this.products.has(gid) ? this.node(gid, String(vars.locale)) : null },
       });
+    }
+    if (name === "LinguvaProductMedia") {
+      const gid = String(vars.id);
+      if (!this.products.has(gid)) return Response.json({ data: { product: null } });
+      const nodes = (this.media.get(gid) ?? []).map((m) => (m ? { id: m.id, image: { url: m.url } } : {}));
+      return Response.json({ data: { product: { media: { nodes } } } });
+    }
+    if (name === "LinguvaTranslatableByIds") {
+      const ids = (vars.ids as string[]).filter((id) => this.products.has(id));
+      return Response.json({
+        data: { translatableResourcesByIds: { nodes: ids.map((id) => this.node(id, String(vars.locale))) } },
+      });
+    }
+    if (name === "LinguvaNestedImages") {
+      const gid = String(vars.id);
+      if (!this.products.has(gid)) return Response.json({ data: { translatableResource: null } });
+      const nodes = (this.nestedImages.get(gid) ?? [])
+        .filter((i) => i.type === vars.type)
+        .map((i) => this.node(i.id, String(vars.locale)));
+      return Response.json({ data: { translatableResource: { nestedTranslatableResources: { nodes } } } });
+    }
+    if (name === "LinguvaOwnerMetafields") {
+      const gid = String(vars.id);
+      if (!this.products.has(gid)) return Response.json({ data: { node: null } });
+      return Response.json({ data: { node: { metafields: { nodes: this.metafields.get(gid) ?? [] } } } });
     }
     if (name === "LinguvaTranslationsRegister") {
       const gid = String(vars.resourceId);

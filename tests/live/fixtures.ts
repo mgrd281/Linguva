@@ -164,6 +164,8 @@ export async function createFixtureProduct(admin: LiveAdmin, runId: string) {
       status: "DRAFT",
       tags: [FIXTURE_TAG],
       seo: { title: `Winter jacket ${runId}`, description: "A warm jacket for cold days." },
+      // A text metafield, to check that Shopify reports it as translatable.
+      metafields: [{ namespace: "linguva_test", key: "care", type: "multi_line_text_field", value: "Hand wash cold." }],
     },
   });
   check(productCreate, "productCreate");

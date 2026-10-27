@@ -25,6 +25,7 @@ import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { restoreRevision } from "../../app/.server/translation/history";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
 import { RESOURCE_KINDS } from "../../app/lib/resource-kinds";
+import { listImageResources, listTranslatableMetafields } from "../../app/.server/shopify/attached-resources";
 import { createLiveAdmin } from "./admin-client";
 import {
   createFixtureCollection,
@@ -98,6 +99,19 @@ live("read contract (no writes)", () => {
     }
   });
 
+  it("exposes image alt text as translatable content of product, collection and blog post images", async () => {
+    // Verifies MEDIA_IMAGE via product media and the nested COLLECTION_IMAGE /
+    // ARTICLE_IMAGE resources on whatever images the dev store already has.
+    for (const resourceType of ["PRODUCT", "COLLECTION", "ARTICLE"] as const) {
+      const page = await listTranslatableResources(admin, { resourceType, locale, first: 5 });
+      for (const r of page.resources) {
+        for (const image of await listImageResources(admin, r.resourceId, locale)) {
+          expect(image.content.map((c) => c.key)).toEqual(["alt"]);
+        }
+      }
+    }
+  });
+
   it("reads markets and their web presences (needs read_markets)", async (context) => {
     let markets;
     try {
@@ -125,6 +139,20 @@ writes("write contract on fixtures", () => {
     expect(c?.content.map((x) => x.key)).toEqual(
       expect.arrayContaining(["title", "body_html", "handle", "meta_title", "meta_description"]),
     );
+  });
+
+  it("reports a text metafield as translatable and translates its value", async () => {
+    const care = (await listTranslatableMetafields(admin, product.id, locale)).find((m) => m.label === "linguva_test.care");
+    expect(care?.content.map((c) => c.key)).toEqual(["value"]);
+    const { shop } = await upsertInstalledShop({ shopDomain: settings!.shop }, prisma);
+    const edit = { key: "value", value: "Kalt von Hand waschen.", digest: care!.content[0]!.digest!, origin: "MANUAL" as const, provider: null, approved: true };
+    const outcomes = await saveResourceTranslations(
+      { admin, shopId: shop.id, actorId: null, resourceId: care!.resourceId, locale, edits: [edit] },
+      prisma,
+    );
+    expect(outcomes).toEqual([{ key: "value", status: "saved" }]);
+    const after = (await listTranslatableMetafields(admin, product.id, locale)).find((m) => m.label === "linguva_test.care");
+    expect(after?.translations).toMatchObject([{ key: "value", value: "Kalt von Hand waschen.", outdated: false }]);
   });
 
   it("registers a translation with the current digest and reads it back up to date", async () => {

@@ -13,6 +13,46 @@ export type LinguvaShopLocalesQueryVariables = AdminTypes.Exact<{ [key: string]:
 
 export type LinguvaShopLocalesQuery = { shopLocales: Array<Pick<AdminTypes.ShopLocale, 'locale' | 'name' | 'primary' | 'published'>> };
 
+export type LinguvaProductMediaQueryVariables = AdminTypes.Exact<{
+  id: AdminTypes.Scalars['ID']['input'];
+}>;
+
+
+export type LinguvaProductMediaQuery = { product?: AdminTypes.Maybe<{ media: { nodes: Array<(
+        Pick<AdminTypes.MediaImage, 'id'>
+        & { image?: AdminTypes.Maybe<Pick<AdminTypes.Image, 'url'>> }
+      )> } }> };
+
+export type LinguvaTranslatableByIdsQueryVariables = AdminTypes.Exact<{
+  ids: Array<AdminTypes.Scalars['ID']['input']> | AdminTypes.Scalars['ID']['input'];
+  locale: AdminTypes.Scalars['String']['input'];
+}>;
+
+
+export type LinguvaTranslatableByIdsQuery = { translatableResourcesByIds: { nodes: Array<(
+      Pick<AdminTypes.TranslatableResource, 'resourceId'>
+      & { translatableContent: Array<Pick<AdminTypes.TranslatableContent, 'key' | 'value' | 'digest' | 'locale' | 'type'>>, translations: Array<Pick<AdminTypes.Translation, 'key' | 'value' | 'outdated' | 'updatedAt'>> }
+    )> } };
+
+export type LinguvaNestedImagesQueryVariables = AdminTypes.Exact<{
+  id: AdminTypes.Scalars['ID']['input'];
+  type: AdminTypes.TranslatableResourceType;
+  locale: AdminTypes.Scalars['String']['input'];
+}>;
+
+
+export type LinguvaNestedImagesQuery = { translatableResource?: AdminTypes.Maybe<{ nestedTranslatableResources: { nodes: Array<(
+        Pick<AdminTypes.TranslatableResource, 'resourceId'>
+        & { translatableContent: Array<Pick<AdminTypes.TranslatableContent, 'key' | 'value' | 'digest' | 'locale' | 'type'>>, translations: Array<Pick<AdminTypes.Translation, 'key' | 'value' | 'outdated' | 'updatedAt'>> }
+      )> } }> };
+
+export type LinguvaOwnerMetafieldsQueryVariables = AdminTypes.Exact<{
+  id: AdminTypes.Scalars['ID']['input'];
+}>;
+
+
+export type LinguvaOwnerMetafieldsQuery = { node?: AdminTypes.Maybe<{ metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'namespace' | 'key' | 'type' | 'translatable'>> } } | { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'namespace' | 'key' | 'type' | 'translatable'>> } }> };
+
 export type LinguvaTranslatableResourcesQueryVariables = AdminTypes.Exact<{
   resourceType: AdminTypes.TranslatableResourceType;
   first: AdminTypes.Scalars['Int']['input'];
@@ -131,6 +171,10 @@ export type LinguvaLiveMarketsQuery = { markets: { nodes: Array<(
 interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaShopId {\n    shop {\n      id\n    }\n  }\n": {return: LinguvaShopIdQuery, variables: LinguvaShopIdQueryVariables},
   "#graphql\n  query LinguvaShopLocales {\n    shopLocales {\n      locale\n      name\n      primary\n      published\n    }\n  }\n": {return: LinguvaShopLocalesQuery, variables: LinguvaShopLocalesQueryVariables},
+  "#graphql\n  query LinguvaProductMedia($id: ID!) {\n    product(id: $id) {\n      media(first: 50) {\n        nodes {\n          ... on MediaImage {\n            id\n            image {\n              url\n            }\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaProductMediaQuery, variables: LinguvaProductMediaQueryVariables},
+  "#graphql\n  query LinguvaTranslatableByIds($ids: [ID!]!, $locale: String!) {\n    translatableResourcesByIds(resourceIds: $ids, first: 100) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n    }\n  }\n": {return: LinguvaTranslatableByIdsQuery, variables: LinguvaTranslatableByIdsQueryVariables},
+  "#graphql\n  query LinguvaNestedImages($id: ID!, $type: TranslatableResourceType!, $locale: String!) {\n    translatableResource(resourceId: $id) {\n      nestedTranslatableResources(resourceType: $type, first: 10) {\n        nodes {\n          resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n        }\n      }\n    }\n  }\n": {return: LinguvaNestedImagesQuery, variables: LinguvaNestedImagesQueryVariables},
+  "#graphql\n  query LinguvaOwnerMetafields($id: ID!) {\n    node(id: $id) {\n      ... on HasMetafields {\n        metafields(first: 100) {\n          nodes {\n            id\n            namespace\n            key\n            type\n            translatable\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaOwnerMetafieldsQuery, variables: LinguvaOwnerMetafieldsQueryVariables},
   "#graphql\n  query LinguvaTranslatableResources(\n    $resourceType: TranslatableResourceType!\n    $first: Int!\n    $after: String\n    $locale: String!\n  ) {\n    translatableResources(resourceType: $resourceType, first: $first, after: $after) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourcesQuery, variables: LinguvaTranslatableResourcesQueryVariables},
   "#graphql\n  query LinguvaTranslatableResource($resourceId: ID!, $locale: String!) {\n    translatableResource(resourceId: $resourceId) {\n      resourceId\n      translatableContent {\n        key\n        value\n        digest\n        locale\n        type\n      }\n      translations(locale: $locale) {\n        key\n        value\n        outdated\n        updatedAt\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourceQuery, variables: LinguvaTranslatableResourceQueryVariables},
   "#graphql\n        query LinguvaShopIdentity {\n          shop {\n            id\n            name\n          }\n        }": {return: LinguvaShopIdentityQuery, variables: LinguvaShopIdentityQueryVariables},

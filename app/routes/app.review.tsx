@@ -41,10 +41,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, shop, session } = await requireShop(request);
+  const { admin, shop, actorId } = await requireShop(request);
   const form = await request.formData();
   const intent = form.get("intent");
-  const actorId = session.onlineAccessInfo?.associated_user?.id?.toString() ?? null;
   const ids = form.getAll("draft").map(String).slice(0, MAX_DRAFTS_PER_ACTION);
 
   if (intent === "reject") {

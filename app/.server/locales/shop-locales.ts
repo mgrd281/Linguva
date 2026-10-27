@@ -97,6 +97,14 @@ export async function syncShopLocales(
   await withTenant(
     shopId,
     async (tx) => {
+      // Most page loads see the same locales; skip the writes then.
+      const stored = await tx.shopLocale.findMany({ where: { shopId } });
+      const same =
+        stored.length === locales.length &&
+        locales.every((l) =>
+          stored.some((s) => s.locale === l.locale && s.name === l.name && s.primary === l.primary && s.published === l.published),
+        );
+      if (same) return;
       await tx.shopLocale.deleteMany({
         where: { shopId, locale: { notIn: locales.map((l) => l.locale) } },
       });

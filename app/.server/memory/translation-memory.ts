@@ -158,17 +158,21 @@ export async function fuzzyMatches(
   const market = context.market ?? "";
   return withTenant(
     context.shopId,
-    (tx) => tx.$queryRaw<FuzzyMatch[]>`
-      SELECT "id", "sourceText", "targetText", "status", similarity("sourceText", ${text})::float8 AS "score"
-      FROM "TranslationMemory"
-      WHERE "shopId" = ${context.shopId}::uuid
-        AND "sourceLocale" = ${context.sourceLocale}
-        AND "targetLocale" = ${context.targetLocale}
-        AND "market" IN (${market}, '')
-        AND length("sourceText") BETWEEN ${minLength} AND ${maxLength}
-        AND similarity("sourceText", ${text}) >= ${threshold}
-      ORDER BY "score" DESC, "status" ASC
-      LIMIT ${limit}`,
+    async (tx) => {
+      // `%` uses the GIN trigram index with this (transaction-local) threshold.
+      await tx.$executeRaw`SELECT set_config('pg_trgm.similarity_threshold', ${String(threshold)}, true)`;
+      return tx.$queryRaw<FuzzyMatch[]>`
+        SELECT "id", "sourceText", "targetText", "status", similarity("sourceText", ${text})::float8 AS "score"
+        FROM "TranslationMemory"
+        WHERE "shopId" = ${context.shopId}::uuid
+          AND "sourceLocale" = ${context.sourceLocale}
+          AND "targetLocale" = ${context.targetLocale}
+          AND "market" IN (${market}, '')
+          AND length("sourceText") BETWEEN ${minLength} AND ${maxLength}
+          AND "sourceText" % ${text}
+        ORDER BY "score" DESC, "status" ASC
+        LIMIT ${limit}`;
+    },
     client,
   );
 }

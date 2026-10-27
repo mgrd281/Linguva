@@ -15,19 +15,18 @@ export async function latestRevisions(
 ): Promise<LatestRevisions> {
   const result: LatestRevisions = new Map();
   if (resourceGids.length === 0) return result;
+  // DISTINCT ON reads one row per field instead of the whole history.
+  const gids = [...new Set(resourceGids)];
   const rows = await withTenant(
     shopId,
-    (tx) =>
-      tx.translationRevision.findMany({
-        where: { shopId, locale, resourceGid: { in: [...new Set(resourceGids)] } },
-        orderBy: { createdAt: "desc" },
-      }),
+    (tx) => tx.$queryRaw<TranslationRevision[]>`
+      SELECT DISTINCT ON ("resourceGid", "key") *
+      FROM "TranslationRevision"
+      WHERE "shopId" = ${shopId}::uuid AND "locale" = ${locale} AND "resourceGid" = ANY(${gids})
+      ORDER BY "resourceGid", "key", "createdAt" DESC, "id" DESC`,
     client,
   );
-  for (const row of rows) {
-    const k = revisionKey(row.resourceGid, row.key);
-    if (!result.has(k)) result.set(k, row);
-  }
+  for (const row of rows) result.set(revisionKey(row.resourceGid, row.key), row);
   return result;
 }
 

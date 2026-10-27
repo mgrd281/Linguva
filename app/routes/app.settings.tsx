@@ -35,10 +35,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, session } = await requireShop(request);
+  const { shop, actorId } = await requireShop(request);
   const form = await request.formData();
   const intent = form.get("intent");
-  const actorId = session.onlineAccessInfo?.associated_user?.id?.toString() ?? null;
   if (intent === "publish-mode") {
     try {
       await setBulkPublishMode({

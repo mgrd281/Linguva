@@ -61,7 +61,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, shop, session } = await requireShop(request);
+  const { admin, shop, actorId } = await requireShop(request);
   const form = await request.formData();
   if (form.get("intent") !== "bulk-translate") return { error: "UNKNOWN_INTENT" };
 
@@ -79,7 +79,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopId: shop.id,
       resourceType: "PRODUCT",
       targetLocale: locale,
-      requestedBy: session.onlineAccessInfo?.associated_user?.id?.toString() ?? null,
+      requestedBy: actorId,
       idempotencyKey,
       overwriteProtected: form.get("overwriteProtected") === "on",
     });

@@ -25,14 +25,14 @@ import {
   aiTranslateResource,
   ResourceNotFoundError,
   saveResourceTranslations,
-  type TranslationEdit,
+  sourceLocaleOf,
 } from "../.server/translation/product-translation-service";
+import { collectEditorEdits } from "../.server/translation/editor-edits";
 import { isMachineTranslatable, segmentField } from "../.server/translation/translate-fields";
 import { listRevisions } from "../.server/translation/revisions";
 import { restoreRevision } from "../.server/translation/history";
 import { fuzzyMatches } from "../.server/memory/translation-memory";
 import { resolveGlossary } from "../.server/glossary/glossary";
-import { sourceLocaleOf } from "../.server/translation/product-translation-service";
 import { getMonthlyUsage, QuotaExceededError } from "../.server/usage/usage-ledger";
 import { fieldLabel } from "../lib/field-labels";
 
@@ -117,10 +117,9 @@ type ActionResult =
   | { kind: "error"; code: string };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin, shop, session, resourceId, target } = await resolveContext(request, params.id);
+  const { admin, shop, actorId, resourceId, target } = await resolveContext(request, params.id);
   const form = await request.formData();
   const intent = form.get("intent");
-  const actorId = session.onlineAccessInfo?.associated_user?.id?.toString() ?? null;
 
   if (intent === "grant-consent") {
     await setAiConsent({ shopId: shop.id, granted: true, actorId });
@@ -212,26 +211,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (intent === "save") {
     const resource = await getTranslatableResource(admin, resourceId, target.locale);
     if (!resource) throw new Response("Not found", { status: 404 });
-    const existing = new Map(resource.translations.map((t) => [t.key, t]));
-    const edits: TranslationEdit[] = [];
-    for (const field of resource.content) {
-      const value = form.get(`value:${field.key}`);
-      const digest = form.get(`digest:${field.key}`);
-      if (typeof value !== "string" || typeof digest !== "string") continue;
-      const current = existing.get(field.key);
-      // Skip untouched fields: same value and still current, or still empty.
-      if ((current?.value ?? "") === value && !current?.outdated) continue;
-      if (!value.trim() && !current?.value) continue;
-      edits.push({
-        key: field.key,
-        value,
-        digest,
-        origin: form.get(`origin:${field.key}`) === "AI" ? "AI" : "MANUAL",
-        provider: String(form.get("provider") ?? "") || null,
-        // Publishing from the editor means the merchant reviewed it.
-        approved: true,
-      });
-    }
+    const edits = collectEditorEdits(resource, form);
     const outcomes = await saveResourceTranslations({
       admin,
       shopId: shop.id,
@@ -310,7 +290,7 @@ export default function ProductTranslation() {
         <s-banner tone={restored === "restored" ? "success" : "warning"} heading={restored === "restored" ? "Version restored" : "Couldn't restore this version"}>
           <s-paragraph>
             {restored === "restored"
-              ? "The earlier translation is published again. Reload to see it in the field."
+              ? "The earlier translation is published again."
               : restored === "source_changed"
                 ? "The source text has changed since that version, so Shopify won't accept it."
                 : "Please reload the page and try again."}
@@ -436,6 +416,12 @@ export default function ProductTranslation() {
                     {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
                   />
                 )}
+                {field.outdated && draft === undefined && field.translation ? (
+                  <s-checkbox
+                    name={`confirm:${field.key}`}
+                    label="The source changed, but this translation is still correct"
+                  />
+                ) : null}
                 <s-stack direction="inline" gap="small">
                   {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
                   {draft !== undefined ? (

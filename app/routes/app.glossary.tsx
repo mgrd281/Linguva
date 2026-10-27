@@ -47,6 +47,9 @@ type Result =
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Result> => {
   const { shop } = await requireShop(request);
+  // Refuse oversized uploads before the body is read into memory.
+  const length = Number(request.headers.get("content-length") ?? "0");
+  if (length > MAX_IMPORT_BYTES + 64 * 1024) return { kind: "error", message: "The upload is larger than 1 MB." };
   const form = await request.formData();
   const intent = form.get("intent");
 

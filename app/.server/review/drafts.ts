@@ -65,7 +65,10 @@ export async function saveDrafts(
   return drafts.length;
 }
 
-/** Pending drafts that already cover a resource field with this digest. */
+/**
+ * Fields a bulk job must not translate again for the same source digest:
+ * a draft is waiting for review, or the merchant rejected it.
+ */
 export async function pendingDraftDigests(
   shopId: string,
   resourceGids: readonly string[],
@@ -77,7 +80,12 @@ export async function pendingDraftDigests(
     shopId,
     (tx) =>
       tx.translationDraft.findMany({
-        where: { shopId, locale, status: "PENDING", resourceGid: { in: [...new Set(resourceGids)] } },
+        where: {
+          shopId,
+          locale,
+          status: { in: ["PENDING", "REJECTED"] },
+          resourceGid: { in: [...new Set(resourceGids)] },
+        },
         select: { resourceGid: true, key: true, sourceDigest: true },
       }),
     client,

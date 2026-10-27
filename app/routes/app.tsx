@@ -9,6 +9,7 @@ import { shopBilling } from "../.server/billing/billing";
 import { getConfig } from "../.server/lib/config";
 import { planSelectionUrl } from "../lib/plans";
 import { isShopifyAuthResponse, RouteErrorContent } from "../components/RouteError";
+import { I18nProvider, useAppLocale, useI18n } from "../i18n/react";
 
 /** The admin's loading bar while a page loads or a form submits (App Bridge). */
 function useAdminLoadingBar() {
@@ -34,27 +35,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
+function AppNav() {
+  const { t } = useI18n();
+  return (
+    <s-app-nav>
+      <s-link href="/app">{t("common.nav.overview")}</s-link>
+      <s-link href="/app/products">{t("common.nav.products")}</s-link>
+      <s-link href="/app/collections">{t("common.nav.collections")}</s-link>
+      <s-link href="/app/content">{t("common.nav.content")}</s-link>
+      <s-link href="/app/review">{t("common.nav.review")}</s-link>
+      <s-link href="/app/jobs">{t("common.nav.jobs")}</s-link>
+      <s-link href="/app/coverage">{t("common.nav.coverage")}</s-link>
+      <s-link href="/app/markets">{t("common.nav.markets")}</s-link>
+      <s-link href="/app/glossary">{t("common.nav.glossary")}</s-link>
+      <s-link href="/app/memory">{t("common.nav.memory")}</s-link>
+      <s-link href="/app/plan">{t("common.nav.plan")}</s-link>
+      <s-link href="/app/settings">{t("common.nav.settings")}</s-link>
+    </s-app-nav>
+  );
+}
+
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const locale = useAppLocale();
   useAdminLoadingBar();
 
   return (
     <AppProvider apiKey={apiKey}>
-      <s-app-nav>
-        <s-link href="/app">Overview</s-link>
-        <s-link href="/app/products">Products</s-link>
-        <s-link href="/app/collections">Collections</s-link>
-        <s-link href="/app/content">All content</s-link>
-        <s-link href="/app/review">Review</s-link>
-        <s-link href="/app/jobs">Translation jobs</s-link>
-        <s-link href="/app/coverage">Coverage &amp; SEO</s-link>
-        <s-link href="/app/markets">Markets</s-link>
-        <s-link href="/app/glossary">Glossary</s-link>
-        <s-link href="/app/memory">Translation memory</s-link>
-        <s-link href="/app/plan">Plan</s-link>
-        <s-link href="/app/settings">Settings</s-link>
-      </s-app-nav>
-      <Outlet />
+      <I18nProvider locale={locale}>
+        <AppNav />
+        <Outlet />
+      </I18nProvider>
     </AppProvider>
   );
 }
@@ -64,10 +75,13 @@ export default function App() {
 export function ErrorBoundary() {
   const error = useRouteError();
   const data = useRouteLoaderData<typeof loader>("routes/app");
+  const locale = useAppLocale();
   if (isShopifyAuthResponse(error)) return boundary.error(error);
   return (
     <AppProvider apiKey={data && "apiKey" in data ? data.apiKey : ""}>
-      <RouteErrorContent error={error} />
+      <I18nProvider locale={locale}>
+        <RouteErrorContent error={error} />
+      </I18nProvider>
     </AppProvider>
   );
 }

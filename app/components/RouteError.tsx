@@ -6,43 +6,18 @@
  */
 import { isRouteErrorResponse, useRevalidator, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useI18n } from "../i18n/react";
 
-function describe(error: unknown) {
+type ErrorCase = "notFound" | "forbidden" | "timeout" | "unavailable" | "generic";
+
+function describe(error: unknown): { kind: ErrorCase; retry: boolean } {
   if (isRouteErrorResponse(error)) {
-    if (error.status === 404) {
-      return {
-        heading: "We couldn't find this page",
-        body: "It may have been deleted in Shopify, or the link is out of date.",
-        retry: false,
-      };
-    }
-    if (error.status === 403) {
-      return {
-        heading: "Linguva doesn't have access to this",
-        body: "Shopify refused the request. Approve the app's permissions again from Shopify's Apps page, then reload.",
-        retry: true,
-      };
-    }
-    if (error.status === 504) {
-      return {
-        heading: "Shopify is taking too long",
-        body: "Shopify didn't answer in time, so Linguva stopped waiting. Nothing was changed by this page. Try again in a moment.",
-        retry: true,
-      };
-    }
-    if (error.status === 429 || error.status >= 500) {
-      return {
-        heading: "Shopify didn't respond",
-        body: "Shopify is busy or temporarily unavailable. Nothing was changed. Try again in a moment.",
-        retry: true,
-      };
-    }
+    if (error.status === 404) return { kind: "notFound", retry: false };
+    if (error.status === 403) return { kind: "forbidden", retry: true };
+    if (error.status === 504) return { kind: "timeout", retry: true };
+    if (error.status === 429 || error.status >= 500) return { kind: "unavailable", retry: true };
   }
-  return {
-    heading: "Something went wrong",
-    body: "This page couldn't be loaded. Nothing was changed in your store. Try again, and contact support if it keeps happening.",
-    retry: true,
-  };
+  return { kind: "generic", retry: true };
 }
 
 /** Shopify's authentication flow throws responses that its boundary must handle. */
@@ -52,7 +27,10 @@ export function isShopifyAuthResponse(error: unknown) {
 
 export function RouteErrorContent({ error }: { error: unknown }) {
   const revalidator = useRevalidator();
-  const { heading, body, retry } = describe(error);
+  const { t } = useI18n();
+  const { kind, retry } = describe(error);
+  const heading = t(`common.error.${kind}.heading`);
+  const body = t(`common.error.${kind}.body`);
   return (
     <s-page heading={heading}>
       <s-section>
@@ -67,10 +45,10 @@ export function RouteErrorContent({ error }: { error: unknown }) {
                 onClick={() => revalidator.revalidate()}
                 {...(revalidator.state !== "idle" ? { loading: true } : {})}
               >
-                Try again
+                {t("common.error.tryAgain")}
               </s-button>
             ) : null}
-            <s-button href="/app">Go to Overview</s-button>
+            <s-button href="/app">{t("common.error.toOverview")}</s-button>
           </s-stack>
         </s-stack>
       </s-section>

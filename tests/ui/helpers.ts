@@ -65,7 +65,8 @@ function appBridgeStub(token: string, shopDomain: string) {
 }
 
 /** Opens a page of the embedded app for one of the test shops. */
-export async function openApp(page: Page, shopKey: UiShopKey, path: string) {
+/** Opens an app page as Shopify does; `locale` is the admin user's language (Shopify's `locale` parameter). */
+export async function openApp(page: Page, shopKey: UiShopKey, path: string, options: { locale?: string } = {}) {
   const shop = UI_SHOPS[shopKey];
   const token = sessionToken(shop.domain);
   await page.route("https://cdn.shopify.com/shopifycloud/app-bridge.js", (route) =>
@@ -76,6 +77,7 @@ export async function openApp(page: Page, shopKey: UiShopKey, path: string) {
   url.searchParams.set("shop", shop.domain);
   url.searchParams.set("host", Buffer.from(`admin.shopify.com/store/${shop.domain.replace(".myshopify.com", "")}`).toString("base64"));
   url.searchParams.set("id_token", token);
+  if (options.locale) url.searchParams.set("locale", options.locale);
   const response = await page.goto(url.toString());
   // Polaris custom elements are defined once polaris.js has run.
   await page.waitForFunction(() => Boolean(customElements.get("s-page")), undefined, { timeout: 20_000 });

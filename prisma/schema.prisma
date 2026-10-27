@@ -71,6 +71,7 @@ model Shop {
   coverageStats   CoverageStat[]
   coverageGaps    CoverageGap[]
   coverageTitles  CoverageTitleHash[]
+  complimentary   ComplimentaryAccess?
   subscription    ShopSubscription?
 }
 
@@ -591,6 +592,28 @@ model ShopSubscription {
   currentPeriodEnd   DateTime?         @db.Timestamptz(3)
   checkedAt          DateTime          @db.Timestamptz(3)
   updatedAt          DateTime          @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+/// Owner complimentary access (docs/BILLING_DESIGN.md §4): all features
+/// without a subscription, for the operator's own stores. Written only by
+/// the operator tool with the owner role; the runtime role can only read
+/// it. It applies only while the shop's Shopify GID is also listed in
+/// COMPLIMENTARY_SHOP_GIDS.
+model ComplimentaryAccess {
+  shopId           String    @id @db.Uuid
+  /// Must equal Shop.shopifyShopGid (from Shopify, not from user input).
+  shopifyShopGid   String
+  reason           String
+  grantedBy        String
+  /// AI characters per month (the cost cap for this shop).
+  monthlyCharLimit Int
+  grantedAt        DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt        DateTime? @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+  revokedBy        String?
+  revokeReason     String?
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }

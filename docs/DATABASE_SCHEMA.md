@@ -30,7 +30,9 @@ Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop,
 | Model | Key fields | Constraints / notes |
 |---|---|---|
 | **Subscription** | id, shopId, source (APP_PRICING/MANUAL/NONE), planHandle, status (ACTIVE/PENDING/CANCELLED/FROZEN/TRIAL), trialEndsAt, currentPeriodStart/End, lastReconciledAt, rawSnapshot jsonb | Local **cache** of Partner API `activeSubscription`. Never the sole authority |
-| **Entitlement** | id, shopId, kind (PLAN/OWNER_COMPLIMENTARY/ENTERPRISE_CONTRACT), features jsonb, monthlyCharLimit, costCapMicros, validFrom, validUntil, revokedAt, approvedByAdminId, reason | Resolved server-side into an effective feature set. OWNER kind requires an admin approval record and an AuditLog entry |
+| **ComplimentaryAccess** (implemented) | shopId (PK), shopifyShopGid, reason, grantedBy, monthlyCharLimit, grantedAt, expiresAt, revokedAt, revokedBy, revokeReason | Owner complimentary access (BILLING_DESIGN §4). RLS + FORCE; runtime role SELECT only, written by the operator tool with the owner role; CHECK constraints on the GID format and the limit |
+| **ShopSubscription** (implemented) | shopId (PK), state, planHandle, pendingPlanHandle, trialEndsAt, cancelAtEndOfCycle, currentPeriodEnd, checkedAt | Cache of the Partner API `activeSubscription` (6 h TTL) |
+| **Entitlement** (planned) | id, shopId, kind (PLAN/ENTERPRISE_CONTRACT), features jsonb, monthlyCharLimit, validFrom, validUntil, revokedAt, reason | For negotiated enterprise contracts |
 | **UsageLedger** | id, shopId, periodKey (YYYY-MM), kind (RESERVE/COMMIT/RELEASE/ADJUST/REFUND), chars, costMicros, provider, jobId, idempotencyKey, createdAt | **Append-only.** unique(shopId, idempotencyKey). Balance = SUM per period |
 | **UsageReservation** | id, shopId, jobId, reservedChars, committedChars, status (OPEN/COMMITTED/RELEASED/EXPIRED), expiresAt | unique(shopId, jobId). An expiry sweeper releases stale reservations |
 | **ProviderUsage** | id, shopId, provider, model, requestId, chars, inputTokens, outputTokens, costMicros, latencyMs, outcome | Feeds the cost/margin dashboards. No text content |

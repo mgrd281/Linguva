@@ -49,3 +49,8 @@ export function planSelectionUrl(shopDomain: string, appHandle: string): string 
   }
   return `https://admin.shopify.com/store/${store}/charges/${appHandle}/pricing_plans`;
 }
+
+/** Estimated provider cost in USD for AI characters (internal reports only). */
+export function estimatedCostUsd(chars: number, usdPerMillionChars: number): number {
+  return Math.round((chars / 1_000_000) * usdPerMillionChars * 100) / 100;
+}

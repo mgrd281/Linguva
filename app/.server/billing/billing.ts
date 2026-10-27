@@ -3,12 +3,16 @@
  * character limits that follow from the plan.
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import { getConfig, partnerApiSettings, type AppConfig } from "../lib/config";
+import { complimentaryShopGids, getConfig, partnerApiSettings, type AppConfig } from "../lib/config";
 import type { Entitlements } from "../../lib/plans";
 import { ensureShopGid, getBillingStatus, type BillingDeps } from "./subscription";
 
 export function billingDeps(config: AppConfig = getConfig()): BillingDeps {
-  return { settings: partnerApiSettings(config), required: config.BILLING_REQUIRED === "true" };
+  return {
+    settings: partnerApiSettings(config),
+    required: config.BILLING_REQUIRED === "true",
+    complimentaryGids: complimentaryShopGids(config),
+  };
 }
 
 export async function shopBilling(
@@ -17,7 +21,10 @@ export async function shopBilling(
   options: { force?: boolean } = {},
 ) {
   const deps = billingDeps();
-  const shopifyShopGid = deps.settings ? await ensureShopGid(admin, shop) : shop.shopifyShopGid;
+  // The GID (from Shopify) identifies the shop to the Partner API and for
+  // complimentary access.
+  const needsGid = Boolean(deps.settings) || Boolean(deps.complimentaryGids?.length);
+  const shopifyShopGid = needsGid ? await ensureShopGid(admin, shop) : shop.shopifyShopGid;
   return getBillingStatus(deps, { id: shop.id, shopifyShopGid }, options);
 }
 

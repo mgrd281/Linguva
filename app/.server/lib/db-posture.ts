@@ -10,6 +10,8 @@ import type { PrismaClient } from "@prisma/client";
 export const NOT_FORCED_TABLES = ["TranslationMemory"] as const;
 /** Tables without RLS by design: global records, or no tenant data. */
 export const GLOBAL_TABLES = ["Shop", "Session", "WebhookEvent", "PrivacyRequest", "AuditLog", "PlatformUsageDay", "_prisma_migrations"] as const;
+/** Tables the runtime role may only read: entitlements granted by the operator. */
+export const READ_ONLY_TABLES = ["ComplimentaryAccess"] as const;
 /**
  * The reviewed SECURITY DEFINER functions: required search_path, and the
  * SHA-256 of the reviewed definition (body, settings, security, volatility,
@@ -67,6 +69,12 @@ export async function checkDatabasePosture(client: PrismaClient): Promise<Postur
     if (!t.rls) add("TENANT_TABLE_WITHOUT_RLS", t.relname);
     if (!t.force && !(NOT_FORCED_TABLES as readonly string[]).includes(t.relname)) add("TENANT_TABLE_NOT_FORCED", t.relname);
     if (t.policies !== 1) add("UNEXPECTED_POLICY_COUNT", `${t.relname}: ${t.policies}`);
+  }
+
+  for (const table of READ_ONLY_TABLES) {
+    const [grant] = await client.$queryRaw<Array<{ write: boolean }>>`
+      SELECT has_table_privilege(current_user, ${`public."${table}"`}, 'INSERT, UPDATE, DELETE, TRUNCATE') AS "write"`;
+    if (grant?.write) add("RUNTIME_CAN_WRITE_GRANTS", table);
   }
 
   const policies = await client.$queryRaw<Array<{ table: string; qual: string | null; check: string | null; permissive: boolean; cmd: string }>>`

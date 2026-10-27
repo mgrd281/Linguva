@@ -16,6 +16,7 @@ import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import { withTenant } from "../tenancy/with-tenant";
 import { entitlementsFor, PLANS, UNMETERED, type Entitlements } from "../../lib/plans";
+import { activeComplimentaryAccess, complimentaryEntitlements } from "./complimentary";
 import { fetchActiveSubscription, PartnerApiError, type PartnerApiSettings } from "./partner-api";
 
 export const SUBSCRIPTION_TTL_MS = 6 * 60 * 60 * 1000;
@@ -27,12 +28,18 @@ export interface BillingDeps {
   required: boolean;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  /** Shop GIDs eligible for owner complimentary access (server configuration). */
+  complimentaryGids?: readonly string[];
 }
 
 export interface BillingStatus {
+  /** The entitlements come from billing: a plan, or complimentary access. */
   configured: boolean;
-  /** ACTIVE: subscribed; NONE: verified no subscription; UNKNOWN: couldn't verify yet. */
-  state: "ACTIVE" | "NONE" | "UNKNOWN";
+  /**
+   * ACTIVE: subscribed; NONE: verified no subscription; UNKNOWN: couldn't
+   * verify yet; COMPLIMENTARY: owner complimentary access (no subscription).
+   */
+  state: "ACTIVE" | "NONE" | "UNKNOWN" | "COMPLIMENTARY";
   entitlements: Entitlements;
   subscription: ShopSubscription | null;
   /** The cached state is older than the TTL because the Partner API failed. */
@@ -122,6 +129,23 @@ export async function getBillingStatus(
   shop: { id: string; shopifyShopGid: string | null },
   options: { force?: boolean } = {},
 ): Promise<BillingStatus> {
+  // Complimentary access needs no subscription and wins over any plan.
+  const complimentary = await activeComplimentaryAccess(
+    shop,
+    deps.complimentaryGids ?? [],
+    deps.prisma ?? defaultClient,
+    (deps.now ?? (() => new Date()))(),
+  );
+  if (complimentary) {
+    return {
+      configured: true,
+      state: "COMPLIMENTARY",
+      entitlements: complimentaryEntitlements(complimentary),
+      subscription: null,
+      stale: false,
+      mustChoosePlan: false,
+    };
+  }
   if (!deps.settings) {
     return { configured: false, state: "ACTIVE", entitlements: UNMETERED, subscription: null, stale: false, mustChoosePlan: false };
   }

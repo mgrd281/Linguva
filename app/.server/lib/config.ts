@@ -44,6 +44,19 @@ const schema = z.object({
   SHOPIFY_PARTNER_API_VERSION: z.string().regex(/^\d{4}-\d{2}$|^unstable$/).default("2026-10"),
   // "true": shops without a subscription are sent to the plan selection page.
   BILLING_REQUIRED: z.enum(["true", "false"]).default("false"),
+  // Owner complimentary access (BILLING_DESIGN §4): Shopify shop GIDs
+  // (gid://shopify/Shop/<id>) of the operator's own stores. A store gets
+  // free access only if it is listed here AND the operator tool granted it.
+  COMPLIMENTARY_SHOP_GIDS: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || v.split(",").every((gid) => /^gid:\/\/shopify\/Shop\/\d+$/.test(gid.trim())),
+      "must be comma-separated gid://shopify/Shop/<id> values",
+    ),
+  // Internal cost estimate for AI usage reports (USD per million characters
+  // sent to the provider). Set it to the provider contract's price.
+  AI_COST_USD_PER_MILLION_CHARS: z.coerce.number().nonnegative().default(25),
   // "mock" returns marked pseudo-translations for development and tests.
   TRANSLATION_PROVIDER: z.enum(["deepl", "mock"]).default("deepl"),
   // Background jobs are disabled when no Redis is configured.
@@ -97,6 +110,14 @@ export function getConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
   if (env === process.env) cached = result.data;
   return result.data;
+}
+
+/** The Shopify shop GIDs eligible for owner complimentary access. */
+export function complimentaryShopGids(config: AppConfig): string[] {
+  return (config.COMPLIMENTARY_SHOP_GIDS ?? "")
+    .split(",")
+    .map((gid) => gid.trim())
+    .filter(Boolean);
 }
 
 /** Partner API settings, or null when billing isn't configured. */

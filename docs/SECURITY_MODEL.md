@@ -68,7 +68,8 @@ PostgreSQL evaluates a query's own conditions after the RLS policy unless they a
 It also checks that:
 
 - every tenant table has RLS with exactly the reviewed policy, and FORCE (except `TranslationMemory`);
-- the only SECURITY DEFINER function is the reviewed one, with the required `search_path`, a non-privileged owner and no PUBLIC execute.
+- the only SECURITY DEFINER function is the reviewed one, with the required `search_path`, a non-privileged owner and no PUBLIC execute;
+- the runtime role can't write `ComplimentaryAccess` (free access is granted only by the operator tool with the owner role, BILLING_DESIGN §4).
 
 In production a failed check makes requests and jobs fail instead of running with weakened isolation.
 

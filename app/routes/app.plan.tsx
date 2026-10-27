@@ -5,7 +5,7 @@ import { requireShop } from "../.server/shopify/require-shop";
 import { shopBilling } from "../.server/billing/billing";
 import { getConfig } from "../.server/lib/config";
 import { getDailyUsage, getMonthlyUsage } from "../.server/usage/usage-ledger";
-import { PLANS, planSelectionUrl } from "../lib/plans";
+import { estimatedCostUsd, PLANS, planSelectionUrl } from "../lib/plans";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -31,6 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       : null,
     choosePlanUrl: billing.configured && appHandle ? planSelectionUrl(shop.shopDomain, appHandle) : null,
     usage: { month: await getMonthlyUsage(shop.id), today: await getDailyUsage(shop.id) },
+    costPerMillion: getConfig().AI_COST_USD_PER_MILLION_CHARS,
   };
 };
 
@@ -48,9 +49,19 @@ export default function Plan() {
   const refresh = useFetcher<typeof action>();
   const e = data.entitlements;
   const planName = (handle: string) => handle.charAt(0).toUpperCase() + handle.slice(1);
+  const complimentary = data.state === "COMPLIMENTARY";
+  const currentPlan = complimentary ? "Complimentary access" : data.state === "ACTIVE" ? planName(e.plan) : "none";
 
   return (
     <s-page heading="Plan">
+      {complimentary ? (
+        <s-banner tone="success" heading="Complimentary access">
+          <s-paragraph>
+            This store has every feature without a subscription. AI usage is still counted, and the monthly allowance
+            below protects against unexpected costs.
+          </s-paragraph>
+        </s-banner>
+      ) : null}
       {!data.configured ? (
         <s-banner tone="info" heading="Billing isn't set up yet">
           <s-paragraph>All features are available while plans are being prepared.</s-paragraph>
@@ -67,7 +78,7 @@ export default function Plan() {
         </s-banner>
       ) : null}
 
-      <s-section heading={data.configured ? `Current plan: ${data.state === "ACTIVE" ? planName(e.plan) : "none"}` : "Current plan"}>
+      <s-section heading={data.configured ? `Current plan: ${currentPlan}` : "Current plan"}>
         <s-stack direction="block" gap="small">
           {data.subscription?.trialEndsAt ? <s-paragraph>Free trial until {date(data.subscription.trialEndsAt)}.</s-paragraph> : null}
           {data.subscription?.cancelAtEndOfCycle ? (
@@ -84,15 +95,21 @@ export default function Plan() {
             Languages: up to {e.maxTargetLocales} · Bulk translation: {e.bulk ? "yes" : "no"} · Glossary: {e.glossary ? "yes" : "no"} ·
             Automatic publishing: {e.autoPublish ? "yes" : "no"}
           </s-paragraph>
+          {complimentary ? (
+            <s-paragraph>
+              Estimated AI cost this month (internal): ${estimatedCostUsd(data.usage.month, data.costPerMillion).toFixed(2)} at $
+              {data.costPerMillion} per million characters.
+            </s-paragraph>
+          ) : null}
           <s-paragraph>Translation memory reuse never counts against your characters.</s-paragraph>
         </s-stack>
         <s-stack direction="inline" gap="base">
-          {data.choosePlanUrl ? (
+          {data.choosePlanUrl && !complimentary ? (
             <s-button variant="primary" href={data.choosePlanUrl} target="_top">
               {data.state === "ACTIVE" ? "Change plan" : "Choose a plan"}
             </s-button>
           ) : null}
-          {data.configured ? (
+          {data.configured && !complimentary ? (
             <refresh.Form method="post">
               <s-button type="submit" {...(refresh.state !== "idle" ? { loading: true } : {})}>
                 Check again

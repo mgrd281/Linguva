@@ -20,7 +20,8 @@ Status: **Implemented and tested locally against a simulated Partner API; not ve
 | Welcome link `/app/welcome` (re-checks; `plan_handle` isn't trusted), Plan page | `app/routes/app.welcome.tsx`, `app.plan.tsx` | Implemented |
 | Enforcement: monthly characters from the plan (editor and worker), languages, bulk jobs (route and worker, checked per item), automatic publishing, glossary editing | editor, list, coverage, settings, glossary, processors | Implemented, Tested locally |
 | Billing off (no Partner API settings): unmetered, environment limits | — | Implemented, Tested locally |
-| Owner complimentary access (§4), usage-based overage via App Events | — | Planned |
+| Owner complimentary access (§4): configuration allowlist + operator grant, audit, cost estimate | `app/.server/billing/complimentary.ts`, `scripts/ops/complimentary.ts` | Implemented, Tested locally |
+| Usage-based overage via App Events | — | Planned |
 
 Testing without charges: locally, every subscription state (none, active plan, trial, pending downgrade, cancellation at period end, unknown plan handle, Partner API errors, throttling, timeouts) is simulated by `tests/support/fake-partner-api.ts` (`tests/unit/billing.test.ts`, `tests/integration/billing.test.ts`). On Shopify, DEV_STORE_TEST_PLAN.md §L walks through the same states on a development store, where every plan costs $0.
 
@@ -54,14 +55,40 @@ effective = resolve(shopId):
   else → FREE
 ```
 
-## 4. Owner (KARINEX) complimentary access
+## 4. Owner complimentary access (implemented, tested locally)
 
-1. In the Partner Dashboard, create a **free private plan** ("Owner") targeted at the explicit `*.myshopify.com` domains of the owner's stores. Private plans are restricted to the stores you select (VERIFIED). This keeps billing inside Shopify's rules: no bypass.
-2. In the admin center, an OWNER admin creates `Entitlement(kind=OWNER_COMPLIMENTARY)` for the matching `Shop.id`, with a reason. Re-auth and MFA are required. An AuditLog entry is written.
-3. Both must be true for unlimited features. A private plan alone gives plan-level limits. An Entitlement without the plan isn't honoured unless the shop is a dev store.
-4. AI usage is **still metered** in `UsageLedger` and `ProviderUsage`, with a configurable monthly cost cap and alert.
-5. Revocation: set `revokedAt` (audited) and remove the store from the private plan.
-6. Nothing keys off a name or email address.
+The operator's own stores get every feature without a monthly subscription. No charge is created and none is bypassed: these stores simply don't need a plan. AI usage is still metered and costed internally.
+
+**A store qualifies only when both hold** (`app/.server/billing/complimentary.ts`):
+
+1. **Server configuration:** its Shopify shop GID (`gid://shopify/Shop/<id>`) is listed in `COMPLIMENTARY_SHOP_GIDS` of the app and the worker.
+2. **Database grant:** an active `ComplimentaryAccess` row, created by the operator tool with the **owner** database role. The app's runtime role can only read it (under RLS, own shop only); the posture check fails (`RUNTIME_CAN_WRITE_GRANTS`) if it ever gains write access. The row's GID must equal `Shop.shopifyShopGid`, which comes from Shopify (`shop { id }` with the store's own token), never from a request.
+
+Names, domains and e-mail addresses are never used for the decision. Removing the GID from the configuration ends access at the next request; so does revocation or expiry.
+
+| | |
+|---|---|
+| Entitlements | Every feature (bulk, glossary, automatic publishing, 20 languages); `monthlyCharLimit` of the grant (default 2,000,000) is the cost cap. Daily and platform caps still apply |
+| Metering | Every AI character is recorded in `UsageLedger` as for any shop; translation memory reuse stays free |
+| Cost | `AI_COST_USD_PER_MILLION_CHARS` (default 25, set it to the provider contract) gives an estimate on the Plan page of complimentary stores and in the operator report |
+| Audit | Grants and revocations write `AuditLog` entries (`complimentary_access.granted` / `.revoked`, operator, reason, limit, expiry) |
+
+Operator steps:
+
+```bash
+# 1. Install the app on your store and open it once (stores the shop GID).
+# 2. Grant (owner role; never from the app):
+MIGRATION_DATABASE_URL=... pnpm ops:complimentary grant \
+  --shop-gid gid://shopify/Shop/123 --reason "Own store" --operator owner \
+  [--monthly-chars 2000000] [--expires 2027-12-31]
+# 3. Add the GID to COMPLIMENTARY_SHOP_GIDS of the app and worker; restart them.
+# Usage and estimated cost per month:
+MIGRATION_DATABASE_URL=... COMPLIMENTARY_SHOP_GIDS=... pnpm ops:complimentary report [--period 2026-10]
+# Revoke (also remove the GID from the configuration):
+MIGRATION_DATABASE_URL=... pnpm ops:complimentary revoke --shop-gid gid://shopify/Shop/123 --reason "Store sold" --operator owner
+```
+
+The shop GID is shown in Shopify admin URLs only indirectly; the easiest way to read it is the operator report after the app was opened once, or the `Shop` table.
 
 ## 5. Usage metering
 

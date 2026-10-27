@@ -1,6 +1,6 @@
 # Roadmap, Risks and Decisions
 
-Status as of 2026-10-27: **M1 and M2 implemented and tested (locally and in GitHub CI). M3 and M4 (interactive editor and bulk worker) are implemented and tested against a simulated Admin API, real PostgreSQL and real Redis, but not yet verified on a real dev store.**
+Status as of 2026-10-27: **M1, M2, M4 and most of M5 are implemented and tested (locally and in GitHub CI) against a simulated Admin API, real PostgreSQL and real Redis. Nothing is verified on a real dev store yet.**
 
 ## 1. Progress checklist
 
@@ -27,6 +27,12 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M4 | Bulk translation worker: BullMQ queues (discovery + items), idempotent enqueue, exponential backoff with jitter, dead-letter state, per-shop Redis token bucket, job stop conditions, cancel/retry/resume, stalled-item sweeper, graceful shutdown | Implemented, Tested (integration with real Redis + BullMQ, security suite). **Not yet verified on a dev store** |
 | M4 | Mock translation provider (refused in production) and DeepL Free readiness (`:fx` endpoint, `/v2/usage` check) | Implemented, Tested. DeepL not verified against the live API |
 | M4 | Jobs pages (list, progress, failed products, cancel, retry) and "translate all" on Products | Implemented. Blocked on a dev store for verification |
+| M5 | Translation memory: per shop, segment level, exact (hash) and fuzzy (pg_trgm) matches, APPROVED vs MACHINE entries (approved never downgraded), market-specific entries, reuse before any provider call, in-request de-duplication, Memory page | Implemented, Tested (unit, integration, security) |
+| M5 | Glossary: never translate / always translate as / never use, per language and market, CSV import (all-or-nothing, line errors) and formula-safe export, Glossary page | Implemented, Tested |
+| M5 | Bulk review: draft mode by default, Review page (edit, approve, reject), stale detection, automatic publishing only after explicit confirmation (recorded) | Implemented, Tested. UI not yet verified on a dev store |
+| M5 | Protection of manual/approved translations (and translations made outside Linguva) from bulk jobs unless explicitly allowed | Implemented, Tested |
+| M5 | Revision history per field, previous Shopify value kept as EXTERNAL revision, restore while the source is unchanged | Implemented, Tested. **Rollback after a source change isn't possible (Shopify accepts translations only for the current source digest)** |
+| M5 | DeepL glossary API, TMX import/export, market-scoped publishing in jobs | Planned |
 | — | CI on GitHub | Implemented, green on the first push |
 | — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, SEO_ARCHITECTURE, DEPLOYMENT, TEST_PLAN | Planned |
 

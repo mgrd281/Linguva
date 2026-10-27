@@ -60,3 +60,66 @@ export async function setAiConsent(
     },
   });
 }
+
+export class ConfirmationRequiredError extends Error {
+  constructor() {
+    super("Explicit confirmation is required");
+    this.name = "ConfirmationRequiredError";
+  }
+}
+
+/**
+ * Switches bulk jobs between review (DRAFT) and automatic publishing.
+ * Turning automatic publishing on requires an explicit confirmation and is
+ * recorded with who and when.
+ */
+export async function setBulkPublishMode(
+  input: { shopId: string; mode: "DRAFT" | "AUTO_PUBLISH"; confirmed: boolean; actorId: string | null },
+  client: PrismaClient = defaultClient,
+) {
+  if (input.mode === "AUTO_PUBLISH" && !input.confirmed) throw new ConfirmationRequiredError();
+  const auto = input.mode === "AUTO_PUBLISH";
+  await withTenant(
+    input.shopId,
+    (tx) =>
+      tx.shopSettings.upsert({
+        where: { shopId: input.shopId },
+        create: {
+          shopId: input.shopId,
+          bulkPublishMode: input.mode,
+          autoPublishEnabledAt: auto ? new Date() : null,
+          autoPublishEnabledBy: auto ? input.actorId : null,
+        },
+        update: {
+          bulkPublishMode: input.mode,
+          autoPublishEnabledAt: auto ? new Date() : null,
+          autoPublishEnabledBy: auto ? input.actorId : null,
+        },
+      }),
+    client,
+  );
+  await client.auditLog.create({
+    data: {
+      shopId: input.shopId,
+      actorType: "MERCHANT_USER",
+      actorId: input.actorId,
+      action: auto ? "bulk_publish.auto_enabled" : "bulk_publish.review_enabled",
+    },
+  });
+}
+
+export async function setReuseMachineMemory(
+  input: { shopId: string; enabled: boolean },
+  client: PrismaClient = defaultClient,
+) {
+  await withTenant(
+    input.shopId,
+    (tx) =>
+      tx.shopSettings.upsert({
+        where: { shopId: input.shopId },
+        create: { shopId: input.shopId, reuseMachineMemory: input.enabled },
+        update: { reuseMachineMemory: input.enabled },
+      }),
+    client,
+  );
+}

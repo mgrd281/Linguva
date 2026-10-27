@@ -25,7 +25,7 @@ describe("MockTranslationProvider", () => {
       sourceLocale: "en",
       targetLocale: "fr",
     });
-    expect(outcomes).toEqual([
+    expect(outcomes).toMatchObject([
       { key: "title", status: "translated", value: "[fr] Jacket 42 {{ size }}", issues: [] },
       { key: "body_html", status: "translated", value: '<p>[fr] Warm <a href="/x">jacket</a> 2 kg</p>', issues: [] },
     ]);

@@ -22,6 +22,16 @@ export interface Segment {
   source: string;
   /** Source without inline codes, for memory lookups and length checks. */
   text: string;
+  /**
+   * What each inline code stands for (tag + attributes, or the literal
+   * text). Used to align a person's translation with its source.
+   */
+  codes: Record<number, string>;
+  /**
+   * The segment has no translatable words but contains glossary
+   * replacements: it renders from its own source, without a provider.
+   */
+  fixed?: boolean;
 }
 
 export interface SegmentedDocument {
@@ -54,7 +64,7 @@ const TRANSLATABLE_ATTRIBUTES = ["alt", "title", "placeholder", "aria-label"];
 type Ref =
   | { kind: "element"; node: T.Element }
   | { kind: "opaque"; node: T.ChildNode }
-  | { kind: "literal"; value: string };
+  | { kind: "literal"; value: string; replaced?: boolean };
 
 interface RunPlan {
   segmentId: string;
@@ -112,10 +122,32 @@ class Encoder {
     let cursor = 0;
     for (const span of findProtectedSpans(value, this.protect)) {
       out += escapeXml(value.slice(cursor, span.start));
-      out += this.code({ kind: "literal", value: span.value });
+      out += this.code(
+        span.replacement !== undefined
+          ? { kind: "literal", value: span.replacement, replaced: true }
+          : { kind: "literal", value: span.value },
+      );
       cursor = span.end;
     }
     return out + escapeXml(value.slice(cursor));
+  }
+
+  hasReplacements(): boolean {
+    return [...this.refs.values()].some((r) => r.kind === "literal" && r.replaced);
+  }
+
+  /** Stable description of every code, independent of its numeric id. */
+  signatures(): Record<number, string> {
+    const result: Record<number, string> = {};
+    for (const [id, ref] of this.refs) {
+      result[id] =
+        ref.kind === "literal"
+          ? `t:${ref.value}`
+          : ref.kind === "element"
+            ? `g:${ref.node.tagName}${JSON.stringify(ref.node.attrs)}`
+            : `x:${isElement(ref.node) ? ref.node.tagName + JSON.stringify(ref.node.attrs) : ref.node.nodeName}`;
+    }
+    return result;
   }
 
   nodes(nodes: T.ChildNode[]): string {
@@ -144,9 +176,16 @@ function analyze(fragment: T.DocumentFragment, protect: ProtectOptions) {
   const runs: RunPlan[] = [];
   const attributes: AttributePlan[] = [];
 
-  const addSegment = (kind: Segment["kind"], source: string) => {
+  const addSegment = (kind: Segment["kind"], source: string, encoder: Encoder, fixed = false) => {
     const id = `${kind === "content" ? "c" : "a"}${segments.length}`;
-    segments.push({ id, kind, source, text: markupToPlainText(source) });
+    segments.push({
+      id,
+      kind,
+      source,
+      text: markupToPlainText(source),
+      codes: encoder.signatures(),
+      ...(fixed ? { fixed: true } : {}),
+    });
     return id;
   };
 
@@ -157,9 +196,10 @@ function analyze(fragment: T.DocumentFragment, protect: ProtectOptions) {
       if (!attr) continue;
       const encoder = new Encoder(protect);
       const source = encoder.text(attr.value).trim();
-      if (!hasTranslatableText(source)) continue;
+      const fixed = !hasTranslatableText(source);
+      if (fixed && !encoder.hasReplacements()) continue;
       attributes.push({
-        segmentId: addSegment("attribute", source),
+        segmentId: addSegment("attribute", source, encoder, fixed),
         element,
         attribute: name,
         refs: encoder.refs,
@@ -182,11 +222,12 @@ function analyze(fragment: T.DocumentFragment, protect: ProtectOptions) {
     if (run.length === 0) return;
     const encoder = new Encoder(protect);
     const encoded = encoder.nodes(run);
-    if (!hasTranslatableText(encoded)) return;
+    const fixed = !hasTranslatableText(encoded);
+    if (fixed && !encoder.hasReplacements()) return;
     const leading = /^\s*/.exec(encoded)![0];
     const trailing = encoded.length > leading.length ? /\s*$/.exec(encoded)![0] : "";
     runs.push({
-      segmentId: addSegment("content", encoded.slice(leading.length, encoded.length - trailing.length)),
+      segmentId: addSegment("content", encoded.slice(leading.length, encoded.length - trailing.length), encoder, fixed),
       parent,
       nodes: [...run],
       leading,
@@ -329,9 +370,20 @@ export function segmentPlainText(text: string, protect: ProtectOptions = {}): Se
   const leading = /^\s*/.exec(encoded)![0];
   const trailing = encoded.length > leading.length ? /\s*$/.exec(encoded)![0] : "";
   const source = encoded.slice(leading.length, encoded.length - trailing.length);
-  const segments: Segment[] = hasTranslatableText(source)
-    ? [{ id: "c0", kind: "content", source, text: markupToPlainText(source) }]
-    : [];
+  const fixed = !hasTranslatableText(source);
+  const segments: Segment[] =
+    !fixed || encoder.hasReplacements()
+      ? [
+          {
+            id: "c0",
+            kind: "content",
+            source,
+            text: markupToPlainText(source),
+            codes: encoder.signatures(),
+            ...(fixed ? { fixed: true } : {}),
+          },
+        ]
+      : [];
   return {
     segments,
     render(translations) {

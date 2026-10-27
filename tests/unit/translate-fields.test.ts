@@ -42,7 +42,7 @@ describe("translateFields", () => {
       targetLocale: "de",
     });
     expect(p.calls).toHaveLength(1);
-    expect(outcomes).toEqual([
+    expect(outcomes).toMatchObject([
       { key: "title", status: "translated", value: "Roter Schuh 42", issues: [] },
       { key: "body_html", status: "translated", value: "<p>Bequemer <b>Leder</b> Schuh.</p>", issues: [] },
       { key: "handle", status: "skipped", reason: "MANUAL_ONLY" },

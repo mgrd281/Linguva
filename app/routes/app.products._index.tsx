@@ -51,6 +51,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
     isFirstPage: !after,
     bulk: {
+      publishMode: (await getShopSettings(shop.id)).bulkPublishMode,
       // One key per page view: a double submit creates only one job.
       idempotencyKey: randomUUID(),
       available: getTranslationProvider() !== null && getQueues() !== null,
@@ -80,6 +81,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       targetLocale: locale,
       requestedBy: session.onlineAccessInfo?.associated_user?.id?.toString() ?? null,
       idempotencyKey,
+      overwriteProtected: form.get("overwriteProtected") === "on",
     });
     return redirect(`/app/jobs/${job.id}`);
   } catch (error) {
@@ -113,19 +115,6 @@ export default function Products() {
 
   return (
     <s-page heading="Products">
-      <bulk.Form method="post" slot="primary-action">
-        <input type="hidden" name="intent" value="bulk-translate" />
-        <input type="hidden" name="locale" value={locale} />
-        <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
-        <s-button
-          type="submit"
-          variant="primary"
-          disabled={!data.bulk.available || !data.bulk.consent}
-          {...(bulk.state !== "idle" ? { loading: true } : {})}
-        >
-          Translate all into {data.target.name}
-        </s-button>
-      </bulk.Form>
 
       {data.bulk.available && !data.bulk.consent ? (
         <s-banner tone="info" heading="Allow AI processing to translate in bulk">
@@ -144,12 +133,38 @@ export default function Products() {
         </s-banner>
       ) : null}
       <s-section>
-        <s-paragraph>
-          Bulk translation fills in missing and outdated fields only. Existing
-          up-to-date translations, including your own edits, are never
-          overwritten. Results are published as soon as they pass the quality
-          checks; you can edit any product afterwards.
-        </s-paragraph>
+        <s-stack direction="block" gap="small">
+          <s-paragraph>
+            Bulk translation fills in missing and outdated fields only. Your
+            glossary and translation memory are applied. Up-to-date
+            translations are never touched, and outdated translations that you
+            wrote or approved are kept unless you allow replacing them below.
+          </s-paragraph>
+          <s-paragraph>
+            {data.bulk.publishMode === "AUTO_PUBLISH"
+              ? "Automatic publishing is on: results that pass the quality checks go live immediately."
+              : "Results wait in Review until you approve them."}
+          </s-paragraph>
+          <bulk.Form method="post">
+            <input type="hidden" name="intent" value="bulk-translate" />
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
+            <s-stack direction="block" gap="small">
+              <s-checkbox
+                name="overwriteProtected"
+                label="Also replace outdated translations that were written or approved by a person"
+              />
+              <s-button
+                type="submit"
+                variant="primary"
+                disabled={!data.bulk.available || !data.bulk.consent}
+                {...(bulk.state !== "idle" ? { loading: true } : {})}
+              >
+                Translate all into {data.target.name}
+              </s-button>
+            </s-stack>
+          </bulk.Form>
+        </s-stack>
       </s-section>
       <s-section>
         <s-stack direction="inline" gap="small" alignItems="center">

@@ -7,13 +7,20 @@ import {
   listTranslatableProducts,
 } from "../shopify/translations-api";
 import { withTenant } from "../tenancy/with-tenant";
-import { saveResourceTranslations } from "../translation/product-translation-service";
-import { estimateCharacters, translateFields } from "../translation/translate-fields";
+import {
+  saveResourceTranslations,
+  sourceLocaleOf,
+} from "../translation/product-translation-service";
+import { completeTranslation, prepareTranslation } from "../translation/translate-fields";
+import { loadTranslationContext } from "../translation/translation-context";
+import { latestRevisions } from "../translation/revisions";
+import { recordMemoryUse } from "../memory/translation-memory";
+import { pendingDraftDigests, saveDrafts } from "../review/drafts";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { finishItem, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
-import { fieldsNeedingTranslation } from "./needs-work";
+import { planResourceWork } from "./needs-work";
 
 export type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -94,8 +101,16 @@ export async function runDiscoveryPage(
     after: job.discoveryCursor,
     first: deps.discoveryPageSize ?? DISCOVERY_PAGE_SIZE,
   });
+  const pageGids = page.resources.map((r) => r.resourceId);
+  const [latest, pendingDrafts] = await Promise.all([
+    latestRevisions(payload.shopId, pageGids, job.targetLocale, deps.prisma),
+    pendingDraftDigests(payload.shopId, pageGids, job.targetLocale, deps.prisma),
+  ]);
   const gids = page.resources
-    .filter((r) => fieldsNeedingTranslation(r).length > 0)
+    .filter(
+      (r) =>
+        planResourceWork(r, { latest, pendingDrafts, overwriteProtected: job.overwriteProtected }).fields.length > 0,
+    )
     .map((r) => r.resourceId);
 
   const itemIds = await withTenant(
@@ -140,7 +155,8 @@ export type ItemOutcome =
   | { status: "SUCCEEDED" | "SKIPPED" | "CANCELLED"; errorCode?: string };
 
 /**
- * Translates and publishes one resource. The payload carries ids only;
+ * Translates one resource, then saves drafts for review or publishes,
+ * depending on the job's publish mode. The payload carries ids only;
  * everything else is reloaded from the database under the payload's tenant,
  * so a forged or stale payload can't act on another shop's data.
  */
@@ -197,58 +213,129 @@ export async function processItem(
     await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "RESOURCE_GONE" }, deps.prisma);
     return { status: "SKIPPED", errorCode: "RESOURCE_GONE" };
   }
-  const fields = fieldsNeedingTranslation(resource);
+  const [latest, pendingDrafts] = await Promise.all([
+    latestRevisions(payload.shopId, [item.resourceGid], job.targetLocale, deps.prisma),
+    pendingDraftDigests(payload.shopId, [item.resourceGid], job.targetLocale, deps.prisma),
+  ]);
+  const { fields, protectedKeys } = planResourceWork(resource, {
+    latest,
+    pendingDrafts,
+    overwriteProtected: job.overwriteProtected,
+  });
   if (fields.length === 0) {
-    await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "UP_TO_DATE" }, deps.prisma);
-    return { status: "SKIPPED", errorCode: "UP_TO_DATE" };
+    const errorCode = protectedKeys.length ? "PROTECTED" : "UP_TO_DATE";
+    await finishItem(
+      payload.shopId,
+      item.id,
+      { status: "SKIPPED", errorCode, protectedSkipped: protectedKeys.length },
+      deps.prisma,
+    );
+    return { status: "SKIPPED", errorCode };
   }
 
-  // One reservation per attempt: a retried attempt is billed separately and
-  // a failed one is released.
-  const reservation = await reserveUsage(
+  const sourceLocale = sourceLocaleOf(resource);
+  const context = await loadTranslationContext(
     {
       shopId: payload.shopId,
-      key: `job-item:${item.id}:${attempt}`,
-      chars: estimateCharacters(fields),
-      limit: deps.monthlyLimit,
-      provider: deps.provider.id,
+      sourceLocale,
+      targetLocale: job.targetLocale,
+      reuseMachineMemory: settings.reuseMachineMemory,
     },
     deps.prisma,
   );
+  const prepared = await prepareTranslation({ fields, protect: context.glossary.protect, memory: context.memory });
 
-  let result: Awaited<ReturnType<typeof translateFields>>;
+  // One reservation per attempt, for what the provider will actually be
+  // sent: a retried attempt is billed separately and a failed one released.
+  const reservation = prepared.providerChars
+    ? await reserveUsage(
+        {
+          shopId: payload.shopId,
+          key: `job-item:${item.id}:${attempt}`,
+          chars: prepared.providerChars,
+          limit: deps.monthlyLimit,
+          provider: deps.provider.id,
+        },
+        deps.prisma,
+      )
+    : null;
+
+  let result: Awaited<ReturnType<typeof completeTranslation>>;
   try {
     const title = resource.content.find((c) => c.key === "title")?.value;
-    result = await translateFields({
+    result = await completeTranslation(prepared, {
       provider: deps.provider,
-      fields,
-      sourceLocale: resource.content[0]?.locale ?? "en",
+      sourceLocale,
       targetLocale: job.targetLocale,
+      glossary: context.glossary.rules,
       context: title ? `Product: ${title}` : undefined,
     });
   } catch (error) {
-    await releaseUsage(reservation, deps.prisma);
+    if (reservation) await releaseUsage(reservation, deps.prisma);
     throw error;
   }
-  await settleUsage(reservation, result.billedCharacters, deps.prisma);
+  if (reservation) await settleUsage(reservation, result.billedCharacters, deps.prisma);
+  await recordMemoryUse(payload.shopId, result.memoryEntryIds, deps.prisma);
 
-  const digests = new Map(fields.map((f) => [f.key, f.digest!]));
-  const translated = result.outcomes.filter((o) => o.status === "translated");
+  const fieldByKey = new Map(fields.map((f) => [f.key, f]));
+  const translated = result.outcomes.flatMap((o) => (o.status === "translated" ? [o] : []));
   const rejected = result.outcomes.filter((o) => o.status === "rejected").length;
+  const stats = {
+    charsBilled: result.billedCharacters,
+    memoryHits: result.memoryHits,
+    charsSaved: result.charsSaved,
+    protectedSkipped: protectedKeys.length,
+  };
+
+  if (job.publishMode === "DRAFT") {
+    // Review first: nothing reaches the storefront until approved.
+    const title = resource.content.find((c) => c.key === "title")?.value ?? null;
+    const drafted = await saveDrafts(
+      payload.shopId,
+      translated.map((o) => ({
+        jobId: job.id,
+        resourceGid: item.resourceGid,
+        resourceTitle: title,
+        locale: job.targetLocale,
+        key: o.key,
+        sourceDigest: fieldByKey.get(o.key)!.digest!,
+        sourceValue: fieldByKey.get(o.key)!.value ?? "",
+        value: o.value,
+        segmentPairs: o.segmentPairs ?? [],
+        issues: o.issues,
+        provider: result.provider,
+      })),
+      deps.prisma,
+    );
+    const status = drafted > 0 ? "SUCCEEDED" : "SKIPPED";
+    const errorCode = drafted > 0 ? (rejected ? "PARTIAL" : "DRAFTED") : "ALL_FIELDS_REJECTED";
+    await finishItem(
+      payload.shopId,
+      item.id,
+      { status, errorCode, fieldsTranslated: drafted, fieldsRejected: rejected, ...stats },
+      deps.prisma,
+    );
+    return { status, errorCode };
+  }
+
+  // Automatic publishing, explicitly enabled by the merchant. Output stays
+  // unreviewed machine translation (not protected, MACHINE memory).
   const saved = translated.length
     ? await saveResourceTranslations(
         {
           admin,
           shopId: payload.shopId,
-          actorId: job.requestedBy,
+          actorId: null,
           resourceId: item.resourceGid,
           locale: job.targetLocale,
           edits: translated.map((o) => ({
             key: o.key,
             value: o.value,
-            digest: digests.get(o.key)!,
+            digest: fieldByKey.get(o.key)!.digest!,
             origin: "AI" as const,
             provider: result.provider,
+            approved: false,
+            segmentPairs: o.segmentPairs,
           })),
         },
         deps.prisma,
@@ -274,7 +361,7 @@ export async function processItem(
       errorCode,
       fieldsTranslated: savedCount,
       fieldsRejected: rejected + notSaved,
-      charsBilled: result.billedCharacters,
+      ...stats,
     },
     deps.prisma,
   );

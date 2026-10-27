@@ -3,6 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import { useState } from "react";
 import { data, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getConfig } from "../.server/lib/config";
@@ -26,7 +27,12 @@ import {
   saveResourceTranslations,
   type TranslationEdit,
 } from "../.server/translation/product-translation-service";
-import { isMachineTranslatable } from "../.server/translation/translate-fields";
+import { isMachineTranslatable, segmentField } from "../.server/translation/translate-fields";
+import { listRevisions } from "../.server/translation/revisions";
+import { restoreRevision } from "../.server/translation/history";
+import { fuzzyMatches } from "../.server/memory/translation-memory";
+import { resolveGlossary } from "../.server/glossary/glossary";
+import { sourceLocaleOf } from "../.server/translation/product-translation-service";
 import { getMonthlyUsage, QuotaExceededError } from "../.server/usage/usage-ledger";
 import { fieldLabel } from "../lib/field-labels";
 
@@ -51,6 +57,22 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const config = getConfig();
   const settings = await getShopSettings(shop.id);
   const translations = new Map(resource.translations.map((t) => [t.key, t]));
+  const digests = new Map(resource.content.map((c) => [c.key, c.digest]));
+  const revisions = await listRevisions(shop.id, resourceId, target.locale);
+  const history: Record<string, Array<{ id: string; value: string; origin: string; approved: boolean; createdAt: string; restorable: boolean }>> = {};
+  for (const r of revisions) {
+    const list = (history[r.key] ??= []);
+    if (list.length >= 10) continue;
+    list.push({
+      id: r.id,
+      value: r.value,
+      origin: r.origin,
+      approved: r.approved,
+      createdAt: r.createdAt.toISOString(),
+      // Shopify only accepts translations of the current source text.
+      restorable: r.sourceDigest === digests.get(r.key) && r.value !== (translations.get(r.key)?.value ?? ""),
+    });
+  }
 
   return {
     productId: params.id!,
@@ -68,6 +90,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         translation: translations.get(c.key)?.value ?? "",
         outdated: translations.get(c.key)?.outdated ?? false,
         machine: isMachineTranslatable({ key: c.key, value: c.value, type: c.type }),
+        history: history[c.key] ?? [],
       })),
     ai: {
       available: getTranslationProvider() !== null,
@@ -79,7 +102,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 type ActionResult =
-  | { kind: "ai"; drafts: Record<string, string>; rejected: Record<string, string>; warnings: Record<string, string[]>; provider: string }
+  | {
+      kind: "ai";
+      drafts: Record<string, string>;
+      rejected: Record<string, string>;
+      warnings: Record<string, string[]>;
+      provider: string;
+      memoryHits?: number;
+      scores?: Record<string, number>;
+    }
+  | { kind: "restored"; status: string }
   | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string }> }
   | { kind: "consent" }
   | { kind: "error"; code: string };
@@ -120,7 +152,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           rejected[o.key] = o.reason;
         }
       }
-      return { kind: "ai", drafts, rejected, warnings, provider: result.provider } satisfies ActionResult;
+      return {
+        kind: "ai",
+        drafts,
+        rejected,
+        warnings,
+        provider: result.provider,
+        memoryHits: result.memoryHits,
+      } satisfies ActionResult;
     } catch (error) {
       if (error instanceof AiConsentRequiredError) return { kind: "error", code: "CONSENT_REQUIRED" } satisfies ActionResult;
       if (error instanceof QuotaExceededError) return { kind: "error", code: "QUOTA_EXCEEDED" } satisfies ActionResult;
@@ -130,6 +169,44 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       }
       throw error;
     }
+  }
+
+  if (intent === "memory-suggest") {
+    // Fuzzy matches are suggestions: they fill the form, never publish.
+    const resource = await getTranslatableResource(admin, resourceId, target.locale);
+    if (!resource) throw new Response("Not found", { status: 404 });
+    const glossary = await resolveGlossary(shop.id, target.locale);
+    const drafts: Record<string, string> = {};
+    const scores: Record<string, number> = {};
+    for (const field of resource.content) {
+      if (!field.value || !isMachineTranslatable(field)) continue;
+      const doc = segmentField(field, glossary.protect);
+      if (doc.segments.length !== 1) continue;
+      const [best] = await fuzzyMatches(
+        { shopId: shop.id, sourceLocale: sourceLocaleOf(resource), targetLocale: target.locale },
+        doc.segments[0]!.source,
+        { threshold: 0.6, limit: 1 },
+      );
+      if (!best) continue;
+      try {
+        drafts[field.key] = doc.render(new Map([[doc.segments[0]!.id, best.targetText]]));
+        scores[field.key] = Math.round(best.score * 100);
+      } catch {
+        // The suggestion's formatting doesn't fit this source; skip it.
+      }
+    }
+    const none: Record<string, never> = {};
+    return { kind: "ai", drafts, rejected: none, warnings: none, provider: "memory", scores } satisfies ActionResult;
+  }
+
+  if (intent === "restore") {
+    const result = await restoreRevision({
+      admin,
+      shopId: shop.id,
+      actorId,
+      revisionId: String(form.get("revisionId") ?? ""),
+    });
+    return { kind: "restored", status: result.status } satisfies ActionResult;
   }
 
   if (intent === "save") {
@@ -151,6 +228,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         digest,
         origin: form.get(`origin:${field.key}`) === "AI" ? "AI" : "MANUAL",
         provider: String(form.get("provider") ?? "") || null,
+        // Publishing from the editor means the merchant reviewed it.
+        approved: true,
       });
     }
     const outcomes = await saveResourceTranslations({
@@ -187,8 +266,15 @@ export default function ProductTranslation() {
   const aiFetcher = useFetcher<typeof action>();
   const saveFetcher = useFetcher<typeof action>();
   const consentFetcher = useFetcher<typeof action>();
+  const memoryFetcher = useFetcher<typeof action>();
+  const restoreFetcher = useFetcher<typeof action>();
+  const [filledFrom, setFilledFrom] = useState<"ai" | "memory">("ai");
 
-  const ai = aiFetcher.data?.kind === "ai" ? aiFetcher.data : null;
+  // The latest of AI translation or memory suggestions fills the form.
+  const aiResult = aiFetcher.data?.kind === "ai" ? aiFetcher.data : null;
+  const memoryResult = memoryFetcher.data?.kind === "ai" ? memoryFetcher.data : null;
+  const ai = filledFrom === "memory" ? memoryResult : aiResult;
+  const restored = restoreFetcher.data?.kind === "restored" ? restoreFetcher.data.status : null;
   const aiError = aiFetcher.data?.kind === "error" ? aiFetcher.data.code : null;
   const saved = saveFetcher.data?.kind === "saved" ? saveFetcher.data.outcomes : null;
   const saveStatus = new Map(saved?.map((o) => [o.key, o]) ?? []);
@@ -217,6 +303,18 @@ export default function ProductTranslation() {
               Allow AI processing
             </s-button>
           </consentFetcher.Form>
+        </s-banner>
+      ) : null}
+
+      {restored ? (
+        <s-banner tone={restored === "restored" ? "success" : "warning"} heading={restored === "restored" ? "Version restored" : "Couldn't restore this version"}>
+          <s-paragraph>
+            {restored === "restored"
+              ? "The earlier translation is published again. Reload to see it in the field."
+              : restored === "source_changed"
+                ? "The source text has changed since that version, so Shopify won't accept it."
+                : "Please reload the page and try again."}
+          </s-paragraph>
         </s-banner>
       ) : null}
 
@@ -253,7 +351,7 @@ export default function ProductTranslation() {
 
       <s-section heading={`${data.sourceName} → ${data.target.name}`}>
         <s-stack direction="inline" gap="base" alignItems="center">
-          <aiFetcher.Form method="post">
+          <aiFetcher.Form method="post" onSubmit={() => setFilledFrom("ai")}>
             <input type="hidden" name="intent" value="ai-translate" />
             {machineKeys.map((k) => (
               <input key={k} type="hidden" name="key" value={k} />
@@ -267,6 +365,12 @@ export default function ProductTranslation() {
               Translate with AI
             </s-button>
           </aiFetcher.Form>
+          <memoryFetcher.Form method="post" onSubmit={() => setFilledFrom("memory")}>
+            <input type="hidden" name="intent" value="memory-suggest" />
+            <s-button type="submit" {...(memoryFetcher.state !== "idle" ? { loading: true } : {})}>
+              Fill from memory
+            </s-button>
+          </memoryFetcher.Form>
           <s-text color="subdued">
             {data.ai.available
               ? `${remaining.toLocaleString()} of ${data.ai.limit.toLocaleString()} AI characters left this month`
@@ -275,7 +379,11 @@ export default function ProductTranslation() {
         </s-stack>
         {ai ? (
           <s-paragraph>
-            AI drafts are filled in below. Review them, then publish.
+            {ai.provider === "memory"
+              ? Object.keys(ai.drafts).length
+                ? "Similar translations from your memory are filled in below. Check them carefully, then publish."
+                : "No similar translations found in your memory."
+              : `AI drafts are filled in below${ai.memoryHits ? ` (${ai.memoryHits} segment${ai.memoryHits === 1 ? "" : "s"} reused from memory at no cost)` : ""}. Review them, then publish.`}
           </s-paragraph>
         ) : null}
       </s-section>
@@ -330,11 +438,42 @@ export default function ProductTranslation() {
                 )}
                 <s-stack direction="inline" gap="small">
                   {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
-                  {draft !== undefined ? <s-badge tone="info">AI draft</s-badge> : null}
+                  {draft !== undefined ? (
+                    <s-badge tone="info">
+                      {ai?.provider === "memory" ? `Memory ${ai.scores?.[field.key] ?? ""}% match` : "AI draft"}
+                    </s-badge>
+                  ) : null}
                   {warnings?.length ? <s-badge tone="warning">Review: {warnings.join(", ")}</s-badge> : null}
                   {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
                   {!field.machine ? <s-badge>Manual only</s-badge> : null}
                 </s-stack>
+                {field.history.length ? (
+                  <details>
+                    <summary>History ({field.history.length})</summary>
+                    <s-stack direction="block" gap="small">
+                      {field.history.map((h) => (
+                        <s-box key={h.id} padding="small" borderWidth="base" borderRadius="base">
+                          <s-text color="subdued">
+                            {new Date(h.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                            {" · "}
+                            {h.origin === "EXTERNAL" ? "Before Linguva" : h.origin === "AI" ? (h.approved ? "AI, approved" : "AI") : "Manual"}
+                          </s-text>
+                          <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
+                          {h.restorable ? (
+                            <s-button
+                              variant="tertiary"
+                              onClick={() =>
+                                restoreFetcher.submit({ intent: "restore", revisionId: h.id }, { method: "post" })
+                              }
+                            >
+                              Restore this version
+                            </s-button>
+                          ) : null}
+                        </s-box>
+                      ))}
+                    </s-stack>
+                  </details>
+                ) : null}
               </s-stack>
             </s-section>
           );

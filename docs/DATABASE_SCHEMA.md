@@ -1,6 +1,6 @@
 # Database Schema
 
-Status: **Phase 0 — proposal.** No `schema.prisma` exists yet. Field lists are indicative and will be finalized in Milestone M1 with migrations and tests.
+Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop, ShopInstallation, ShopSettings, ShopLocale, WebhookEvent, AuditLog, PrivacyRequest, TranslationRevision, UsageLedger, TranslationJob, TranslationJobItem, TranslationMemory, Glossary, GlossaryTerm, TranslationDraft), all tenant tables under fail-closed RLS. Entities below that are not in the schema yet (Subscription, Entitlement, ProviderUsage, AdminUser, FeatureFlag, ShopMarket) are still proposals.
 
 ## 1. Conventions
 

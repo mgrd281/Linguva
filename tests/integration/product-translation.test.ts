@@ -65,7 +65,7 @@ describe("aiTranslateResource", () => {
       { admin: fake.asAdmin(), shopId: s.id, resourceId: PRODUCT, targetLocale: "de", keys: ["title", "body_html", "handle"], provider, monthlyLimit: 1000 },
       app,
     );
-    expect(result.outcomes).toEqual([
+    expect(result.outcomes).toMatchObject([
       { key: "title", status: "translated", value: "Blau Jacke", issues: [] },
       { key: "body_html", status: "translated", value: "<p>Blau <b>Jacke</b></p>", issues: [] },
       { key: "handle", status: "skipped", reason: "MANUAL_ONLY" },
@@ -127,8 +127,8 @@ describe("saveResourceTranslations", () => {
         resourceId: PRODUCT,
         locale: "de",
         edits: [
-          { key: "title", value: "Blaue Jacke", digest: digests.title!, origin: "AI", provider: "deepl" },
-          { key: "handle", value: "blaue-jacke", digest: digests.handle!, origin: "MANUAL" },
+          { key: "title", value: "Blaue Jacke", digest: digests.title!, origin: "AI", provider: "deepl", approved: true },
+          { key: "handle", value: "blaue-jacke", digest: digests.handle!, origin: "MANUAL", approved: true },
         ],
       },
       app,
@@ -159,8 +159,8 @@ describe("saveResourceTranslations", () => {
         resourceId: PRODUCT,
         locale: "de",
         edits: [
-          { key: "title", value: "Blaue Jacke", digest: digests.title!, origin: "AI" },
-          { key: "body_html", value: "<p>Blaue <b>Jacke</b></p>", digest: digests.body_html!, origin: "AI" },
+          { key: "title", value: "Blaue Jacke", digest: digests.title!, origin: "AI", approved: true },
+          { key: "body_html", value: "<p>Blaue <b>Jacke</b></p>", digest: digests.body_html!, origin: "AI", approved: true },
         ],
       },
       app,
@@ -184,8 +184,8 @@ describe("saveResourceTranslations", () => {
         resourceId: PRODUCT,
         locale: "de",
         edits: [
-          { key: "title", value: "  ", digest: digests.title!, origin: "MANUAL" },
-          { key: "vendor", value: "x", digest: "abc", origin: "MANUAL" },
+          { key: "title", value: "  ", digest: digests.title!, origin: "MANUAL", approved: true },
+          { key: "vendor", value: "x", digest: "abc", origin: "MANUAL", approved: true },
         ],
       },
       app,

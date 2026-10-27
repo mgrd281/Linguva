@@ -24,6 +24,13 @@
 - Mock translation provider for development and tests (refused in production) and DeepL usage check (`GET /v2/usage`).
 - Jobs pages (list, live progress, failed products, cancel, retry) and "Translate all" on the Products page.
 - Security test suite: cross-tenant payloads, job access across shops, payload validation, no secrets or content in Redis, malicious provider output in bulk jobs.
+- Translation memory per shop: segment-level exact matches (whitespace-insensitive hash), fuzzy suggestions with pg_trgm, APPROVED and MACHINE entries (approved entries are never downgraded), market-specific entries, reuse before any provider call so repeated text costs nothing, de-duplication of identical segments within a request, Memory page (search, approve, delete).
+- Alignment of a person's translation with its source segment by segment (tag/attribute signatures), so manual translations feed the memory.
+- Glossary: never translate, always translate as (enforced through opaque codes the provider can't change), never use (blocks the result); scoped by language and market; CSV import with per-line validation (all or nothing, 1 MB, 5,000 terms) and formula-safe export; Glossary page.
+- Bulk review: jobs create drafts by default; Review page to edit, approve and publish, or reject; drafts go stale when the source changes; automatic publishing only after explicit, recorded confirmation in Settings.
+- Protection of translations written or approved by a person, or made outside Linguva, from bulk jobs unless the merchant explicitly allows replacing them.
+- Revision history with approval flag and actor; the previous Shopify value is kept as an EXTERNAL revision before overwriting; restore of earlier versions while the source is unchanged; History panel in the product editor; "Fill from memory" suggestions.
+- Job statistics for memory reuse, characters saved and protected translations kept.
 - Phase 0 documentation set.
 
 ### Removed

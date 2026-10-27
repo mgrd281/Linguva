@@ -18,7 +18,7 @@ Status: **Phase 0 — proposal.** Plan prices and limits are **assumptions** for
 | BUSINESS | 179 | 4,000,000 | 20 | + premium AI routing, analytics, priority queue |
 | ENTERPRISE | private plan | negotiated | 20 | + custom limits, support SLA |
 
-- Characters = source characters sent for translation after TM hits are removed. TM hits are free. That is a selling point and lowers our cost.
+- Characters = source characters sent to the provider after translation-memory hits, duplicate segments and glossary-only segments are removed (implemented: only `providerChars` is reserved). TM hits are free. That is a selling point and lowers our cost.
 - Overage (PRO and above, opt-in, with a merchant-set cap): usage-based meter via the App Events API, proposed at $40 per additional 1M characters.
 - Yearly option ≈ 2 months free.
 - Up to 8 public plans are allowed (VERIFIED). We use 4 public plans plus private plans.

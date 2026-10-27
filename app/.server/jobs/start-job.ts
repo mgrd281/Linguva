@@ -16,6 +16,7 @@ export async function startBulkJob(input: {
   targetLocale: string;
   requestedBy: string | null;
   idempotencyKey: string;
+  overwriteProtected?: boolean;
 }) {
   const queues = getQueues();
   if (!queues) throw new BackgroundJobsUnavailableError();

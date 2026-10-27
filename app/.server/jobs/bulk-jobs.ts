@@ -29,6 +29,8 @@ export async function createBulkJob(
     targetLocale: string;
     requestedBy: string | null;
     idempotencyKey: string;
+    /** Explicit permission to replace manual or approved translations. */
+    overwriteProtected?: boolean;
   },
   client: PrismaClient = defaultClient,
 ): Promise<{ job: TranslationJob; created: boolean }> {
@@ -53,6 +55,7 @@ export async function createBulkJob(
         },
       });
       if (active) return { job: active, created: false };
+      const settings = await tx.shopSettings.findUnique({ where: { shopId: input.shopId } });
       const job = await tx.translationJob.create({
         data: {
           shopId: input.shopId,
@@ -60,6 +63,9 @@ export async function createBulkJob(
           targetLocale: input.targetLocale,
           requestedBy: input.requestedBy,
           idempotencyKey: input.idempotencyKey,
+          // Draft unless the merchant explicitly enabled automatic publishing.
+          publishMode: settings?.bulkPublishMode ?? "DRAFT",
+          overwriteProtected: input.overwriteProtected ?? false,
         },
       });
       return { job, created: true };
@@ -148,6 +154,9 @@ export interface ItemResult {
   fieldsTranslated?: number;
   fieldsRejected?: number;
   charsBilled?: number;
+  memoryHits?: number;
+  charsSaved?: number;
+  protectedSkipped?: number;
 }
 
 /**
@@ -187,7 +196,13 @@ export async function finishItem(
             : { failedItems: { increment: 1 } };
       const job = await tx.translationJob.update({
         where: { id: item.jobId },
-        data: { ...counter, charsBilled: { increment: result.charsBilled ?? 0 } },
+        data: {
+          ...counter,
+          charsBilled: { increment: result.charsBilled ?? 0 },
+          memoryHits: { increment: result.memoryHits ?? 0 },
+          charsSaved: { increment: result.charsSaved ?? 0 },
+          protectedSkipped: { increment: result.protectedSkipped ?? 0 },
+        },
       });
       await maybeComplete(tx, job);
       return true;

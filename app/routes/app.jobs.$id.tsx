@@ -31,6 +31,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       targetLocale: job.targetLocale,
       errorCode: job.errorCode,
       charsBilled: job.charsBilled,
+      memoryHits: job.memoryHits,
+      charsSaved: job.charsSaved,
+      protectedSkipped: job.protectedSkipped,
+      publishMode: job.publishMode,
       succeeded: job.succeededItems,
       skipped: job.skippedItems,
       failed: job.failedItems,
@@ -117,9 +121,19 @@ export default function JobDetail() {
             />
           </s-box>
           <s-paragraph>
-            Translated: {job.succeeded} · Already up to date or skipped: {job.skipped} · Failed: {job.failed} ·
-            AI characters: {job.charsBilled.toLocaleString()}
+            {job.publishMode === "DRAFT" ? "Drafted for review" : "Translated"}: {job.succeeded} · Already up to date
+            or skipped: {job.skipped} · Failed: {job.failed}
           </s-paragraph>
+          <s-paragraph>
+            AI characters: {job.charsBilled.toLocaleString()} · Reused from memory: {job.memoryHits.toLocaleString()}{" "}
+            segments ({job.charsSaved.toLocaleString()} characters saved)
+            {job.protectedSkipped ? ` · Protected translations kept: ${job.protectedSkipped}` : ""}
+          </s-paragraph>
+          {job.publishMode === "DRAFT" && job.succeeded > 0 ? (
+            <s-button href={`/app/review?job=${job.id}`} variant="primary">
+              Review translations
+            </s-button>
+          ) : null}
         </s-stack>
       </s-section>
 

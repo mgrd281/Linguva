@@ -12,7 +12,7 @@ import {
   type JobDependencies,
 } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
-import { setAiConsent } from "../../app/.server/settings/shop-settings";
+import { setAiConsent, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
 import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { getMonthlyUsage } from "../../app/.server/usage/usage-ledger";
@@ -28,9 +28,12 @@ afterAll(async () => {
   await ownerDb.$disconnect();
 });
 
-async function setup(products = 3, options: { consent?: boolean } = {}) {
+async function setup(products = 3, options: { consent?: boolean; mode?: "DRAFT" | "AUTO_PUBLISH" } = {}) {
   const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
   if (options.consent !== false) await setAiConsent({ shopId: shop.id, granted: true, actorId: null }, app);
+  if (options.mode !== "DRAFT") {
+    await setBulkPublishMode({ shopId: shop.id, mode: "AUTO_PUBLISH", confirmed: true, actorId: null }, app);
+  }
   const store = new FakeShopifyStore(products);
   const provider = new MockTranslationProvider();
   const deps: JobDependencies = {

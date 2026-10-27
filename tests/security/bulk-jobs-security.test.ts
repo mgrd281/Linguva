@@ -20,7 +20,7 @@ import {
 } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import type { TranslationProvider } from "../../app/.server/providers/types";
-import { setAiConsent } from "../../app/.server/settings/shop-settings";
+import { setAiConsent, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { ownerDb, resetDatabase } from "../support/db";
@@ -40,6 +40,7 @@ afterAll(async () => {
 async function tenant(domain: string, products = 1) {
   const { shop } = await upsertInstalledShop({ shopDomain: domain }, app);
   await setAiConsent({ shopId: shop.id, granted: true, actorId: null }, app);
+  await setBulkPublishMode({ shopId: shop.id, mode: "AUTO_PUBLISH", confirmed: true, actorId: null }, app);
   const store = new FakeShopifyStore(products);
   const { job } = await createBulkJob(
     { shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: null, idempotencyKey: `${domain}-k` },

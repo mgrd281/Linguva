@@ -1,6 +1,6 @@
 # Roadmap, Risks and Decisions
 
-Status as of 2026-10-27: **M1, M2, M4 and most of M5 are implemented and tested (locally and in GitHub CI) against a simulated Admin API, real PostgreSQL and real Redis. Nothing is verified on a real dev store yet.**
+Status as of 2026-10-27: **M1, M2, M4 and most of M5 are implemented and tested (locally and in GitHub CI) against a simulated Admin API, real PostgreSQL and real Redis. Collections are supported alongside products. Nothing is verified on a real dev store yet: no dev store is connected (see DEV_STORE_SETUP.md for what is missing). Guarded live contract tests are ready to run.**
 
 ## 1. Progress checklist
 
@@ -33,8 +33,12 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M5 | Protection of manual/approved translations (and translations made outside Linguva) from bulk jobs unless explicitly allowed | Implemented, Tested |
 | M5 | Revision history per field, previous Shopify value kept as EXTERNAL revision, restore while the source is unchanged | Implemented, Tested. **Rollback after a source change isn't possible (Shopify accepts translations only for the current source digest)** |
 | M5 | DeepL glossary API, TMX import/export, market-scoped publishing in jobs | Planned |
+| M4 | Collections: list with coverage, editor (shared with products), bulk jobs (`resourceType` COLLECTION) | Implemented, Tested (fake store). Not yet Verified |
+| M3 | Guarded live contract tests (`pnpm test:live`): dev-store gate (`plan.partnerDevelopment`), deny list, fixture-only writes with cleanup, mock provider; operations schema-validated in CI | Implemented; guard unit-tested. **Not run: no dev store connected (Blocked on owner)** |
+| M6 | SEO and Markets plan (SEO_ARCHITECTURE.md) | Planned. Implementation **Blocked** until the live checks pass |
 | — | CI on GitHub | Implemented, green on the first push |
-| — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, SEO_ARCHITECTURE, DEPLOYMENT, TEST_PLAN | Planned |
+| — | SEO_ARCHITECTURE, DEV_STORE_SETUP | Written |
+| — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, DEPLOYMENT, TEST_PLAN | Planned |
 
 ## 2. Milestones
 
@@ -82,12 +86,36 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | D-07 | Partner organization: which one owns the app; who creates the dev store | Owner creates; credentials go only into env vars |
 | D-08 | Push/PR policy: may Claude push to the feature branch `claude/gallant-pasteur-8opy75` and open draft PRs, or only commit locally? | Allow pushes to the feature branch + draft PRs (no merge) |
 
-## 5. Next task (proposed, not started)
+## 5. Verification status (what is actually proven)
 
-**M1-T1: Scaffold the app from the official Shopify React Router template, without any Shopify credentials.**
+| Area | Unit/integration (local + CI) | Security suite | Real dev store |
+|---|---|---|---|
+| Install, sessions, token encryption, webhooks, compliance | Yes | Yes | No |
+| Languages page (`shopLocales`) | Yes (fake) | — | No |
+| Products and collections: list, editor, publish with digest check | Yes (fake) | Yes | No |
+| Translation memory (exact, fuzzy), glossary | Yes | Yes | No |
+| Bulk jobs, drafts, review, approve/reject | Yes (fake + real Redis/BullMQ) | Yes | No |
+| Protection of existing translations, EXTERNAL history, restore | Yes (fake) | Yes | No (live test prepared) |
+| Shopify error codes and `outdated` behaviour assumed by the fakes | Schema only | — | No (live test prepared) |
+| DeepL | Stubbed HTTP only | — | No key configured |
+| Markets, metafields, SEO checks, handles, image alt text | Not implemented | — | — |
 
-- Steps: `npx @shopify/cli@4.9.4 app init --template=reactRouter` (exact template flag verified at run time) into the repo root, without linking a Partner app (`client_id` left empty). Switch to pnpm. Add TypeScript strict, ESLint, Vitest with one smoke test, `docker-compose.yml` (Postgres + Redis, local only), `.env.example`, and a CI workflow.
-- Files: `package.json`, `app/**`, `shopify.app.toml` (no secrets), `prisma/schema.prisma` (template Session model only), `vitest.config.ts`, `docker-compose.yml`, `.github/workflows/ci.yml`, `.env.example`.
-- Risks: the CLI may require Partner login for some init flows. If so, use the public template repository at a pinned tag instead.
-- Validation: `pnpm install && pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
-- Not included: no Partner app linking, no store access, no deployment.
+## 6. Open issues
+
+| ID | Issue | Severity | Plan |
+|---|---|---|---|
+| O1 | No dev store connected; nothing verified live | High | Owner provides store and credentials (DEV_STORE_SETUP §1), then `pnpm test:live` |
+| O2 | Fuzzy memory search measured at ~130 ms for 10k entries per shop; 100k+ entries may exceed 1 s | Medium | Benchmark in M8; limit candidates by length band; per-shop partial index if needed |
+| O3 | No per-user rate limit on interactive app endpoints (AI translate, memory suggest); only the monthly quota bounds cost | Medium | Redis token bucket per shop and user, reusing `rate-limiter.ts` |
+| O4 | Metafields, metaobjects, pages, articles and Markets are not part of jobs or editors | Medium | After live verification; Markets per SEO_ARCHITECTURE S4 |
+| O5 | Deleting a translation from the UI isn't supported (`translationsRemove` only in live tests) | Low | Editor "remove translation" with revision |
+| O6 | Review page shows 50 drafts per filter, jobs page 50 jobs; no pagination | Low | Keyset pagination |
+| O7 | Rollback after a source change is impossible (Shopify accepts only the current digest) | By design | Shown in the UI |
+| O8 | The repository is public | Medium | Owner: consider making it private; set `main` as default branch and protect it |
+
+## 7. Next steps
+
+1. Owner: create the dev store and the "Linguva live tests" Dev Dashboard app, run `pnpm test:live` locally (read-only first, then with `LIVE_ALLOW_WRITES=yes`), and do the manual checklist. Report results, or share them so the results log is updated.
+2. Fix whatever the live run shows, before any new feature.
+3. Then SEO S1 (SEO fields and checks) and S5 (audit), per SEO_ARCHITECTURE.md.
+4. O3 rate limiting of interactive endpoints.

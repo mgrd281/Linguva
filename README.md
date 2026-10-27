@@ -2,7 +2,7 @@
 
 AI translation and multilingual SEO app for Shopify merchants (public app, planned for the Shopify App Store).
 
-**Status:** foundation (authentication, multi-tenant database with row-level security, encrypted tokens, compliance webhooks) and interactive product translation (AI drafts via DeepL, review, digest-checked publishing, usage metering) bulk translation (BullMQ worker with retries, rate limiting and tenant isolation), translation memory, glossary, bulk review with drafts, protection of manual translations and revision history with restore are implemented and tested. Nothing has been verified on a real development store yet. See [docs/ROADMAP.md](docs/ROADMAP.md) for exactly what is implemented, tested, and verified.
+**Status:** foundation (authentication, multi-tenant database with row-level security, encrypted tokens, compliance webhooks) and interactive product and collection translation (AI drafts via DeepL, review, digest-checked publishing, usage metering), bulk translation (BullMQ worker with retries, rate limiting and tenant isolation), translation memory, glossary, bulk review with drafts, protection of manual translations and revision history with restore are implemented and tested. Nothing has been verified on a real development store yet (none is connected); guarded live contract tests are ready, see [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md). See [docs/ROADMAP.md](docs/ROADMAP.md) for exactly what is implemented, tested, and verified.
 
 ## Stack
 

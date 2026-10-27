@@ -28,6 +28,10 @@ Legend:
 | Authentication | `authenticate.admin(request)` validates the ID (session) token and performs **token exchange** | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/cli-app-authentication |
 | Offline tokens | **Expiring offline access tokens are required for all public apps as of 2027-01-01.** The template enables `future.expiringOfflineAccessTokens: true` | VERIFIED | Shopify changelog + CLI auth docs |
 | Scopes | Declared in `shopify.app.toml` `[access_scopes]`. Deploy with `shopify app deploy` | VERIFIED | CLI auth docs |
+| Admin-created custom apps | New ones can no longer be created in the Shopify admin. Use Dev Dashboard or Shopify CLI apps | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/legacy/admin-custom-apps |
+| Client credentials grant | `POST https://{shop}/admin/oauth/access_token` with `client_id`, `client_secret`, `grant_type=client_credentials`. Only for stores in the app's own organization. Token valid 24 h; carries the installation's granted scopes. Used only by the live tests | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant |
+| `ShopPlan.partnerDevelopment` | Boolean "partner development shop". Used as the gate for live tests | VERIFIED (schema) | admin-2026-10 schema |
+| Product/collection mutations (2026-10) | `productCreate(product:)`, `productUpdate(product:)`, `productDelete(input:)`, `collectionCreate(collection:)`, `collectionDelete(input:)` | VERIFIED (schema, codegen) | Used only for live-test fixtures |
 | Prisma | npm `latest` tag currently points to `8.0.0-rc.27` (a release candidate). The last stable line is `7.10.1` | VERIFIED (npm) | npm registry. **Decision needed**: pin a stable version (see ROADMAP, D-05) |
 
 ## 2. Translation APIs
@@ -38,7 +42,8 @@ Legend:
 | `translatableResourcesByIds` | Exists, returns a `TranslatableResourceConnection` | VERIFIED |
 | `translatableResource(resourceId:)` | Single-resource read used to fetch digests before writing | VERIFIED |
 | `TranslatableResource.nestedTranslatableResources` | Exists (for example, product → options) | VERIFIED |
-| `translationsRegister(resourceId, translations[])` | Creates or updates translations. Each `TranslationInput` needs a `translatableContentDigest`. Optional `marketId` scopes a translation to one market | VERIFIED |
+| `translationsRegister(resourceId, translations[])` | Creates or updates translations. Each `TranslationInput` needs a `translatableContentDigest`. Optional `marketId` scopes a translation to one market (also for the default language, per the docs' product example) | VERIFIED |
+| Error code for a wrong digest | `INVALID_TRANSLATABLE_CONTENT` (in the `TranslationErrorCode` enum). The fake store returns it | VERIFIED (schema). **ASSUMPTION** that this is the code returned for a stale digest; checked by `tests/live` |
 | `translationsRemove(resourceId, translationKeys, locales, marketIds)` | Deletes translations. Only locales returned by `shopLocales` are valid | VERIFIED |
 | `Translation.outdated` | Boolean that is true when the source changed after the translation was last updated | VERIFIED |
 | `Translation.market` | `null` means the translation applies to all markets | VERIFIED |

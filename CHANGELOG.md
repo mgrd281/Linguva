@@ -31,7 +31,18 @@
 - Protection of translations written or approved by a person, or made outside Linguva, from bulk jobs unless the merchant explicitly allows replacing them.
 - Revision history with approval flag and actor; the previous Shopify value is kept as an EXTERNAL revision before overwriting; restore of earlier versions while the source is unchanged; History panel in the product editor; "Fill from memory" suggestions.
 - Job statistics for memory reuse, characters saved and protected translations kept.
+- Collections: list with coverage, translation editor and bulk jobs, sharing the product code paths; Collections navigation entry.
+- Guarded live contract tests for a Shopify development store (`pnpm test:live`, never in CI) with a dev-store gate, deny list, fixture-only writes and cleanup; setup guide `docs/DEV_STORE_SETUP.md`.
+- SEO and Markets architecture plan (`docs/SEO_ARCHITECTURE.md`).
 - Phase 0 documentation set.
+
+### Fixed
+- Re-saving an outdated translation unchanged now requires an explicit "still correct" confirmation instead of being silently skipped.
+- Rejected drafts are no longer re-created by the next bulk job for the same source text.
+- Audit entries record the acting staff member from the session token.
+- Latest revisions are read with one `DISTINCT ON` query instead of the full history; locale sync skips unchanged rows; fuzzy memory search uses the trigram index (new migration).
+- Glossary CSV uploads over the size limit are refused before the body is parsed.
+- Restoring from an editor only accepts revisions of the resource shown.
 
 ### Removed
 - Template demo pages and the `write_products` scope.

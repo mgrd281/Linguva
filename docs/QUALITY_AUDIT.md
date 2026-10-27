@@ -17,28 +17,28 @@ Rules:
 - **No area gets 10/10 without verification on a development store.** Every Shopify-facing criterion counts as ◐ at most until it is Verified on Shopify (FEATURE_STATUS.md).
 - The criteria were written before scoring. Evidence names the test or document.
 - There is **no measured comparison with competitor apps yet**. Their features were not tested, so "best in class" here means these criteria, not a benchmark.
-- Test basis (update after phase A): 513 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance) and 81 Playwright browser tests on the production build, including 14 screenshot comparisons. All pass locally; CI status per commit in the PR.
+- Test basis (update after phase B): 547 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance) and 84 Playwright browser tests on the production build, including 14 screenshot comparisons. All pass locally; CI status per commit in the PR.
 
 ## 2. Summary
 
-| Area | Before (9a89523) | Round 1 | **Phase A** | Biggest gap now |
-|---|---|---|---|---|
-| Design and modernity | 5.5 | 6.5 | **7.5** | Not checked inside the real admin; no native save bar; no App Store assets |
-| Usability for beginners | 5.5 | 8 | **8** | App interface only in English; no test with real merchants |
-| Desktop and mobile | 5 | 7.5 | **8.5** | No check on real devices or in the Shopify mobile app |
-| AI translation | 5 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
-| Content coverage | 3 | 5 | **5** | Images and metafields only one by one; no automatic translation of new products |
-| SEO | 7 | 7 | **7** | Storefront output (hreflang, translated URLs) not verified |
-| Performance | 4.5 | 6.5 | **6.5** | Real Shopify latency not measured; Review text search not indexed |
-| Security | 6.5 | 8 | **8** | No external review; branch protection off; no production operations |
-| Billing | 5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
-| Shopify integration | 6.5 | 6.5 | **6.5** | Not verified on a development store |
-| Error handling and loading states | 6 | 7 | **8.5** | Errors are logged, but no error tracking service |
-| **Average** | **5.4** | **6.8** | **7.1** | |
+| Area | Before (9a89523) | Round 1 | Phase A | **Phase B** | Biggest gap now |
+|---|---|---|---|---|---|
+| Design and modernity | 5.5 | 6.5 | 7.5 | **7.5** | Not checked inside the real admin; no native save bar; no App Store assets |
+| Usability for beginners | 5.5 | 8 | 8 | **8** | App interface only in English; no test with real merchants |
+| Desktop and mobile | 5 | 7.5 | 8.5 | **8.5** | No check on real devices or in the Shopify mobile app |
+| AI translation | 5 | 7 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
+| Content coverage | 3 | 5 | 5 | **6.5** | Webhooks and image nesting unverified on Shopify; JSON/list metafields and market-specific translations missing |
+| SEO | 7 | 7 | 7 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
+| Performance | 4.5 | 6.5 | 6.5 | **6.5** | Real Shopify latency not measured; Review text search not indexed |
+| Security | 6.5 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
+| Billing | 5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
+| Shopify integration | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
+| Error handling and loading states | 6 | 7 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
+| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | |
 
-Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a. A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
+Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b. A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
-**Honest overall verdict: 7.1/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
+**Honest overall verdict: 7.3/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
 
 ## 3. Areas in detail
 
@@ -110,7 +110,7 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 
 **Plan:** (8) Free DeepL API key, owner approval needed, no cost. (9) Then a reference set: about 50 real product texts × 5 languages, rated blind; findings feed back into the checks. (10) Evaluate `custom_instructions` with the key. An LLM engine only with a cost model and the owner's approval.
 
-### 3.5 Content coverage: 5/10
+### 3.5 Content coverage: 6.5/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -119,15 +119,15 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 3 | Bulk translation for every safe type | ✅ | `tests/integration/content-types.test.ts` |
 | 4 | Image alt texts | ✅ | Integration and security tests (editor) |
 | 5 | Text metafields | ✅ | Integration and security tests (editor) |
-| 6 | Rich text, JSON and list metafields | ❌ | Counted, not editable |
-| 7 | Images and metafields in bulk jobs and the coverage report | ❌ | Editor only |
+| 6 | Rich text, JSON and list metafields | ◐ | Phase B: rich text translated with structure and links kept (`tests/unit/rich-text.test.ts`, attached-resources and bulk tests); JSON and lists still counted only |
+| 7 | Images and metafields in bulk jobs and the coverage report | ◐ | Phase B: both in bulk jobs (`tests/integration/bulk-attached.test.ts`), images in the coverage report; custom fields can't be listed there (deprecated `METAFIELD` type) |
 | 8 | Market-specific translations | ❌ | Markets page is read-only |
-| 9 | New and changed products are translated automatically (webhooks) | ❌ | Planned |
+| 9 | New and changed products are translated automatically (webhooks) | ◐ | Phase B: products and collections, `tests/integration/auto-translate.test.ts` (incl. BullMQ end to end); delivery by Shopify not verified |
 | 10 | Coverage confirmed on a development store | ❌ | Live test probes all types, not run yet |
 
-**Plan, without external access:** (7) images and metafields in bulk and coverage, because they reuse existing code. (6) Rich text metafields with structure-aware segmenting, like HTML. (9) Webhook `products/update` → reconciliation job, only for languages the merchant switched on, as drafts. **Needs the dev store:** (8), (10).
+**Plan, without external access:** (6) JSON and list metafields only where a schema says which values are text. (9) Periodic reconciliation for missed webhooks; other types once Shopify offers webhooks for them. **Needs the dev store:** (7) and (9) confirmation, (8), (10).
 
-### 3.6 SEO: 7/10
+### 3.6 SEO: 7.5/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -138,11 +138,11 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 5 | Duplicate SEO titles found | ✅ | Coverage tests |
 | 6 | "SEO fields only" jobs | ✅ | Bulk tests |
 | 7 | Languages visible to customers (otherwise no hreflang) | ◐ | Overview shows unpublished languages; storefront not checked |
-| 8 | Image alt texts for image search | ◐ | Editor only, not in bulk |
+| 8 | Image alt texts for image search | ✅ | Phase B: editor, bulk jobs and coverage report |
 | 9 | Market-specific SEO | ❌ | Not implemented |
 | 10 | Storefront output verified: hreflang, translated URLs, sitemaps | ❌ | Needs a development store (D1–D4, K1–K3) |
 
-**Plan:** (8) together with images in bulk (§3.5). (10) dev store. (9) after market-specific translations.
+**Plan:** (10) dev store. (9) after market-specific translations.
 
 ### 3.7 Performance: 6.5/10
 
@@ -255,14 +255,26 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | Unexpected server errors logged (no request data) | e178fe8 |
 | Keyboard, slow network, timeout and 14 screenshot tests | e178fe8 |
 
+## 4b. Phase B: translation coverage (all Tested Locally)
+
+| Change | Evidence |
+|---|---|
+| Image alt text and custom fields in bulk jobs (option), drafts linked to their product, same protection and review | 5820cce; `tests/integration/bulk-attached.test.ts` incl. tenant isolation |
+| Image alt text in the coverage report, "Translate gaps" with images | 5820cce; coverage tests |
+| Rich text custom fields with structure, heading levels and link targets enforced | 5820cce; unit, editor (tampered link, malformed JSON) and bulk tests |
+| Automatic translation of new and changed products and collections (webhooks, debounce, same rules as bulk, never joins jobs with other settings) | 77fc8dc; 14 integration tests incl. BullMQ, webhook route, UI test |
+| Webhook log retention | 77fc8dc; integration test |
+| **Bug found by the UI test:** Polaris choice lists submit multiple values comma-separated | 77fc8dc |
+| Shopify limits documented (SHOPIFY_API_MATRIX §2.2) | docs |
+
 ## 5. Next steps, in order of effect
 
 **Without external access (I can continue):**
 
-1. Images and metafields in bulk jobs and the coverage report (coverage, SEO)
+1. App interface in German and English (usability)
 2. Load test with many shops in parallel (performance)
-3. Automatic translation of changed products as drafts (coverage)
-4. App interface in German (usability)
+3. Clearer progress and error reports on jobs (usability, error handling)
+4. Audit of publishing and overwrite protection across all paths (security)
 
 **Need the owner (accounts, decisions, money):**
 

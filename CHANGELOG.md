@@ -36,6 +36,7 @@
 - SEO and Markets architecture plan (`docs/SEO_ARCHITECTURE.md`).
 - AI cost limits: daily cap per shop, platform-wide daily cap, maximum characters per interactive request, and request rate limits per staff member and per shop (Redis token buckets). Usage today is shown in the editor and Settings.
 - SEO: checks for SEO titles and descriptions (length by display width, incl. CJK; unchanged from the source), a "Search engine listing" section in the editor with live counters and a search result preview, "Translate SEO fields only" in the editor, and SEO-only bulk jobs. Readable names for quality warnings in the editor and Review.
+- Translation coverage report: a background scan of products and collections per language (no AI, no writes) with translated/outdated/missing counts by content, SEO and URL handles, SEO findings, duplicate SEO titles, items with the most gaps, and buttons to translate the gaps or only SEO fields.
 - Phase 0 documentation set.
 
 ### Fixed

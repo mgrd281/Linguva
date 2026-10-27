@@ -55,18 +55,22 @@ model Shop {
   createdAt      DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
 
-  installations ShopInstallation[]
-  settings      ShopSettings?
-  locales       ShopLocale[]
-  auditLogs     AuditLog[]
-  revisions     TranslationRevision[]
-  usage         UsageLedger[]
-  jobs          TranslationJob[]
-  jobItems      TranslationJobItem[]
-  memory        TranslationMemory[]
-  glossaries    Glossary[]
-  glossaryTerms GlossaryTerm[]
-  drafts        TranslationDraft[]
+  installations   ShopInstallation[]
+  settings        ShopSettings?
+  locales         ShopLocale[]
+  auditLogs       AuditLog[]
+  revisions       TranslationRevision[]
+  usage           UsageLedger[]
+  jobs            TranslationJob[]
+  jobItems        TranslationJobItem[]
+  memory          TranslationMemory[]
+  glossaries      Glossary[]
+  glossaryTerms   GlossaryTerm[]
+  drafts          TranslationDraft[]
+  coverageReports CoverageReport[]
+  coverageStats   CoverageStat[]
+  coverageGaps    CoverageGap[]
+  coverageTitles  CoverageTitleHash[]
 }
 
 enum InstallationEventType {
@@ -475,4 +479,94 @@ model TranslationDraft {
   @@unique([shopId, resourceGid, locale, key])
   @@index([shopId, status, locale])
   @@index([shopId, jobId, status])
+}
+
+enum CoverageReportStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+/// One coverage scan of a shop's content across its languages. Stores only
+/// counts, resource ids and hashes, never merchant text.
+model CoverageReport {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId           String               @db.Uuid
+  status           CoverageReportStatus @default(QUEUED)
+  requestedBy      String?
+  idempotencyKey   String
+  /// Scan order: "RESOURCE_TYPE|locale" pairs.
+  segments         String[]
+  segmentIndex     Int                  @default(0)
+  cursor           String?
+  pagesScanned     Int                  @default(0)
+  resourcesScanned Int                  @default(0)
+  errorCode        String?
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  startedAt        DateTime?            @db.Timestamptz(3)
+  finishedAt       DateTime?            @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
+
+  shop   Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  stats  CoverageStat[]
+  gaps   CoverageGap[]
+  titles CoverageTitleHash[]
+
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, createdAt])
+}
+
+/// Per report, language, resource type and field key ("*" counts resources).
+model CoverageStat {
+  id           String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId       String @db.Uuid
+  reportId     String @db.Uuid
+  locale       String
+  resourceType String
+  key          String
+  withSource   Int    @default(0)
+  translated   Int    @default(0)
+  outdated     Int    @default(0)
+  seoIssues    Int    @default(0)
+
+  shop   Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  report CoverageReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, locale, resourceType, key])
+  @@index([shopId])
+}
+
+/// Resources with missing or outdated fields, for "fix" links (capped per language).
+model CoverageGap {
+  id           String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId       String @db.Uuid
+  reportId     String @db.Uuid
+  locale       String
+  resourceType String
+  resourceGid  String
+  missing      Int
+  outdated     Int
+
+  shop   Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  report CoverageReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, locale, resourceGid])
+  @@index([reportId, locale, missing])
+  @@index([shopId])
+}
+
+/// Hashes of translated SEO titles, to find duplicates per language.
+model CoverageTitleHash {
+  shopId   String @db.Uuid
+  reportId String @db.Uuid
+  locale   String
+  hash     String
+  count    Int    @default(0)
+
+  shop   Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  report CoverageReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@id([reportId, locale, hash])
+  @@index([shopId])
 }

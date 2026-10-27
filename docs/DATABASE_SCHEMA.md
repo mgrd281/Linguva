@@ -1,6 +1,6 @@
 # Database Schema
 
-Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop, ShopInstallation, ShopSettings, ShopLocale, WebhookEvent, AuditLog, PrivacyRequest, TranslationRevision, UsageLedger, TranslationJob, TranslationJobItem, TranslationMemory, Glossary, GlossaryTerm, TranslationDraft), all tenant tables under fail-closed RLS. Entities below that are not in the schema yet (Subscription, Entitlement, ProviderUsage, AdminUser, FeatureFlag, ShopMarket) are still proposals.
+Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop, ShopInstallation, ShopSettings, ShopLocale, WebhookEvent, AuditLog, PrivacyRequest, TranslationRevision, UsageLedger, TranslationJob, TranslationJobItem, TranslationMemory, Glossary, GlossaryTerm, TranslationDraft, CoverageReport, CoverageStat, CoverageGap, CoverageTitleHash), all tenant tables under fail-closed RLS, plus the non-tenant `PlatformUsageDay` (a date and a character count, for the platform cost cap). Coverage tables hold only counts, resource ids and hashes. Entities below that are not in the schema yet (Subscription, Entitlement, ProviderUsage, AdminUser, FeatureFlag, ShopMarket) are still proposals.
 
 ## 1. Conventions
 

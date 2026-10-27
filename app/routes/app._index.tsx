@@ -70,6 +70,16 @@ export default function Overview() {
         </s-banner>
       ) : null}
 
+      {additional > 0 ? (
+        <s-section heading="How complete are your translations?">
+          <s-paragraph>
+            The coverage report shows, per language, what is translated, missing or outdated, including search engine
+            listings.
+          </s-paragraph>
+          <s-button href="/app/coverage">Open coverage report</s-button>
+        </s-section>
+      ) : null}
+
       <s-section slot="aside" heading="Installation">
         <s-paragraph>
           Installed on{" "}

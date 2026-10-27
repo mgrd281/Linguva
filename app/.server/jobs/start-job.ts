@@ -1,6 +1,7 @@
 import { getQueues } from "../queue/client";
 import { createBulkJob, retryJobItems, type BulkResourceType } from "./bulk-jobs";
-import { enqueueDiscovery, enqueueItems } from "./queues";
+import { enqueueCoveragePage, enqueueDiscovery, enqueueItems } from "./queues";
+import { createCoverageReport } from "../coverage/coverage";
 
 export class BackgroundJobsUnavailableError extends Error {
   constructor() {
@@ -38,4 +39,20 @@ export async function retryBulkJob(shopId: string, jobId: string) {
   // Discovery resumes from the stored cursor under a fresh queue job id.
   if (rediscover) await enqueueDiscovery(queues, { shopId, jobId }, null, round);
   return itemIds.length;
+}
+
+/** Starts (or reuses) a coverage report and enqueues its first page. */
+export async function startCoverageReport(input: {
+  shopId: string;
+  locales: readonly string[];
+  requestedBy: string | null;
+  idempotencyKey: string;
+}) {
+  const queues = getQueues();
+  if (!queues) throw new BackgroundJobsUnavailableError();
+  const { report, created } = await createCoverageReport(input);
+  if (created) {
+    await enqueueCoveragePage(queues, { shopId: input.shopId, reportId: report.id, segmentIndex: 0, cursor: null });
+  }
+  return { report, created };
 }

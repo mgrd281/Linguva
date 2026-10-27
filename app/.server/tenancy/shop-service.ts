@@ -102,6 +102,10 @@ export async function markShopUninstalled(
         where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } },
         data: { status: "CANCELLED", cancelRequestedAt: new Date(), finishedAt: new Date(), errorCode: "SHOP_UNINSTALLED" },
       });
+      await tx.coverageReport.updateMany({
+        where: { shopId: shop.id, status: { in: ["QUEUED", "RUNNING"] } },
+        data: { status: "FAILED", finishedAt: new Date(), errorCode: "SHOP_UNINSTALLED" },
+      });
     },
     client,
   );

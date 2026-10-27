@@ -22,10 +22,16 @@ import {
   type ItemPayload,
   type JobDependencies,
 } from "./processors";
+import {
+  failCoverageReport,
+  runCoveragePage,
+  type CoveragePagePayload,
+} from "../coverage/coverage";
 
 export const QUEUE_NAMES = {
   discovery: "translation-discovery",
   items: "translation-items",
+  coverage: "translation-coverage",
 } as const;
 
 export const ITEM_JOB_OPTIONS: JobsOptions = {
@@ -44,10 +50,19 @@ const DISCOVERY_JOB_OPTIONS: JobsOptions = {
 const uuid = z.string().uuid();
 const itemPayloadSchema = z.object({ shopId: uuid, itemId: uuid }).strict();
 const discoveryPayloadSchema = z.object({ shopId: uuid, jobId: uuid }).strict();
+const coveragePayloadSchema = z
+  .object({
+    shopId: uuid,
+    reportId: uuid,
+    segmentIndex: z.number().int().min(0).max(1000),
+    cursor: z.string().max(1000).nullable(),
+  })
+  .strict();
 
 export interface Queues {
   discovery: Queue<DiscoveryPayload>;
   items: Queue<ItemPayload>;
+  coverage: Queue<CoveragePagePayload>;
   itemJobOptions: JobsOptions;
   discoveryJobOptions: JobsOptions;
   close(): Promise<void>;
@@ -60,13 +75,15 @@ export function createQueues(
 ): Queues {
   const discovery = new Queue<DiscoveryPayload>(QUEUE_NAMES.discovery, { connection, prefix });
   const items = new Queue<ItemPayload>(QUEUE_NAMES.items, { connection, prefix });
+  const coverage = new Queue<CoveragePagePayload>(QUEUE_NAMES.coverage, { connection, prefix });
   return {
     discovery,
     items,
+    coverage,
     itemJobOptions: { ...ITEM_JOB_OPTIONS, ...overrides.itemJobOptions },
     discoveryJobOptions: { ...DISCOVERY_JOB_OPTIONS, ...overrides.discoveryJobOptions },
     async close() {
-      await Promise.all([discovery.close(), items.close()]);
+      await Promise.all([discovery.close(), items.close(), coverage.close()]);
     },
   };
 }
@@ -126,6 +143,15 @@ export async function enqueueItems(
       opts: { ...queues.itemJobOptions, jobId: job.queueJobId },
     })),
   );
+}
+
+/** Enqueues one coverage page; the job id makes a repeated enqueue a no-op. */
+export async function enqueueCoveragePage(queues: Queues, payload: CoveragePagePayload) {
+  const page = createHash("sha256").update(payload.cursor ?? "start").digest("hex").slice(0, 16);
+  await queues.coverage.add("coverage", payload, {
+    ...queues.discoveryJobOptions,
+    jobId: `coverage_${payload.reportId}_${payload.segmentIndex}_${page}`,
+  });
 }
 
 async function delay(job: Job, token: string | undefined, waitMs: number): Promise<never> {
@@ -218,9 +244,32 @@ export function createDiscoveryProcessor(deps: JobDependencies, queues: Queues) 
   };
 }
 
+export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
+  return async (job: Job<CoveragePagePayload>, token?: string) => {
+    const parsed = coveragePayloadSchema.safeParse(job.data);
+    if (!parsed.success) throw new UnrecoverableError("INVALID_PAYLOAD");
+    const payload = parsed.data;
+    const log = logger.child({ queue: QUEUE_NAMES.coverage, queueJobId: job.id, shopId: payload.shopId, reportId: payload.reportId });
+    try {
+      const next = await runCoveragePage(deps, payload);
+      if (next) await enqueueCoveragePage(queues, next);
+      return { done: !next };
+    } catch (error) {
+      const decision = classifyError(error);
+      if (decision.kind === "rate-limited") return delay(job, token, decision.waitMs);
+      if (decision.kind === "retryable" && !isFinalAttempt(job)) throw error;
+      const code = decision.kind === "retryable" ? "SCAN_FAILED" : decision.code;
+      await failCoverageReport(payload.shopId, payload.reportId, code, deps.prisma);
+      log.error({ code }, "coverage report failed");
+      throw new UnrecoverableError(code);
+    }
+  };
+}
+
 export interface WorkerSet {
   discovery: Worker<DiscoveryPayload>;
   items: Worker<ItemPayload>;
+  coverage: Worker<CoveragePagePayload>;
   close(): Promise<void>;
 }
 
@@ -239,14 +288,21 @@ export function createWorkers(
     prefix: options.prefix,
     concurrency: options.concurrency,
   });
-  for (const worker of [discovery, items]) {
+  const coverage = new Worker<CoveragePagePayload>(QUEUE_NAMES.coverage, createCoverageProcessor(deps, queues), {
+    connection: options.connection,
+    prefix: options.prefix,
+    // Pages of one report run one after another; this only spreads shops.
+    concurrency: Math.max(1, Math.floor(options.concurrency / 2)),
+  });
+  for (const worker of [discovery, items, coverage]) {
     worker.on("error", (error) => logger.error({ err: error.name }, "worker error"));
   }
   return {
     discovery,
     items,
+    coverage,
     async close() {
-      await Promise.all([discovery.close(), items.close()]);
+      await Promise.all([discovery.close(), items.close(), coverage.close()]);
     },
   };
 }

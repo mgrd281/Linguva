@@ -65,7 +65,11 @@ Implemented as described below, in `app/lib/seo.ts` (rules shared by server and 
 - Market-specific translations as an advanced option later: `marketId` added to revisions, drafts, job items and the protection rule (migration with `NULLS NOT DISTINCT` uniqueness), jobs gain an optional `marketId`, and `INVALID_LOCALE_FOR_MARKET` is handled. Linguva never deletes or overwrites market-specific translations it didn't create.
 - Enabling languages for a web presence (`shopLocaleEnable`, `marketWebPresenceIds`) only from an explicit merchant action, within the 20-locale limit.
 
-### S5 SEO health and missing translations
+### S5 SEO health and missing translations — Implemented (report and dashboard), Tested (fake store)
+
+Implemented: `app/.server/coverage/coverage.ts`, queue `translation-coverage`, page `/app/coverage`. One report per shop at a time scans PRODUCT and COLLECTION for every target language, page by page (idempotent: a page only counts if the report is still at the position it was read from). It stores counts per language, type and field key, SEO findings, duplicate SEO titles as SHA-256 hashes, and up to 200 worst resources per language as ids. No merchant text, no Shopify writes, no AI. "Translate gaps" and "SEO only" start targeted bulk jobs. Not yet: webhook-driven refresh, pages/articles/metafields.
+
+Original plan:
 - Background audit job (new job kind `AUDIT`): reuses paginated discovery and the rate limiter, no provider, no writes. It stores per shop, language, resource type and field key: counts of translated / missing / outdated / SEO-issue. Results are aggregates, no merchant text.
 - Dashboard: coverage per language and field group (content, SEO, handles, images), the worst resources, and "fix" links that start a targeted bulk job (for example "only meta descriptions, German").
 - Freshness: re-run on demand and after bulk jobs; webhook-driven refresh (`products/update`, `collections/update`) later with debounce.

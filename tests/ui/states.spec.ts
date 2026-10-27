@@ -8,7 +8,10 @@ import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 test.describe("empty states", () => {
   test("a store with only its primary language is guided to add one", async ({ page }) => {
     await openApp(page, "empty", "/app");
-    await expect(page.getByText("Add a language to get started")).toBeVisible();
+    // The checklist starts with adding a language, as the primary action.
+    await expect(page.getByText("0 of 5 steps done")).toBeVisible();
+    await expect(page.locator('s-button[variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
+    await expect(page.getByText(/Your store only has its primary language/)).toBeVisible();
     await openApp(page, "empty", "/app/products");
     await expect(page.getByText("No languages to translate into")).toBeVisible();
     await expect(page.locator("s-button", { hasText: "Open language settings" })).toBeVisible();
@@ -91,7 +94,7 @@ test.describe("loading states", () => {
       await held;
       await route.continue();
     });
-    await page.locator("s-button", { hasText: "Open coverage report" }).click();
+    await page.getByRole("link", { name: "Open coverage report" }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(true);
     release();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(false);

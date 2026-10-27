@@ -42,14 +42,13 @@ export default function App() {
     <AppProvider apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Overview</s-link>
-        <s-link href="/app/languages">Languages</s-link>
         <s-link href="/app/products">Products</s-link>
         <s-link href="/app/collections">Collections</s-link>
         <s-link href="/app/content">All content</s-link>
-        <s-link href="/app/coverage">Coverage</s-link>
-        <s-link href="/app/markets">Markets</s-link>
-        <s-link href="/app/jobs">Translation jobs</s-link>
         <s-link href="/app/review">Review</s-link>
+        <s-link href="/app/jobs">Translation jobs</s-link>
+        <s-link href="/app/coverage">Coverage &amp; SEO</s-link>
+        <s-link href="/app/markets">Markets</s-link>
         <s-link href="/app/glossary">Glossary</s-link>
         <s-link href="/app/memory">Translation memory</s-link>
         <s-link href="/app/plan">Plan</s-link>

@@ -17,8 +17,10 @@ test("a new store installs through token exchange and lands on the Overview", as
   expect(await owner.shop.findUnique({ where: { shopDomain: shop.domain } })).toBeNull();
 
   await openApp(page, "fresh", "/app");
-  await expect(page.getByText("Primary language")).toBeVisible();
-  await expect(page.getByText(shop.name)).toBeVisible();
+  await expect(page.locator(`s-section[heading="${shop.name}"]`)).toHaveCount(1);
+  // A new merchant is guided: German exists and is published; the next step is allowing AI.
+  await expect(page.getByText("2 of 5 steps done")).toBeVisible();
+  await expect(page.locator('s-button[variant="primary"]', { hasText: "Open settings" })).toBeVisible();
 
   // afterAuth stored the tenant with the GID Shopify reported.
   const row = await owner.shop.findUniqueOrThrow({ where: { shopDomain: shop.domain } });
@@ -42,7 +44,7 @@ test("a forged session token gets no app content", async ({ page }) => {
   const response = await page.request.get(url.toString(), { maxRedirects: 0 });
   const body = await response.text();
   expect(body).not.toContain(shop.name);
-  expect(body).not.toContain("Primary language");
+  expect(body).not.toContain("steps done");
 
   // A data request with a forged bearer token is refused.
   const data = await page.request.get(new URL("/app/products.data?locale=de", UI_ENV.appUrl).toString(), {

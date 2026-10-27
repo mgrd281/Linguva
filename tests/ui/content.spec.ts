@@ -10,10 +10,11 @@ import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
 test("the content overview lists every content type with its status @responsive", async ({ page }) => {
   await openApp(page, "full", "/app/content");
-  await expect(page.getByText(/content types have something to translate/)).toBeVisible();
-  for (const group of ["Online store", "Store", "Navigation", "Catalog", "Theme", "Checkout", "Notifications"]) {
-    await expect(page.locator(`s-section[heading="${group}"]`)).toHaveCount(1);
-  }
+  await expect(page.getByText(/content types have\s+something to translate/)).toBeVisible();
+  // Ordered by what to do: ready first, then permissions, then the rest compactly.
+  const headings = await page.locator("s-section[heading]").evaluateAll((els) => els.map((e) => e.getAttribute("heading")));
+  expect(headings).toEqual(["Ready to translate", "Needs your permission", "Not in your store yet"]);
+  await expect(page.locator('s-section[heading="Not in your store yet"]').getByText(/Shipping methods/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Menus", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Translate Menus" })).toBeVisible();
   await expect(page.locator("s-button", { hasText: "Allow access" }).first()).toBeVisible();

@@ -10,9 +10,15 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Overview",
     path: "/app",
     check: async (page) => {
-      await expect(page.getByText("Languages enabled")).toBeVisible();
-      await expect(page.getByText("4 / 20")).toBeVisible();
-      await expect(page.getByText(/Arabic is enabled but not visible/)).toBeVisible();
+      // Setup checklist: languages, consent and a published translation are done in this store.
+      await expect(page.locator('s-section[heading="Get started"]')).toHaveCount(1);
+      await expect(page.getByText(/of 5 steps done/)).toBeVisible();
+      await expect(page.getByRole("progressbar", { name: "Setup progress" })).toBeVisible();
+      // Languages with their storefront state.
+      await expect(page.locator("s-table").getByText("Arabic", { exact: true })).toBeVisible();
+      await expect(page.locator("s-table").getByText("Hidden")).toBeVisible();
+      await expect(page.getByText(/translations? to review/)).toBeVisible();
+      await expect(page.getByRole("progressbar", { name: "AI usage this month" })).toBeVisible();
     },
   },
   {

@@ -8,11 +8,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, scopes } = await requireShop(request);
   const granted = (await scopes.query()).granted;
   const entries = await loadContentHub(admin, granted);
-  const groups = [...new Set(entries.map((e) => e.group))].map((group) => ({
-    group,
-    entries: entries.filter((e) => e.group === group),
-  }));
-  return { groups, counts: { withContent: entries.filter((e) => e.status === "has-content").length, total: entries.length } };
+  const by = (status: HubStatus) => entries.filter((e) => e.status === status);
+  return {
+    ready: by("has-content"),
+    permission: by("needs-permission"),
+    empty: by("empty"),
+    unavailable: by("unavailable"),
+    total: entries.length,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -26,65 +29,101 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: true };
 };
 
-const STATUS: Record<HubStatus, { label: string; tone?: "success" | "info" | "warning" }> = {
-  "has-content": { label: "Ready to translate", tone: "success" },
-  empty: { label: "Nothing in your store yet" },
-  "needs-permission": { label: "Needs your permission", tone: "warning" },
-  unavailable: { label: "Not available", tone: "info" },
-};
-
 export default function ContentHub() {
-  const { groups, counts } = useLoaderData<typeof loader>();
-  const permission = useFetcher<typeof action>();
+  const { ready, permission, empty, unavailable, total } = useLoaderData<typeof loader>();
+  const grant = useFetcher<typeof action>();
+  const mode = (e: { bulk: boolean; caution: string | null }) =>
+    e.bulk ? "Translate all at once" : e.caution === "legal" ? "One by one (legal text)" : "One by one";
 
   return (
     <s-page heading="All content">
       <s-section>
         <s-paragraph>
-          Everything in your store that Shopify lets you translate. {counts.withContent} of {counts.total} content types
-          have something to translate. Products and collections have their own pages in the navigation.
+          Everything in your store that Shopify lets you translate: {ready.length} of {total} content types have
+          something to translate. Products and collections have their own pages in the navigation.
         </s-paragraph>
       </s-section>
-      {groups.map(({ group, entries }) => (
-        <s-section key={group} heading={group} padding="none">
+
+      <s-section heading="Ready to translate" padding="none">
+        {ready.length ? (
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">Content</s-table-header>
-              <s-table-header listSlot="secondary">Status</s-table-header>
-              <s-table-header>Translate all</s-table-header>
+              <s-table-header listSlot="secondary">Area</s-table-header>
+              <s-table-header>How</s-table-header>
               <s-table-header>Action</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {entries.map((e) => (
+              {ready.map((e) => (
                 <s-table-row key={e.type}>
                   <s-table-cell>
-                    {e.status === "has-content" ? <s-link href={e.path}>{e.label}</s-link> : e.label}
+                    <s-link href={e.path}>{e.label}</s-link>
                   </s-table-cell>
+                  <s-table-cell>{e.group}</s-table-cell>
+                  <s-table-cell>{mode(e)}</s-table-cell>
                   <s-table-cell>
-                    <s-badge {...(STATUS[e.status].tone ? { tone: STATUS[e.status].tone } : {})}>{STATUS[e.status].label}</s-badge>
-                  </s-table-cell>
-                  <s-table-cell>{e.bulk ? "Yes" : e.caution === "legal" ? "One by one (legal text)" : "One by one"}</s-table-cell>
-                  <s-table-cell>
-                    {e.status === "needs-permission" && e.scope ? (
-                      <permission.Form method="post">
-                        <input type="hidden" name="intent" value="request-scope" />
-                        <input type="hidden" name="scope" value={e.scope} />
-                        <s-button type="submit" variant="secondary" accessibilityLabel={`Allow access to ${e.label}`}>
-                          Allow access
-                        </s-button>
-                      </permission.Form>
-                    ) : e.status === "has-content" ? (
-                      <s-button href={e.path} accessibilityLabel={`Translate ${e.label}`}>
-                        Translate
-                      </s-button>
-                    ) : null}
+                    <s-button href={e.path} accessibilityLabel={`Translate ${e.label}`}>
+                      Translate
+                    </s-button>
                   </s-table-cell>
                 </s-table-row>
               ))}
             </s-table-body>
           </s-table>
+        ) : (
+          <s-box padding="base">
+            <s-paragraph>Nothing besides products and collections yet.</s-paragraph>
+          </s-box>
+        )}
+      </s-section>
+
+      {permission.length ? (
+        <s-section heading="Needs your permission" padding="none">
+          <s-table>
+            <s-table-header-row>
+              <s-table-header listSlot="primary">Content</s-table-header>
+              <s-table-header listSlot="secondary">Area</s-table-header>
+              <s-table-header>Action</s-table-header>
+            </s-table-header-row>
+            <s-table-body>
+              {permission.map((e) => (
+                <s-table-row key={e.type}>
+                  <s-table-cell>{e.label}</s-table-cell>
+                  <s-table-cell>{e.group}</s-table-cell>
+                  <s-table-cell>
+                    <grant.Form method="post">
+                      <input type="hidden" name="intent" value="request-scope" />
+                      <input type="hidden" name="scope" value={e.scope ?? ""} />
+                      <s-button type="submit" variant="primary" accessibilityLabel={`Allow access to ${e.label}`}>
+                        Allow access
+                      </s-button>
+                    </grant.Form>
+                  </s-table-cell>
+                </s-table-row>
+              ))}
+            </s-table-body>
+          </s-table>
+          <s-box padding="base">
+            <s-text color="subdued">Linguva only asks to read this content. It never changes your originals.</s-text>
+          </s-box>
         </s-section>
-      ))}
+      ) : null}
+
+      {empty.length ? (
+        <s-section heading="Not in your store yet">
+          <s-paragraph>
+            {empty.map((e) => e.label).join(" · ")}
+          </s-paragraph>
+          <s-text color="subdued">They appear under Ready to translate as soon as you add them in Shopify.</s-text>
+        </s-section>
+      ) : null}
+
+      {unavailable.length ? (
+        <s-section heading="Not available to apps in this store">
+          <s-paragraph>{unavailable.map((e) => e.label).join(" · ")}</s-paragraph>
+          <s-text color="subdued">You can translate these in Shopify&apos;s own Translate &amp; Adapt app.</s-text>
+        </s-section>
+      ) : null}
     </s-page>
   );
 }

@@ -64,6 +64,11 @@ export class FakeShopifyStore {
     Array<{ id: string; namespace: string; key: string; type: string; translatable: boolean }>
   >();
   private nextSubId = 9000;
+  /** The shop's languages (shopLocales). */
+  locales = [
+    { locale: "en", name: "English", primary: true, published: true },
+    { locale: "de", name: "German", primary: false, published: true },
+  ];
   /** Resource types the app has no access scope for (ACCESS_DENIED). */
   readonly deniedTypes = new Set<string>();
   /** Throw this error for the next N calls (any operation). */
@@ -213,6 +218,7 @@ export class FakeShopifyStore {
         data: { translatableResource: this.products.has(gid) ? this.node(gid, String(vars.locale)) : null },
       });
     }
+    if (name === "LinguvaShopLocales") return Response.json({ data: { shopLocales: this.locales } });
     if (name === "LinguvaProductMedia") {
       const gid = String(vars.id);
       if (!this.products.has(gid)) return Response.json({ data: { product: null } });

@@ -10,6 +10,9 @@ node_modules/
 /coverage/
 playwright-report/
 *.log
+# Local Redis snapshots
+dump.rdb
+*.rdb
 
 .env
 .env.*

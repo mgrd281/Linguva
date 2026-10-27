@@ -50,6 +50,11 @@ jobs:
       - name: Create database roles
         run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f scripts/db/init-roles.sql
 
+      # High and critical advisories in what ships (accepted exceptions with
+      # reasons: docs/SECURITY_MODEL.md, "Dependencies").
+      - name: Dependency audit (production dependencies)
+        run: pnpm audit --prod --audit-level high
+
       - name: Validate Prisma schema and generate client
         run: |
           pnpm exec prisma validate
@@ -88,7 +93,7 @@ jobs:
       - name: Security tests (tenant isolation, payloads, XSS)
         run: pnpm test:security
 
-      - name: Performance tests (fuzzy memory search at 100,000 entries)
+      - name: Performance tests (fuzzy memory at 100,000 entries; large shop: 50,000 drafts, 5,000 jobs, 5,000 products)
         run: pnpm test:performance
 
       - name: Build (web app, worker, operator tools)

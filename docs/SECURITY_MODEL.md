@@ -95,6 +95,31 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 - The editor's AI and memory actions only fill the form. Publishing needs the merchant's save.
 - Approval needs explicit draft ids of the same shop with status PENDING; rejected, stale and other shops' drafts are never published.
 
+## 5e. HTTP security headers (implemented, tested)
+
+`app/.server/lib/security-headers.ts`, applied to every page and data response (`entry.server.tsx`):
+
+| Header | Value | Why |
+|---|---|---|
+| Content-Security-Policy | Shopify's `frame-ancestors` for the store's admin, plus `base-uri 'self'; object-src 'none'` | Clickjacking, base-tag and plugin injection |
+| (no shop in the request) | `frame-ancestors https://admin.shopify.com https://*.myshopify.com` | Before, such pages had no framing protection at all |
+| X-Content-Type-Options | `nosniff` | MIME sniffing |
+| Referrer-Policy | `strict-origin-when-cross-origin` | No full app URLs (with `shop`, `host`) sent to other sites |
+| Permissions-Policy | camera, microphone, geolocation, payment, usb off | Not needed by the app |
+| Strict-Transport-Security | `max-age=31536000`, production over HTTPS only | Never on local http |
+
+Not set on purpose: `X-Frame-Options` (the admin must embed the app), `Cross-Origin-Opener-Policy` (App Bridge), `script-src` (App Bridge and Polaris come from Shopify's CDN; only after a test on a development store). Tests: `tests/unit/security-headers.test.ts`; the production build is checked in `tests/ui/install.spec.ts`.
+
+## 5f. Dependencies
+
+CI runs `pnpm audit --prod --audit-level high` and fails on any high or critical advisory in what ships. Accepted exceptions (`pnpm.auditConfig.ignoreGhsas` in package.json), each reviewed:
+
+| Advisory | Package and path | Why accepted | Remove when |
+|---|---|---|---|
+| GHSA-ggr8-5vv4-36mx (stack exhaustion with recursive objects) | `deepmerge-ts` 7.1.5 via `prisma` → `@prisma/config` | Only merges the repository's own Prisma configuration when the CLI runs (migrations); no merchant, Shopify or network input reaches it; not in the web app or worker bundle. Every Prisma 6 release pins 7.1.5 | Upgrading to Prisma 7 |
+
+Development-only tools (not shipped, not run on user input) also have advisories as of 2026-10-27: `minimatch` (ReDoS) via ESLint plugins, `lodash` and `@graphql-tools/utils` via the GraphQL codegen preset. They run only on the repository's own files; they are reviewed when those tools are updated.
+
 ## 6. Admin control center
 
 - Separate deployment and domain. Email + password (argon2id) **plus mandatory TOTP/WebAuthn**.

@@ -5,8 +5,15 @@ import { createReadableStreamFromReadable } from "@react-router/node";
 import { type EntryContext } from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
+import { addSecurityHeaders } from "./.server/lib/security-headers";
 
 export const streamTimeout = 5000;
+
+// Loader and action data (client navigation, fetchers).
+export function handleDataRequest(response: Response, { request }: { request: Request }) {
+  addSecurityHeaders(request, response.headers, { document: false });
+  return response;
+}
 
 export default async function handleRequest(
   request: Request,
@@ -15,6 +22,7 @@ export default async function handleRequest(
   reactRouterContext: EntryContext
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
+  addSecurityHeaders(request, responseHeaders, { document: true });
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"

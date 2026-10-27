@@ -63,3 +63,26 @@ test("a token for one store can't read another store's data", async ({ page }) =
   });
   expect(await data.text()).not.toContain("Product 1 jacket");
 });
+
+test("pages and data responses carry the security headers, and the admin may still embed the app", async ({ page }) => {
+  const shop = UI_SHOPS.full;
+  const response = await openApp(page, "full", "/app");
+  const headers = response!.headers();
+  expect(headers["content-security-policy"]).toBe(
+    `frame-ancestors https://${shop.domain} https://admin.shopify.com https://*.spin.dev https://admin.myshopify.io https://admin.shop.dev; base-uri 'self'; object-src 'none';`,
+  );
+  expect(headers).toMatchObject({ "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin" });
+  expect(headers["x-frame-options"]).toBeUndefined();
+  // Local http: no HSTS.
+  expect(headers["strict-transport-security"]).toBeUndefined();
+
+  const data = await page.request.get(new URL("/app/products.data?locale=de", UI_ENV.appUrl).toString(), {
+    headers: { Authorization: `Bearer ${sessionToken(shop.domain)}` },
+  });
+  expect(data.status()).toBe(200);
+  expect(data.headers()["x-content-type-options"]).toBe("nosniff");
+
+  // A page opened without a shop can't be framed by other sites.
+  const login = await page.request.get(new URL("/auth/login", UI_ENV.appUrl).toString());
+  expect(login.headers()["content-security-policy"]).toContain("frame-ancestors https://admin.shopify.com https://*.myshopify.com;");
+});

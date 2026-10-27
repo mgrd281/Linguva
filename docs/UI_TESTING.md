@@ -53,15 +53,17 @@ Polaris web components set ARIA roles through `ElementInternals`, which axe-core
 
 ## Visual comparisons
 
-`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings and Plan pages, desktop and phone, with reviewed images in `tests/ui/visual.spec.ts-snapshots/` (up to 1 % of pixels may differ). It uses the `ui-visual` store and replaces dates with a fixed one. Polaris text has no box of its own, so masking can't cover it.
+`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings and Plan pages, desktop and phone, with reference images (up to 1 % of pixels may differ). It uses the `ui-visual` store, waits until the Inter web font is loaded, and replaces dates with a fixed one. Polaris text has no box of its own, so masking can't cover it.
 
-When a change is intended, or when Shopify updates Polaris (it loads from Shopify's CDN, so its look can change without a change here):
+**CI is the reference.** GitHub's Ubuntu runners render the committed images `tests/ui/visual.spec.ts-snapshots/*-ci.png`. Other machines can render text differently: this development container has Inter installed as a system font, which the browser uses instead of Shopify's web font, with slightly different glyph widths (2–4 % of pixels). So other machines compare against their own `*-local.png` images. Those are created on the first run and not committed.
 
-```bash
-pnpm test:visual:update    # rewrites the images
-```
+When a page changes on purpose, or when Shopify updates Polaris (it loads from Shopify's CDN, so its look can change without a change here):
 
-Then look at every changed image before committing it. A changed image is a review item, not a formality.
+1. Push. The visual test fails in CI, and the Playwright report artifact holds `<page>-actual.png` for each changed page.
+2. Look at every changed image.
+3. Commit the correct ones as `<page>-<desktop|mobile>-ci.png`.
+
+Locally, run `pnpm test:visual:update` to refresh your own `*-local.png` images. A changed image is a review item, not a formality.
 
 ## Running
 

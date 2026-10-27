@@ -46,6 +46,13 @@ export default defineConfig({
   retries: 0,
   timeout: 60_000,
   expect: { timeout: 10_000 },
+  // Screenshot comparisons: CI (GitHub's Ubuntu runners) is the reference.
+  // Its images are committed (*-ci.png). Other machines can render text
+  // differently (for example with Inter installed as a system font), so they
+  // compare against their own images (*-local.png, not committed), created
+  // on the first run.
+  snapshotPathTemplate: `{testDir}/{testFileName}-snapshots/{arg}-{projectName}-${process.env.CI ? "ci" : "local"}{ext}`,
+  updateSnapshots: process.env.CI ? "none" : "missing",
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : [["list"]],
   use: {
     baseURL: UI_ENV.appUrl,

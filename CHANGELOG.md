@@ -37,9 +37,13 @@
 - AI cost limits: daily cap per shop, platform-wide daily cap, maximum characters per interactive request, and request rate limits per staff member and per shop (Redis token buckets). Usage today is shown in the editor and Settings.
 - SEO: checks for SEO titles and descriptions (length by display width, incl. CJK; unchanged from the source), a "Search engine listing" section in the editor with live counters and a search result preview, "Translate SEO fields only" in the editor, and SEO-only bulk jobs. Readable names for quality warnings in the editor and Review.
 - Translation coverage report: a background scan of products and collections per language (no AI, no writes) with translated/outdated/missing counts by content, SEO and URL handles, SEO findings, duplicate SEO titles, items with the most gaps, and buttons to translate the gaps or only SEO fields.
+- Jobs and Review: pagination, filters (status, language, content type, field group, only with warnings) and search on Review.
+- Performance test suite (`pnpm test:performance`, in CI): fuzzy memory search with 100,000 entries.
 - Phase 0 documentation set.
 
 ### Fixed
+- Fuzzy memory search couldn't use its index under row-level security and scanned the whole memory (446 ms at 100,000 entries); it now uses a shop + trigram index through a narrow security definer function (37 ms median).
+- Review search treated `%` and `_` as wildcards.
 - Bulk jobs with automatic publishing published results with quality warnings; these now go to Review. Jobs also stop publishing when the merchant switches back to review mode.
 - Errors from memory suggestions are shown in the editor.
 - Re-saving an outdated translation unchanged now requires an explicit "still correct" confirmation instead of being silently skipped.

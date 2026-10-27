@@ -1,16 +1,25 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { listJobsForShop } from "../.server/jobs/bulk-jobs";
+import { listJobsPage } from "../.server/jobs/bulk-jobs";
+import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { JOB_STATUS_LABELS, jobProgress } from "../lib/job-display";
 import { RESOURCE_KINDS } from "../lib/resource-kinds";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { shop } = await requireShop(request);
-  const jobs = await listJobsForShop(shop.id, { take: 50 });
+  const { admin, shop } = await requireShop(request);
+  const url = new URL(request.url);
+  const q = (name: string) => url.searchParams.get(name) || null;
+  const filter = { status: q("status"), locale: q("locale"), resourceType: q("type") };
+  const page = await listJobsPage(shop.id, { ...filter, cursor: q("after"), take: 25 });
+  const locales = (await fetchAndSyncShopLocales(admin, shop.id)).locales.filter((l) => !l.primary);
   return {
-    jobs: jobs.map((j) => ({
+    filter,
+    locales: locales.map((l) => ({ locale: l.locale, name: l.name })),
+    nextCursor: page.nextCursor,
+    isFirstPage: !q("after"),
+    jobs: page.jobs.map((j) => ({
       id: j.id,
       targetLocale: j.targetLocale,
       type: j.resourceType in RESOURCE_KINDS ? RESOURCE_KINDS[j.resourceType as keyof typeof RESOURCE_KINDS].label : j.resourceType,
@@ -22,12 +31,58 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Jobs() {
-  const { jobs } = useLoaderData<typeof loader>();
+  const { jobs, filter, locales, nextCursor, isFirstPage } = useLoaderData<typeof loader>();
+  const filtered = Boolean(filter.status || filter.locale || filter.resourceType);
+  const pageHref = (after: string | null) => {
+    const params = new URLSearchParams();
+    if (filter.status) params.set("status", filter.status);
+    if (filter.locale) params.set("locale", filter.locale);
+    if (filter.resourceType) params.set("type", filter.resourceType);
+    if (after) params.set("after", after);
+    const query = params.toString();
+    return query ? `/app/jobs?${query}` : "/app/jobs";
+  };
 
   return (
     <s-page heading="Translation jobs">
+      <s-section>
+        <Form method="get">
+          <s-stack direction="inline" gap="base" alignItems="end">
+            <s-select name="status" label="Status" value={filter.status ?? ""}>
+              <s-option value="">All</s-option>
+              <s-option value="active">Running</s-option>
+              <s-option value="completed">Completed</s-option>
+              <s-option value="failed">Stopped</s-option>
+              <s-option value="cancelled">Cancelled</s-option>
+            </s-select>
+            <s-select name="locale" label="Language" value={filter.locale ?? ""}>
+              <s-option value="">All languages</s-option>
+              {locales.map((l) => (
+                <s-option key={l.locale} value={l.locale}>
+                  {l.name}
+                </s-option>
+              ))}
+            </s-select>
+            <s-select name="type" label="Content" value={filter.resourceType ?? ""}>
+              <s-option value="">All</s-option>
+              <s-option value="PRODUCT">Products</s-option>
+              <s-option value="COLLECTION">Collections</s-option>
+            </s-select>
+            <s-button type="submit">Apply</s-button>
+            {filtered ? (
+              <s-button href="/app/jobs" variant="tertiary">
+                Clear
+              </s-button>
+            ) : null}
+          </s-stack>
+        </Form>
+      </s-section>
       <s-section padding="none">
-        {jobs.length === 0 ? (
+        {jobs.length === 0 && filtered ? (
+          <s-box padding="base">
+            <s-paragraph>No jobs match these filters.</s-paragraph>
+          </s-box>
+        ) : jobs.length === 0 ? (
           <s-box padding="base">
             <s-paragraph>
               No jobs yet. Start a bulk translation from the{" "}
@@ -71,6 +126,10 @@ export default function Jobs() {
           </s-table>
         )}
       </s-section>
+      <s-stack direction="inline" gap="base">
+        {!isFirstPage ? <s-button href={pageHref(null)}>First page</s-button> : null}
+        {nextCursor ? <s-button href={pageHref(nextCursor)}>Next page</s-button> : null}
+      </s-stack>
     </s-page>
   );
 }

@@ -26,6 +26,17 @@ export default defineConfig({
       },
       {
         test: {
+          name: "performance",
+          include: ["tests/performance/**/*.test.ts"],
+          env: testEnv,
+          globalSetup: ["tests/support/integration-global-setup.ts"],
+          fileParallelism: false,
+          hookTimeout: 180_000,
+          testTimeout: 120_000,
+        },
+      },
+      {
+        test: {
           name: "integration",
           include: ["tests/integration/**/*.test.ts"],
           env: testEnv,

@@ -61,6 +61,9 @@ Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop,
 
 ## 3. Row-level security (defense in depth)
 
+Exception: `TranslationMemory` has RLS enabled but not forced, so that the owner-defined `linguva_memory_fuzzy()` function can use the shop + trigram GIN index (see SECURITY_MODEL §5c). The runtime role is subject to RLS on every table.
+
+
 ```sql
 ALTER TABLE "TranslationEntry" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "TranslationEntry" FORCE ROW LEVEL SECURITY;

@@ -395,8 +395,9 @@ model TranslationMemory {
 
   @@unique([shopId, sourceLocale, targetLocale, market, sourceHash])
   @@index([shopId, sourceLocale, targetLocale, market])
-  // Trigram index for fuzzy matches (pg_trgm).
-  @@index([sourceText(ops: raw("gin_trgm_ops"))], type: Gin)
+  // Fuzzy matches: shop + trigram GIN index (btree_gin, pg_trgm), used by
+  // the linguva_memory_fuzzy() function (see its migration).
+  @@index([shopId(ops: raw("uuid_ops")), sourceText(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Glossary {

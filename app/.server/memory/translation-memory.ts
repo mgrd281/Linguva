@@ -151,28 +151,22 @@ export async function fuzzyMatches(
 ): Promise<FuzzyMatch[]> {
   const text = normalizeSegment(source);
   if (!text || text.length > MAX_SEGMENT_LENGTH) return [];
-  const threshold = options.threshold ?? 0.6;
+  // Below 0.3 matches are noise and the index can't narrow the search.
+  const threshold = Math.min(1, Math.max(0.3, options.threshold ?? 0.6));
   const limit = Math.min(options.limit ?? 3, 10);
   const minLength = Math.floor(text.length * 0.5);
   const maxLength = Math.ceil(text.length * 1.5);
   const market = context.market ?? "";
   return withTenant(
     context.shopId,
-    async (tx) => {
-      // `%` uses the GIN trigram index with this (transaction-local) threshold.
-      await tx.$executeRaw`SELECT set_config('pg_trgm.similarity_threshold', ${String(threshold)}, true)`;
-      return tx.$queryRaw<FuzzyMatch[]>`
-        SELECT "id", "sourceText", "targetText", "status", similarity("sourceText", ${text})::float8 AS "score"
-        FROM "TranslationMemory"
-        WHERE "shopId" = ${context.shopId}::uuid
-          AND "sourceLocale" = ${context.sourceLocale}
-          AND "targetLocale" = ${context.targetLocale}
-          AND "market" IN (${market}, '')
-          AND length("sourceText") BETWEEN ${minLength} AND ${maxLength}
-          AND "sourceText" % ${text}
-        ORDER BY "score" DESC, "status" ASC
-        LIMIT ${limit}`;
-    },
+    // The function applies the tenant from this transaction (see the
+    // memory_fuzzy_function migration), so the shop + trigram index is used.
+    (tx) => tx.$queryRaw<FuzzyMatch[]>`
+      SELECT "id", "sourceText", "targetText", "status", "score"
+      FROM linguva_memory_fuzzy(
+        ${context.sourceLocale}, ${context.targetLocale}, ${market}, ${text},
+        ${minLength}::int, ${maxLength}::int, ${threshold}::real, ${limit}::int
+      )`,
     client,
   );
 }

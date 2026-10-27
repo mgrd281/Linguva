@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
 import type { SegmentPair } from "../memory/alignment";
@@ -113,6 +113,95 @@ export async function listPendingDrafts(
       }),
     client,
   );
+}
+
+/** Escapes LIKE wildcards; Prisma's `contains` passes them through. */
+export function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+export interface DraftPageFilter {
+  locale?: string | null;
+  jobId?: string | null;
+  /** "seo", "handle" or "content". */
+  group?: string | null;
+  resourceType?: string | null;
+  /** Only drafts with quality warnings. */
+  flagged?: boolean;
+  /** Text in the item title, source or translation (max. 100 characters). */
+  search?: string | null;
+  /** Id of the last draft of the previous page. */
+  cursor?: string | null;
+  take?: number;
+}
+
+const SEO_KEYS_LIST = ["meta_title", "meta_description"];
+const GID_PREFIX: Record<string, string> = { PRODUCT: "gid://shopify/Product/", COLLECTION: "gid://shopify/Collection/" };
+
+/** One page of pending drafts with filters and search, plus the matching total. */
+export async function searchPendingDrafts(shopId: string, filter: DraftPageFilter = {}, client: PrismaClient = defaultClient) {
+  const take = Math.min(Math.max(filter.take ?? 50, 1), MAX_DRAFTS_PER_ACTION);
+  const search = filter.search?.trim().slice(0, 100);
+  const pattern = search ? escapeLike(search) : null;
+  const where: Prisma.TranslationDraftWhereInput = {
+    shopId,
+    status: "PENDING",
+    ...(filter.locale ? { locale: filter.locale } : {}),
+    ...(filter.jobId && UUID.test(filter.jobId) ? { jobId: filter.jobId } : {}),
+    ...(filter.group === "seo"
+      ? { key: { in: SEO_KEYS_LIST } }
+      : filter.group === "handle"
+        ? { key: "handle" }
+        : filter.group === "content"
+          ? { key: { notIn: [...SEO_KEYS_LIST, "handle"] } }
+          : {}),
+    ...(filter.resourceType && GID_PREFIX[filter.resourceType]
+      ? { resourceGid: { startsWith: GID_PREFIX[filter.resourceType] } }
+      : {}),
+    ...(filter.flagged ? { NOT: [{ issues: { equals: Prisma.DbNull } }, { issues: { equals: [] } }] } : {}),
+    ...(pattern
+      ? {
+          OR: [
+            { resourceTitle: { contains: pattern, mode: "insensitive" } },
+            { sourceValue: { contains: pattern, mode: "insensitive" } },
+            { value: { contains: pattern, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+  const cursor = filter.cursor && UUID.test(filter.cursor) ? filter.cursor : null;
+  const [rows, total] = await withTenant(
+    shopId,
+    (tx) =>
+      Promise.all([
+        tx.translationDraft.findMany({
+          where,
+          orderBy: [{ resourceGid: "asc" }, { locale: "asc" }, { key: "asc" }, { id: "asc" }],
+          take: take + 1,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        }),
+        tx.translationDraft.count({ where }),
+      ]),
+    client,
+  );
+  return { drafts: rows.slice(0, take), nextCursor: rows.length > take ? rows[take - 1]!.id : null, total };
+}
+
+/** Languages that have pending drafts, for the review filter. */
+export async function listDraftLocales(shopId: string, client: PrismaClient = defaultClient): Promise<string[]> {
+  const rows = await withTenant(
+    shopId,
+    (tx) =>
+      tx.translationDraft.findMany({
+        where: { shopId, status: "PENDING" },
+        distinct: ["locale"],
+        select: { locale: true },
+        orderBy: { locale: "asc" },
+        take: 50,
+      }),
+    client,
+  );
+  return rows.map((r) => r.locale);
 }
 
 export async function countPendingDrafts(shopId: string, client: PrismaClient = defaultClient) {

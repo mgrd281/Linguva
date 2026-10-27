@@ -28,6 +28,7 @@
     "build:worker": "esbuild worker/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=build/worker/index.js",
     "worker": "LOG_SERVICE=linguva-worker node build/worker/index.js",
     "test:security": "vitest run --project security",
+    "test:performance": "vitest run --project performance",
     "test:live": "vitest run --config vitest.live.config.ts"
   },
   "type": "module",

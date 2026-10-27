@@ -85,6 +85,9 @@ jobs:
       - name: Security tests (tenant isolation, payloads, XSS)
         run: pnpm test:security
 
+      - name: Performance tests (fuzzy memory search at 100,000 entries)
+        run: pnpm test:performance
+
       - name: Build (web app and worker)
         run: pnpm build
 

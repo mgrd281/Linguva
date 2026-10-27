@@ -38,6 +38,7 @@ pnpm lint
 pnpm test               # unit tests
 pnpm test:integration   # needs PostgreSQL (scripts/db/init-roles.sql applied) and Redis
 pnpm test:security      # tenant isolation, payload and XSS tests (same services)
+pnpm test:performance   # fuzzy memory search with 100,000 entries (same services)
 pnpm test:live          # optional: guarded contract tests on a dev store (docs/DEV_STORE_SETUP.md), never in CI
 pnpm build
 pnpm graphql-codegen    # re-validates GraphQL operations against the Admin API schema

@@ -46,6 +46,17 @@ Status: **Phase 0 — proposal and threat model.** Controls listed here aren't i
 - Replay window: reject events whose `X-Shopify-Triggered-At` is older than a configurable window (the default must allow Shopify retries, which can take up to ~48h — **ASSUMPTION, verify**). Duplicates are still caught by the ID check.
 - Handlers only persist and enqueue. They respond within a few hundred ms.
 
+## 5c. RLS and indexes: the fuzzy search function
+
+PostgreSQL evaluates a query's own conditions after the RLS policy unless they are LEAKPROOF. Trigram (`%`) and `ILIKE` operators aren't, so under RLS no index can serve them. For translation memory this made fuzzy search scan all of a shop's entries.
+
+`linguva_memory_fuzzy()` (migration `20261027180000_memory_fuzzy_function`) is the one, deliberate exception:
+
+- `SECURITY DEFINER`, owned by the migration role, with a fixed `search_path`; `EXECUTE` revoked from PUBLIC and granted only to `linguva_app`.
+- It takes **no shop argument**. The tenant comes from `current_setting('app.shop_id')`, the same transaction setting the RLS policy uses, so a caller can't choose another shop. Without a tenant it returns nothing.
+- To run as the owner without RLS, `TranslationMemory` has RLS enabled but not forced. The runtime role stays fully under RLS for every direct query; only the owner (migrations) isn't forced.
+- Covered by the security suite: no rows without a tenant, no rows of another tenant, the function's attributes, and RLS still on for the table.
+
 ## 5a. AI cost and abuse limits (implemented, tested)
 
 | Control | Where | Behaviour |

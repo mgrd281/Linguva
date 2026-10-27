@@ -4,13 +4,14 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import { useRef } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { Form, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import {
   approveDrafts,
   countPendingDrafts,
-  listPendingDrafts,
+  listDraftLocales,
+  searchPendingDrafts,
   MAX_DRAFTS_PER_ACTION,
   rejectDrafts,
 } from "../.server/review/drafts";
@@ -21,13 +22,25 @@ import { issueLabel } from "../lib/issue-labels";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { shop } = await requireShop(request);
   const url = new URL(request.url);
-  const locale = url.searchParams.get("locale") ?? undefined;
-  const jobId = url.searchParams.get("job") ?? undefined;
-  const drafts = await listPendingDrafts(shop.id, { locale, jobId, take: 50 });
+  const q = (name: string) => url.searchParams.get(name) || null;
+  const filter = {
+    locale: q("locale"),
+    jobId: q("job"),
+    group: q("group"),
+    resourceType: q("type"),
+    flagged: q("flagged") === "1",
+    search: q("q"),
+  };
+  const page = await searchPendingDrafts(shop.id, { ...filter, cursor: q("after"), take: 50 });
+  const locales = await listDraftLocales(shop.id);
   return {
     total: await countPendingDrafts(shop.id),
-    filter: { locale: locale ?? null, jobId: jobId ?? null },
-    drafts: drafts.map((d) => ({
+    matching: page.total,
+    filter,
+    locales,
+    nextCursor: page.nextCursor,
+    isFirstPage: !q("after"),
+    drafts: page.drafts.map((d) => ({
       id: d.id,
       href: editorPath(d.resourceGid, d.locale),
       title: d.resourceTitle ?? "(untitled)",
@@ -68,6 +81,21 @@ export default function Review() {
   const busy = fetcher.state !== "idle";
   const result = fetcher.data;
   const formRef = useRef<HTMLFormElement>(null);
+  const filtered = Boolean(
+    data.filter.search || data.filter.locale || data.filter.group || data.filter.resourceType || data.filter.flagged,
+  );
+  const pageHref = (after: string | null) => {
+    const params = new URLSearchParams();
+    if (data.filter.jobId) params.set("job", data.filter.jobId);
+    if (data.filter.search) params.set("q", data.filter.search);
+    if (data.filter.locale) params.set("locale", data.filter.locale);
+    if (data.filter.group) params.set("group", data.filter.group);
+    if (data.filter.resourceType) params.set("type", data.filter.resourceType);
+    if (data.filter.flagged) params.set("flagged", "1");
+    if (after) params.set("after", after);
+    const query = params.toString();
+    return query ? `/app/review?${query}` : "/app/review";
+  };
   const submit = (intent: "approve" | "reject") => {
     const form = formRef.current;
     if (!form) return;
@@ -98,6 +126,40 @@ export default function Review() {
         <s-banner tone="info" heading="Drafts rejected">
           <s-paragraph>{result.count} draft(s) discarded. They won&apos;t be published.</s-paragraph>
         </s-banner>
+      ) : null}
+
+      {data.total > 0 ? (
+        <s-section>
+          <Form method="get">
+            {data.filter.jobId ? <input type="hidden" name="job" value={data.filter.jobId} /> : null}
+            <s-stack direction="inline" gap="base" alignItems="end">
+              <s-search-field name="q" label="Search" placeholder="Title, original or translation" value={data.filter.search ?? ""} />
+              <s-select name="locale" label="Language" value={data.filter.locale ?? ""}>
+                <s-option value="">All languages</s-option>
+                {data.locales.map((l) => (
+                  <s-option key={l} value={l}>
+                    {l}
+                  </s-option>
+                ))}
+              </s-select>
+              <s-select name="group" label="Fields" value={data.filter.group ?? ""}>
+                <s-option value="">All fields</s-option>
+                <s-option value="content">Content</s-option>
+                <s-option value="seo">Search engine listing</s-option>
+                <s-option value="handle">URL handles</s-option>
+              </s-select>
+              <s-select name="type" label="Type" value={data.filter.resourceType ?? ""}>
+                <s-option value="">Products and collections</s-option>
+                <s-option value="PRODUCT">Products</s-option>
+                <s-option value="COLLECTION">Collections</s-option>
+              </s-select>
+              <s-checkbox name="flagged" value="1" label="Only with warnings" {...(data.filter.flagged ? { checked: true } : {})} />
+              <s-button type="submit">Apply</s-button>
+              {filtered ? <s-button href={data.filter.jobId ? `/app/review?job=${data.filter.jobId}` : "/app/review"} variant="tertiary">Clear</s-button> : null}
+            </s-stack>
+          </Form>
+          {filtered ? <s-paragraph>{data.matching} matching.</s-paragraph> : null}
+        </s-section>
       ) : null}
 
       {data.drafts.length ? (
@@ -134,6 +196,11 @@ export default function Review() {
           </s-stack>
         </fetcher.Form>
       ) : null}
+
+      <s-stack direction="inline" gap="base">
+        {!data.isFirstPage ? <s-button href={pageHref(null)}>First page</s-button> : null}
+        {data.nextCursor ? <s-button href={pageHref(data.nextCursor)}>Next page</s-button> : null}
+      </s-stack>
     </s-page>
   );
 }

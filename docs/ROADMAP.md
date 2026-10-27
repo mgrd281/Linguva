@@ -38,6 +38,8 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M7 | AI cost limits: daily cap per shop, platform-wide daily cap, per-request size cap, per-user and per-shop request rate limits (Redis) | Implemented, Tested (integration with real Redis/PostgreSQL incl. concurrency, security suite) |
 | M5 | Draft protection: publishing only while automatic publishing is still enabled; flagged results always go to Review | Implemented, Tested (security suite, mutation-checked) |
 | M6 | SEO and Markets plan (SEO_ARCHITECTURE.md) | Written |
+| M5 | Jobs and Review: keyset pagination, filters and search | Implemented, Tested (integration incl. 20,000 drafts, cross-shop cursor) |
+| M8 | Fuzzy memory search at 100,000 entries: shop + trigram index via a hardened SECURITY DEFINER function | Implemented, Tested (performance suite in CI, security suite) |
 | M6 | Coverage report (SEO S5): background scan per language and type, counts by field group, SEO findings, duplicate SEO titles, worst items, "translate gaps" / "SEO only" actions | Implemented, Tested (unit, integration incl. BullMQ worker, security: isolation and no stored text; mutation-checked). Not verified on a dev store |
 | M6 | SEO S1: SEO title/description checks (width-based limits, untranslated), editor "Search engine listing" with live counters and result preview, "SEO fields only" AI and bulk jobs | Implemented, Tested (unit, integration, mutation-checked). Not verified on a dev store |
 | — | CI on GitHub | Implemented, green on the first push |
@@ -109,11 +111,12 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | ID | Issue | Severity | Plan |
 |---|---|---|---|
 | O1 | No dev store connected; nothing verified live | High | Owner provides store and credentials (DEV_STORE_SETUP §1), then `pnpm test:live` |
-| O2 | Fuzzy memory search measured at ~130 ms for 10k entries per shop; 100k+ entries may exceed 1 s | Medium | Benchmark in M8; limit candidates by length band; per-shop partial index if needed |
+| O2 | ~~Fuzzy memory search slow at scale~~ | Fixed | Under RLS no index could serve the trigram operator (not LEAKPROOF), so every search scanned the shop's whole memory (446 ms at 100k). Now a hardened SECURITY DEFINER function uses a shop + trigram GIN index: median 37 ms, p95 49 ms, recall 10/10 at 100,000 entries (performance test in CI) |
 | O3 | ~~No per-user rate limit on interactive AI endpoints~~ | Fixed | Request limits per user and shop, daily and platform caps (SECURITY_MODEL §5a) |
 | O4 | Metafields, metaobjects, pages, articles and Markets are not part of jobs or editors | Medium | After live verification; Markets per SEO_ARCHITECTURE S4 |
 | O5 | Deleting a translation from the UI isn't supported (`translationsRemove` only in live tests) | Low | Editor "remove translation" with revision |
-| O6 | Review page shows 50 drafts per filter, jobs page 50 jobs; no pagination | Low | Keyset pagination |
+| O6 | ~~No pagination on Review and Jobs~~ | Fixed | Keyset pagination, filters (status, language, type, field group, warnings) and search (wildcards escaped) |
+| O9 | Search on Review (ILIKE) can't use an index under RLS either | Low | Fine at 20,000 drafts (tested). Revisit with the same function approach if shops exceed ~100k pending drafts |
 | O7 | Rollback after a source change is impossible (Shopify accepts only the current digest) | By design | Shown in the UI |
 | O8 | The repository is public | Medium | Owner: consider making it private; set `main` as default branch and protect it |
 

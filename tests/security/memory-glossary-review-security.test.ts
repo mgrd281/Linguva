@@ -50,6 +50,8 @@ describe("translation memory isolation", () => {
     await storeMemory(ctx(a.id), [{ source: "Secret product line launch text", target: "Geheimer Text" }], "APPROVED", app);
     expect((await lookupExact(ctx(b.id), ["Secret product line launch text"], { allowMachine: true }, app)).size).toBe(0);
     expect(await fuzzyMatches(ctx(b.id), "Secret product line launch texts", { threshold: 0.1 }, app)).toEqual([]);
+    // Positive control: the same search finds the entry for its own shop.
+    expect(await fuzzyMatches(ctx(a.id), "Secret product line launch texts", { threshold: 0.1 }, app)).toHaveLength(1);
     expect(await listMemory(b.id, { search: "Secret" }, app)).toEqual([]);
     // Shop A still sees its own entry.
     expect((await lookupExact(ctx(a.id), ["Secret product line launch text"], { allowMachine: true }, app)).size).toBe(1);
@@ -170,5 +172,46 @@ describe("review isolation", () => {
     await twoShops();
     await expect(app.$executeRawUnsafe(`DELETE FROM "TranslationDraft"`)).rejects.toThrow(/permission denied/);
     await expect(app.$executeRawUnsafe(`DELETE FROM "TranslationRevision"`)).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("fuzzy search function (security definer)", () => {
+  it("returns nothing without a tenant, and only the current tenant's entries with one", async () => {
+    const { a, b } = await twoShops();
+    await storeMemory(ctx(a.id), [{ source: "Waterproof hiking jacket for summer", target: "x" }], "APPROVED", app);
+    // Called directly by the runtime role, outside withTenant.
+    const none = await app.$queryRaw<unknown[]>`
+      SELECT * FROM linguva_memory_fuzzy('en', 'de', '', 'Waterproof hiking jacket for summer', 0, 1000, 0.3, 10)`;
+    expect(none).toEqual([]);
+    const asB = await withTenant(
+      b.id,
+      (tx) => tx.$queryRaw<unknown[]>`
+        SELECT * FROM linguva_memory_fuzzy('en', 'de', '', 'Waterproof hiking jacket for summer', 0, 1000, 0.3, 10)`,
+      app,
+    );
+    expect(asB).toEqual([]);
+    const asA = await withTenant(
+      a.id,
+      (tx) => tx.$queryRaw<unknown[]>`
+        SELECT * FROM linguva_memory_fuzzy('en', 'de', '', 'Waterproof hiking jacket for summer', 0, 1000, 0.3, 10)`,
+      app,
+    );
+    expect(asA).toHaveLength(1);
+  });
+
+  it("is a narrow, hardened definer function and the table stays under RLS", async () => {
+    const [fn] = await ownerDb.$queryRaw<Array<{ secdef: boolean; config: string[] | null; public_exec: boolean }>>`
+      SELECT p.prosecdef AS secdef, p.proconfig AS config,
+             has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec
+      FROM pg_proc p WHERE p.proname = 'linguva_memory_fuzzy'`;
+    expect(fn).toMatchObject({ secdef: true, public_exec: false });
+    expect(fn!.config).toContain("search_path=public, pg_temp");
+    const [table] = await ownerDb.$queryRaw<Array<{ rls: boolean }>>`
+      SELECT relrowsecurity AS rls FROM pg_class WHERE relname = 'TranslationMemory'`;
+    expect(table!.rls).toBe(true);
+    // The runtime role reading the table directly is still filtered by RLS.
+    const { a } = await twoShops();
+    await storeMemory(ctx(a.id), [{ source: "Red", target: "Rot" }], "APPROVED", app);
+    expect(await app.translationMemory.count()).toBe(0);
   });
 });

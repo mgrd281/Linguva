@@ -95,21 +95,51 @@ export async function getJobForShop(
   );
 }
 
-export async function listJobsForShop(
-  shopId: string,
-  options: { take?: number } = {},
-  client: PrismaClient = defaultClient,
-) {
-  return withTenant(
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const JOB_STATUS_FILTERS = {
+  active: ["PENDING", "DISCOVERING", "RUNNING"],
+  completed: ["COMPLETED"],
+  failed: ["FAILED"],
+  cancelled: ["CANCELLED"],
+} as const satisfies Record<string, readonly TranslationJob["status"][]>;
+export type JobStatusFilter = keyof typeof JOB_STATUS_FILTERS;
+
+export interface JobPageFilter {
+  status?: string | null;
+  locale?: string | null;
+  resourceType?: string | null;
+  /** Id of the last job of the previous page. */
+  cursor?: string | null;
+  take?: number;
+}
+
+/**
+ * One page of a shop's jobs, newest first, with optional filters. Keyset
+ * pagination (cursor = last job id), so pages stay fast and stable while
+ * new jobs are added.
+ */
+export async function listJobsPage(shopId: string, filter: JobPageFilter = {}, client: PrismaClient = defaultClient) {
+  const take = Math.min(Math.max(filter.take ?? 25, 1), 100);
+  const status = filter.status && filter.status in JOB_STATUS_FILTERS ? JOB_STATUS_FILTERS[filter.status as JobStatusFilter] : null;
+  const cursor = filter.cursor && UUID_RE.test(filter.cursor) ? filter.cursor : null;
+  const rows = await withTenant(
     shopId,
     (tx) =>
       tx.translationJob.findMany({
-        where: { shopId },
-        orderBy: { createdAt: "desc" },
-        take: options.take ?? 25,
+        where: {
+          shopId,
+          ...(status ? { status: { in: [...status] } } : {}),
+          ...(filter.locale ? { targetLocale: filter.locale } : {}),
+          ...(filter.resourceType && isBulkResourceType(filter.resourceType) ? { resourceType: filter.resourceType } : {}),
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: take + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       }),
     client,
   );
+  return { jobs: rows.slice(0, take), nextCursor: rows.length > take ? rows[take - 1]!.id : null };
 }
 
 export async function listProblemItems(

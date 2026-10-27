@@ -2,8 +2,8 @@
  * Translation editor UI shared by the product and collection pages. The
  * route supplies the loader and action (see .server/translation/resource-editor).
  */
-import { useState } from "react";
-import { Form, useFetcher, useLoaderData } from "react-router";
+import { useEffect, useState } from "react";
+import { Form, useBlocker, useFetcher, useLoaderData } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
 import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
@@ -70,6 +70,10 @@ export function ResourceTranslationEditor() {
   const typed = typedState.base === ai ? typedState.values : {};
   const fieldByKey = new Map(data.fields.map((f) => [f.key, f]));
   const currentValue = (key: string) => typed[key] ?? ai?.drafts[key] ?? fieldByKey.get(key)?.translation ?? "";
+  // Right-to-left languages are typed right to left. URL handles stay left to
+  // right; HTML follows its first letter (usually a tag, so left to right).
+  const textDirection = (field: { key: string; type: string }): { dir?: "rtl" | "auto" } =>
+    !data.target.rtl || field.key === "handle" ? {} : { dir: field.type === "HTML" ? "auto" : "rtl" };
   const onFormInput = (event: { target: EventTarget | null }) => {
     const el = event.target as (Element & { value?: string }) | null;
     const name = el?.getAttribute?.("name");
@@ -78,6 +82,28 @@ export function ResourceTranslationEditor() {
       setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), [key]: el.value! } }));
     }
   };
+  // Typed text or AI drafts that differ from what is published would be lost
+  // by leaving the page: ask first (in-app navigation and reloads).
+  const unpublished =
+    !saving &&
+    [...new Set([...Object.keys(typed), ...Object.keys(ai?.drafts ?? {})])].some(
+      (key) => currentValue(key) !== (fieldByKey.get(key)?.translation ?? ""),
+    );
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      unpublished && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search),
+  );
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    window.scrollTo({ top: 0 });
+    document.getElementById("editor-stay")?.focus();
+  }, [blocker.state]);
+  useEffect(() => {
+    if (!unpublished) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unpublished]);
   const pageHref = (page: number) => {
     const params = new URLSearchParams({ locale: data.target.locale, page: String(page) });
     if (data.paging?.query) params.set("q", data.paging.query);
@@ -90,6 +116,20 @@ export function ResourceTranslationEditor() {
       <s-link slot="breadcrumb-actions" href={`${data.kind.path}?locale=${encodeURIComponent(data.target.locale)}`}>
         {data.kind.label}
       </s-link>
+
+      {blocker.state === "blocked" ? (
+        <s-banner tone="warning" heading="Leave without publishing?">
+          <s-paragraph>Your changes to this translation aren&apos;t published yet. They will be lost if you leave.</s-paragraph>
+          <s-stack direction="inline" gap="base">
+            <s-button id="editor-stay" variant="primary" onClick={() => blocker.reset()}>
+              Stay on this page
+            </s-button>
+            <s-button tone="critical" onClick={() => blocker.proceed()}>
+              Leave without publishing
+            </s-button>
+          </s-stack>
+        </s-banner>
+      ) : null}
 
       {data.ai.available && !data.ai.consent ? (
         <s-banner tone="info" heading="Allow AI translation">
@@ -323,26 +363,28 @@ export function ResourceTranslationEditor() {
             <s-text color="subdued">{data.sourceName}</s-text>
             <s-paragraph>{field.source}</s-paragraph>
           </s-box>
-          {multiline ? (
-            <s-text-area
-              key={`${field.key}:${draft ?? "base"}`}
-              name={`value:${field.key}`}
-              label={data.target.name}
-              value={value}
-              rows={field.type === "HTML" ? 8 : 3}
-              {...(error ? { error } : {})}
-              {...(field.type === "HTML" ? { details: "HTML. Formatting must match the source." } : {})}
-            />
-          ) : (
-            <s-text-field
-              key={`${field.key}:${draft ?? "base"}`}
-              name={`value:${field.key}`}
-              label={data.target.name}
-              value={field.key === "handle" ? currentValue("handle") : value}
-              {...(error ? { error } : {})}
-              {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
-            />
-          )}
+          <div lang={data.target.locale} {...textDirection(field)}>
+            {multiline ? (
+              <s-text-area
+                key={`${field.key}:${draft ?? "base"}`}
+                name={`value:${field.key}`}
+                label={data.target.name}
+                value={value}
+                rows={field.type === "HTML" ? 8 : 3}
+                {...(error ? { error } : {})}
+                {...(field.type === "HTML" ? { details: "HTML. Formatting must match the source." } : {})}
+              />
+            ) : (
+              <s-text-field
+                key={`${field.key}:${draft ?? "base"}`}
+                name={`value:${field.key}`}
+                label={data.target.name}
+                value={field.key === "handle" ? currentValue("handle") : value}
+                {...(error ? { error } : {})}
+                {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
+              />
+            )}
+          </div>
           {field.key === "handle" ? (
             <s-stack direction="block" gap="small">
               <s-button

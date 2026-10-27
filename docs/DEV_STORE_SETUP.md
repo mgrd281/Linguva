@@ -2,7 +2,7 @@
 
 Status: **No development store is connected yet.** Nothing in this repository has run against a real Shopify store. All Shopify behaviour so far is tested against in-memory fakes (`tests/support/fake-admin.ts`, `tests/support/fake-store.ts`). Their assumptions were checked against the downloaded Admin API 2026-10 schema, but not against a live store.
 
-This document lists what the owner has to provide, how to run the guarded live contract tests, and the manual checks in the embedded admin.
+Installing the app itself with Shopify CLI is described step by step in SHOPIFY_CLI_SETUP.md. This document lists what the owner has to provide, how to run the guarded live contract tests, and the manual checks in the embedded admin.
 
 ## 1. What is missing (blocked on the owner)
 

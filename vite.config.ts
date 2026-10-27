@@ -1,6 +1,14 @@
+import { existsSync } from "node:fs";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig, type UserConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+
+// Local development (`shopify app dev`): load .env into process.env, where
+// the app's configuration is read. Values the Shopify CLI sets (API key,
+// secret, app URL, scopes) take precedence; production never reads .env.
+if (process.env.NODE_ENV !== "production" && existsSync(".env")) {
+  process.loadEnvFile(".env");
+}
 
 // Related: https://github.com/remix-run/remix/issues/2835#issuecomment-1144102176
 // Replace the HOST env var with SHOPIFY_APP_URL so that it doesn't break the Vite server.

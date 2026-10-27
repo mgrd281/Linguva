@@ -25,10 +25,13 @@ pnpm db:up                       # Docker: Postgres + Redis (creates roles and d
 # without Docker: psql -U postgres -f scripts/db/init-roles.sql
 cp .env.example .env             # then set TOKEN_ENCRYPTION_KEYS (see the comment in the file)
 pnpm db:migrate                  # runs migrations as the owner role
-pnpm exec prisma generate
-pnpm dev                         # shopify app dev: links the Partner app and opens the dev store
-pnpm build && pnpm worker        # background worker (needs REDIS_URL); use TRANSLATION_PROVIDER=mock without a DeepL key
+pnpm config:link                 # once: create or choose the Linguva development app
+pnpm preflight                   # checks the local setup (no Shopify calls)
+pnpm dev                         # shopify app dev on your development store
+pnpm worker:dev                  # second terminal: bulk jobs and coverage (needs REDIS_URL)
 ```
+
+Step by step, with scopes, webhooks and billing: [docs/SHOPIFY_CLI_SETUP.md](docs/SHOPIFY_CLI_SETUP.md). Use `TRANSLATION_PROVIDER=mock` without a DeepL key.
 
 ## Checks
 
@@ -89,6 +92,7 @@ docs/               architecture, security, billing, roadmap
 | [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) | Implemented / Tested Locally / Verified on Shopify, per feature |
 | [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) | Test cases on a development store, beta exit criteria, results log |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Progress, milestones, risks, decisions |
+| [docs/SHOPIFY_CLI_SETUP.md](docs/SHOPIFY_CLI_SETUP.md) | Install on a development store with Shopify CLI: setup, preflight, scopes, webhooks |
 | [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
 | [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
 | [docs/SECURITY_REVIEW_MEMORY_FUZZY.md](docs/SECURITY_REVIEW_MEMORY_FUZZY.md) | Security review of the fuzzy search function, roles and grants |

@@ -13,6 +13,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   AI_NOT_CONFIGURED: "AI translation isn't configured for this app yet.",
   CONSENT_REQUIRED: "Allow AI processing below before translating with AI.",
   QUOTA_EXCEEDED: "This month's AI translation allowance is used up.",
+  DAILY_LIMIT: "Today's AI translation allowance is used up. It resets at midnight UTC.",
+  PLATFORM_LIMIT: "AI translation is paused for today because of high demand. Please try again tomorrow.",
+  REQUEST_TOO_LARGE: "This is too much text for one request. Translate fewer fields at a time, or use bulk translation.",
+  RATE_LIMITED_USER: "You're translating very quickly. Please wait a moment and try again.",
+  RATE_LIMITED_SHOP: "Your team is sending many AI requests right now. Please wait a moment and try again.",
   PROVIDER_RETRYABLE: "The translation service is busy. Please try again in a moment.",
   PROVIDER_QUOTA: "The translation service quota is exhausted. Please contact support.",
   PROVIDER_AUTH: "The translation service rejected our credentials. Please contact support.",
@@ -38,13 +43,15 @@ export function ResourceTranslationEditor() {
   const memoryResult = memoryFetcher.data?.kind === "ai" ? memoryFetcher.data : null;
   const ai = filledFrom === "memory" ? memoryResult : aiResult;
   const restored = restoreFetcher.data?.kind === "restored" ? restoreFetcher.data.status : null;
-  const aiError = aiFetcher.data?.kind === "error" ? aiFetcher.data.code : null;
+  // Errors of the action that ran last (AI translation or memory suggestions).
+  const lastData = filledFrom === "memory" ? memoryFetcher.data : aiFetcher.data;
+  const actionError = lastData?.kind === "error" ? lastData : null;
   const saved = saveFetcher.data?.kind === "saved" ? saveFetcher.data.outcomes : null;
   const saveStatus = new Map(saved?.map((o) => [o.key, o]) ?? []);
   const translating = aiFetcher.state !== "idle";
   const saving = saveFetcher.state !== "idle";
   const machineKeys = data.fields.filter((f) => f.machine).map((f) => f.key);
-  const remaining = Math.max(0, data.ai.limit - data.ai.used);
+  const remaining = Math.max(0, Math.min(data.ai.limit - data.ai.used, data.ai.dailyLimit - data.ai.usedToday));
 
   return (
     <s-page heading={data.title}>
@@ -81,9 +88,17 @@ export function ResourceTranslationEditor() {
         </s-banner>
       ) : null}
 
-      {aiError ? (
-        <s-banner tone="critical" heading="AI translation failed">
-          <s-paragraph>{ERROR_MESSAGES[aiError] ?? "Something went wrong."}</s-paragraph>
+      {actionError ? (
+        <s-banner
+          tone={actionError.code.startsWith("RATE_LIMITED") ? "warning" : "critical"}
+          heading={filledFrom === "memory" ? "Memory suggestions failed" : "AI translation failed"}
+        >
+          <s-paragraph>
+            {ERROR_MESSAGES[actionError.code] ?? "Something went wrong."}
+            {"retryAfterSeconds" in actionError && actionError.retryAfterSeconds
+              ? ` Try again in ${actionError.retryAfterSeconds} s.`
+              : ""}
+          </s-paragraph>
         </s-banner>
       ) : null}
 
@@ -136,7 +151,7 @@ export function ResourceTranslationEditor() {
           </memoryFetcher.Form>
           <s-text color="subdued">
             {data.ai.available
-              ? `${remaining.toLocaleString()} of ${data.ai.limit.toLocaleString()} AI characters left this month`
+              ? `${remaining.toLocaleString()} AI characters available (${Math.max(0, data.ai.limit - data.ai.used).toLocaleString()} of ${data.ai.limit.toLocaleString()} left this month, at most ${data.ai.dailyLimit.toLocaleString()} per day)`
               : "AI translation isn't configured"}
           </s-text>
         </s-stack>

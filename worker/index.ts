@@ -3,7 +3,7 @@
  * Runs as its own process (`pnpm worker` / `node build/worker/index.js`).
  */
 import { unauthenticated } from "../app/shopify.server";
-import { getConfig } from "../app/.server/lib/config";
+import { aiUsageLimits, getConfig } from "../app/.server/lib/config";
 import { prisma } from "../app/.server/lib/db";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
@@ -21,11 +21,14 @@ async function main() {
   const connection = createRedis(config.REDIS_URL);
   const prefix = keyPrefix(config.NODE_ENV);
   const queues = createQueues(connection, prefix);
+  const limits = aiUsageLimits(config);
   const deps: JobDependencies = {
     prisma,
     adminFor: async (shopDomain) => (await unauthenticated.admin(shopDomain)).admin,
     provider: getTranslationProvider(),
-    monthlyLimit: config.AI_MONTHLY_CHAR_LIMIT,
+    monthlyLimit: limits.limit,
+    dailyLimit: limits.dailyLimit,
+    platformDailyLimit: limits.platformDailyLimit,
     keyPrefix: prefix,
     shopifyLimiter: new TokenBucket(connection, {
       capacity: config.SHOPIFY_JOB_BUCKET_SIZE,

@@ -257,6 +257,15 @@ model UsageLedger {
 
   @@unique([shopId, idempotencyKey])
   @@index([shopId, periodKey])
+  @@index([shopId, createdAt])
+}
+
+/// AI characters across all shops per UTC day: the platform's cost safety
+/// cap. Holds no tenant data, so it isn't under row-level security.
+model PlatformUsageDay {
+  day       DateTime @id @db.Date
+  chars     BigInt   @default(0)
+  updatedAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 enum TranslationJobStatus {

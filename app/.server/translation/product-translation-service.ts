@@ -32,6 +32,17 @@ export class AiConsentRequiredError extends Error {
   }
 }
 
+/** The request would send more text to the provider than one request may. */
+export class AiRequestTooLargeError extends Error {
+  constructor(
+    readonly chars: number,
+    readonly max: number,
+  ) {
+    super(`AI request too large (${chars} > ${max} characters)`);
+    this.name = "AiRequestTooLargeError";
+  }
+}
+
 export class ResourceNotFoundError extends Error {
   constructor() {
     super("Resource not found");
@@ -64,6 +75,10 @@ export async function aiTranslateResource(
     keys: readonly string[];
     provider: TranslationProvider;
     monthlyLimit: number;
+    /** Optional caps (see aiUsageLimits) and the largest single request. */
+    dailyLimit?: number;
+    platformDailyLimit?: number;
+    maxRequestChars?: number;
   },
   client: PrismaClient = defaultClient,
 ) {
@@ -85,6 +100,9 @@ export async function aiTranslateResource(
   );
 
   const prepared = await prepareTranslation({ fields, protect: context.glossary.protect, memory: context.memory });
+  if (input.maxRequestChars !== undefined && prepared.providerChars > input.maxRequestChars) {
+    throw new AiRequestTooLargeError(prepared.providerChars, input.maxRequestChars);
+  }
   const reservation = prepared.providerChars
     ? await reserveUsage(
         {
@@ -92,6 +110,8 @@ export async function aiTranslateResource(
           key: `ai:${randomUUID()}`,
           chars: prepared.providerChars,
           limit: input.monthlyLimit,
+          dailyLimit: input.dailyLimit,
+          platformDailyLimit: input.platformDailyLimit,
           provider: input.provider.id,
         },
         client,

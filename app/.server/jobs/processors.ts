@@ -36,6 +36,9 @@ export interface JobDependencies {
   adminFor(shopDomain: string): Promise<Admin>;
   provider: TranslationProvider | null;
   monthlyLimit: number;
+  /** Optional daily caps (shop and platform), see aiUsageLimits. */
+  dailyLimit?: number;
+  platformDailyLimit?: number;
   keyPrefix: string;
   shopifyLimiter?: Limiter;
   /** Resources per discovery page (default DISCOVERY_PAGE_SIZE). */
@@ -261,6 +264,8 @@ export async function processItem(
           key: `job-item:${item.id}:${attempt}`,
           chars: prepared.providerChars,
           limit: deps.monthlyLimit,
+          dailyLimit: deps.dailyLimit,
+          platformDailyLimit: deps.platformDailyLimit,
           provider: deps.provider.id,
         },
         deps.prisma,
@@ -294,40 +299,38 @@ export async function processItem(
     protectedSkipped: protectedKeys.length,
   };
 
-  if (job.publishMode === "DRAFT") {
-    // Review first: nothing reaches the storefront until approved.
-    const title = resource.content.find((c) => c.key === "title")?.value ?? null;
-    const drafted = await saveDrafts(
-      payload.shopId,
-      translated.map((o) => ({
-        jobId: job.id,
-        resourceGid: item.resourceGid,
-        resourceTitle: title,
-        locale: job.targetLocale,
-        key: o.key,
-        sourceDigest: fieldByKey.get(o.key)!.digest!,
-        sourceValue: fieldByKey.get(o.key)!.value ?? "",
-        value: o.value,
-        segmentPairs: o.segmentPairs ?? [],
-        issues: o.issues,
-        provider: result.provider,
-      })),
-      deps.prisma,
-    );
-    const status = drafted > 0 ? "SUCCEEDED" : "SKIPPED";
-    const errorCode = drafted > 0 ? (rejected ? "PARTIAL" : "DRAFTED") : "ALL_FIELDS_REJECTED";
-    await finishItem(
-      payload.shopId,
-      item.id,
-      { status, errorCode, fieldsTranslated: drafted, fieldsRejected: rejected, ...stats },
-      deps.prisma,
-    );
-    return { status, errorCode };
-  }
+  // Publishing needs automatic publishing on the job AND still on in the
+  // shop's settings: switching back to review stops running jobs publishing.
+  // Even then only results without quality warnings go live; flagged ones
+  // wait in Review.
+  const autoPublish = job.publishMode === "AUTO_PUBLISH" && settings.bulkPublishMode === "AUTO_PUBLISH";
+  const toPublish = autoPublish ? translated.filter((o) => o.issues.length === 0) : [];
+  const toDraft = autoPublish ? translated.filter((o) => o.issues.length > 0) : translated;
+
+  const title = resource.content.find((c) => c.key === "title")?.value ?? null;
+  const drafted = toDraft.length
+    ? await saveDrafts(
+        payload.shopId,
+        toDraft.map((o) => ({
+          jobId: job.id,
+          resourceGid: item.resourceGid,
+          resourceTitle: title,
+          locale: job.targetLocale,
+          key: o.key,
+          sourceDigest: fieldByKey.get(o.key)!.digest!,
+          sourceValue: fieldByKey.get(o.key)!.value ?? "",
+          value: o.value,
+          segmentPairs: o.segmentPairs ?? [],
+          issues: o.issues,
+          provider: result.provider,
+        })),
+        deps.prisma,
+      )
+    : 0;
 
   // Automatic publishing, explicitly enabled by the merchant. Output stays
   // unreviewed machine translation (not protected, MACHINE memory).
-  const saved = translated.length
+  const saved = toPublish.length
     ? await saveResourceTranslations(
         {
           admin,
@@ -335,7 +338,7 @@ export async function processItem(
           actorId: null,
           resourceId: item.resourceGid,
           locale: job.targetLocale,
-          edits: translated.map((o) => ({
+          edits: toPublish.map((o) => ({
             key: o.key,
             value: o.value,
             digest: fieldByKey.get(o.key)!.digest!,
@@ -350,13 +353,16 @@ export async function processItem(
     : [];
   const savedCount = saved.filter((s) => s.status === "saved").length;
   const notSaved = saved.length - savedCount;
+  const done = drafted + savedCount;
 
-  const status = savedCount > 0 ? "SUCCEEDED" : "SKIPPED";
+  const status = done > 0 ? "SUCCEEDED" : "SKIPPED";
   const errorCode =
-    savedCount > 0
+    done > 0
       ? rejected + notSaved > 0
         ? "PARTIAL"
-        : null
+        : drafted > 0
+          ? "DRAFTED"
+          : null
       : saved.some((s) => s.status === "conflict")
         ? "SOURCE_CHANGED"
         : "ALL_FIELDS_REJECTED";
@@ -366,7 +372,7 @@ export async function processItem(
     {
       status,
       errorCode,
-      fieldsTranslated: savedCount,
+      fieldsTranslated: done,
       fieldsRejected: rejected + notSaved,
       ...stats,
     },

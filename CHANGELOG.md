@@ -34,9 +34,12 @@
 - Collections: list with coverage, translation editor and bulk jobs, sharing the product code paths; Collections navigation entry.
 - Guarded live contract tests for a Shopify development store (`pnpm test:live`, never in CI) with a dev-store gate, deny list, fixture-only writes and cleanup; setup guide `docs/DEV_STORE_SETUP.md`.
 - SEO and Markets architecture plan (`docs/SEO_ARCHITECTURE.md`).
+- AI cost limits: daily cap per shop, platform-wide daily cap, maximum characters per interactive request, and request rate limits per staff member and per shop (Redis token buckets). Usage today is shown in the editor and Settings.
 - Phase 0 documentation set.
 
 ### Fixed
+- Bulk jobs with automatic publishing published results with quality warnings; these now go to Review. Jobs also stop publishing when the merchant switches back to review mode.
+- Errors from memory suggestions are shown in the editor.
 - Re-saving an outdated translation unchanged now requires an explicit "still correct" confirmation instead of being silently skipped.
 - Rejected drafts are no longer re-created by the next bulk job for the same source text.
 - Audit entries record the acting staff member from the session token.

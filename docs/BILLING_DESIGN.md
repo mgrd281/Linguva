@@ -19,6 +19,7 @@ Status: **Phase 0 — proposal.** Plan prices and limits are **assumptions** for
 | ENTERPRISE | private plan | negotiated | 20 | + custom limits, support SLA |
 
 - Characters = source characters sent to the provider after translation-memory hits, duplicate segments and glossary-only segments are removed (implemented: only `providerChars` is reserved). TM hits are free. That is a selling point and lowers our cost.
+- Cost safety (implemented): a daily cap per shop, a platform-wide daily cap on our provider cost, a per-request size cap and request rate limits per staff member and shop (SECURITY_MODEL §5a). Plans will set the per-shop values.
 - Overage (PRO and above, opt-in, with a merchant-set cap): usage-based meter via the App Events API, proposed at $40 per additional 1M characters.
 - Yearly option ≈ 2 months free.
 - Up to 8 public plans are allowed (VERIFIED). We use 4 public plans plus private plans.

@@ -25,6 +25,8 @@ describe("classifyError", () => {
     [new ItemPermanentError("Y"), { kind: "item-permanent", code: "Y" }],
     [new AiConsentRequiredError(), { kind: "job-stop", code: "CONSENT_REQUIRED" }],
     [new QuotaExceededError(1, 2, 2), { kind: "job-stop", code: "QUOTA_EXCEEDED" }],
+    [new QuotaExceededError(1, 2, 2, "daily"), { kind: "job-stop", code: "DAILY_LIMIT" }],
+    [new QuotaExceededError(1, 2, 2, "platform"), { kind: "job-stop", code: "PLATFORM_LIMIT" }],
     [new TranslationProviderError("deepl", "retryable", "x"), { kind: "retryable", code: "PROVIDER_UNAVAILABLE" }],
     [new TranslationProviderError("deepl", "retryable", "x", 429, 3000), { kind: "rate-limited", waitMs: 3000 }],
     [new TranslationProviderError("deepl", "quota", "x"), { kind: "job-stop", code: "PROVIDER_QUOTA" }],

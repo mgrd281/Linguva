@@ -24,6 +24,17 @@ const schema = z.object({
   DEEPL_API_URL: z.string().url().optional(),
   // Monthly AI character allowance per shop until plans are wired to billing.
   AI_MONTHLY_CHAR_LIMIT: z.coerce.number().int().positive().default(20_000),
+  // Daily cap per shop (UTC day); defaults to the monthly allowance.
+  AI_DAILY_CHAR_LIMIT: z.coerce.number().int().positive().optional(),
+  // Cost safety: AI characters across all shops per UTC day.
+  AI_PLATFORM_DAILY_CHAR_LIMIT: z.coerce.number().int().positive().default(100_000),
+  // Largest single interactive AI request (characters sent to the provider).
+  AI_MAX_CHARS_PER_REQUEST: z.coerce.number().int().positive().default(20_000),
+  // Interactive AI requests per minute, per staff member and per shop.
+  AI_USER_REQUESTS_PER_MINUTE: z.coerce.number().int().positive().default(10),
+  AI_SHOP_REQUESTS_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  // Translation memory suggestions per minute and staff member.
+  MEMORY_SUGGESTIONS_PER_MINUTE: z.coerce.number().int().positive().default(30),
   // "mock" returns marked pseudo-translations for development and tests.
   TRANSLATION_PROVIDER: z.enum(["deepl", "mock"]).default("deepl"),
   // Background jobs are disabled when no Redis is configured.
@@ -35,7 +46,20 @@ const schema = z.object({
 }).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock"), {
   message: "the mock translation provider can't be used in production",
   path: ["TRANSLATION_PROVIDER"],
+}).refine((c) => !(c.NODE_ENV === "production" && !c.REDIS_URL), {
+  // Rate limits must be shared by all app instances.
+  message: "is required in production (shared rate limits)",
+  path: ["REDIS_URL"],
 });
+
+/** The AI character limits applied to every reservation. */
+export function aiUsageLimits(config: AppConfig) {
+  return {
+    limit: config.AI_MONTHLY_CHAR_LIMIT,
+    dailyLimit: Math.min(config.AI_DAILY_CHAR_LIMIT ?? config.AI_MONTHLY_CHAR_LIMIT, config.AI_MONTHLY_CHAR_LIMIT),
+    platformDailyLimit: config.AI_PLATFORM_DAILY_CHAR_LIMIT,
+  };
+}
 
 export type AppConfig = z.infer<typeof schema>;
 

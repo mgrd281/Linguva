@@ -5,7 +5,7 @@ import type {
 } from "react-router";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { getConfig } from "../.server/lib/config";
+import { aiUsageLimits, getConfig } from "../.server/lib/config";
 import { getTranslationProvider } from "../.server/providers";
 import {
   ConfirmationRequiredError,
@@ -16,7 +16,7 @@ import {
   setReuseMachineMemory,
 } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
-import { getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
+import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { shop } = await requireShop(request);
@@ -31,6 +31,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     period: periodKey(),
     used: await getMonthlyUsage(shop.id),
     limit: getConfig().AI_MONTHLY_CHAR_LIMIT,
+    usedToday: await getDailyUsage(shop.id),
+    dailyLimit: aiUsageLimits(getConfig()).dailyLimit,
   };
 };
 
@@ -182,6 +184,10 @@ export default function Settings() {
         <s-paragraph>
           {data.used.toLocaleString()} of {data.limit.toLocaleString()} AI
           characters used ({percent}%).
+        </s-paragraph>
+        <s-paragraph>
+          Today: {data.usedToday.toLocaleString()} of {data.dailyLimit.toLocaleString()} characters
+          (the daily limit protects against unexpected costs and resets at midnight UTC).
         </s-paragraph>
         <s-paragraph>
           Text reused from your translation memory, repeated sentences and

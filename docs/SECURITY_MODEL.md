@@ -46,6 +46,26 @@ Status: **Phase 0 — proposal and threat model.** Controls listed here aren't i
 - Replay window: reject events whose `X-Shopify-Triggered-At` is older than a configurable window (the default must allow Shopify retries, which can take up to ~48h — **ASSUMPTION, verify**). Duplicates are still caught by the ID check.
 - Handlers only persist and enqueue. They respond within a few hundred ms.
 
+## 5a. AI cost and abuse limits (implemented, tested)
+
+| Control | Where | Behaviour |
+|---|---|---|
+| Monthly allowance per shop | `UsageLedger` reservation (advisory lock) | Request refused, bulk job stops with `QUOTA_EXCEEDED` |
+| Daily cap per shop (`AI_DAILY_CHAR_LIMIT`, never above the monthly allowance) | Same transaction | Refused / job stops with `DAILY_LIMIT`, resumable the next UTC day |
+| Platform cap per day across all shops (`AI_PLATFORM_DAILY_CHAR_LIMIT`, our provider cost) | `PlatformUsageDay`, conditional `UPDATE` in the reservation transaction | Refused / `PLATFORM_LIMIT`. Concurrency-tested: never overshoots |
+| Largest single interactive request (`AI_MAX_CHARS_PER_REQUEST`) | Before reservation | `REQUEST_TOO_LARGE`, no provider call |
+| Requests per minute per staff member and per shop (AI translate, memory suggestions) | Redis token buckets (shared by all instances; Redis required in production) | `RATE_LIMITED_USER` / `RATE_LIMITED_SHOP` with retry time; no quota used. Staff ids are hashed in Redis keys |
+
+`PlatformUsageDay` holds only a date and a number, so it isn't under RLS. The runtime role can read, insert and update it, but not delete.
+
+## 5b. No unintended publishing (implemented, tested)
+
+- Bulk jobs create drafts by default. Automatic publishing needs an explicit, recorded confirmation.
+- A job publishes only while automatic publishing is on for the job **and** still on in Settings. Switching back to review stops running jobs from publishing; their results become drafts.
+- Even with automatic publishing, results with quality warnings go to Review instead of the storefront.
+- The editor's AI and memory actions only fill the form. Publishing needs the merchant's save.
+- Approval needs explicit draft ids of the same shop with status PENDING; rejected, stale and other shops' drafts are never published.
+
 ## 6. Admin control center
 
 - Separate deployment and domain. Email + password (argon2id) **plus mandatory TOTP/WebAuthn**.

@@ -35,6 +35,8 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M5 | DeepL glossary API, TMX import/export, market-scoped publishing in jobs | Planned |
 | M4 | Collections: list with coverage, editor (shared with products), bulk jobs (`resourceType` COLLECTION) | Implemented, Tested (fake store). Not yet Verified |
 | M3 | Guarded live contract tests (`pnpm test:live`): dev-store gate (`plan.partnerDevelopment`), deny list, fixture-only writes with cleanup, mock provider; operations schema-validated in CI | Implemented; guard unit-tested. **Not run: no dev store connected (Blocked on owner)** |
+| M7 | AI cost limits: daily cap per shop, platform-wide daily cap, per-request size cap, per-user and per-shop request rate limits (Redis) | Implemented, Tested (integration with real Redis/PostgreSQL incl. concurrency, security suite) |
+| M5 | Draft protection: publishing only while automatic publishing is still enabled; flagged results always go to Review | Implemented, Tested (security suite, mutation-checked) |
 | M6 | SEO and Markets plan (SEO_ARCHITECTURE.md) | Planned. Implementation **Blocked** until the live checks pass |
 | — | CI on GitHub | Implemented, green on the first push |
 | — | SEO_ARCHITECTURE, DEV_STORE_SETUP | Written |
@@ -106,7 +108,7 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 |---|---|---|---|
 | O1 | No dev store connected; nothing verified live | High | Owner provides store and credentials (DEV_STORE_SETUP §1), then `pnpm test:live` |
 | O2 | Fuzzy memory search measured at ~130 ms for 10k entries per shop; 100k+ entries may exceed 1 s | Medium | Benchmark in M8; limit candidates by length band; per-shop partial index if needed |
-| O3 | No per-user rate limit on interactive app endpoints (AI translate, memory suggest); only the monthly quota bounds cost | Medium | Redis token bucket per shop and user, reusing `rate-limiter.ts` |
+| O3 | ~~No per-user rate limit on interactive AI endpoints~~ | Fixed | Request limits per user and shop, daily and platform caps (SECURITY_MODEL §5a) |
 | O4 | Metafields, metaobjects, pages, articles and Markets are not part of jobs or editors | Medium | After live verification; Markets per SEO_ARCHITECTURE S4 |
 | O5 | Deleting a translation from the UI isn't supported (`translationsRemove` only in live tests) | Low | Editor "remove translation" with revision |
 | O6 | Review page shows 50 drafts per filter, jobs page 50 jobs; no pagination | Low | Keyset pagination |

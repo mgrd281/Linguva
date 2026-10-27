@@ -4,7 +4,7 @@
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { data } from "react-router";
-import { getConfig } from "../lib/config";
+import { aiUsageLimits, getConfig } from "../lib/config";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { getTranslationProvider } from "../providers";
 import { TranslationProviderError } from "../providers/types";
@@ -13,11 +13,13 @@ import { requireShop } from "../shopify/require-shop";
 import { getTranslatableResource } from "../shopify/translations-api";
 import { fuzzyMatches } from "../memory/translation-memory";
 import { resolveGlossary } from "../glossary/glossary";
-import { getMonthlyUsage, QuotaExceededError } from "../usage/usage-ledger";
+import { getDailyUsage, getMonthlyUsage, QuotaExceededError } from "../usage/usage-ledger";
+import { getRequestLimiter, RequestRateLimitedError } from "../usage/request-limits";
 import { fieldLabel } from "../../lib/field-labels";
 import { RESOURCE_KINDS, resourceGid, type ResourceKind } from "../../lib/resource-kinds";
 import {
   AiConsentRequiredError,
+  AiRequestTooLargeError,
   aiTranslateResource,
   ResourceNotFoundError,
   saveResourceTranslations,
@@ -118,6 +120,8 @@ export async function loadEditorData(ctx: EditorContext) {
       consent: hasCurrentAiConsent(settings),
       used: await getMonthlyUsage(shopId),
       limit: config.AI_MONTHLY_CHAR_LIMIT,
+      usedToday: await getDailyUsage(shopId),
+      dailyLimit: aiUsageLimits(config).dailyLimit,
     },
   };
 }
@@ -135,7 +139,15 @@ export type EditorActionResult =
   | { kind: "restored"; status: string }
   | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string }> }
   | { kind: "consent" }
-  | { kind: "error"; code: string };
+  | { kind: "error"; code: string; retryAfterSeconds?: number };
+
+function rateLimited(error: RequestRateLimitedError) {
+  return {
+    kind: "error",
+    code: error.scope === "user" ? "RATE_LIMITED_USER" : "RATE_LIMITED_SHOP",
+    retryAfterSeconds: Math.max(1, Math.ceil(error.retryAfterMs / 1000)),
+  } satisfies EditorActionResult;
+}
 
 export async function runEditorAction(ctx: EditorContext, form: FormData) {
   const { admin, shopId, actorId, resourceId, target } = ctx;
@@ -149,8 +161,11 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
   if (intent === "ai-translate") {
     const provider = getTranslationProvider();
     if (!provider) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
-    const keys = form.getAll("key").map(String);
+    const keys = form.getAll("key").map(String).slice(0, 100);
     try {
+      await getRequestLimiter().consume(shopId, actorId, "ai-translate");
+      const config = getConfig();
+      const limits = aiUsageLimits(config);
       const result = await aiTranslateResource({
         admin,
         shopId,
@@ -158,7 +173,10 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
         targetLocale: target.locale,
         keys,
         provider,
-        monthlyLimit: getConfig().AI_MONTHLY_CHAR_LIMIT,
+        monthlyLimit: limits.limit,
+        dailyLimit: limits.dailyLimit,
+        platformDailyLimit: limits.platformDailyLimit,
+        maxRequestChars: config.AI_MAX_CHARS_PER_REQUEST,
       });
       const drafts: Record<string, string> = {};
       const rejected: Record<string, string> = {};
@@ -183,7 +201,12 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
       if (error instanceof AiConsentRequiredError) {
         return { kind: "error", code: "CONSENT_REQUIRED" } satisfies EditorActionResult;
       }
-      if (error instanceof QuotaExceededError) return { kind: "error", code: "QUOTA_EXCEEDED" } satisfies EditorActionResult;
+      if (error instanceof RequestRateLimitedError) return rateLimited(error);
+      if (error instanceof AiRequestTooLargeError) return { kind: "error", code: "REQUEST_TOO_LARGE" } satisfies EditorActionResult;
+      if (error instanceof QuotaExceededError) {
+        const code = { monthly: "QUOTA_EXCEEDED", daily: "DAILY_LIMIT", platform: "PLATFORM_LIMIT" }[error.scope];
+        return { kind: "error", code } satisfies EditorActionResult;
+      }
       if (error instanceof ResourceNotFoundError) throw new Response("Not found", { status: 404 });
       if (error instanceof TranslationProviderError) {
         return { kind: "error", code: `PROVIDER_${error.kind.toUpperCase()}` } satisfies EditorActionResult;
@@ -194,6 +217,12 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
 
   if (intent === "memory-suggest") {
     // Fuzzy matches are suggestions: they fill the form, never publish.
+    try {
+      await getRequestLimiter().consume(shopId, actorId, "memory-suggest");
+    } catch (error) {
+      if (error instanceof RequestRateLimitedError) return rateLimited(error);
+      throw error;
+    }
     const resource = await getTranslatableResource(admin, resourceId, target.locale);
     if (!resource) throw new Response("Not found", { status: 404 });
     const glossary = await resolveGlossary(shopId, target.locale);

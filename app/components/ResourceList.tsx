@@ -59,7 +59,7 @@ export function ResourceList() {
           </s-paragraph>
           <s-paragraph>
             {data.bulk.publishMode === "AUTO_PUBLISH"
-              ? "Automatic publishing is on: results that pass the quality checks go live immediately."
+              ? "Automatic publishing is on: results that pass the quality checks go live immediately; results with warnings wait in Review."
               : "Results wait in Review until you approve them."}
           </s-paragraph>
           <bulk.Form method="post">

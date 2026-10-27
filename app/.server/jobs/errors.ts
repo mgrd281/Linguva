@@ -49,7 +49,10 @@ export function classifyError(error: unknown): ErrorClass {
   if (error instanceof JobStopError) return { kind: "job-stop", code: error.code };
   if (error instanceof ItemPermanentError) return { kind: "item-permanent", code: error.code };
   if (error instanceof AiConsentRequiredError) return { kind: "job-stop", code: "CONSENT_REQUIRED" };
-  if (error instanceof QuotaExceededError) return { kind: "job-stop", code: "QUOTA_EXCEEDED" };
+  if (error instanceof QuotaExceededError) {
+    const code = { monthly: "QUOTA_EXCEEDED", daily: "DAILY_LIMIT", platform: "PLATFORM_LIMIT" }[error.scope];
+    return { kind: "job-stop", code };
+  }
 
   if (error instanceof TranslationProviderError) {
     switch (error.kind) {

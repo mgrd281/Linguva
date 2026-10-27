@@ -15,7 +15,29 @@ const TERMINAL_ITEM_STATUSES: TranslationJobItemStatus[] = [
   "CANCELLED",
 ];
 
-export const SUPPORTED_BULK_RESOURCE_TYPES = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"] as const;
+/**
+ * Resource types bulk jobs translate. Theme content, policies and
+ * notification templates are translated one by one with review
+ * (CONTENT_TYPES[...].bulk = false).
+ */
+export const SUPPORTED_BULK_RESOURCE_TYPES = [
+  "PRODUCT",
+  "COLLECTION",
+  "PAGE",
+  "ARTICLE",
+  "BLOG",
+  "SHOP",
+  "MENU",
+  "LINK",
+  "FILTER",
+  "PRODUCT_OPTION",
+  "PRODUCT_OPTION_VALUE",
+  "SELLING_PLAN_GROUP",
+  "SELLING_PLAN",
+  "METAOBJECT",
+  "DELIVERY_METHOD_DEFINITION",
+  "PAYMENT_GATEWAY",
+] as const;
 export type BulkResourceType = (typeof SUPPORTED_BULK_RESOURCE_TYPES)[number];
 
 export function isBulkResourceType(value: string): value is BulkResourceType {

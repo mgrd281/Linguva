@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "react-router";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { requireShop } from "../shopify/require-shop";
-import { listTranslatableResources } from "../shopify/translations-api";
+import { AccessDeniedError, isAccessDenied, listTranslatableResources } from "../shopify/translations-api";
 import { getTranslationProvider } from "../providers";
 import { getQueues } from "../queue/client";
 import { BackgroundJobsUnavailableError, startBulkJob } from "../jobs/start-job";
@@ -14,29 +14,52 @@ import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings"
 import { summarizeCoverage } from "../../lib/coverage";
 import { shopBilling } from "../billing/billing";
 import { allowedTargetLocales } from "../billing/subscription";
-import { numericId, RESOURCE_KINDS, type ResourceKind } from "../../lib/resource-kinds";
+import {
+  CONTENT_TYPES,
+  contentRef,
+  isContentType,
+  kindMeta,
+  numericId,
+  resourceTitle,
+  type TranslatableKind,
+} from "../../lib/resource-kinds";
+import { isBulkResourceType } from "../jobs/bulk-jobs";
 
-export async function loadResourceList(request: Request, kind: ResourceKind) {
+export async function loadResourceList(request: Request, kind: TranslatableKind) {
   const { admin, shop } = await requireShop(request);
-  const meta = RESOURCE_KINDS[kind];
+  const meta = kindMeta(kind);
   const url = new URL(request.url);
   const locales = await fetchAndSyncShopLocales(admin, shop.id);
   const targets = locales.locales.filter((l) => !l.primary);
-  const kindInfo = { label: meta.label, singular: meta.singular, plural: meta.plural, path: meta.path };
+  const caution = isContentType(kind) ? ((CONTENT_TYPES[kind] as { caution?: "legal" | "liquid" }).caution ?? null) : null;
+  const kindInfo = { label: meta.label, singular: meta.singular, plural: meta.plural, path: meta.path, caution, bulk: isBulkResourceType(kind) };
 
   const requested = url.searchParams.get("locale");
   const target = targets.find((l) => l.locale === requested) ?? targets[0];
   if (!target) {
-    return { kind: kindInfo, targets: [], target: null, items: [], nextCursor: null, isFirstPage: true, bulk: null };
+    return { kind: kindInfo, targets: [], target: null, items: [], nextCursor: null, isFirstPage: true, bulk: null, denied: null };
   }
 
   const after = url.searchParams.get("after");
-  const { resources, pageInfo } = await listTranslatableResources(admin, {
-    resourceType: kind,
-    locale: target.locale,
-    after,
-    first: 25,
-  });
+  let page: Awaited<ReturnType<typeof listTranslatableResources>>;
+  try {
+    page = await listTranslatableResources(admin, { resourceType: kind, locale: target.locale, after, first: 25 });
+  } catch (error) {
+    if (!(error instanceof AccessDeniedError) && !isAccessDenied(error)) throw error;
+    // An optional permission the merchant hasn't granted (yet).
+    const scope = isContentType(kind) ? CONTENT_TYPES[kind].scope : null;
+    return {
+      kind: kindInfo,
+      targets: targets.map((l) => ({ locale: l.locale, name: l.name })),
+      target: { locale: target.locale, name: target.name },
+      items: [],
+      nextCursor: null,
+      isFirstPage: true,
+      bulk: null,
+      denied: { scope },
+    };
+  }
+  const { resources, pageInfo } = page;
   const settings = await getShopSettings(shop.id);
   const billing = await shopBilling(admin, shop);
   const allowed = allowedTargetLocales(billing.entitlements, targets.map((l) => l.locale));
@@ -46,8 +69,9 @@ export async function loadResourceList(request: Request, kind: ResourceKind) {
     targets: targets.map((l) => ({ locale: l.locale, name: l.name })),
     target: { locale: target.locale, name: target.name },
     items: resources.map((r) => ({
-      id: numericId(r.resourceId),
-      title: r.content.find((c) => c.key === "title")?.value ?? "(untitled)",
+      // Content types (theme resources included) are addressed by an encoded GID.
+      id: isContentType(kind) ? contentRef(r.resourceId) : numericId(r.resourceId),
+      title: resourceTitle(kind, r.content),
       ...summarizeCoverage(r.content, r.translations),
     })),
     nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
@@ -61,13 +85,15 @@ export async function loadResourceList(request: Request, kind: ResourceKind) {
       planAllowsBulk: billing.entitlements.bulk,
       planAllowsLocale: allowed.includes(target.locale),
     },
+    denied: null,
   };
 }
 
-export async function runResourceListAction(request: Request, kind: ResourceKind) {
+export async function runResourceListAction(request: Request, kind: TranslatableKind) {
   const { admin, shop, actorId } = await requireShop(request);
   const form = await request.formData();
   if (form.get("intent") !== "bulk-translate") return { error: "UNKNOWN_INTENT" };
+  if (!isBulkResourceType(kind)) return { error: "BULK_NOT_SUPPORTED" };
   const billing = await shopBilling(admin, shop);
   if (!billing.entitlements.bulk) return { error: "PLAN_BULK" };
 

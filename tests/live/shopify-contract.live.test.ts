@@ -24,9 +24,10 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { restoreRevision } from "../../app/.server/translation/history";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
-import { RESOURCE_KINDS } from "../../app/lib/resource-kinds";
+import { contentGid, contentRef, RESOURCE_KINDS } from "../../app/lib/resource-kinds";
 import { listImageResources, listTranslatableMetafields } from "../../app/.server/shopify/attached-resources";
 import { fetchMarkets, MarketsAccessError } from "../../app/.server/markets/markets";
+import { loadContentHub } from "../../app/.server/translation/content-hub";
 import { createLiveAdmin } from "./admin-client";
 import {
   createFixtureCollection,
@@ -108,6 +109,19 @@ live("read contract (no writes)", () => {
         for (const image of await listImageResources(admin, r.resourceId, locale)) {
           expect(image.content.map((c) => c.key)).toEqual(["alt"]);
         }
+      }
+    }
+  });
+
+  it("probes every content type and lists real resources with GIDs the editor accepts", async () => {
+    // Read-only. Records which types this store has and which need a scope.
+    const entries = await loadContentHub(admin, []);
+    console.info("[live] content types:", Object.fromEntries(entries.map((e) => [e.type, e.status])));
+    for (const entry of entries.filter((e) => e.status === "has-content")) {
+      const page = await listTranslatableResources(admin, { resourceType: entry.type, locale, first: 3 });
+      for (const r of page.resources) {
+        // The encoded reference used in editor URLs must round-trip every real GID.
+        expect(contentGid(contentRef(r.resourceId)), r.resourceId).toBe(r.resourceId);
       }
     }
   });

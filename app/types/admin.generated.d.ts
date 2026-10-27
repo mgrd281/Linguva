@@ -107,6 +107,13 @@ export type LinguvaTranslationsRemoveMutationVariables = AdminTypes.Exact<{
 
 export type LinguvaTranslationsRemoveMutation = { translationsRemove?: AdminTypes.Maybe<{ translations?: AdminTypes.Maybe<Array<Pick<AdminTypes.Translation, 'key' | 'locale'>>>, userErrors: Array<Pick<AdminTypes.TranslationUserError, 'field' | 'message' | 'code'>> }> };
 
+export type LinguvaProbeTranslatableQueryVariables = AdminTypes.Exact<{
+  resourceType: AdminTypes.TranslatableResourceType;
+}>;
+
+
+export type LinguvaProbeTranslatableQuery = { translatableResources: { nodes: Array<Pick<AdminTypes.TranslatableResource, 'resourceId'>> } };
+
 export type LinguvaShopIdentityQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
 
 
@@ -180,6 +187,7 @@ interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaOwnerMetafields($id: ID!) {\n    node(id: $id) {\n      ... on HasMetafields {\n        metafields(first: 100) {\n          nodes {\n            id\n            namespace\n            key\n            type\n            translatable\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaOwnerMetafieldsQuery, variables: LinguvaOwnerMetafieldsQueryVariables},
   "#graphql\n  query LinguvaTranslatableResources(\n    $resourceType: TranslatableResourceType!\n    $first: Int!\n    $after: String\n    $locale: String!\n  ) {\n    translatableResources(resourceType: $resourceType, first: $first, after: $after) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourcesQuery, variables: LinguvaTranslatableResourcesQueryVariables},
   "#graphql\n  query LinguvaTranslatableResource($resourceId: ID!, $locale: String!) {\n    translatableResource(resourceId: $resourceId) {\n      resourceId\n      translatableContent {\n        key\n        value\n        digest\n        locale\n        type\n      }\n      translations(locale: $locale) {\n        key\n        value\n        outdated\n        updatedAt\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourceQuery, variables: LinguvaTranslatableResourceQueryVariables},
+  "#graphql\n  query LinguvaProbeTranslatable($resourceType: TranslatableResourceType!) {\n    translatableResources(resourceType: $resourceType, first: 1) {\n      nodes {\n        resourceId\n      }\n    }\n  }\n": {return: LinguvaProbeTranslatableQuery, variables: LinguvaProbeTranslatableQueryVariables},
   "#graphql\n        query LinguvaShopIdentity {\n          shop {\n            id\n            name\n          }\n        }": {return: LinguvaShopIdentityQuery, variables: LinguvaShopIdentityQueryVariables},
   "#graphql\n  query LinguvaLiveShopFacts {\n    shop {\n      myshopifyDomain\n      plan {\n        partnerDevelopment\n        publicDisplayName\n      }\n    }\n  }\n": {return: LinguvaLiveShopFactsQuery, variables: LinguvaLiveShopFactsQueryVariables},
 }

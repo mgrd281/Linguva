@@ -30,12 +30,17 @@ describe("app configuration (shopify.app.toml)", () => {
     expect(isDeniedStore(toml)).toBe(false);
   });
 
-  it("requests exactly the reviewed scopes; read_markets only as optional", () => {
+  it("requests exactly the reviewed scopes; feature scopes only as optional", () => {
     // Changing scopes needs merchant re-approval and a SECURITY_MODEL entry: update this test deliberately.
     expect(tomlString(toml, "scopes")!.split(",").sort()).toEqual(
       ["read_content", "read_locales", "read_online_store_pages", "read_products", "read_translations", "write_locales", "write_translations"],
     );
-    expect(toml).toMatch(/^optional_scopes = \["read_markets"\]$/m);
+    const optional = JSON.parse(/^optional_scopes = (.*)$/m.exec(toml)![1]!) as string[];
+    expect(optional.sort()).toEqual(
+      ["read_legal_policies", "read_markets", "read_metaobjects", "read_online_store_navigation", "read_shipping", "read_themes"],
+    );
+    // Only read scopes are optional; the content pages request nothing else.
+    expect(optional.every((scope) => scope.startsWith("read_"))).toBe(true);
     // No customer or order data (ADR-007).
     expect(`${tomlString(toml, "scopes")} ${/^optional_scopes = (.*)$/m.exec(toml)![1]}`).not.toMatch(/customer|order/);
   });

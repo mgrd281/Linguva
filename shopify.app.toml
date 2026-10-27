@@ -23,9 +23,10 @@ redirect_urls = ["https://example.com/auth/callback"]
 # Least privilege: read catalog/content, read+write translations and locales.
 # No customer or order scopes (ADR-007).
 scopes = "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales"
-# Requested on the Markets page only when the merchant opens it (read-only
-# overview of languages per market); the app works without it.
-optional_scopes = ["read_markets"]
+# Requested only where needed, when the merchant opens that feature: Markets
+# overview, menus, metaobjects, theme content, policies, shipping methods.
+# All read-only; the app works without them.
+optional_scopes = ["read_markets", "read_online_store_navigation", "read_metaobjects", "read_themes", "read_legal_policies", "read_shipping"]
 
 [webhooks]
 api_version = "2026-10"

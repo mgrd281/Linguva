@@ -11,6 +11,33 @@ type ListAction = () => ReturnType<typeof runResourceListAction>;
 export function ResourceList() {
   const data = useLoaderData<ListLoader>();
   const bulk = useFetcher<ListAction>();
+  const permission = useFetcher();
+
+  if (data.denied) {
+    return (
+      <s-page heading={data.kind.label}>
+        <s-section heading={`Allow Linguva to read your ${data.kind.plural}`}>
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              {data.denied.scope
+                ? `To translate ${data.kind.plural}, Linguva needs permission to read them. It never changes the originals.`
+                : `Shopify doesn't allow apps to read ${data.kind.plural} in this store yet.`}
+            </s-paragraph>
+            {data.denied.scope ? (
+              <permission.Form method="post" action="/app/content">
+                <input type="hidden" name="intent" value="request-scope" />
+                <input type="hidden" name="scope" value={data.denied.scope} />
+                <s-button type="submit" variant="primary" {...(permission.state !== "idle" ? { loading: true } : {})}>
+                  Allow access
+                </s-button>
+              </permission.Form>
+            ) : null}
+            <s-link href="/app/content">Back to all content</s-link>
+          </s-stack>
+        </s-section>
+      </s-page>
+    );
+  }
 
   if (!data.target || !data.bulk) {
     return (
@@ -58,44 +85,55 @@ export function ResourceList() {
           </s-paragraph>
         </s-banner>
       ) : null}
-      <s-section>
-        <s-stack direction="block" gap="small">
+      {data.kind.caution ? (
+        <s-banner tone="warning" heading={data.kind.caution === "legal" ? "Legal texts" : "Templates with Liquid code"}>
           <s-paragraph>
-            Bulk translation fills in missing and outdated fields only. Your
-            glossary and translation memory are applied. Up-to-date
-            translations are never touched, and outdated translations that you
-            wrote or approved are kept unless you allow replacing them below.
+            {data.kind.caution === "legal"
+              ? "Have every translation checked by someone qualified before publishing. They are translated one by one, with review."
+              : "Only visible text is translated; Liquid code is kept as is. They are translated one by one, with review."}
           </s-paragraph>
-          <s-paragraph>
-            {data.bulk.publishMode === "AUTO_PUBLISH"
-              ? "Automatic publishing is on: results that pass the quality checks go live immediately; results with warnings wait in Review."
-              : "Results wait in Review until you approve them."}
-          </s-paragraph>
-          <bulk.Form method="post">
-            <input type="hidden" name="intent" value="bulk-translate" />
-            <input type="hidden" name="locale" value={locale} />
-            <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
-            <s-stack direction="block" gap="small">
-              <s-select name="fieldScope" label="What to translate">
-                <s-option value="ALL">All fields</s-option>
-                <s-option value="SEO">Only search engine listings (SEO title and description)</s-option>
-              </s-select>
-              <s-checkbox
-                name="overwriteProtected"
-                label="Also replace outdated translations that were written or approved by a person"
-              />
-              <s-button
-                type="submit"
-                variant="primary"
-                disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
-                {...(bulk.state !== "idle" ? { loading: true } : {})}
-              >
-                Translate all into {data.target.name}
-              </s-button>
-            </s-stack>
-          </bulk.Form>
-        </s-stack>
-      </s-section>
+        </s-banner>
+      ) : null}
+      {data.kind.bulk ? (
+        <s-section>
+          <s-stack direction="block" gap="small">
+            <s-paragraph>
+              Bulk translation fills in missing and outdated fields only. Your
+              glossary and translation memory are applied. Up-to-date
+              translations are never touched, and outdated translations that you
+              wrote or approved are kept unless you allow replacing them below.
+            </s-paragraph>
+            <s-paragraph>
+              {data.bulk.publishMode === "AUTO_PUBLISH"
+                ? "Automatic publishing is on: results that pass the quality checks go live immediately; results with warnings wait in Review."
+                : "Results wait in Review until you approve them."}
+            </s-paragraph>
+            <bulk.Form method="post">
+              <input type="hidden" name="intent" value="bulk-translate" />
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
+              <s-stack direction="block" gap="small">
+                <s-select name="fieldScope" label="What to translate">
+                  <s-option value="ALL">All fields</s-option>
+                  <s-option value="SEO">Only search engine listings (SEO title and description)</s-option>
+                </s-select>
+                <s-checkbox
+                  name="overwriteProtected"
+                  label="Also replace outdated translations that were written or approved by a person"
+                />
+                <s-button
+                  type="submit"
+                  variant="primary"
+                  disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
+                  {...(bulk.state !== "idle" ? { loading: true } : {})}
+                >
+                  Translate all into {data.target.name}
+                </s-button>
+              </s-stack>
+            </bulk.Form>
+          </s-stack>
+        </s-section>
+      ) : null}
       <s-section>
         <s-stack direction="inline" gap="small" alignItems="center">
           <s-text>Translate into:</s-text>

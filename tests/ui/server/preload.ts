@@ -14,6 +14,8 @@ import { shopByDomain, UI_SHOPS, type UiShop } from "../fixtures/shops";
 import type { FakeShopifyStore } from "../../support/fake-store";
 
 const realFetch = globalThis.fetch.bind(globalThis);
+const REQUIRED_SCOPES = ["read_products", "read_content", "read_online_store_pages", "read_translations", "write_translations", "read_locales", "write_locales"];
+const OPTIONAL_SCOPES = ["read_markets", "read_online_store_navigation", "read_metaobjects", "read_themes", "read_legal_policies", "read_shipping"];
 const stores = new Map<string, FakeShopifyStore>();
 const storeFor = (shop: UiShop) => {
   let store = stores.get(shop.domain);
@@ -30,6 +32,18 @@ async function adminGraphql(shop: UiShop, body: { query: string; variables?: Rec
   if (name === "LinguvaShopLocales") return json({ data: { shopLocales: shop.locales } });
   if (name === "LinguvaShopId") return json({ data: { shop: { id: shop.gid } } });
   if (name === "LinguvaShopIdentity") return json({ data: { shop: { id: shop.gid, name: shop.name } } });
+  if (name === "FetchAccessScopes") {
+    const handles = (list: readonly string[]) => list.map((handle) => ({ handle }));
+    return json({
+      data: {
+        app: {
+          requestedAccessScopes: handles(REQUIRED_SCOPES),
+          optionalAccessScopes: handles(OPTIONAL_SCOPES),
+          installation: { accessScopes: handles([...REQUIRED_SCOPES, ...(shop.grantedOptionalScopes ?? [])]) },
+        },
+      },
+    });
+  }
   if (shop.failing && /^LinguvaTranslatable/.test(name)) return json({ errors: "Service unavailable" }, 503);
   try {
     const response = await storeFor(shop).graphql(body.query, { variables: body.variables });

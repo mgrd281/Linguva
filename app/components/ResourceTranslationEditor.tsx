@@ -3,7 +3,7 @@
  * route supplies the loader and action (see .server/translation/resource-editor).
  */
 import { useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { Form, useFetcher, useLoaderData } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
 import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
@@ -77,6 +77,11 @@ export function ResourceTranslationEditor() {
       const key = name.slice("value:".length);
       setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), [key]: el.value! } }));
     }
+  };
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams({ locale: data.target.locale, page: String(page) });
+    if (data.paging?.query) params.set("q", data.paging.query);
+    return `?${params.toString()}`;
   };
   const remaining = Math.max(0, Math.min(data.ai.limit - data.ai.used, data.ai.dailyLimit - data.ai.usedToday));
 
@@ -158,6 +163,23 @@ export function ResourceTranslationEditor() {
         )
       ) : null}
 
+      {data.caution === "legal" ? (
+        <s-banner tone="warning" heading="Legal text">
+          <s-paragraph>
+            Policies are legal documents. Have every translation checked by someone qualified before you publish it.
+            AI results are drafts and are never published on their own.
+          </s-paragraph>
+        </s-banner>
+      ) : null}
+      {data.caution === "liquid" ? (
+        <s-banner tone="warning" heading="Template with Liquid code">
+          <s-paragraph>
+            Only the visible text is translated; Liquid tags and variables are kept exactly as in the original. Send
+            yourself a test notification after publishing.
+          </s-paragraph>
+        </s-banner>
+      ) : null}
+
       {data.target.rtl ? (
         <s-banner tone="info" heading="Right-to-left language">
           <s-paragraph>Check the storefront layout after publishing.</s-paragraph>
@@ -214,32 +236,57 @@ export function ResourceTranslationEditor() {
         ) : null}
       </s-section>
 
+      {data.paging ? (
+        <s-section heading={`${data.paging.total.toLocaleString()} texts`}>
+          <s-stack direction="block" gap="small">
+            <Form method="get">
+              <input type="hidden" name="locale" value={data.target.locale} />
+              <s-stack direction="inline" gap="small" alignItems="end">
+                <s-search-field name="q" label="Find a text" placeholder="Key, original or translation" value={data.paging.query} />
+                <s-button type="submit">Search</s-button>
+              </s-stack>
+            </Form>
+            <s-text color="subdued">
+              {data.paging.matching === 0
+                ? "No texts match your search."
+                : `Showing ${((data.paging.page - 1) * data.paging.pageSize + 1).toLocaleString()}–${Math.min(data.paging.page * data.paging.pageSize, data.paging.matching).toLocaleString()} of ${data.paging.matching.toLocaleString()}${data.paging.query ? " matching" : ""}. Publish each page before moving on.`}
+            </s-text>
+            <s-stack direction="inline" gap="small">
+              {data.paging.page > 1 ? <s-button href={pageHref(data.paging.page - 1)}>Previous</s-button> : null}
+              {data.paging.page < data.paging.pages ? <s-button href={pageHref(data.paging.page + 1)}>Next</s-button> : null}
+            </s-stack>
+          </s-stack>
+        </s-section>
+      ) : null}
+
       <saveFetcher.Form method="post" onInput={onFormInput} onChange={onFormInput}>
         <input type="hidden" name="intent" value="save" />
         {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
-        {data.fields.filter((f) => !isSeoKey(f.key)).map((field) => renderField(field))}
-        <s-section heading="Search engine listing">
-          <s-stack direction="block" gap="base">
-            <s-paragraph>
-              How this {data.kind.singular} may appear in search results in {data.target.name}.
-            </s-paragraph>
-            <SeoPreview
-              value={currentValue}
-              source={(k) => fieldByKey.get(k)?.source ?? ""}
-              hasField={(k) => fieldByKey.has(k)}
-              shopDomain={data.shopDomain}
-              locale={data.target.locale}
-              pathSegment={data.kind.plural}
-            />
-            {seoFields.length === 0 ? (
+        {data.fields.filter((f) => !data.seoPreview || !isSeoKey(f.key)).map((field) => renderField(field))}
+        {data.seoPreview ? (
+          <s-section heading="Search engine listing">
+            <s-stack direction="block" gap="base">
               <s-paragraph>
-                This {data.kind.singular} has no SEO title or description of its own. Add them in Shopify to
-                control search results per language.
+                How this {data.kind.singular} may appear in search results in {data.target.name}.
               </s-paragraph>
-            ) : null}
-          </s-stack>
-        </s-section>
-        {seoFields.map((field) => renderField(field))}
+              <SeoPreview
+                value={currentValue}
+                source={(k) => fieldByKey.get(k)?.source ?? ""}
+                hasField={(k) => fieldByKey.has(k)}
+                shopDomain={data.shopDomain}
+                locale={data.target.locale}
+                pathSegment={data.kind.plural}
+              />
+              {seoFields.length === 0 ? (
+                <s-paragraph>
+                  This {data.kind.singular} has no SEO title or description of its own. Add them in Shopify to
+                  control search results per language.
+                </s-paragraph>
+              ) : null}
+            </s-stack>
+          </s-section>
+        ) : null}
+        {data.seoPreview ? seoFields.map((field) => renderField(field)) : null}
         <s-stack direction="inline" gap="base">
           <s-button type="submit" variant="primary" {...(saving ? { loading: true } : {})}>
             Publish translations

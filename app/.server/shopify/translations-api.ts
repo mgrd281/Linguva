@@ -1,5 +1,5 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import { resourceGid, type ResourceKind } from "../../lib/resource-kinds";
+import { resourceGid, type TranslatableKind } from "../../lib/resource-kinds";
 import type { TranslatableResourceType } from "../../types/admin.types";
 
 type Admin = Pick<AdminApiContext, "graphql">;
@@ -8,6 +8,14 @@ export class ShopifyApiError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ShopifyApiError";
+  }
+}
+
+/** The app lacks the access scope for a resource type. */
+export class AccessDeniedError extends Error {
+  constructor(readonly resourceType: string) {
+    super(`Access denied for ${resourceType}`);
+    this.name = "AccessDeniedError";
   }
 }
 
@@ -154,7 +162,7 @@ function toResource(node: {
 
 export async function listTranslatableResources(
   admin: Admin,
-  options: { resourceType: ResourceKind; locale: string; first?: number; after?: string | null },
+  options: { resourceType: TranslatableKind; locale: string; first?: number; after?: string | null },
 ) {
   const response = await admin.graphql(LIST_QUERY, {
     variables: {
@@ -166,6 +174,8 @@ export async function listTranslatableResources(
     },
   });
   const body = await response.json();
+  const errors = (body as { errors?: unknown }).errors;
+  if (errors && isAccessDenied(errors)) throw new AccessDeniedError(String(options.resourceType));
   const connection = body.data?.translatableResources;
   if (!connection) throw new ShopifyApiError("translatableResources returned no data");
   return {
@@ -247,3 +257,40 @@ export function productGid(id: string): string | null {
 }
 
 export { numericId } from "../../lib/resource-kinds";
+
+const PROBE_QUERY = `#graphql
+  query LinguvaProbeTranslatable($resourceType: TranslatableResourceType!) {
+    translatableResources(resourceType: $resourceType, first: 1) {
+      nodes {
+        resourceId
+      }
+    }
+  }
+`;
+
+/** Shopify refused the query for lack of an access scope. */
+export function isAccessDenied(errorOrBody: unknown): boolean {
+  const text =
+    errorOrBody instanceof Error
+      ? JSON.stringify(errorOrBody, Object.getOwnPropertyNames(errorOrBody))
+      : JSON.stringify(errorOrBody ?? "");
+  return /ACCESS_DENIED|access denied|requires? .*access scope/i.test(text);
+}
+
+export type ProbeResult = { status: "available"; hasItems: boolean } | { status: "denied" };
+
+/** Whether the shop has resources of a type, and whether the app may read them. */
+export async function probeTranslatableType(admin: Admin, resourceType: TranslatableKind): Promise<ProbeResult> {
+  let body: { data?: { translatableResources?: { nodes: unknown[] } | null }; errors?: unknown };
+  try {
+    const response = await admin.graphql(PROBE_QUERY, { variables: { resourceType: resourceType as TranslatableResourceType } });
+    body = await response.json();
+  } catch (error) {
+    if (isAccessDenied(error)) return { status: "denied" };
+    throw error;
+  }
+  if (body.errors && isAccessDenied(body.errors)) return { status: "denied" };
+  const nodes = body.data?.translatableResources?.nodes;
+  if (!nodes) throw new ShopifyApiError("translatableResources returned no data");
+  return { status: "available", hasItems: nodes.length > 0 };
+}

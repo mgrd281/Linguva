@@ -173,10 +173,10 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
       : {}),
   };
   const cursor = filter.cursor && UUID.test(filter.cursor) ? filter.cursor : null;
-  const [rows, total] = await withTenant(
+  const [rows, total, jobTypes] = await withTenant(
     shopId,
-    (tx) =>
-      Promise.all([
+    async (tx) => {
+      const [found, count] = await Promise.all([
         tx.translationDraft.findMany({
           where,
           orderBy: [{ resourceGid: "asc" }, { locale: "asc" }, { key: "asc" }, { id: "asc" }],
@@ -184,10 +184,18 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
           ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         }),
         tx.translationDraft.count({ where }),
-      ]),
+      ]);
+      // The resource type (for editor links) comes from the draft's job.
+      const jobIds = [...new Set(found.map((d) => d.jobId).filter((id): id is string => Boolean(id)))];
+      const jobs = jobIds.length
+        ? await tx.translationJob.findMany({ where: { shopId, id: { in: jobIds } }, select: { id: true, resourceType: true } })
+        : [];
+      return [found, count, new Map(jobs.map((j) => [j.id, j.resourceType]))] as const;
+    },
     client,
   );
-  return { drafts: rows.slice(0, take), nextCursor: rows.length > take ? rows[take - 1]!.id : null, total };
+  const drafts = rows.slice(0, take).map((d) => ({ ...d, resourceType: d.jobId ? (jobTypes.get(d.jobId) ?? null) : null }));
+  return { drafts, nextCursor: rows.length > take ? rows[take - 1]!.id : null, total };
 }
 
 /** Languages that have pending drafts, for the review filter. */

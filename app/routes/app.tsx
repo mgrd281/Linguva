@@ -45,9 +45,7 @@ export default function App() {
         <s-link href="/app/languages">Languages</s-link>
         <s-link href="/app/products">Products</s-link>
         <s-link href="/app/collections">Collections</s-link>
-        <s-link href="/app/pages">Pages</s-link>
-        <s-link href="/app/articles">Blog posts</s-link>
-        <s-link href="/app/blogs">Blogs</s-link>
+        <s-link href="/app/content">All content</s-link>
         <s-link href="/app/coverage">Coverage</s-link>
         <s-link href="/app/markets">Markets</s-link>
         <s-link href="/app/jobs">Translation jobs</s-link>

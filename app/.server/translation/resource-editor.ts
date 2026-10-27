@@ -18,7 +18,15 @@ import { getRequestLimiter, RequestRateLimitedError } from "../usage/request-lim
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { allowedTargetLocales, type BillingStatus } from "../billing/subscription";
 import { fieldLabel } from "../../lib/field-labels";
-import { RESOURCE_KINDS, resourceGid, type ResourceKind } from "../../lib/resource-kinds";
+import {
+  CONTENT_TYPES,
+  contentGid,
+  isContentType,
+  kindMeta,
+  resourceGid,
+  resourceTitle,
+  type TranslatableKind,
+} from "../../lib/resource-kinds";
 import {
   AiConsentRequiredError,
   AiRequestTooLargeError,
@@ -50,8 +58,10 @@ export interface EditorContext {
   /** For previews only. */
   shopDomain?: string;
   actorId: string | null;
-  kind: ResourceKind;
+  kind: TranslatableKind;
   resourceId: string;
+  /** Search and page within resources with many texts (theme content). */
+  view?: { query: string; page: number };
   target: { locale: string; name: string; rtl: boolean };
   sourceName: string | null;
   /** Billing status (absent: billing not checked, as in tests). */
@@ -63,16 +73,19 @@ export interface EditorContext {
 /** Authenticates the request and resolves the resource and target language. */
 export async function resolveEditorContext(
   request: Request,
-  kind: ResourceKind,
+  kind: TranslatableKind,
   id: string | undefined,
 ): Promise<EditorContext> {
   const { admin, shop, actorId } = await requireShop(request);
   const billing = await shopBilling(admin, shop);
-  const resourceId = resourceGid(kind, id ?? "");
+  // Content types are addressed by an encoded GID, validated here; Shopify
+  // only returns resources of the authenticated shop.
+  const resourceId = isContentType(kind) ? contentGid(id ?? "") : resourceGid(kind, id ?? "");
   if (!resourceId) throw new Response("Not found", { status: 404 });
 
   const locales = await fetchAndSyncShopLocales(admin, shop.id);
-  const requested = new URL(request.url).searchParams.get("locale");
+  const url = new URL(request.url);
+  const requested = url.searchParams.get("locale");
   const target = locales.locales.find((l) => !l.primary && l.locale === requested);
   if (!target) throw new Response("Unknown language", { status: 404 });
 
@@ -87,8 +100,16 @@ export async function resolveEditorContext(
     sourceName: locales.primary?.name ?? null,
     billing,
     targetLocales: locales.locales.filter((l) => !l.primary).map((l) => l.locale),
+    view: {
+      query: (url.searchParams.get("q") ?? "").slice(0, 100),
+      page: Math.max(1, Math.min(10_000, Number(url.searchParams.get("page")) || 1)),
+    },
   };
 }
+
+/** Resources with more texts than this are searched and paged in the editor. */
+export const EDITOR_PAGE_SIZE = 50;
+const PAGING_THRESHOLD = 60;
 
 /** Plan limits for this editor request (config limits when billing isn't checked). */
 function editorLimits(ctx: EditorContext) {
@@ -123,28 +144,47 @@ export async function loadEditorData(ctx: EditorContext) {
     });
   }
 
-  const meta = RESOURCE_KINDS[ctx.kind];
+  const meta = kindMeta(ctx.kind);
   const attached = await loadAttachedData(admin, ctx.kind, resourceId, target.locale);
+  const allFields = resource.content
+    .filter((c) => c.value && c.value.trim() && c.digest)
+    .map((c) => ({
+      key: c.key,
+      label: fieldLabel(c.key),
+      type: c.type,
+      source: c.value!,
+      digest: c.digest!,
+      translation: translations.get(c.key)?.value ?? "",
+      outdated: translations.get(c.key)?.outdated ?? false,
+      machine: isMachineTranslatable({ key: c.key, value: c.value, type: c.type }),
+      history: history[c.key] ?? [],
+    }));
+  // Theme content can have thousands of texts: search and page them.
+  let fields = allFields;
+  let paging: { total: number; matching: number; page: number; pages: number; query: string; pageSize: number } | null = null;
+  if (allFields.length > PAGING_THRESHOLD) {
+    const query = ctx.view?.query.trim().toLowerCase() ?? "";
+    const matching = query
+      ? allFields.filter((f) => [f.key, f.label, f.source, f.translation].some((v) => v.toLowerCase().includes(query)))
+      : allFields;
+    const pages = Math.max(1, Math.ceil(matching.length / EDITOR_PAGE_SIZE));
+    const page = Math.min(ctx.view?.page ?? 1, pages);
+    fields = matching.slice((page - 1) * EDITOR_PAGE_SIZE, page * EDITOR_PAGE_SIZE);
+    paging = { total: allFields.length, matching: matching.length, page, pages, query: ctx.view?.query ?? "", pageSize: EDITOR_PAGE_SIZE };
+  }
+  const caution = isContentType(ctx.kind) ? ((CONTENT_TYPES[ctx.kind] as { caution?: "legal" | "liquid" }).caution ?? null) : null;
   return {
     attached,
     kind: { label: meta.label, singular: meta.singular, path: meta.path, plural: meta.plural },
     shopDomain: ctx.shopDomain ?? "",
-    title: resource.content.find((c) => c.key === "title")?.value ?? "(untitled)",
+    title: resourceTitle(ctx.kind, resource.content),
     target,
     sourceName: ctx.sourceName ?? resource.content[0]?.locale ?? "",
-    fields: resource.content
-      .filter((c) => c.value && c.value.trim() && c.digest)
-      .map((c) => ({
-        key: c.key,
-        label: fieldLabel(c.key),
-        type: c.type,
-        source: c.value!,
-        digest: c.digest!,
-        translation: translations.get(c.key)?.value ?? "",
-        outdated: translations.get(c.key)?.outdated ?? false,
-        machine: isMachineTranslatable({ key: c.key, value: c.value, type: c.type }),
-        history: history[c.key] ?? [],
-      })),
+    fields,
+    paging,
+    caution,
+    // The search result preview applies to storefront pages only.
+    seoPreview: !isContentType(ctx.kind),
     ai: {
       available: getTranslationProvider() !== null,
       consent: hasCurrentAiConsent(settings),

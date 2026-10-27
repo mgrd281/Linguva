@@ -6,7 +6,7 @@ import {
   getTranslatableResource,
   listTranslatableResources,
 } from "../shopify/translations-api";
-import { providerContext } from "../../lib/resource-kinds";
+import { providerContext, resourceTitle } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
 import {
   saveResourceTranslations,
@@ -291,13 +291,13 @@ export async function processItem(
 
   let result: Awaited<ReturnType<typeof completeTranslation>>;
   try {
-    const title = resource.content.find((c) => c.key === "title")?.value;
+    const title = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : undefined;
     result = await completeTranslation(prepared, {
       provider: deps.provider,
       sourceLocale,
       targetLocale: job.targetLocale,
       glossary: context.glossary.rules,
-      context: providerContext(resource.resourceId, title),
+      context: providerContext(resource.resourceId, title, job.resourceType),
     });
   } catch (error) {
     if (reservation) await releaseUsage(reservation, deps.prisma);

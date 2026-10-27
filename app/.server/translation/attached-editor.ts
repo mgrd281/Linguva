@@ -10,7 +10,7 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { logger } from "../lib/logger";
 import { listAttachedResources, type AttachedResource } from "../shopify/attached-resources";
-import type { ResourceKind } from "../../lib/resource-kinds";
+import type { ResourceKind, TranslatableKind } from "../../lib/resource-kinds";
 import { collectEditorEdits } from "./editor-edits";
 import { isMachineTranslatable } from "./translate-fields";
 import type { TranslationEdit } from "./product-translation-service";
@@ -18,7 +18,7 @@ import type { TranslationEdit } from "./product-translation-service";
 type Admin = Pick<AdminApiContext, "graphql">;
 
 /** Owners that can have image alt text or metafields Linguva edits. */
-const ATTACHED_KINDS = new Set<ResourceKind>(["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"]);
+const ATTACHED_KINDS = new Set<TranslatableKind>(["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"] satisfies ResourceKind[]);
 
 /**
  * Content types edited here. Rich text, JSON, lists, links and file
@@ -43,13 +43,13 @@ export function isEditableAttachedField(field: { type: string }) {
   return EDITABLE_TYPES.has(field.type);
 }
 
-export async function listEditorAttachments(admin: Admin, kind: ResourceKind, parentGid: string, locale: string) {
+export async function listEditorAttachments(admin: Admin, kind: TranslatableKind, parentGid: string, locale: string) {
   if (!ATTACHED_KINDS.has(kind)) return [];
   return listAttachedResources(admin, parentGid, locale);
 }
 
 /** Loader data for the editor's "Images and custom fields" section. */
-export async function loadAttachedData(admin: Admin, kind: ResourceKind, parentGid: string, locale: string) {
+export async function loadAttachedData(admin: Admin, kind: TranslatableKind, parentGid: string, locale: string) {
   let resources: AttachedResource[];
   try {
     resources = await listEditorAttachments(admin, kind, parentGid, locale);

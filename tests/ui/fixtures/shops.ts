@@ -5,6 +5,8 @@
  */
 import { FakeShopifyStore } from "../../support/fake-store";
 
+export const UI_THEME_GID = "gid://shopify/OnlineStoreThemeJsonTemplate/index?theme_id=42";
+
 export interface UiLocale {
   locale: string;
   name: string;
@@ -21,6 +23,8 @@ export interface UiShop {
   plan: string | null;
   /** Every Admin API call fails (Shopify outage or revoked access). */
   failing?: boolean;
+  /** Optional access scopes the merchant granted. */
+  grantedOptionalScopes?: string[];
   build(): FakeShopifyStore;
 }
 
@@ -34,6 +38,7 @@ export const UI_SHOPS = {
     name: "Linguva UI Store",
     locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }, { locale: "ar", name: "Arabic", primary: false, published: false }],
     plan: "pro",
+    grantedOptionalScopes: ["read_online_store_navigation", "read_themes"],
     build() {
       const store = new FakeShopifyStore(30).addCollections(3).addContent(2);
       // Some translations already exist, some are outdated.
@@ -44,6 +49,21 @@ export const UI_SHOPS = {
       store.setField("gid://shopify/Product/1", "meta_description", "A warm jacket with two pockets, made for long winter walks in the cold.");
       store.addImage("gid://shopify/Product/1", "Red wool jacket, front view");
       store.addMetafield("gid://shopify/Product/1", { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Hand wash cold." });
+      // Other content: menus, the store listing, theme content with many texts.
+      store.addResource("MENU", "1", [{ key: "title", value: "Main menu", type: "SINGLE_LINE_TEXT_FIELD" }]);
+      store.addResource("MENU", "2", [{ key: "title", value: "Footer", type: "SINGLE_LINE_TEXT_FIELD" }]);
+      store.addResource("SHOP", "91001", [{ key: "meta_title", value: "Linguva UI Store", type: "SINGLE_LINE_TEXT_FIELD" }]);
+      store.products.set(
+        UI_THEME_GID,
+        Array.from({ length: 120 }, (_, i) => ({
+          key: `section.hero_${i}.heading:${i}`,
+          value: i === 64 ? "Free shipping over 50 €" : `Theme text ${i}`,
+          type: "STRING",
+        })),
+      );
+      store.addResource("SHOP_POLICY", "1", [{ key: "body", value: "<p>Returns within 30 days.</p>", type: "HTML" }]);
+      // Policies need read_legal_policies, which this store hasn't granted.
+      store.deniedTypes.add("SHOP_POLICY");
       return store;
     },
   },

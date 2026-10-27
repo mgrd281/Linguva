@@ -2,10 +2,10 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { listJobsPage } from "../.server/jobs/bulk-jobs";
+import { isBulkResourceType, listJobsPage } from "../.server/jobs/bulk-jobs";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { JOB_STATUS_LABELS, jobProgress } from "../lib/job-display";
-import { RESOURCE_KINDS } from "../lib/resource-kinds";
+import { kindMeta, RESOURCE_KINDS } from "../lib/resource-kinds";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -22,7 +22,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     jobs: page.jobs.map((j) => ({
       id: j.id,
       targetLocale: j.targetLocale,
-      type: j.resourceType in RESOURCE_KINDS ? RESOURCE_KINDS[j.resourceType as keyof typeof RESOURCE_KINDS].label : j.resourceType,
+      type: isBulkResourceType(j.resourceType) ? kindMeta(j.resourceType).label : j.resourceType,
       status: j.status,
       createdAt: j.createdAt.toISOString(),
       progress: jobProgress(j),

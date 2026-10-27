@@ -16,7 +16,7 @@ import {
   MAX_DRAFTS_PER_ACTION,
   rejectDrafts,
 } from "../.server/review/drafts";
-import { editorPath, RESOURCE_KINDS } from "../lib/resource-kinds";
+import { editorPathFor, RESOURCE_KINDS } from "../lib/resource-kinds";
 import { fieldLabel } from "../lib/field-labels";
 import { issueLabel } from "../lib/issue-labels";
 
@@ -45,7 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     isFirstPage: !q("after"),
     drafts: page.drafts.map((d) => ({
       id: d.id,
-      href: editorPath(d.resourceGid, d.locale),
+      href: editorPathFor(d.resourceGid, d.locale, d.resourceType),
       title: d.resourceTitle ?? "(untitled)",
       locale: d.locale,
       key: d.key,

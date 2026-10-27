@@ -41,6 +41,15 @@ const GID_TYPES: Record<string, string> = {
   BLOG: "Blog",
 };
 
+/** GID type of any resource type in the fake (PascalCase of the enum name). */
+const gidTypeOf = (resourceType: string) =>
+  GID_TYPES[resourceType] ??
+  resourceType
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+
 export class FakeShopifyStore {
   readonly calls: string[] = [];
   /** All resources by GID (products and collections). */
@@ -55,6 +64,8 @@ export class FakeShopifyStore {
     Array<{ id: string; namespace: string; key: string; type: string; translatable: boolean }>
   >();
   private nextSubId = 9000;
+  /** Resource types the app has no access scope for (ACCESS_DENIED). */
+  readonly deniedTypes = new Set<string>();
   /** Throw this error for the next N calls (any operation). */
   failNext: { count: number; error: () => Error } | null = null;
 
@@ -106,6 +117,16 @@ export class FakeShopifyStore {
     this.nestedImages.set(parentGid, [...(this.nestedImages.get(parentGid) ?? []), { id, type }]);
     this.products.set(id, [{ key: "alt", value: alt, type: "STRING" }]);
     return id;
+  }
+
+  /**
+   * Adds a resource of any translatable type, e.g. ("MENU", "1", fields) →
+   * gid://shopify/Menu/1. Theme resources may use non-numeric ids.
+   */
+  addResource(resourceType: string, id: string, fields: Field[]) {
+    const gid = `gid://shopify/${gidTypeOf(resourceType)}/${id}`;
+    this.products.set(gid, fields);
+    return gid;
   }
 
   /** Adds a video (not translatable here) to a product's media. */
@@ -160,9 +181,18 @@ export class FakeShopifyStore {
     }
     const vars = options?.variables ?? {};
 
+    if ((name === "LinguvaTranslatableResources" || name === "LinguvaProbeTranslatable") && this.deniedTypes.has(String(vars.resourceType))) {
+      return Response.json({
+        errors: [{ message: "Access denied for translatableResources field.", extensions: { code: "ACCESS_DENIED" } }],
+      });
+    }
+    if (name === "LinguvaProbeTranslatable") {
+      const prefix = `gid://shopify/${gidTypeOf(String(vars.resourceType))}/`;
+      const first = [...this.products.keys()].find((gid) => gid.startsWith(prefix));
+      return Response.json({ data: { translatableResources: { nodes: first ? [{ resourceId: first }] : [] } } });
+    }
     if (name === "LinguvaTranslatableResources") {
-      const gidType = GID_TYPES[String(vars.resourceType)];
-      if (!gidType) throw new Error(`FakeShopifyStore: unsupported resourceType ${String(vars.resourceType)}`);
+      const gidType = gidTypeOf(String(vars.resourceType));
       const all = [...this.products.keys()].filter((gid) => gid.startsWith(`gid://shopify/${gidType}/`));
       const start = vars.after ? Number(vars.after) : 0;
       const first = Number(vars.first);

@@ -9,7 +9,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { cancelJob, getJobForShop, isBulkResourceType, listProblemItems } from "../.server/jobs/bulk-jobs";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
-import { editorPath, numericId, RESOURCE_KINDS } from "../lib/resource-kinds";
+import { editorPathFor, numericId, kindMeta } from "../lib/resource-kinds";
 import {
   ITEM_ERROR_MESSAGES,
   JOB_ERROR_MESSAGES,
@@ -18,7 +18,7 @@ import {
 } from "../lib/job-display";
 
 function kindInfo(resourceType: string) {
-  const meta = RESOURCE_KINDS[isBulkResourceType(resourceType) ? resourceType : "PRODUCT"];
+  const meta = kindMeta(isBulkResourceType(resourceType) ? resourceType : "PRODUCT");
   return { label: meta.label, plural: meta.plural };
 }
 
@@ -50,7 +50,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     },
     problems: problems.map((p) => ({
       id: p.id,
-      href: editorPath(p.resourceGid, job.targetLocale),
+      href: editorPathFor(p.resourceGid, job.targetLocale, job.resourceType),
       label: numericId(p.resourceGid),
       status: p.status,
       errorCode: p.errorCode,

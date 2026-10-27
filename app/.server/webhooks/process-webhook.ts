@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
+import { ensureDatabasePosture } from "../lib/db-guard";
 
 export interface VerifiedWebhook {
   webhookId: string;
@@ -85,6 +86,7 @@ export async function processWebhook(
     shop: webhook.shop,
   });
 
+  await ensureDatabasePosture();
   if (!(await claim(webhook, client))) {
     log.info("webhook duplicate ignored");
     return "duplicate";

@@ -143,7 +143,7 @@ describe("saveResourceTranslations", () => {
       ["handle", "MANUAL", null],
       ["title", "AI", "deepl"],
     ]);
-    expect(await app.auditLog.count({ where: { action: "translations.saved", shopId: s.id } })).toBe(1);
+    expect(await ownerDb.auditLog.count({ where: { action: "translations.saved", shopId: s.id } })).toBe(1);
   });
 
   it("refuses to save a translation of a source that changed meanwhile", async () => {

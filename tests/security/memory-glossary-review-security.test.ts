@@ -205,7 +205,7 @@ describe("fuzzy search function (security definer)", () => {
              has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec
       FROM pg_proc p WHERE p.proname = 'linguva_memory_fuzzy'`;
     expect(fn).toMatchObject({ secdef: true, public_exec: false });
-    expect(fn!.config).toContain("search_path=public, pg_temp");
+    expect(fn!.config).toContain("search_path=pg_catalog, pg_temp");
     const [table] = await ownerDb.$queryRaw<Array<{ rls: boolean }>>`
       SELECT relrowsecurity AS rls FROM pg_class WHERE relname = 'TranslationMemory'`;
     expect(table!.rls).toBe(true);

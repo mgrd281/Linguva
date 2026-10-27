@@ -50,14 +50,15 @@ export async function setAiConsent(
       }),
     client,
   );
-  await client.auditLog.create({
-    data: {
+  // createMany: no RETURNING, so the runtime role needs no SELECT on AuditLog.
+  await client.auditLog.createMany({
+    data: [{
       shopId: input.shopId,
       actorType: "MERCHANT_USER",
       actorId: input.actorId,
       action: input.granted ? "ai_consent.granted" : "ai_consent.revoked",
       metadata: { version: AI_CONSENT_VERSION },
-    },
+    }],
   });
 }
 
@@ -98,13 +99,14 @@ export async function setBulkPublishMode(
       }),
     client,
   );
-  await client.auditLog.create({
-    data: {
+  // createMany: no RETURNING, so the runtime role needs no SELECT on AuditLog.
+  await client.auditLog.createMany({
+    data: [{
       shopId: input.shopId,
       actorType: "MERCHANT_USER",
       actorId: input.actorId,
       action: auto ? "bulk_publish.auto_enabled" : "bulk_publish.review_enabled",
-    },
+    }],
   });
 }
 

@@ -84,7 +84,7 @@ describe("publish mode", () => {
     const settings = await withTenant(shop.id, (tx) => tx.shopSettings.findUniqueOrThrow({ where: { shopId: shop.id } }), app);
     expect(settings).toMatchObject({ bulkPublishMode: "AUTO_PUBLISH", autoPublishEnabledBy: "77" });
     expect(settings.autoPublishEnabledAt).toBeInstanceOf(Date);
-    expect(await app.auditLog.count({ where: { action: "bulk_publish.auto_enabled" } })).toBe(1);
+    expect(await ownerDb.auditLog.count({ where: { action: "bulk_publish.auto_enabled" } })).toBe(1);
   });
 });
 

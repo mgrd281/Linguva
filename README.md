@@ -42,6 +42,7 @@ pnpm test:performance   # fuzzy memory search with 100,000 entries (same service
 pnpm test:live          # optional: guarded contract tests on a dev store (docs/DEV_STORE_SETUP.md), never in CI
 pnpm build
 pnpm graphql-codegen    # re-validates GraphQL operations against the Admin API schema
+pnpm check:ignored      # before pushing: no source file hidden by .gitignore
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of these plus a migration drift check and a secret scan.
@@ -88,6 +89,7 @@ docs/               architecture, security, billing, roadmap
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Progress, milestones, risks, decisions |
 | [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
 | [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
+| [docs/SECURITY_REVIEW_MEMORY_FUZZY.md](docs/SECURITY_REVIEW_MEMORY_FUZZY.md) | Security review of the fuzzy search function, roles and grants |
 | [CHANGELOG.md](CHANGELOG.md) | Change history |
 
 ## Project boundaries

@@ -117,7 +117,7 @@ describe("compliance webhooks", () => {
     const other = await upsertInstalledShop({ shopDomain: "keep.myshopify.com" }, app);
     await syncShopLocales(shop.id, [{ locale: "de", name: "German", primary: true, published: true, rtl: false }], app);
     await app.session.create({ data: { id: `offline_${SHOP}`, shop: SHOP, state: "", accessToken: "v1.a.b.c.d" } });
-    await app.auditLog.create({ data: { shopId: shop.id, actorType: "SYSTEM", action: "test" } });
+    await app.auditLog.createMany({ data: [{ shopId: shop.id, actorType: "SYSTEM", action: "test" }] });
 
     const response = await call(
       shopRedact as Action,
@@ -131,8 +131,8 @@ describe("compliance webhooks", () => {
       expect(await countAsOwner(table, shop.id)).toBe(0);
     }
     // Audit entries survive but no longer point at the shop.
-    expect(await app.auditLog.count({ where: { shopId: shop.id } })).toBe(0);
-    expect(await app.auditLog.count({ where: { action: "test" } })).toBe(1);
+    expect(await ownerDb.auditLog.count({ where: { shopId: shop.id } })).toBe(0);
+    expect(await ownerDb.auditLog.count({ where: { action: "test" } })).toBe(1);
     // Other tenants are untouched.
     expect(await countAsOwner("ShopSettings", other.shop.id)).toBe(1);
     expect(await app.privacyRequest.count({ where: { topic: "SHOP_REDACT", status: "COMPLETED" } })).toBe(1);

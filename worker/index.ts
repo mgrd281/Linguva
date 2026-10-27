@@ -5,6 +5,7 @@
 import { unauthenticated } from "../app/shopify.server";
 import { aiUsageLimits, getConfig } from "../app/.server/lib/config";
 import { prisma } from "../app/.server/lib/db";
+import { ensureDatabasePosture } from "../app/.server/lib/db-guard";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
 import { createQueues, createWorkers, requeueStalledItems } from "../app/.server/jobs/queues";
@@ -17,6 +18,8 @@ const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 async function main() {
   const config = getConfig();
   if (!config.REDIS_URL) throw new Error("REDIS_URL is required for the worker");
+  // Refuses to process jobs if the database could leak data between shops.
+  await ensureDatabasePosture();
 
   const connection = createRedis(config.REDIS_URL);
   const prefix = keyPrefix(config.NODE_ENV);

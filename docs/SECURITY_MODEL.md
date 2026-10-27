@@ -52,10 +52,27 @@ PostgreSQL evaluates a query's own conditions after the RLS policy unless they a
 
 `linguva_memory_fuzzy()` (migration `20261027180000_memory_fuzzy_function`) is the one, deliberate exception:
 
-- `SECURITY DEFINER`, owned by the migration role, with a fixed `search_path`; `EXECUTE` revoked from PUBLIC and granted only to `linguva_app`.
+- `SECURITY DEFINER`, owned by the (non-superuser) migration role, `search_path = pg_catalog, pg_temp` with every `public` object schema-qualified; `EXECUTE` revoked from PUBLIC and granted only to `linguva_app`. Full review, threat tests, residual risks and alternatives: [SECURITY_REVIEW_MEMORY_FUZZY.md](SECURITY_REVIEW_MEMORY_FUZZY.md).
 - It takes **no shop argument**. The tenant comes from `current_setting('app.shop_id')`, the same transaction setting the RLS policy uses, so a caller can't choose another shop. Without a tenant it returns nothing.
 - To run as the owner without RLS, `TranslationMemory` has RLS enabled but not forced. The runtime role stays fully under RLS for every direct query; only the owner (migrations) isn't forced.
 - Covered by the security suite: no rows without a tenant, no rows of another tenant, the function's attributes, and RLS still on for the table.
+
+## 5d. Database posture check
+
+`checkDatabasePosture()` (`app/.server/lib/db-posture.ts`) runs once per process in the web app, the webhook handlers and the worker, as the runtime role. It checks that the runtime role:
+
+- isn't superuser, BYPASSRLS or CREATEROLE;
+- owns no tables;
+- can't create objects in `public`.
+
+It also checks that:
+
+- every tenant table has RLS with exactly the reviewed policy, and FORCE (except `TranslationMemory`);
+- the only SECURITY DEFINER function is the reviewed one, with the required `search_path`, a non-privileged owner and no PUBLIC execute.
+
+In production a failed check makes requests and jobs fail instead of running with weakened isolation.
+
+Grants of the runtime role on global tables: `AuditLog` insert only (no read); `Shop`, `Session`, `WebhookEvent`, `PrivacyRequest` read/write (they hold no merchant content; access is by verified shop domain or webhook id).
 
 ## 5a. AI cost and abuse limits (implemented, tested)
 

@@ -41,6 +41,11 @@
 - Performance test suite (`pnpm test:performance`, in CI): fuzzy memory search with 100,000 entries.
 - Phase 0 documentation set.
 
+### Security
+- Review of `linguva_memory_fuzzy()` (docs/SECURITY_REVIEW_MEMORY_FUZZY.md): fixed `search_path` (`pg_catalog, pg_temp`) with schema-qualified names, input bound, migrations refuse to run as a superuser, and a database posture check that stops the app and worker in production if tenant isolation could be weakened.
+- The runtime role can no longer read the audit log (entries of all shops).
+- Adversarial PostgreSQL tests with three roles (runtime, owner, a user without grants).
+
 ### Fixed
 - Fuzzy memory search couldn't use its index under row-level security and scanned the whole memory (446 ms at 100,000 entries); it now uses a shop + trigram index through a narrow security definer function (37 ms median).
 - Review search treated `%` and `_` as wildcards.

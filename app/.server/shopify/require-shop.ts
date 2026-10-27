@@ -1,4 +1,5 @@
 import { authenticate } from "../../shopify.server";
+import { ensureDatabasePosture } from "../lib/db-guard";
 import {
   findShopByDomain,
   upsertInstalledShop,
@@ -9,6 +10,7 @@ import {
  * comes only from the verified session token, never from request input.
  */
 export async function requireShop(request: Request) {
+  await ensureDatabasePosture();
   const context = await authenticate.admin(request);
   const { admin, session } = context;
   let shop = await findShopByDomain(session.shop);

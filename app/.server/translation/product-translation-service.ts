@@ -285,8 +285,9 @@ export async function saveResourceTranslations(
 
   await storeSavedInMemory(input.shopId, resource, input.locale, saved, client);
 
-  await client.auditLog.create({
-    data: {
+  // createMany: no RETURNING, so the runtime role needs no SELECT on AuditLog.
+  await client.auditLog.createMany({
+    data: [{
       shopId: input.shopId,
       actorType: input.actorId ? "MERCHANT_USER" : "SYSTEM",
       actorId: input.actorId,
@@ -298,7 +299,7 @@ export async function saveResourceTranslations(
         keys: saved.map((e) => e.key),
         approved: saved.every((e) => e.approved),
       },
-    },
+    }],
   });
   return outcomes;
 }

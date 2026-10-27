@@ -54,7 +54,7 @@ Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop,
 |---|---|---|
 | **ProviderConfiguration** | id, provider, enabled, modelId, routingWeight, pricePer1MCharsMicros, regions, dpaStatus | Global (not tenant). Admin-managed. API keys are **not stored here**; they come from env/secret manager |
 | **WebhookEvent** | id, shopId (nullable until resolved), topic, webhookId (`X-Shopify-Webhook-Id`), triggeredAt, receivedAt, processedAt, status, payloadHash | unique(webhookId) for duplicate suppression. The raw payload is kept only if needed and expires after N days |
-| **AuditLog** | id, shopId (nullable), actorType (MERCHANT_USER/ADMIN/SYSTEM), actorId, action, targetType, targetId, metadata jsonb, ip, createdAt | Append-only (`UPDATE`/`DELETE` revoked for the app role) |
+| **AuditLog** | id, shopId (nullable), actorType (MERCHANT_USER/ADMIN/SYSTEM), actorId, action, targetType, targetId, metadata jsonb, ip, createdAt | Insert-only for the app role (no `SELECT`, `UPDATE` or `DELETE`): it holds entries of every shop and isn't under RLS |
 | **PrivacyRequest** | id, shopId, topic, shopifyRequestId, receivedAt, dueAt (+30d), completedAt, status, notes | Tracks compliance webhook obligations |
 | **AdminUser** | id, email, role (OWNER/SUPPORT/FINANCE/READONLY), mfaSecretEnc, mfaEnabledAt, lastLoginAt, disabledAt | Separate admin app only |
 | **FeatureFlag** | key, description, defaultOn, rules jsonb (shop allow-list by Shop.id) | Global |

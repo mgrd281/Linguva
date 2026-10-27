@@ -1,9 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
-import { getTranslatableResource } from "../shopify/translations-api";
-import { saveResourceTranslations, type SaveOutcome } from "./product-translation-service";
-import { getRevision } from "./revisions";
+import { getTranslatableResource, removeTranslations } from "../shopify/translations-api";
+import { externalDigest, saveResourceTranslations, type SaveOutcome } from "./product-translation-service";
+import { getRevision, latestRevisions, revisionKey } from "./revisions";
+import { withTenant } from "../tenancy/with-tenant";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -60,4 +61,65 @@ export async function restoreRevision(
     client,
   );
   return outcome?.status === "saved" ? { status: "restored" } : { status: "failed", outcome };
+}
+
+export type RemoveResult = { status: "removed" } | { status: "not_found" } | { status: "failed"; message: string };
+
+/**
+ * Removes a field's translation in Shopify (the storefront then shows the
+ * original text). The removed value is kept as a revision first, so it can
+ * be restored while the source is unchanged. Only the market-independent
+ * translation is removed.
+ */
+export async function removeTranslation(
+  input: { admin: Admin; shopId: string; actorId: string | null; resourceGid: string; locale: string; key: string },
+  client: PrismaClient = defaultClient,
+): Promise<RemoveResult> {
+  const resource = await getTranslatableResource(input.admin, input.resourceGid, input.locale);
+  const field = resource?.content.find((f) => f.key === input.key);
+  const current = resource?.translations.find((t) => t.key === input.key);
+  if (!field?.digest || !current?.value) return { status: "not_found" };
+
+  const latest = (await latestRevisions(input.shopId, [input.resourceGid], input.locale, client)).get(
+    revisionKey(input.resourceGid, input.key),
+  );
+  if (latest?.value !== current.value) {
+    // Not recorded by Linguva yet (made elsewhere): keep it as history.
+    await withTenant(
+      input.shopId,
+      (tx) =>
+        tx.translationRevision.createMany({
+          data: [
+            {
+              shopId: input.shopId,
+              resourceGid: input.resourceGid,
+              key: input.key,
+              locale: input.locale,
+              value: current.value!,
+              sourceDigest: externalDigest(field.digest!, current.outdated),
+              origin: "EXTERNAL",
+              approved: true,
+            },
+          ],
+        }),
+      client,
+    );
+  }
+
+  const result = await removeTranslations(input.admin, input.resourceGid, input.locale, [input.key]);
+  if (result.userErrors.length) return { status: "failed", message: result.userErrors[0]!.message };
+  await client.auditLog.createMany({
+    data: [
+      {
+        shopId: input.shopId,
+        actorType: input.actorId ? "MERCHANT_USER" : "SYSTEM",
+        actorId: input.actorId,
+        action: "translations.removed",
+        targetType: "TranslatableResource",
+        targetId: input.resourceGid,
+        metadata: { locale: input.locale, keys: [input.key] },
+      },
+    ],
+  });
+  return { status: "removed" };
 }

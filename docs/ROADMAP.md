@@ -41,6 +41,8 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M5 | Jobs and Review: keyset pagination, filters and search | Implemented, Tested (integration incl. 20,000 drafts, cross-shop cursor) |
 | M8 | Security review of the fuzzy search definer function and database privileges (SECURITY_REVIEW_MEMORY_FUZZY.md): hardened search path, superuser guard, runtime posture check (fail closed in production), AuditLog insert-only, adversarial tests with three roles, mutation-checked | Implemented, Tested (security suite in CI) |
 | M8 | Fuzzy memory search at 100,000 entries: shop + trigram index via a hardened SECURITY DEFINER function | Implemented, Tested (performance suite in CI, security suite) |
+| M6 | SEO S2: URL handle suggestions, format check, confirmation before changing a published handle | Implemented, Tested (unit, integration, mutation-checked) |
+| M5 | Remove a translation from the editor (kept in history, restorable) | Implemented, Tested |
 | M4 | Pages, blog posts and blogs (PAGE, ARTICLE, BLOG): list, editor, bulk, review, coverage | Implemented, Tested (fake store). GID format to be confirmed by the live read test |
 | M6 | Coverage report (SEO S5): background scan per language and type, counts by field group, SEO findings, duplicate SEO titles, worst items, "translate gaps" / "SEO only" actions | Implemented, Tested (unit, integration incl. BullMQ worker, security: isolation and no stored text; mutation-checked). Not verified on a dev store |
 | M6 | SEO S1: SEO title/description checks (width-based limits, untranslated), editor "Search engine listing" with live counters and result preview, "SEO fields only" AI and bulk jobs | Implemented, Tested (unit, integration, mutation-checked). Not verified on a dev store |
@@ -116,7 +118,7 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | O2 | ~~Fuzzy memory search slow at scale~~ | Fixed | Under RLS no index could serve the trigram operator (not LEAKPROOF), so every search scanned the shop's whole memory (446 ms at 100k). Now a hardened SECURITY DEFINER function uses a shop + trigram GIN index: median 37 ms, p95 49 ms, recall 10/10 at 100,000 entries (performance test in CI) |
 | O3 | ~~No per-user rate limit on interactive AI endpoints~~ | Fixed | Request limits per user and shop, daily and platform caps (SECURITY_MODEL §5a) |
 | O4 | Metafields, metaobjects, pages, articles and Markets are not part of jobs or editors | Medium | After live verification; Markets per SEO_ARCHITECTURE S4 |
-| O5 | Deleting a translation from the UI isn't supported (`translationsRemove` only in live tests) | Low | Editor "remove translation" with revision |
+| O5 | ~~Deleting a translation from the UI isn't supported~~ | Fixed | Editor "Remove translation" (two-step), removed value kept as a revision, audit entry |
 | O6 | ~~No pagination on Review and Jobs~~ | Fixed | Keyset pagination, filters (status, language, type, field group, warnings) and search (wildcards escaped) |
 | O9 | Search on Review (ILIKE) can't use an index under RLS either | Low | Fine at 20,000 drafts (tested). Revisit with the same function approach if shops exceed ~100k pending drafts |
 | O7 | Rollback after a source change is impossible (Shopify accepts only the current digest) | By design | Shown in the UI |

@@ -8,6 +8,7 @@ import type { loadEditorData, runEditorAction } from "../.server/translation/res
 
 import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
+import { HANDLE_PROBLEM_MESSAGES, suggestHandle, validateHandle } from "../lib/handles";
 import { issueLabel } from "../lib/issue-labels";
 
 type EditorLoader = () => ReturnType<typeof loadEditorData>;
@@ -40,6 +41,9 @@ export function ResourceTranslationEditor() {
   const consentFetcher = useFetcher<EditorAction>();
   const memoryFetcher = useFetcher<EditorAction>();
   const restoreFetcher = useFetcher<EditorAction>();
+  const removeFetcher = useFetcher<EditorAction>();
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const removed = removeFetcher.data?.kind === "removed" ? removeFetcher.data : null;
   const [filledFrom, setFilledFrom] = useState<"ai" | "memory">("ai");
 
   // The latest of AI translation or memory suggestions fills the form.
@@ -94,6 +98,16 @@ export function ResourceTranslationEditor() {
               Allow AI processing
             </s-button>
           </consentFetcher.Form>
+        </s-banner>
+      ) : null}
+
+      {removed ? (
+        <s-banner tone={removed.status === "removed" ? "success" : "warning"} heading={removed.status === "removed" ? "Translation removed" : "Couldn't remove the translation"}>
+          <s-paragraph>
+            {removed.status === "removed"
+              ? "Customers now see the original text for this field. The removed version is kept in the history."
+              : "Please reload the page and try again."}
+          </s-paragraph>
         </s-banner>
       ) : null}
 
@@ -273,11 +287,34 @@ export function ResourceTranslationEditor() {
               key={`${field.key}:${draft ?? "base"}`}
               name={`value:${field.key}`}
               label={data.target.name}
-              value={value}
+              value={field.key === "handle" ? currentValue("handle") : value}
               {...(error ? { error } : {})}
               {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
             />
           )}
+          {field.key === "handle" ? (
+            <s-stack direction="block" gap="small">
+              <s-button
+                variant="tertiary"
+                onClick={() => {
+                  const title = currentValue("title") || fieldByKey.get("title")?.source || "";
+                  const suggestion = suggestHandle(title, data.target.locale);
+                  if (suggestion) setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), handle: suggestion } }));
+                }}
+              >
+                Suggest from the translated title
+              </s-button>
+              {currentValue("handle") && validateHandle(currentValue("handle")) ? (
+                <s-text tone="critical">{HANDLE_PROBLEM_MESSAGES[validateHandle(currentValue("handle"))!]}</s-text>
+              ) : null}
+              {field.translation && currentValue("handle") !== field.translation ? (
+                <s-checkbox
+                  name="confirm-handle"
+                  label={`Change the published address. Links to …/${field.translation} in ${data.target.name} will stop working.`}
+                />
+              ) : null}
+            </s-stack>
+          ) : null}
           {isSeoKey(field.key) ? (
             <SeoCounter fieldKey={field.key} value={currentValue(field.key)} source={field.source} />
           ) : null}
@@ -298,6 +335,22 @@ export function ResourceTranslationEditor() {
                 <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge>
               ) : null}
             {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
+            {field.translation && !(removed?.status === "removed" && removed.key === field.key) ? (
+              <s-button
+                variant="tertiary"
+                tone="critical"
+                onClick={() => {
+                  if (confirmRemove !== field.key) {
+                    setConfirmRemove(field.key);
+                    return;
+                  }
+                  setConfirmRemove(null);
+                  removeFetcher.submit({ intent: "remove", key: field.key }, { method: "post" });
+                }}
+              >
+                {confirmRemove === field.key ? "Click again to remove the translation" : "Remove translation"}
+              </s-button>
+            ) : null}
             {!field.machine ? <s-badge>Manual only</s-badge> : null}
           </s-stack>
           {field.history.length ? (

@@ -102,6 +102,22 @@ const REGISTER_MUTATION = `#graphql
   }
 `;
 
+const REMOVE_MUTATION = `#graphql
+  mutation LinguvaTranslationsRemove($resourceId: ID!, $keys: [String!]!, $locales: [String!]!) {
+    translationsRemove(resourceId: $resourceId, translationKeys: $keys, locales: $locales) {
+      translations {
+        key
+        locale
+      }
+      userErrors {
+        field
+        message
+        code
+      }
+    }
+  }
+`;
+
 function toResource(node: {
   resourceId: string;
   translatableContent: Array<{
@@ -208,6 +224,20 @@ export async function registerTranslations(
       message: e.message,
       code: e.code ?? null,
     })),
+  };
+}
+
+/** Removes the market-independent translation of the given keys for one locale. */
+export async function removeTranslations(admin: Admin, resourceId: string, locale: string, keys: readonly string[]) {
+  const response = await admin.graphql(REMOVE_MUTATION, {
+    variables: { resourceId, keys: [...keys], locales: [locale] },
+  });
+  const body = await response.json();
+  const result = body.data?.translationsRemove;
+  if (!result) throw new ShopifyApiError("translationsRemove returned no data");
+  return {
+    removed: (result.translations ?? []).map((t) => t.key),
+    userErrors: result.userErrors.map((e) => ({ message: e.message, code: e.code ?? null })),
   };
 }
 

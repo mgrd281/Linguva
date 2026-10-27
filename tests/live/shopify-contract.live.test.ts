@@ -17,6 +17,7 @@ import {
   getTranslatableResource,
   listTranslatableResources,
   registerTranslations,
+  removeTranslations as removeAppTranslations,
 } from "../../app/.server/shopify/translations-api";
 import { SHOP_LOCALES_QUERY } from "../../app/.server/locales/shop-locales";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
@@ -169,7 +170,8 @@ writes("write contract on fixtures", () => {
   });
 
   it("removes a translation", async () => {
-    const result = await removeTranslations(admin, product.id, ["meta_title"], [locale]);
+    // The app's own removal call (editor "Remove translation").
+    const result = await removeAppTranslations(admin, product.id, locale, ["meta_title"]);
     expect(result.userErrors).toEqual([]);
     expect((await field(product.id, "meta_title")).translation?.value ?? null).toBeNull();
   });

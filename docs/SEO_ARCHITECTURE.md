@@ -48,7 +48,11 @@ Implemented as described below, in `app/lib/seo.ts` (rules shared by server and 
 - Fallback rule: if the source has no `meta_title`, Shopify uses the title. Linguva shows "uses translated title" instead of reporting a missing field.
 - AI prompt context: "SEO title, keep under 60 characters". DeepL has no length control, so the result is checked and flagged, not truncated (truncation could break meaning).
 
-### S2 Translatable handles
+### S2 Translatable handles — Implemented, Tested (fake store)
+
+Implemented in `app/lib/handles.ts` and the editor: a suggestion from the translated title (ASCII with German transliteration for Latin-script languages, the original script otherwise), a format check (lowercase letters/numbers of any script, single hyphens, ≤ 255), and a required confirmation before changing a published translated handle. Handles are never part of bulk jobs. Not yet: a uniqueness check against other resources' handles, and mapping of `INVALID_VALUE_FOR_HANDLE_TRANSLATION` from a live store (both need the dev store).
+
+Original plan:
 - Suggestion only, never automatic publishing: slug from the translated title (lowercase, NFKC, spaces → `-`, keep letters of the target script; transliteration for Latin-only stores as an option), with uniqueness checked against handles already registered for that language.
 - Publishing a handle needs explicit confirmation in the editor and is never part of bulk jobs unless a separate, explicit "handles" option is chosen.
 - Map `INVALID_VALUE_FOR_HANDLE_TRANSLATION` to a clear field error.

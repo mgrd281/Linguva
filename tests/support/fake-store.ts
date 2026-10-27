@@ -167,6 +167,16 @@ export class FakeShopifyStore {
       });
       return Response.json({ data: { translationsRegister: { translations: written, userErrors } } });
     }
+    if (name === "LinguvaTranslationsRemove") {
+      const gid = String(vars.resourceId);
+      const removed: Array<{ key: string; locale: string }> = [];
+      for (const locale of vars.locales as string[]) {
+        for (const key of vars.keys as string[]) {
+          if (this.translations.delete(`${gid}|${locale}|${key}`)) removed.push({ key, locale });
+        }
+      }
+      return Response.json({ data: { translationsRemove: { translations: removed, userErrors: [] } } });
+    }
     throw new Error(`FakeShopifyStore: unsupported operation ${name}`);
   };
 

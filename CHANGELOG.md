@@ -40,6 +40,8 @@
 - Jobs and Review: pagination, filters (status, language, content type, field group, only with warnings) and search on Review.
 - Performance test suite (`pnpm test:performance`, in CI): fuzzy memory search with 100,000 entries.
 - Online store pages, blog posts and blogs: lists with coverage, editor, bulk jobs, review filters and the coverage report, sharing the product code paths.
+- URL handles per language: suggestion from the translated title, format check, and a required confirmation before changing a published handle.
+- "Remove translation" in the editor; the removed value stays in the history and can be restored.
 - Phase 0 documentation set.
 
 ### Security
@@ -48,6 +50,7 @@
 - Adversarial PostgreSQL tests with three roles (runtime, owner, a user without grants).
 
 ### Fixed
+- A replaced or removed translation that was already outdated is kept in the history as written for an older source, so restoring it can't mark it current for the new text.
 - Fuzzy memory search couldn't use its index under row-level security and scanned the whole memory (446 ms at 100,000 entries); it now uses a shop + trigram index through a narrow security definer function (37 ms median).
 - Review search treated `%` and `_` as wildcards.
 - Bulk jobs with automatic publishing published results with quality warnings; these now go to Review. Jobs also stop publishing when the merchant switches back to review mode.

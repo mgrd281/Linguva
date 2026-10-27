@@ -40,6 +40,15 @@ export type LinguvaTranslationsRegisterMutationVariables = AdminTypes.Exact<{
 
 export type LinguvaTranslationsRegisterMutation = { translationsRegister?: AdminTypes.Maybe<{ translations?: AdminTypes.Maybe<Array<Pick<AdminTypes.Translation, 'key' | 'locale' | 'value'>>>, userErrors: Array<Pick<AdminTypes.TranslationUserError, 'field' | 'message' | 'code'>> }> };
 
+export type LinguvaTranslationsRemoveMutationVariables = AdminTypes.Exact<{
+  resourceId: AdminTypes.Scalars['ID']['input'];
+  keys: Array<AdminTypes.Scalars['String']['input']> | AdminTypes.Scalars['String']['input'];
+  locales: Array<AdminTypes.Scalars['String']['input']> | AdminTypes.Scalars['String']['input'];
+}>;
+
+
+export type LinguvaTranslationsRemoveMutation = { translationsRemove?: AdminTypes.Maybe<{ translations?: AdminTypes.Maybe<Array<Pick<AdminTypes.Translation, 'key' | 'locale'>>>, userErrors: Array<Pick<AdminTypes.TranslationUserError, 'field' | 'message' | 'code'>> }> };
+
 export type LinguvaShopIdentityQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
 
 
@@ -125,6 +134,7 @@ interface GeneratedQueryTypes {
 
 interface GeneratedMutationTypes {
   "#graphql\n  mutation LinguvaTranslationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {\n    translationsRegister(resourceId: $resourceId, translations: $translations) {\n      translations {\n        key\n        locale\n        value\n      }\n      userErrors {\n        field\n        message\n        code\n      }\n    }\n  }\n": {return: LinguvaTranslationsRegisterMutation, variables: LinguvaTranslationsRegisterMutationVariables},
+  "#graphql\n  mutation LinguvaTranslationsRemove($resourceId: ID!, $keys: [String!]!, $locales: [String!]!) {\n    translationsRemove(resourceId: $resourceId, translationKeys: $keys, locales: $locales) {\n      translations {\n        key\n        locale\n      }\n      userErrors {\n        field\n        message\n        code\n      }\n    }\n  }\n": {return: LinguvaTranslationsRemoveMutation, variables: LinguvaTranslationsRemoveMutationVariables},
   "#graphql\n  mutation LinguvaLiveProductCreate($product: ProductCreateInput!) {\n    productCreate(product: $product) {\n      product {\n        id\n        handle\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: LinguvaLiveProductCreateMutation, variables: LinguvaLiveProductCreateMutationVariables},
   "#graphql\n  mutation LinguvaLiveProductUpdate($product: ProductUpdateInput!) {\n    productUpdate(product: $product) {\n      product {\n        id\n      }\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: LinguvaLiveProductUpdateMutation, variables: LinguvaLiveProductUpdateMutationVariables},
   "#graphql\n  mutation LinguvaLiveProductDelete($id: ID!) {\n    productDelete(input: { id: $id }) {\n      deletedProductId\n      userErrors {\n        field\n        message\n      }\n    }\n  }\n": {return: LinguvaLiveProductDeleteMutation, variables: LinguvaLiveProductDeleteMutationVariables},

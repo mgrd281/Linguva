@@ -28,7 +28,10 @@ import {
 import { collectEditorEdits } from "./editor-edits";
 import { isMachineTranslatable, segmentField } from "./translate-fields";
 import { listRevisions } from "./revisions";
-import { restoreRevision } from "./history";
+import { removeTranslation, restoreRevision } from "./history";
+import { HANDLE_PROBLEM_MESSAGES, validateHandle } from "../../lib/handles";
+import type { TranslationEdit } from "./product-translation-service";
+import type { TranslatableResourceData } from "../shopify/translations-api";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -141,6 +144,7 @@ export type EditorActionResult =
       scores?: Record<string, number>;
     }
   | { kind: "restored"; status: string }
+  | { kind: "removed"; key: string; status: string }
   | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string }> }
   | { kind: "consent" }
   | { kind: "error"; code: string; retryAfterSeconds?: number };
@@ -151,6 +155,34 @@ function rateLimited(error: RequestRateLimitedError) {
     code: error.scope === "user" ? "RATE_LIMITED_USER" : "RATE_LIMITED_SHOP",
     retryAfterSeconds: Math.max(1, Math.ceil(error.retryAfterMs / 1000)),
   } satisfies EditorActionResult;
+}
+
+/**
+ * URL handles are never changed by accident: a handle must be well-formed,
+ * and changing a translated handle that is already published needs the
+ * merchant's explicit confirmation (old language URLs don't redirect).
+ */
+export function checkHandleEdits(resource: TranslatableResourceData, edits: TranslationEdit[], form: Pick<FormData, "get">) {
+  const current = resource.translations.find((t) => t.key === "handle")?.value ?? "";
+  const refused: Array<{ key: string; status: "error"; message: string }> = [];
+  const kept = edits.filter((edit) => {
+    if (edit.key !== "handle") return true;
+    const problem = validateHandle(edit.value);
+    if (problem) {
+      refused.push({ key: "handle", status: "error", message: HANDLE_PROBLEM_MESSAGES[problem] });
+      return false;
+    }
+    if (current && current !== edit.value && form.get("confirm-handle") !== "on") {
+      refused.push({
+        key: "handle",
+        status: "error",
+        message: "Confirm the URL change below: links to the old address in this language will stop working.",
+      });
+      return false;
+    }
+    return true;
+  });
+  return { edits: kept, refused };
 }
 
 export async function runEditorAction(ctx: EditorContext, form: FormData) {
@@ -268,16 +300,25 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
   if (intent === "save") {
     const resource = await getTranslatableResource(admin, resourceId, target.locale);
     if (!resource) throw new Response("Not found", { status: 404 });
-    const edits = collectEditorEdits(resource, form);
-    const outcomes = await saveResourceTranslations({
-      admin,
-      shopId,
-      actorId,
-      resourceId,
-      locale: target.locale,
-      edits,
-    });
-    return data({ kind: "saved", outcomes } satisfies EditorActionResult);
+    const { edits, refused } = checkHandleEdits(resource, collectEditorEdits(resource, form), form);
+    const outcomes = edits.length
+      ? await saveResourceTranslations({
+          admin,
+          shopId,
+          actorId,
+          resourceId,
+          locale: target.locale,
+          edits,
+        })
+      : [];
+    return data({ kind: "saved", outcomes: [...refused, ...outcomes] } satisfies EditorActionResult);
+  }
+
+  if (intent === "remove") {
+    const key = String(form.get("key") ?? "");
+    if (!/^[A-Za-z0-9_.-]{1,100}$/.test(key)) return data({ kind: "error", code: "INVALID_REQUEST" } satisfies EditorActionResult, { status: 400 });
+    const result = await removeTranslation({ admin, shopId, actorId, resourceGid: resourceId, locale: target.locale, key });
+    return { kind: "removed", key, status: result.status } satisfies EditorActionResult;
   }
 
   return data({ kind: "error", code: "UNKNOWN_INTENT" } satisfies EditorActionResult, { status: 400 });

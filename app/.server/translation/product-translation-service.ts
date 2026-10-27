@@ -169,6 +169,15 @@ export type SaveOutcome =
  * Linguva is kept as an EXTERNAL revision, so it can be restored. Saved
  * segments go to translation memory.
  */
+/**
+ * Digest recorded for a value Linguva didn't write. An outdated value was
+ * written for an older source, so it gets a digest that never matches:
+ * restoring it would otherwise mark it current for the new source text.
+ */
+export function externalDigest(currentDigest: string, outdated: boolean): string {
+  return outdated ? `outdated:${currentDigest}` : currentDigest;
+}
+
 export async function saveResourceTranslations(
   input: {
     admin: Admin;
@@ -242,7 +251,7 @@ export async function saveResourceTranslations(
         key: edit.key,
         locale: input.locale,
         value: before.value,
-        sourceDigest: current.get(edit.key)!.digest!,
+        sourceDigest: externalDigest(current.get(edit.key)!.digest!, before.outdated),
         origin: "EXTERNAL",
         approved: true,
         createdAt: new Date(now - 1),

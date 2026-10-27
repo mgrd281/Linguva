@@ -19,6 +19,11 @@ const schema = z.object({
       (v) => v.split(",").every((entry) => keyEntry.test(entry.trim())),
       "must be comma-separated kid:base64key entries with 32-byte keys",
     ),
+  // AI translation is disabled when no provider key is configured.
+  DEEPL_API_KEY: z.string().min(1).optional(),
+  DEEPL_API_URL: z.string().url().optional(),
+  // Monthly AI character allowance per shop until plans are wired to billing.
+  AI_MONTHLY_CHAR_LIMIT: z.coerce.number().int().positive().default(20_000),
 });
 
 export type AppConfig = z.infer<typeof schema>;

@@ -8,7 +8,7 @@ export const ownerDb = new PrismaClient({
 /** Removes all rows between tests (TRUNCATE isn't subject to RLS). */
 export async function resetDatabase() {
   await ownerDb.$executeRawUnsafe(
-    `TRUNCATE "AuditLog", "ShopLocale", "ShopSettings", "ShopInstallation",
+    `TRUNCATE "UsageLedger", "TranslationRevision", "AuditLog", "ShopLocale", "ShopSettings", "ShopInstallation",
        "Shop", "Session", "WebhookEvent", "PrivacyRequest" CASCADE`,
   );
 }

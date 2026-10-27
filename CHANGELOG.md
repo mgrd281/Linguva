@@ -13,6 +13,12 @@
 - Overview and Languages pages reading the store's languages from Shopify, with the 20-language limit and RTL warnings.
 - Validated environment configuration (zod) and structured logging with redaction (pino).
 - Unit and integration test suites (Vitest, real PostgreSQL), CI workflow with migration drift check, GraphQL schema validation and secret scanning.
+- Translation engine: HTML segmentation with XLIFF-style inline codes, protection of Liquid, placeholders, URLs, e-mails, merchant terms and SKU patterns, and rebuild of markup from the source only (provider output can't inject HTML).
+- Translation validation: numbers (incl. Arabic-Indic and Persian digits), glossary forbidden/preferred terms, length ratio.
+- Provider abstraction with a DeepL adapter (XML tag handling, batching under the request limit, retry with backoff and jitter, error classification).
+- Usage ledger with per-shop monthly quota, concurrency-safe reservations and idempotent settlement.
+- Products page with translation coverage per language, and a product translation editor with AI drafts, review, digest-checked publishing to Shopify, revision history and audit log.
+- Versioned AI data-processing consent and a Settings page.
 - Phase 0 documentation set.
 
 ### Removed

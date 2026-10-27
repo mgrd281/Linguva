@@ -59,6 +59,8 @@ model Shop {
   settings      ShopSettings?
   locales       ShopLocale[]
   auditLogs     AuditLog[]
+  revisions     TranslationRevision[]
+  usage         UsageLedger[]
 }
 
 enum InstallationEventType {
@@ -186,4 +188,53 @@ model PrivacyRequest {
 
   @@index([shopDomain, receivedAt])
   @@index([status, dueAt])
+}
+
+enum TranslationOrigin {
+  AI
+  MANUAL
+}
+
+// History of every translation Linguva wrote to Shopify. Enables review of
+// changes and rollback while the source is unchanged.
+model TranslationRevision {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId       String            @db.Uuid
+  resourceGid  String
+  key          String
+  locale       String
+  marketGid    String?
+  value        String
+  sourceDigest String
+  origin       TranslationOrigin
+  provider     String?
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, resourceGid, locale, createdAt])
+}
+
+enum UsageKind {
+  RESERVE
+  ADJUST
+  RELEASE
+}
+
+// Append-only usage ledger (characters sent to AI providers). Usage for a
+// period is SUM(chars). See docs/BILLING_DESIGN.md §5.
+model UsageLedger {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId         String    @db.Uuid
+  periodKey      String
+  kind           UsageKind
+  chars          Int
+  provider       String?
+  idempotencyKey String
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, periodKey])
 }

@@ -1,6 +1,6 @@
 # Roadmap, Risks and Decisions
 
-Status as of 2026-10-27: **M1 and M2 implemented and tested locally. M3 is code-complete but not yet verified on a dev store.**
+Status as of 2026-10-27: **M1 and M2 implemented and tested (locally and in GitHub CI). M3 and the interactive part of M4 are implemented and tested against a simulated Admin API, but not yet verified on a real dev store.**
 
 ## 1. Progress checklist
 
@@ -18,7 +18,14 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M2 | Webhooks: HMAC (401), duplicate suppression, retry after failure | Implemented, Tested (route level and against the running production build) |
 | M2 | Compliance webhooks: customers/data_request, customers/redact, shop/redact | Implemented, Tested. Not yet Verified via `shopify app webhook trigger` |
 | M3 | Overview and Languages pages reading `shopLocales` | Implemented. **Blocked on a dev store** for verification |
-| — | CI on GitHub | Implemented. First run happens after push |
+| M4 | HTML segmenter (XLIFF-style inline codes), placeholder/Liquid/URL protection, XSS-safe rebuild | Implemented, Tested (29 unit tests) |
+| M4 | Content validation (numbers incl. Arabic-Indic digits, glossary terms, length) | Implemented, Tested |
+| M4 | Provider layer + DeepL adapter (batching, retry with backoff/jitter, error classes) | Implemented, Tested with a stubbed HTTP layer. **Not yet verified against live DeepL** (no key configured) |
+| M4 | Usage ledger with quota reservation (advisory lock, idempotent) | Implemented, Tested (incl. concurrency) |
+| M4 | Products list (coverage per locale) and product translation editor: AI drafts, review, digest-checked publish, revisions, audit log | Implemented, Tested against a simulated Admin API. **Blocked on a dev store** for verification |
+| M4 | AI data-processing consent (versioned, audited) and Settings page | Implemented, Tested |
+| M4 | Background jobs (BullMQ worker) for bulk translation | Planned (next) |
+| — | CI on GitHub | Implemented, green on the first push |
 | — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, SEO_ARCHITECTURE, DEPLOYMENT, TEST_PLAN | Planned |
 
 ## 2. Milestones

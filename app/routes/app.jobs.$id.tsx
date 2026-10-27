@@ -7,15 +7,20 @@ import type {
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { cancelJob, getJobForShop, listProblemItems } from "../.server/jobs/bulk-jobs";
+import { cancelJob, getJobForShop, isBulkResourceType, listProblemItems } from "../.server/jobs/bulk-jobs";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
-import { numericId } from "../.server/shopify/translations-api";
+import { editorPath, numericId, RESOURCE_KINDS } from "../lib/resource-kinds";
 import {
   ITEM_ERROR_MESSAGES,
   JOB_ERROR_MESSAGES,
   JOB_STATUS_LABELS,
   jobProgress,
 } from "../lib/job-display";
+
+function kindInfo(resourceType: string) {
+  const meta = RESOURCE_KINDS[isBulkResourceType(resourceType) ? resourceType : "PRODUCT"];
+  return { label: meta.label, plural: meta.plural };
+}
 
 const ACTIVE = new Set(["PENDING", "DISCOVERING", "RUNNING"]);
 
@@ -29,6 +34,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       id: job.id,
       status: job.status,
       targetLocale: job.targetLocale,
+      kind: kindInfo(job.resourceType),
       errorCode: job.errorCode,
       charsBilled: job.charsBilled,
       memoryHits: job.memoryHits,
@@ -43,7 +49,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     },
     problems: problems.map((p) => ({
       id: p.id,
-      productId: numericId(p.resourceGid),
+      href: editorPath(p.resourceGid, job.targetLocale),
+      label: numericId(p.resourceGid),
       status: p.status,
       errorCode: p.errorCode,
       attempts: p.attempts,
@@ -101,8 +108,8 @@ export default function JobDetail() {
           <s-stack direction="inline" gap="base" alignItems="center">
             <s-badge tone={label.tone}>{label.label}</s-badge>
             <s-text>
-              {job.progress.done} of {job.progress.total} products
-              {!job.discoveryDone ? " (still finding products)" : ""}
+              {job.progress.done} of {job.progress.total} {job.kind.plural}
+              {!job.discoveryDone ? ` (still finding ${job.kind.plural})` : ""}
             </s-text>
           </s-stack>
           <s-box background="subdued" borderRadius="base" padding="none">
@@ -150,17 +157,17 @@ export default function JobDetail() {
           <fetcher.Form method="post">
             <input type="hidden" name="intent" value="retry" />
             <s-button type="submit" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
-              {job.status === "FAILED" ? "Resume job" : "Retry failed products"}
+              {job.status === "FAILED" ? "Resume job" : `Retry failed ${job.kind.plural}`}
             </s-button>
           </fetcher.Form>
         ) : null}
       </s-stack>
 
       {problems.length ? (
-        <s-section heading="Products that failed" padding="none">
+        <s-section heading={`${job.kind.label} that failed`} padding="none">
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">Product</s-table-header>
+              <s-table-header listSlot="primary">{job.kind.label}</s-table-header>
               <s-table-header>Reason</s-table-header>
               <s-table-header format="numeric">Attempts</s-table-header>
             </s-table-header-row>
@@ -168,9 +175,7 @@ export default function JobDetail() {
               {problems.map((p) => (
                 <s-table-row key={p.id}>
                   <s-table-cell>
-                    <s-link href={`/app/products/${p.productId}?locale=${encodeURIComponent(job.targetLocale)}`}>
-                      Product {p.productId}
-                    </s-link>
+                    {p.href ? <s-link href={p.href}>{p.label}</s-link> : p.label}
                   </s-table-cell>
                   <s-table-cell>{ITEM_ERROR_MESSAGES[p.errorCode ?? ""] ?? p.errorCode ?? "Unknown"}</s-table-cell>
                   <s-table-cell>{p.attempts}</s-table-cell>

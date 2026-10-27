@@ -1,4 +1,6 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import { resourceGid, type ResourceKind } from "../../lib/resource-kinds";
+import type { TranslatableResourceType } from "../../types/admin.types";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -31,8 +33,13 @@ export interface TranslatableResourceData {
 }
 
 const LIST_QUERY = `#graphql
-  query LinguvaTranslatableProducts($first: Int!, $after: String, $locale: String!) {
-    translatableResources(resourceType: PRODUCT, first: $first, after: $after) {
+  query LinguvaTranslatableResources(
+    $resourceType: TranslatableResourceType!
+    $first: Int!
+    $after: String
+    $locale: String!
+  ) {
+    translatableResources(resourceType: $resourceType, first: $first, after: $after) {
       nodes {
         resourceId
         translatableContent {
@@ -129,12 +136,18 @@ function toResource(node: {
   };
 }
 
-export async function listTranslatableProducts(
+export async function listTranslatableResources(
   admin: Admin,
-  options: { locale: string; first?: number; after?: string | null },
+  options: { resourceType: ResourceKind; locale: string; first?: number; after?: string | null },
 ) {
   const response = await admin.graphql(LIST_QUERY, {
-    variables: { first: options.first ?? 25, after: options.after ?? null, locale: options.locale },
+    variables: {
+      // ResourceKind values are TranslatableResourceType enum names.
+      resourceType: options.resourceType as TranslatableResourceType,
+      first: options.first ?? 25,
+      after: options.after ?? null,
+      locale: options.locale,
+    },
   });
   const body = await response.json();
   const connection = body.data?.translatableResources;
@@ -200,9 +213,7 @@ export async function registerTranslations(
 
 /** Product GIDs are built server-side from a numeric id in the URL. */
 export function productGid(id: string): string | null {
-  return /^\d{1,20}$/.test(id) ? `gid://shopify/Product/${id}` : null;
+  return resourceGid("PRODUCT", id);
 }
 
-export function numericId(gid: string): string {
-  return gid.slice(gid.lastIndexOf("/") + 1);
-}
+export { numericId } from "../../lib/resource-kinds";

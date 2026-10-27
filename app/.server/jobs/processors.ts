@@ -4,8 +4,9 @@ import type { TranslationProvider } from "../providers/types";
 import { shopKey } from "../queue/redis";
 import {
   getTranslatableResource,
-  listTranslatableProducts,
+  listTranslatableResources,
 } from "../shopify/translations-api";
+import { providerContext } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
 import {
   saveResourceTranslations,
@@ -18,7 +19,7 @@ import { recordMemoryUse } from "../memory/translation-memory";
 import { pendingDraftDigests, saveDrafts } from "../review/drafts";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
-import { finishItem, stopJob, completeIfDone } from "./bulk-jobs";
+import { finishItem, isBulkResourceType, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork } from "./needs-work";
 
@@ -94,9 +95,15 @@ export async function runDiscoveryPage(
     return done;
   }
 
+  if (!isBulkResourceType(job.resourceType)) {
+    await stopJob(payload.shopId, job.id, "DISCOVERY_FAILED", deps.prisma);
+    return done;
+  }
+
   await throttle(deps, payload.shopId, DISCOVERY_PAGE_COST);
   const admin = await deps.adminFor(shop.shopDomain);
-  const page = await listTranslatableProducts(admin, {
+  const page = await listTranslatableResources(admin, {
+    resourceType: job.resourceType,
     locale: job.targetLocale,
     after: job.discoveryCursor,
     first: deps.discoveryPageSize ?? DISCOVERY_PAGE_SIZE,
@@ -268,7 +275,7 @@ export async function processItem(
       sourceLocale,
       targetLocale: job.targetLocale,
       glossary: context.glossary.rules,
-      context: title ? `Product: ${title}` : undefined,
+      context: providerContext(resource.resourceId, title),
     });
   } catch (error) {
     if (reservation) await releaseUsage(reservation, deps.prisma);

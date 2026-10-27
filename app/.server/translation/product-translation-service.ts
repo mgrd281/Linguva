@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
+import { providerContext } from "../../lib/resource-kinds";
 import { logger } from "../lib/logger";
 import { alignDocuments, type SegmentPair } from "../memory/alignment";
 import { recordMemoryUse, storeMemory } from "../memory/translation-memory";
@@ -103,7 +104,7 @@ export async function aiTranslateResource(
       sourceLocale: sourceLocaleOf(resource),
       targetLocale: input.targetLocale,
       glossary: context.glossary.rules,
-      context: titleField?.value ? `Product: ${titleField.value}` : undefined,
+      context: providerContext(resource.resourceId, titleField?.value),
     });
     if (reservation) await settleUsage(reservation, result.billedCharacters, client);
     await recordMemoryUse(input.shopId, result.memoryEntryIds, client);

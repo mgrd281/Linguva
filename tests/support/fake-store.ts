@@ -1,5 +1,6 @@
 /**
- * In-memory stand-in for one shop's Admin GraphQL API with many products:
+ * In-memory stand-in for one shop's Admin GraphQL API with many products
+ * (and optionally collections):
  * paginated translatableResources, translatableResource and
  * translationsRegister. Supports fault injection. It models the documented
  * contract only; real behaviour must still be verified on a dev store.
@@ -23,8 +24,20 @@ export function productFields(n: number): Field[] {
   ];
 }
 
+export function collectionFields(n: number): Field[] {
+  return [
+    { key: "title", value: `Collection ${n} winter`, type: "SINGLE_LINE_TEXT_FIELD" },
+    { key: "body_html", value: `<p>Our <em>winter</em> picks, part ${n}.</p>`, type: "HTML" },
+    { key: "handle", value: `collection-${n}`, type: "URI" },
+    { key: "meta_title", value: `Winter collection ${n}`, type: "SINGLE_LINE_TEXT_FIELD" },
+  ];
+}
+
+const GID_TYPES: Record<string, string> = { PRODUCT: "Product", COLLECTION: "Collection" };
+
 export class FakeShopifyStore {
   readonly calls: string[] = [];
+  /** All resources by GID (products and collections). */
   readonly products = new Map<string, Field[]>();
   readonly translations = new Map<string, { value: string; digest: string }>();
   /** Throw this error for the next N calls (any operation). */
@@ -32,6 +45,11 @@ export class FakeShopifyStore {
 
   constructor(count: number, private readonly sourceLocale = "en") {
     for (let i = 1; i <= count; i++) this.products.set(`gid://shopify/Product/${i}`, productFields(i));
+  }
+
+  addCollections(count: number) {
+    for (let i = 1; i <= count; i++) this.products.set(`gid://shopify/Collection/${i}`, collectionFields(i));
+    return this;
   }
 
   asAdmin(): Pick<AdminApiContext, "graphql"> {
@@ -63,8 +81,10 @@ export class FakeShopifyStore {
     }
     const vars = options?.variables ?? {};
 
-    if (name === "LinguvaTranslatableProducts") {
-      const all = [...this.products.keys()];
+    if (name === "LinguvaTranslatableResources") {
+      const gidType = GID_TYPES[String(vars.resourceType)];
+      if (!gidType) throw new Error(`FakeShopifyStore: unsupported resourceType ${String(vars.resourceType)}`);
+      const all = [...this.products.keys()].filter((gid) => gid.startsWith(`gid://shopify/${gidType}/`));
       const start = vars.after ? Number(vars.after) : 0;
       const first = Number(vars.first);
       const slice = all.slice(start, start + first);

@@ -14,7 +14,7 @@ import {
   MAX_DRAFTS_PER_ACTION,
   rejectDrafts,
 } from "../.server/review/drafts";
-import { numericId } from "../.server/shopify/translations-api";
+import { editorPath } from "../lib/resource-kinds";
 import { fieldLabel } from "../lib/field-labels";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -28,7 +28,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     filter: { locale: locale ?? null, jobId: jobId ?? null },
     drafts: drafts.map((d) => ({
       id: d.id,
-      productId: numericId(d.resourceGid),
+      href: editorPath(d.resourceGid, d.locale),
       title: d.resourceTitle ?? "(untitled)",
       locale: d.locale,
       key: d.key,
@@ -118,9 +118,7 @@ export default function Review() {
                 />
                 <s-stack direction="inline" gap="small">
                   {d.issues.length ? <s-badge tone="warning">Check: {d.issues.join(", ")}</s-badge> : null}
-                  <s-link href={`/app/products/${d.productId}?locale=${encodeURIComponent(d.locale)}`}>
-                    Open product
-                  </s-link>
+                  {d.href ? <s-link href={d.href}>Open in editor</s-link> : null}
                 </s-stack>
               </s-stack>
             </s-section>

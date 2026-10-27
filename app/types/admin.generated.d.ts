@@ -8,14 +8,15 @@ export type LinguvaShopLocalesQueryVariables = AdminTypes.Exact<{ [key: string]:
 
 export type LinguvaShopLocalesQuery = { shopLocales: Array<Pick<AdminTypes.ShopLocale, 'locale' | 'name' | 'primary' | 'published'>> };
 
-export type LinguvaTranslatableProductsQueryVariables = AdminTypes.Exact<{
+export type LinguvaTranslatableResourcesQueryVariables = AdminTypes.Exact<{
+  resourceType: AdminTypes.TranslatableResourceType;
   first: AdminTypes.Scalars['Int']['input'];
   after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
   locale: AdminTypes.Scalars['String']['input'];
 }>;
 
 
-export type LinguvaTranslatableProductsQuery = { translatableResources: { nodes: Array<(
+export type LinguvaTranslatableResourcesQuery = { translatableResources: { nodes: Array<(
       Pick<AdminTypes.TranslatableResource, 'resourceId'>
       & { translatableContent: Array<Pick<AdminTypes.TranslatableContent, 'key' | 'value' | 'digest' | 'locale' | 'type'>>, translations: Array<Pick<AdminTypes.Translation, 'key' | 'value' | 'outdated' | 'updatedAt'>> }
     )>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } };
@@ -46,7 +47,7 @@ export type LinguvaShopIdentityQuery = { shop: Pick<AdminTypes.Shop, 'id' | 'nam
 
 interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaShopLocales {\n    shopLocales {\n      locale\n      name\n      primary\n      published\n    }\n  }\n": {return: LinguvaShopLocalesQuery, variables: LinguvaShopLocalesQueryVariables},
-  "#graphql\n  query LinguvaTranslatableProducts($first: Int!, $after: String, $locale: String!) {\n    translatableResources(resourceType: PRODUCT, first: $first, after: $after) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaTranslatableProductsQuery, variables: LinguvaTranslatableProductsQueryVariables},
+  "#graphql\n  query LinguvaTranslatableResources(\n    $resourceType: TranslatableResourceType!\n    $first: Int!\n    $after: String\n    $locale: String!\n  ) {\n    translatableResources(resourceType: $resourceType, first: $first, after: $after) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourcesQuery, variables: LinguvaTranslatableResourcesQueryVariables},
   "#graphql\n  query LinguvaTranslatableResource($resourceId: ID!, $locale: String!) {\n    translatableResource(resourceId: $resourceId) {\n      resourceId\n      translatableContent {\n        key\n        value\n        digest\n        locale\n        type\n      }\n      translations(locale: $locale) {\n        key\n        value\n        outdated\n        updatedAt\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourceQuery, variables: LinguvaTranslatableResourceQueryVariables},
   "#graphql\n        query LinguvaShopIdentity {\n          shop {\n            id\n            name\n          }\n        }": {return: LinguvaShopIdentityQuery, variables: LinguvaShopIdentityQueryVariables},
 }

@@ -70,7 +70,7 @@ describe("tenant isolation of bulk jobs", () => {
     expect(outcome).toEqual({ status: "discarded", reason: "NOT_FOUND" });
     // Nothing was read from or written to either store.
     expect(a.store.calls).toEqual([]);
-    expect(b.store.calls).toEqual(["LinguvaTranslatableProducts"]);
+    expect(b.store.calls).toEqual(["LinguvaTranslatableResources"]);
     const item = await withTenant(b.shop.id, (tx) => tx.translationJobItem.findUniqueOrThrow({ where: { id: itemOfB! } }), app);
     expect(item.status).toBe("PENDING");
   });

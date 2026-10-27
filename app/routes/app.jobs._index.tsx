@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { listJobsForShop } from "../.server/jobs/bulk-jobs";
 import { JOB_STATUS_LABELS, jobProgress } from "../lib/job-display";
+import { RESOURCE_KINDS } from "../lib/resource-kinds";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { shop } = await requireShop(request);
@@ -12,6 +13,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     jobs: jobs.map((j) => ({
       id: j.id,
       targetLocale: j.targetLocale,
+      type: j.resourceType in RESOURCE_KINDS ? RESOURCE_KINDS[j.resourceType as keyof typeof RESOURCE_KINDS].label : j.resourceType,
       status: j.status,
       createdAt: j.createdAt.toISOString(),
       progress: jobProgress(j),
@@ -29,13 +31,15 @@ export default function Jobs() {
           <s-box padding="base">
             <s-paragraph>
               No jobs yet. Start a bulk translation from the{" "}
-              <s-link href="/app/products">Products</s-link> page.
+              <s-link href="/app/products">Products</s-link> or{" "}
+              <s-link href="/app/collections">Collections</s-link> page.
             </s-paragraph>
           </s-box>
         ) : (
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">Started</s-table-header>
+              <s-table-header>Content</s-table-header>
               <s-table-header>Language</s-table-header>
               <s-table-header>Status</s-table-header>
               <s-table-header format="numeric">Progress</s-table-header>
@@ -51,6 +55,7 @@ export default function Jobs() {
                       })}
                     </s-link>
                   </s-table-cell>
+                  <s-table-cell>{job.type}</s-table-cell>
                   <s-table-cell>{job.targetLocale}</s-table-cell>
                   <s-table-cell>
                     <s-badge tone={JOB_STATUS_LABELS[job.status].tone}>

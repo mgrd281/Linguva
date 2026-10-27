@@ -15,8 +15,12 @@ const TERMINAL_ITEM_STATUSES: TranslationJobItemStatus[] = [
   "CANCELLED",
 ];
 
-export const SUPPORTED_BULK_RESOURCE_TYPES = ["PRODUCT"] as const;
+export const SUPPORTED_BULK_RESOURCE_TYPES = ["PRODUCT", "COLLECTION"] as const;
 export type BulkResourceType = (typeof SUPPORTED_BULK_RESOURCE_TYPES)[number];
+
+export function isBulkResourceType(value: string): value is BulkResourceType {
+  return (SUPPORTED_BULK_RESOURCE_TYPES as readonly string[]).includes(value);
+}
 
 /**
  * Creates a bulk job, or returns the existing one when the same request is

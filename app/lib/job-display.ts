@@ -2,7 +2,7 @@ type Tone = "info" | "success" | "warning" | "critical" | "neutral";
 
 export const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   PENDING: { label: "Queued", tone: "info" },
-  DISCOVERING: { label: "Finding products", tone: "info" },
+  DISCOVERING: { label: "Finding content", tone: "info" },
   RUNNING: { label: "Translating", tone: "info" },
   COMPLETED: { label: "Completed", tone: "success" },
   CANCELLED: { label: "Cancelled", tone: "neutral" },
@@ -18,7 +18,7 @@ export const JOB_ERROR_MESSAGES: Record<string, string> = {
   SHOP_AUTH: "Shopify rejected the app's access. Open the app again to re-authorise it.",
   SHOP_INACTIVE: "The app is no longer installed on this store.",
   SHOP_UNINSTALLED: "The app was uninstalled.",
-  DISCOVERY_FAILED: "Shopify didn't return the product list. Please resume later.",
+  DISCOVERY_FAILED: "Shopify didn't return the list of items. Please resume later.",
 };
 
 export const ITEM_ERROR_MESSAGES: Record<string, string> = {

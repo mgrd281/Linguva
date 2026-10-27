@@ -20,11 +20,19 @@ export type RestoreResult =
  * creates a new revision that points to the restored one.
  */
 export async function restoreRevision(
-  input: { admin: Admin; shopId: string; actorId: string | null; revisionId: string },
+  input: {
+    admin: Admin;
+    shopId: string;
+    actorId: string | null;
+    revisionId: string;
+    /** When set, only a revision of this resource is restored. */
+    resourceGid?: string;
+  },
   client: PrismaClient = defaultClient,
 ): Promise<RestoreResult> {
   const revision = await getRevision(input.shopId, input.revisionId, client);
   if (!revision) return { status: "not_found" };
+  if (input.resourceGid && revision.resourceGid !== input.resourceGid) return { status: "not_found" };
 
   const resource = await getTranslatableResource(input.admin, revision.resourceGid, revision.locale);
   const field = resource?.content.find((f) => f.key === revision.key);

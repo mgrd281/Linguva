@@ -39,6 +39,7 @@
 - Translation coverage report: a background scan of products and collections per language (no AI, no writes) with translated/outdated/missing counts by content, SEO and URL handles, SEO findings, duplicate SEO titles, items with the most gaps, and buttons to translate the gaps or only SEO fields.
 - Jobs and Review: pagination, filters (status, language, content type, field group, only with warnings) and search on Review.
 - Performance test suite (`pnpm test:performance`, in CI): fuzzy memory search with 100,000 entries.
+- Online store pages, blog posts and blogs: lists with coverage, editor, bulk jobs, review filters and the coverage report, sharing the product code paths.
 - Phase 0 documentation set.
 
 ### Security

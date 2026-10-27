@@ -15,7 +15,7 @@ import {
   MAX_DRAFTS_PER_ACTION,
   rejectDrafts,
 } from "../.server/review/drafts";
-import { editorPath } from "../lib/resource-kinds";
+import { editorPath, RESOURCE_KINDS } from "../lib/resource-kinds";
 import { fieldLabel } from "../lib/field-labels";
 import { issueLabel } from "../lib/issue-labels";
 
@@ -149,9 +149,12 @@ export default function Review() {
                 <s-option value="handle">URL handles</s-option>
               </s-select>
               <s-select name="type" label="Type" value={data.filter.resourceType ?? ""}>
-                <s-option value="">Products and collections</s-option>
-                <s-option value="PRODUCT">Products</s-option>
-                <s-option value="COLLECTION">Collections</s-option>
+                <s-option value="">All content</s-option>
+                {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
+                  <s-option key={kind} value={kind}>
+                    {meta.label}
+                  </s-option>
+                ))}
               </s-select>
               <s-checkbox name="flagged" value="1" label="Only with warnings" {...(data.filter.flagged ? { checked: true } : {})} />
               <s-button type="submit">Apply</s-button>

@@ -31,6 +31,7 @@ Legend:
 | Admin-created custom apps | New ones can no longer be created in the Shopify admin. Use Dev Dashboard or Shopify CLI apps | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/legacy/admin-custom-apps |
 | Client credentials grant | `POST https://{shop}/admin/oauth/access_token` with `client_id`, `client_secret`, `grant_type=client_credentials`. Only for stores in the app's own organization. Token valid 24 h; carries the installation's granted scopes. Used only by the live tests | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant |
 | `ShopPlan.partnerDevelopment` | Boolean "partner development shop". Used as the gate for live tests | VERIFIED (schema) | admin-2026-10 schema |
+| Page, Article, Blog GIDs | `Page`, `Article` and `Blog` are Node types in 2026-10, so GIDs are `gid://shopify/Page/<id>` etc. | VERIFIED (schema). **ASSUMPTION** that `translatableResources(PAGE/ARTICLE/BLOG)` returns these GIDs; checked by `tests/live` |
 | Product/collection mutations (2026-10) | `productCreate(product:)`, `productUpdate(product:)`, `productDelete(input:)`, `collectionCreate(collection:)`, `collectionDelete(input:)` | VERIFIED (schema, codegen) | Used only for live-test fixtures |
 | Prisma | npm `latest` tag currently points to `8.0.0-rc.27` (a release candidate). The last stable line is `7.10.1` | VERIFIED (npm) | npm registry. **Decision needed**: pin a stable version (see ROADMAP, D-05) |
 

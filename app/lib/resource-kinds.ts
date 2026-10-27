@@ -12,6 +12,9 @@ export const RESOURCE_KINDS = {
     plural: "collections",
     label: "Collections",
   },
+  PAGE: { gidType: "Page", path: "/app/pages", singular: "page", plural: "pages", label: "Pages" },
+  ARTICLE: { gidType: "Article", path: "/app/articles", singular: "blog post", plural: "blog posts", label: "Blog posts" },
+  BLOG: { gidType: "Blog", path: "/app/blogs", singular: "blog", plural: "blogs", label: "Blogs" },
 } as const;
 
 export type ResourceKind = keyof typeof RESOURCE_KINDS;

@@ -4,6 +4,7 @@ import { prisma as defaultClient } from "../lib/db";
 import type { SegmentPair } from "../memory/alignment";
 import { withTenant } from "../tenancy/with-tenant";
 import { saveResourceTranslations } from "../translation/product-translation-service";
+import { RESOURCE_KINDS } from "../../lib/resource-kinds";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -136,7 +137,9 @@ export interface DraftPageFilter {
 }
 
 const SEO_KEYS_LIST = ["meta_title", "meta_description"];
-const GID_PREFIX: Record<string, string> = { PRODUCT: "gid://shopify/Product/", COLLECTION: "gid://shopify/Collection/" };
+const GID_PREFIX: Record<string, string> = Object.fromEntries(
+  Object.entries(RESOURCE_KINDS).map(([kind, meta]) => [kind, `gid://shopify/${meta.gidType}/`]),
+);
 
 /** One page of pending drafts with filters and search, plus the matching total. */
 export async function searchPendingDrafts(shopId: string, filter: DraftPageFilter = {}, client: PrismaClient = defaultClient) {

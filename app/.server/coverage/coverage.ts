@@ -16,7 +16,7 @@ import type { Admin, Limiter } from "../jobs/processors";
 import { checkSeoField, SEO_TITLE_KEY } from "../../lib/seo";
 import type { ResourceKind } from "../../lib/resource-kinds";
 
-export const COVERAGE_RESOURCE_TYPES: readonly ResourceKind[] = ["PRODUCT", "COLLECTION"];
+export const COVERAGE_RESOURCE_TYPES: readonly ResourceKind[] = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"];
 export const COVERAGE_PAGE_SIZE = 50;
 /** Resources with gaps kept per language (the worst ones). */
 export const GAP_LIMIT_PER_LOCALE = 200;

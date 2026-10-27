@@ -23,6 +23,7 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { restoreRevision } from "../../app/.server/translation/history";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
+import { RESOURCE_KINDS } from "../../app/lib/resource-kinds";
 import { createLiveAdmin } from "./admin-client";
 import {
   createFixtureCollection,
@@ -86,10 +87,11 @@ afterAll(async () => {
 
 live("read contract (no writes)", () => {
   it("lists products and collections with digests for every translatable field", async () => {
-    for (const resourceType of ["PRODUCT", "COLLECTION"] as const) {
+    // Also confirms the GID type Linguva assumes for each kind (Page, Article, Blog).
+    for (const resourceType of ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"] as const) {
       const page = await listTranslatableResources(admin, { resourceType, locale, first: 5 });
       for (const r of page.resources) {
-        expect(r.resourceId).toMatch(resourceType === "PRODUCT" ? /^gid:\/\/shopify\/Product\// : /^gid:\/\/shopify\/Collection\//);
+        expect(r.resourceId).toMatch(new RegExp(`^gid://shopify/${RESOURCE_KINDS[resourceType].gidType}/\\d+$`));
         for (const c of r.content) if (c.value) expect(c.digest).toMatch(/^[0-9a-f]{64}$/);
       }
     }

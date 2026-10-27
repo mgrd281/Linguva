@@ -65,8 +65,11 @@ export default function Jobs() {
             </s-select>
             <s-select name="type" label="Content" value={filter.resourceType ?? ""}>
               <s-option value="">All</s-option>
-              <s-option value="PRODUCT">Products</s-option>
-              <s-option value="COLLECTION">Collections</s-option>
+              {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
+                <s-option key={kind} value={kind}>
+                  {meta.label}
+                </s-option>
+              ))}
             </s-select>
             <s-button type="submit">Apply</s-button>
             {filtered ? (
@@ -86,8 +89,8 @@ export default function Jobs() {
           <s-box padding="base">
             <s-paragraph>
               No jobs yet. Start a bulk translation from the{" "}
-              <s-link href="/app/products">Products</s-link> or{" "}
-              <s-link href="/app/collections">Collections</s-link> page.
+              <s-link href="/app/products">Products</s-link>, <s-link href="/app/collections">Collections</s-link>{" "}
+              or <s-link href="/app/pages">Pages</s-link> page.
             </s-paragraph>
           </s-box>
         ) : (

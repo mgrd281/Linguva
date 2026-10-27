@@ -33,7 +33,13 @@ export function collectionFields(n: number): Field[] {
   ];
 }
 
-const GID_TYPES: Record<string, string> = { PRODUCT: "Product", COLLECTION: "Collection" };
+const GID_TYPES: Record<string, string> = {
+  PRODUCT: "Product",
+  COLLECTION: "Collection",
+  PAGE: "Page",
+  ARTICLE: "Article",
+  BLOG: "Blog",
+};
 
 export class FakeShopifyStore {
   readonly calls: string[] = [];
@@ -45,6 +51,28 @@ export class FakeShopifyStore {
 
   constructor(count: number, private readonly sourceLocale = "en") {
     for (let i = 1; i <= count; i++) this.products.set(`gid://shopify/Product/${i}`, productFields(i));
+  }
+
+  /** Adds online store pages, blog posts and blogs. */
+  addContent(count: number) {
+    for (let i = 1; i <= count; i++) {
+      this.products.set(`gid://shopify/Page/${i}`, [
+        { key: "title", value: `About us ${i}`, type: "SINGLE_LINE_TEXT_FIELD" },
+        { key: "body_html", value: `<p>We make <strong>warm</strong> clothes since ${1990 + i}.</p>`, type: "HTML" },
+        { key: "handle", value: `about-us-${i}`, type: "URI" },
+      ]);
+      this.products.set(`gid://shopify/Article/${i}`, [
+        { key: "title", value: `How to wash wool ${i}`, type: "SINGLE_LINE_TEXT_FIELD" },
+        { key: "body_html", value: `<p>Use cold water, step ${i}.</p>`, type: "HTML" },
+        { key: "summary_html", value: `<p>Wool care tips ${i}.</p>`, type: "HTML" },
+        { key: "handle", value: `wash-wool-${i}`, type: "URI" },
+      ]);
+      this.products.set(`gid://shopify/Blog/${i}`, [
+        { key: "title", value: `Journal ${i}`, type: "SINGLE_LINE_TEXT_FIELD" },
+        { key: "handle", value: `journal-${i}`, type: "URI" },
+      ]);
+    }
+    return this;
   }
 
   addCollections(count: number) {

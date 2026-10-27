@@ -69,7 +69,8 @@ describe("coverage report", () => {
     store.translate("gid://shopify/Collection/1", "fr", "meta_title", "Collection hiver 1");
 
     const report = await runAll(deps, shop.id);
-    expect(await reportRow(shop.id, report.id)).toMatchObject({ status: "COMPLETED", resourcesScanned: 18, segmentIndex: 4 });
+    // 5 content types × 2 languages, each scanned to the end.
+    expect(await reportRow(shop.id, report.id)).toMatchObject({ status: "COMPLETED", resourcesScanned: 18, segmentIndex: 10 });
 
     const coverage = (await loadCoverage(shop.id, app))!;
     const de = coverage.rows.find((r) => r.locale === "de" && r.resourceType === "PRODUCT")!;

@@ -9,7 +9,12 @@ function getConfig() {
       default: shopifyApiProject({
         apiType: ApiType.Admin,
         apiVersion: ApiVersion.October26,
-        documents: ["./app/**/*.{js,ts,jsx,tsx}", "./app/.server/**/*.{js,ts,jsx,tsx}"],
+        documents: [
+          "./app/**/*.{js,ts,jsx,tsx}",
+          "./app/.server/**/*.{js,ts,jsx,tsx}",
+          // Live dev-store tests: validated against the schema, never run in CI.
+          "./tests/live/**/*.ts",
+        ],
         outputDir: "./app/types",
       }),
     },

@@ -38,6 +38,7 @@ pnpm lint
 pnpm test               # unit tests
 pnpm test:integration   # needs PostgreSQL (scripts/db/init-roles.sql applied) and Redis
 pnpm test:security      # tenant isolation, payload and XSS tests (same services)
+pnpm test:live          # optional: guarded contract tests on a dev store (docs/DEV_STORE_SETUP.md), never in CI
 pnpm build
 pnpm graphql-codegen    # re-validates GraphQL operations against the Admin API schema
 ```
@@ -68,7 +69,7 @@ app/
 prisma/             schema and migrations (incl. RLS policies)
 worker/             background worker entrypoint
 scripts/db/         local/CI database roles
-tests/              unit/, integration/ and security/
+tests/              unit/, integration/, security/ and live/ (dev store only)
 docs/               architecture, security, billing, roadmap
 ```
 
@@ -84,6 +85,8 @@ docs/               architecture, security, billing, roadmap
 | [docs/BILLING_DESIGN.md](docs/BILLING_DESIGN.md) | Shopify App Pricing, entitlements, metering |
 | [docs/COST_MODEL.md](docs/COST_MODEL.md) | Unit economics (assumptions) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Progress, milestones, risks, decisions |
+| [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
+| [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
 | [CHANGELOG.md](CHANGELOG.md) | Change history |
 
 ## Project boundaries

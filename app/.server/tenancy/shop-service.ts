@@ -11,54 +11,53 @@ export interface InstallInput {
 
 /**
  * Creates or reactivates the tenant for a freshly authenticated shop and
- * records the installation event. Idempotent: calling it again for an active
- * shop only refreshes metadata.
+ * records the installation event. Idempotent and safe under concurrency:
+ * on first open the app's loaders authenticate in parallel, so several
+ * requests install the same shop at once. Exactly one of them creates the
+ * shop (INSTALLED) or reactivates it (REINSTALLED); the others only refresh
+ * metadata.
  */
 export async function upsertInstalledShop(
   input: InstallInput,
   client: PrismaClient = defaultClient,
 ) {
-  const existing = await client.shop.findUnique({
-    where: { shopDomain: input.shopDomain },
-  });
+  const metadata = {
+    ...(input.name ? { name: input.name } : {}),
+    ...(input.shopifyShopGid ? { shopifyShopGid: input.shopifyShopGid } : {}),
+  };
 
-  const shop = existing
-    ? await client.shop.update({
-        where: { id: existing.id },
-        data: {
-          status: "ACTIVE",
-          uninstalledAt: null,
-          ...(existing.status === "UNINSTALLED"
-            ? { installedAt: new Date() }
-            : {}),
-          ...(input.name ? { name: input.name } : {}),
-          ...(input.shopifyShopGid
-            ? { shopifyShopGid: input.shopifyShopGid }
-            : {}),
-        },
-      })
-    : await client.shop.create({
-        data: {
-          shopDomain: input.shopDomain,
-          name: input.name ?? null,
-          shopifyShopGid: input.shopifyShopGid ?? null,
-        },
+  let event: "INSTALLED" | "REINSTALLED" | null = null;
+  let existing = await client.shop.findUnique({ where: { shopDomain: input.shopDomain } });
+  if (!existing) {
+    try {
+      existing = await client.shop.create({
+        data: { shopDomain: input.shopDomain, name: input.name ?? null, shopifyShopGid: input.shopifyShopGid ?? null },
       });
-
-  const event = !existing
-    ? "INSTALLED"
-    : existing.status === "UNINSTALLED"
-      ? "REINSTALLED"
-      : null;
+      event = "INSTALLED";
+    } catch (error) {
+      // Another request created it first.
+      if ((error as { code?: string }).code !== "P2002") throw error;
+      existing = await client.shop.findUniqueOrThrow({ where: { shopDomain: input.shopDomain } });
+    }
+  }
+  if (!event && existing.status === "UNINSTALLED") {
+    // Only the request that flips the status records the reinstall.
+    const flipped = await client.shop.updateMany({
+      where: { id: existing.id, status: "UNINSTALLED" },
+      data: { status: "ACTIVE", uninstalledAt: null, installedAt: new Date() },
+    });
+    if (flipped.count === 1) event = "REINSTALLED";
+  }
+  const shop =
+    event === "INSTALLED" && !Object.keys(metadata).length
+      ? existing
+      : await client.shop.update({ where: { id: existing.id }, data: { status: "ACTIVE", ...metadata } });
 
   await withTenant(
     shop.id,
     async (tx) => {
-      await tx.shopSettings.upsert({
-        where: { shopId: shop.id },
-        create: { shopId: shop.id },
-        update: {},
-      });
+      // ON CONFLICT DO NOTHING: concurrent requests can't collide.
+      await tx.shopSettings.createMany({ data: [{ shopId: shop.id }], skipDuplicates: true });
       if (event) {
         await tx.shopInstallation.create({
           data: { shopId: shop.id, event, scopes: input.scopes ?? null },

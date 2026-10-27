@@ -12,3 +12,6 @@ export default ResourceList;
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
+
+// Clear error page that keeps the navigation (Shopify auth responses pass through).
+export { RouteErrorBoundary as ErrorBoundary } from "../components/RouteError";

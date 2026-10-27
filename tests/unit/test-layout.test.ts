@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = join(__dirname, "..", "..");
 const CI_SUITES = ["tests/unit/", "tests/integration/", "tests/security/", "tests/performance/"];
+/** Playwright specs (pnpm test:ui), also run by CI. */
+const UI_SUITE = /^tests\/ui\/[\w-]+\.spec\.ts$/;
 
 function testFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -22,7 +24,10 @@ describe("test layout", () => {
     const files = [...testFiles(join(ROOT, "tests")), ...testFiles(join(ROOT, "app"))];
     expect(files.length).toBeGreaterThan(40);
     const orphans = files.filter(
-      (f) => !CI_SUITES.some((s) => f.startsWith(s)) && !(f.startsWith("tests/live/") && f.endsWith(".live.test.ts")),
+      (f) =>
+        !CI_SUITES.some((s) => f.startsWith(s) && f.endsWith(".test.ts")) &&
+        !UI_SUITE.test(f) &&
+        !(f.startsWith("tests/live/") && f.endsWith(".live.test.ts")),
     );
     expect(orphans).toEqual([]);
   });

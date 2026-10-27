@@ -131,3 +131,9 @@ export async function syncShopLocales(
     client,
   );
 }
+
+/** Language names by code, from the last sync (no Shopify call). */
+export async function storedLocaleNames(shopId: string, client: PrismaClient = defaultClient): Promise<Record<string, string>> {
+  const rows = await withTenant(shopId, (tx) => tx.shopLocale.findMany({ where: { shopId }, select: { locale: true, name: true } }), client);
+  return Object.fromEntries(rows.map((r) => [r.locale, r.name]));
+}

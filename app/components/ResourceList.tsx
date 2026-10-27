@@ -115,8 +115,13 @@ export function ResourceList() {
 
       <s-section padding="none">
         {data.items.length === 0 ? (
-          <s-box padding="base">
-            <s-paragraph>No {data.kind.plural} found.</s-paragraph>
+          <s-box padding="large">
+            <s-stack direction="block" gap="small" alignItems="center">
+              <s-heading>No {data.kind.plural} yet</s-heading>
+              <s-paragraph>
+                {data.kind.label} you create in Shopify appear here, ready to translate into {data.targets.find((t) => t.locale === locale)?.name ?? "your languages"}.
+              </s-paragraph>
+            </s-stack>
           </s-box>
         ) : (
           <s-table>

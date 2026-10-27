@@ -34,7 +34,9 @@
     "test:security": "vitest run --project security",
     "test:performance": "vitest run --project performance",
     "test:live": "vitest run --config vitest.live.config.ts",
-    "check:ignored": "node scripts/check-ignored.mjs"
+    "check:ignored": "node scripts/check-ignored.mjs",
+    "build:ui-preload": "esbuild tests/ui/server/preload.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=build/ui-test/preload.js",
+    "test:ui": "pnpm build && pnpm build:ui-preload && playwright test"
   },
   "type": "module",
   "engines": {
@@ -62,6 +64,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "1.63.0",
     "@shopify/api-codegen-preset": "^2.0.0",
     "@shopify/polaris-types": "1.0.1",
     "@types/eslint": "^9.6.1",

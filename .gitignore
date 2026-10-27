@@ -9,6 +9,7 @@ node_modules/
 /app/public/build
 /coverage/
 playwright-report/
+test-results/
 *.log
 # Local Redis snapshots
 dump.rdb

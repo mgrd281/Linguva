@@ -7,6 +7,7 @@ import { useRef } from "react";
 import { Form, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
+import { storedLocaleNames } from "../.server/locales/shop-locales";
 import {
   approveDrafts,
   countPendingDrafts,
@@ -33,7 +34,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
   const page = await searchPendingDrafts(shop.id, { ...filter, cursor: q("after"), take: 50 });
   const locales = await listDraftLocales(shop.id);
+  const names = await storedLocaleNames(shop.id);
   return {
+    names,
     total: await countPendingDrafts(shop.id),
     matching: page.total,
     filter,
@@ -138,7 +141,7 @@ export default function Review() {
                 <s-option value="">All languages</s-option>
                 {data.locales.map((l) => (
                   <s-option key={l} value={l}>
-                    {l}
+                    {data.names[l] ?? l}
                   </s-option>
                 ))}
               </s-select>
@@ -168,8 +171,21 @@ export default function Review() {
       {data.drafts.length ? (
         <fetcher.Form method="post" ref={formRef}>
           <input type="hidden" name="intent" value="approve" />
+          <s-section>
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <s-button variant="primary" onClick={() => submit("approve")} {...(busy ? { loading: true } : {})}>
+                Approve and publish selected
+              </s-button>
+              <s-button tone="critical" onClick={() => submit("reject")} {...(busy ? { loading: true } : {})}>
+                Reject selected
+              </s-button>
+              <s-text color="subdued">
+                {data.drafts.length} on this page. Untick the ones you don&apos;t want to change.
+              </s-text>
+            </s-stack>
+          </s-section>
           {data.drafts.map((d) => (
-            <s-section key={d.id} heading={`${d.title} · ${d.label} · ${d.locale}`}>
+            <s-section key={d.id} heading={`${d.title} · ${d.label} · ${data.names[d.locale] ?? d.locale}`}>
               <s-stack direction="block" gap="base">
                 <s-checkbox name="draft" value={d.id} label="Include" defaultChecked />
                 <s-box padding="base" background="subdued" borderRadius="base">
@@ -211,3 +227,6 @@ export default function Review() {
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
+
+// Clear error page that keeps the navigation (Shopify auth responses pass through).
+export { RouteErrorBoundary as ErrorBoundary } from "../components/RouteError";

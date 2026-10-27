@@ -32,6 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Jobs() {
   const { jobs, filter, locales, nextCursor, isFirstPage } = useLoaderData<typeof loader>();
+  const languageName = (code: string) => locales.find((l) => l.locale === code)?.name ?? code;
   const filtered = Boolean(filter.status || filter.locale || filter.resourceType);
   const pageHref = (after: string | null) => {
     const params = new URLSearchParams();
@@ -114,7 +115,7 @@ export default function Jobs() {
                     </s-link>
                   </s-table-cell>
                   <s-table-cell>{job.type}</s-table-cell>
-                  <s-table-cell>{job.targetLocale}</s-table-cell>
+                  <s-table-cell>{languageName(job.targetLocale)}</s-table-cell>
                   <s-table-cell>
                     <s-badge tone={JOB_STATUS_LABELS[job.status].tone}>
                       {JOB_STATUS_LABELS[job.status].label}
@@ -140,3 +141,6 @@ export default function Jobs() {
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
+
+// Clear error page that keeps the navigation (Shopify auth responses pass through).
+export { RouteErrorBoundary as ErrorBoundary } from "../components/RouteError";

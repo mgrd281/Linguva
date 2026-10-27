@@ -1,5 +1,6 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { useEffect } from "react";
+import { Outlet, useLoaderData, useNavigation, useRouteError, useRouteLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
@@ -7,6 +8,15 @@ import { requireShop } from "../.server/shopify/require-shop";
 import { shopBilling } from "../.server/billing/billing";
 import { getConfig } from "../.server/lib/config";
 import { planSelectionUrl } from "../lib/plans";
+import { isShopifyAuthResponse, RouteErrorContent } from "../components/RouteError";
+
+/** The admin's loading bar while a page loads or a form submits (App Bridge). */
+function useAdminLoadingBar() {
+  const busy = useNavigation().state !== "idle";
+  useEffect(() => {
+    window.shopify?.loading?.(busy);
+  }, [busy]);
+}
 
 // Pages a shop without a subscription may still open.
 const PLAN_FREE_PATHS = ["/app/plan", "/app/welcome"];
@@ -26,6 +36,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  useAdminLoadingBar();
 
   return (
     <AppProvider apiKey={apiKey}>
@@ -52,8 +63,16 @@ export default function App() {
 }
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
+// Other errors of the app shell get a clear page (Polaris still loads through AppProvider).
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  const data = useRouteLoaderData<typeof loader>("routes/app");
+  if (isShopifyAuthResponse(error)) return boundary.error(error);
+  return (
+    <AppProvider apiKey={data && "apiKey" in data ? data.apiKey : ""}>
+      <RouteErrorContent error={error} />
+    </AppProvider>
+  );
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

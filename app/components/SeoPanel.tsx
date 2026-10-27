@@ -66,15 +66,15 @@ export function SeoPreview(props: SeoPanelProps) {
         <s-heading>{truncateForPreview(title.text || props.source("title"), SEO_LIMITS[SEO_TITLE_KEY].max)}</s-heading>
         <s-paragraph>{truncateForPreview(description, SEO_LIMITS[SEO_DESCRIPTION_KEY].max)}</s-paragraph>
       </s-stack>
-      {title.fallback && props.hasField(SEO_TITLE_KEY) === false ? (
-        <s-text color="subdued">No SEO title: Shopify uses the translated title.</s-text>
-      ) : null}
-      {!descriptionValue ? (
-        <s-text color="subdued">No SEO description in this language: search engines may use the description text.</s-text>
-      ) : null}
-      <s-text color="subdued">
-        Example address; the real one depends on your domains and markets.
-      </s-text>
+      <s-stack direction="block" gap="small-300">
+        {title.fallback && props.hasField(SEO_TITLE_KEY) === false ? (
+          <s-text color="subdued">No SEO title: Shopify uses the translated title.</s-text>
+        ) : null}
+        {!descriptionValue ? (
+          <s-text color="subdued">No SEO description in this language: search engines may use the description text.</s-text>
+        ) : null}
+        <s-text color="subdued">Example address; the real one depends on your domains and markets.</s-text>
+      </s-stack>
     </s-box>
   );
 }

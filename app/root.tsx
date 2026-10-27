@@ -1,4 +1,8 @@
+import type { MetaFunction } from "react-router";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+
+// Page title for assistive technology and browser tabs (the admin shows each page's heading).
+export const meta: MetaFunction = () => [{ title: "Linguva" }];
 
 export default function App() {
   return (

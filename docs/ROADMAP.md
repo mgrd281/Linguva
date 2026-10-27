@@ -1,6 +1,6 @@
 # Roadmap, Risks and Decisions
 
-Status as of 2026-10-27: **M1 and M2 implemented and tested (locally and in GitHub CI). M3 and the interactive part of M4 are implemented and tested against a simulated Admin API, but not yet verified on a real dev store.**
+Status as of 2026-10-27: **M1 and M2 implemented and tested (locally and in GitHub CI). M3 and M4 (interactive editor and bulk worker) are implemented and tested against a simulated Admin API, real PostgreSQL and real Redis, but not yet verified on a real dev store.**
 
 ## 1. Progress checklist
 
@@ -24,7 +24,9 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M4 | Usage ledger with quota reservation (advisory lock, idempotent) | Implemented, Tested (incl. concurrency) |
 | M4 | Products list (coverage per locale) and product translation editor: AI drafts, review, digest-checked publish, revisions, audit log | Implemented, Tested against a simulated Admin API. **Blocked on a dev store** for verification |
 | M4 | AI data-processing consent (versioned, audited) and Settings page | Implemented, Tested |
-| M4 | Background jobs (BullMQ worker) for bulk translation | Planned (next) |
+| M4 | Bulk translation worker: BullMQ queues (discovery + items), idempotent enqueue, exponential backoff with jitter, dead-letter state, per-shop Redis token bucket, job stop conditions, cancel/retry/resume, stalled-item sweeper, graceful shutdown | Implemented, Tested (integration with real Redis + BullMQ, security suite). **Not yet verified on a dev store** |
+| M4 | Mock translation provider (refused in production) and DeepL Free readiness (`:fx` endpoint, `/v2/usage` check) | Implemented, Tested. DeepL not verified against the live API |
+| M4 | Jobs pages (list, progress, failed products, cancel, retry) and "translate all" on Products | Implemented. Blocked on a dev store for verification |
 | — | CI on GitHub | Implemented, green on the first push |
 | — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, SEO_ARCHITECTURE, DEPLOYMENT, TEST_PLAN | Planned |
 

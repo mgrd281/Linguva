@@ -17,7 +17,7 @@ function fakeFetch(responses: Array<(body: { text: string[] }) => Response>) {
   const calls: Call[] = [];
   let i = 0;
   const impl = (async (url: string, init: RequestInit) => {
-    const body = JSON.parse(init.body as string);
+    const body = init.body ? JSON.parse(init.body as string) : {};
     calls.push({ url, headers: init.headers as Record<string, string>, body });
     const respond = responses[Math.min(i++, responses.length - 1)]!;
     return respond(body);
@@ -172,5 +172,19 @@ describe("withRetry", () => {
     ).rejects.toThrow();
     expect(attempts).toBe(5);
     expect(delays).toEqual([100, 200, 400, 500]);
+  });
+});
+
+describe("DeepLProvider.getUsage", () => {
+  it("reads character count and limit from the usage endpoint", async () => {
+    const { impl, calls } = fakeFetch([() => Response.json({ character_count: 1200, character_limit: 500000 })]);
+    const usage = await new DeepLProvider({ apiKey: "free-key:fx", fetch: impl }).getUsage();
+    expect(usage).toEqual({ characterCount: 1200, characterLimit: 500000 });
+    expect(calls[0]!.url).toBe("https://api-free.deepl.com/v2/usage");
+  });
+
+  it("reports an invalid key as an auth error", async () => {
+    const { impl } = fakeFetch([() => new Response(null, { status: 403 })]);
+    await expect(new DeepLProvider({ apiKey: "k:fx", fetch: impl }).getUsage()).rejects.toMatchObject({ kind: "auth" });
   });
 });

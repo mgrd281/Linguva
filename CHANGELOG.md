@@ -19,6 +19,11 @@
 - Usage ledger with per-shop monthly quota, concurrency-safe reservations and idempotent settlement.
 - Products page with translation coverage per language, and a product translation editor with AI drafts, review, digest-checked publishing to Shopify, revision history and audit log.
 - Versioned AI data-processing consent and a Settings page.
+- Bulk translation worker (BullMQ 6.3, Redis): paginated discovery that only creates work for missing or outdated fields, item processing with digest-checked publishing, idempotent enqueue (queue job id = item id), exponential backoff with jitter, dead-letter state after the last attempt, job-wide stop conditions (quota, consent, provider or shop auth), cancel, retry and resume, stalled-item sweeper, graceful shutdown.
+- Per-shop Admin API rate limiting with an atomic Redis token bucket; throttled work is delayed without spending retry attempts.
+- Mock translation provider for development and tests (refused in production) and DeepL usage check (`GET /v2/usage`).
+- Jobs pages (list, live progress, failed products, cancel, retry) and "Translate all" on the Products page.
+- Security test suite: cross-tenant payloads, job access across shops, payload validation, no secrets or content in Redis, malicious provider output in bulk jobs.
 - Phase 0 documentation set.
 
 ### Removed

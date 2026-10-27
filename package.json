@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "build": "react-router build",
+    "build": "react-router build && pnpm run build:worker",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
@@ -24,7 +24,10 @@
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
     "db:up": "docker compose up -d postgres redis",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node scripts/migrate.mjs",
+    "build:worker": "esbuild worker/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=build/worker/index.js",
+    "worker": "LOG_SERVICE=linguva-worker node build/worker/index.js",
+    "test:security": "vitest run --project security"
   },
   "type": "module",
   "engines": {
@@ -39,6 +42,8 @@
     "@shopify/app-bridge-react": "^4.2.4",
     "@shopify/shopify-app-react-router": "^3.0.2",
     "@shopify/shopify-app-session-storage-prisma": "^11.0.0",
+    "bullmq": "6.3.12",
+    "ioredis": "6.0.0",
     "isbot": "^5.1.31",
     "parse5": "^8.0.1",
     "pino": "^10.4.0",
@@ -58,6 +63,7 @@
     "@types/react-dom": "^18.3.7",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
+    "esbuild": "0.28.2",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",

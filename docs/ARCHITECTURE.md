@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the web app, tenancy, and webhooks (§2.1, §5 `app/`) are **implemented**. The worker, providers, and admin center are **planned**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
+Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, mock) and the bulk worker (§2.1–2.3) are **implemented and tested**; the admin center is **planned**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
 
 ## 1. Principles
 
@@ -59,6 +59,14 @@ Status: the web app, tenancy, and webhooks (§2.1, §5 `app/`) are **implemented
 - Each job payload carries only `{ shopId, jobId, itemId, idempotencyKey }`. The worker reloads everything from the database inside a tenant-scoped transaction and re-checks that the installation is active.
 - Shopify calls go through a **per-shop token bucket** fed by `throttleStatus`, so one large merchant can't starve others.
 - Fairness: per-shop concurrency caps, with priority by plan (Business/Enterprise get higher priority, not exclusive capacity).
+
+### 2.2.1 Bulk job flow (implemented)
+
+1. The merchant clicks "Translate all" → `createBulkJob` (idempotency key per page view; an advisory lock allows one active job per shop + locale) → a discovery queue job.
+2. **Discovery** (`translation-discovery` queue) reads one page of `translatableResources`, creates a `TranslationJobItem` only for resources with missing or outdated machine-translatable fields (`skipDuplicates`), advances the cursor and enqueues the items and the next page.
+3. **Items** (`translation-items` queue, queue job id = item id) reload everything under `withTenant(shopId)`, take Admin API budget from the shop's token bucket, check consent, reserve usage, translate, save with digest re-check, and record counters atomically with job completion.
+4. Error handling (`jobs/errors.ts`): rate limits → `moveToDelayed` (no attempt spent); transient errors → retry with exponential backoff + jitter (5 attempts) → `DEAD`; permanent → `FAILED`; quota/consent/auth → the whole job stops and remaining items are cancelled.
+5. A sweeper re-enqueues items whose queue job no longer exists (crash between DB write and enqueue); items still waiting in the queue are left alone.
 
 ### 2.3 Translation provider layer
 

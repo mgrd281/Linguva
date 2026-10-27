@@ -33,3 +33,18 @@ describe("getConfig", () => {
     ).toThrow(/DATABASE_URL/);
   });
 });
+
+describe("getConfig: background jobs and providers", () => {
+  it("refuses the mock provider in production", () => {
+    expect(() =>
+      getConfig({ ...valid, NODE_ENV: "production", TRANSLATION_PROVIDER: "mock" } as NodeJS.ProcessEnv),
+    ).toThrow(/TRANSLATION_PROVIDER/);
+  });
+
+  it("allows the mock provider in development and applies job defaults", () => {
+    const config = getConfig({ ...valid, TRANSLATION_PROVIDER: "mock" } as NodeJS.ProcessEnv);
+    expect(config.TRANSLATION_PROVIDER).toBe("mock");
+    expect(config.WORKER_CONCURRENCY).toBe(5);
+    expect(config.SHOPIFY_JOB_RESTORE_PER_SECOND).toBe(80);
+  });
+});

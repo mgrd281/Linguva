@@ -2,7 +2,7 @@
 
 AI translation and multilingual SEO app for Shopify merchants (public app, planned for the Shopify App Store).
 
-**Status:** foundation (authentication, multi-tenant database with row-level security, encrypted tokens, compliance webhooks) and interactive product translation (AI drafts via DeepL, review, digest-checked publishing, usage metering) are implemented and tested. Nothing has been verified on a real development store yet. See [docs/ROADMAP.md](docs/ROADMAP.md) for exactly what is implemented, tested, and verified.
+**Status:** foundation (authentication, multi-tenant database with row-level security, encrypted tokens, compliance webhooks) and interactive product translation (AI drafts via DeepL, review, digest-checked publishing, usage metering) and bulk translation (BullMQ worker with retries, rate limiting and tenant isolation) are implemented and tested. Nothing has been verified on a real development store yet. See [docs/ROADMAP.md](docs/ROADMAP.md) for exactly what is implemented, tested, and verified.
 
 ## Stack
 
@@ -27,6 +27,7 @@ cp .env.example .env             # then set TOKEN_ENCRYPTION_KEYS (see the comme
 pnpm db:migrate                  # runs migrations as the owner role
 pnpm exec prisma generate
 pnpm dev                         # shopify app dev: links the Partner app and opens the dev store
+pnpm build && pnpm worker        # background worker (needs REDIS_URL); use TRANSLATION_PROVIDER=mock without a DeepL key
 ```
 
 ## Checks
@@ -35,7 +36,8 @@ pnpm dev                         # shopify app dev: links the Partner app and op
 pnpm typecheck
 pnpm lint
 pnpm test               # unit tests
-pnpm test:integration   # needs PostgreSQL with scripts/db/init-roles.sql applied
+pnpm test:integration   # needs PostgreSQL (scripts/db/init-roles.sql applied) and Redis
+pnpm test:security      # tenant isolation, payload and XSS tests (same services)
 pnpm build
 pnpm graphql-codegen    # re-validates GraphQL operations against the Admin API schema
 ```
@@ -53,11 +55,17 @@ app/
     webhooks/       verification + duplicate suppression
     privacy/        compliance webhook handlers
     locales/        shopLocales sync
+    translation/    segmentation, protection, validation, translate/save services
+    providers/      DeepL, mock, retry
+    jobs/           bulk jobs: processors, queues, errors
+    queue/          Redis connection, token bucket
+    usage/          usage ledger and quota
   lib/              code shared by server and UI
   routes/           pages (app.*) and webhook endpoints (webhooks.*)
 prisma/             schema and migrations (incl. RLS policies)
+worker/             background worker entrypoint
 scripts/db/         local/CI database roles
-tests/              unit/ and integration/
+tests/              unit/, integration/ and security/
 docs/               architecture, security, billing, roadmap
 ```
 

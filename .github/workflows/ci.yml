@@ -23,6 +23,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       PGPASSWORD: postgres
     steps:
@@ -70,10 +79,13 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      - name: Integration tests (PostgreSQL, RLS enforced)
+      - name: Integration tests (PostgreSQL with RLS, Redis, BullMQ)
         run: pnpm test:integration
 
-      - name: Build
+      - name: Security tests (tenant isolation, payloads, XSS)
+        run: pnpm test:security
+
+      - name: Build (web app and worker)
         run: pnpm build
 
   secrets:

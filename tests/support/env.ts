@@ -13,6 +13,7 @@ export const testEnv: Record<string, string> = {
   DATABASE_URL:
     process.env.TEST_DATABASE_URL ??
     "postgresql://linguva_app:linguva_app_dev@localhost:5432/linguva_test",
+  REDIS_URL: process.env.TEST_REDIS_URL ?? "redis://localhost:6379",
   MIGRATION_DATABASE_URL:
     process.env.TEST_MIGRATION_DATABASE_URL ??
     "postgresql://linguva_owner:linguva_owner_dev@localhost:5432/linguva_test",

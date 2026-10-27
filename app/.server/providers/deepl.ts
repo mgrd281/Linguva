@@ -79,6 +79,32 @@ export class DeepLProvider implements TranslationProvider {
     this.fetchImpl = options.fetch ?? fetch;
   }
 
+  /**
+   * Account usage (GET /v2/usage). Used to verify a key and to show the
+   * remaining provider quota to the operator.
+   */
+  async getUsage(): Promise<{ characterCount: number; characterLimit: number }> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/v2/usage`, {
+        headers: { Authorization: `DeepL-Auth-Key ${this.options.apiKey}` },
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? 30_000),
+      });
+    } catch (error) {
+      throw new TranslationProviderError(this.id, "retryable", `network error: ${(error as Error).name}`);
+    }
+    if (!response.ok) {
+      throw new TranslationProviderError(
+        this.id,
+        response.status === 401 || response.status === 403 ? "auth" : "retryable",
+        `HTTP ${response.status}`,
+        response.status,
+      );
+    }
+    const body = (await response.json()) as { character_count?: number; character_limit?: number };
+    return { characterCount: body.character_count ?? 0, characterLimit: body.character_limit ?? 0 };
+  }
+
   async translate(request: TranslationRequest, signal?: AbortSignal): Promise<TranslationResult> {
     const translations: string[] = [];
     let billedCharacters = 0;

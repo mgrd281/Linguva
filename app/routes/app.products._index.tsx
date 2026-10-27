@@ -1,5 +1,10 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { randomUUID } from "node:crypto";
+import type {
+  ActionFunctionArgs,
+  HeadersFunction,
+  LoaderFunctionArgs,
+} from "react-router";
+import { redirect, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
@@ -8,6 +13,13 @@ import {
   numericId,
 } from "../.server/shopify/translations-api";
 import { summarizeCoverage } from "../lib/coverage";
+import { getTranslationProvider } from "../.server/providers";
+import { getQueues } from "../.server/queue/client";
+import {
+  BackgroundJobsUnavailableError,
+  startBulkJob,
+} from "../.server/jobs/start-job";
+import { getShopSettings, hasCurrentAiConsent } from "../.server/settings/shop-settings";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -38,11 +50,47 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })),
     nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
     isFirstPage: !after,
+    bulk: {
+      // One key per page view: a double submit creates only one job.
+      idempotencyKey: randomUUID(),
+      available: getTranslationProvider() !== null && getQueues() !== null,
+      consent: hasCurrentAiConsent(await getShopSettings(shop.id)),
+    },
   };
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { admin, shop, session } = await requireShop(request);
+  const form = await request.formData();
+  if (form.get("intent") !== "bulk-translate") return { error: "UNKNOWN_INTENT" };
+
+  // The target must be one of the shop's own additional languages.
+  const locales = await fetchAndSyncShopLocales(admin, shop.id);
+  const locale = String(form.get("locale") ?? "");
+  if (!locales.locales.some((l) => !l.primary && l.locale === locale)) {
+    return { error: "UNKNOWN_LOCALE" };
+  }
+  const idempotencyKey = String(form.get("idempotencyKey") ?? "");
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(idempotencyKey)) return { error: "INVALID_REQUEST" };
+
+  try {
+    const { job } = await startBulkJob({
+      shopId: shop.id,
+      resourceType: "PRODUCT",
+      targetLocale: locale,
+      requestedBy: session.onlineAccessInfo?.associated_user?.id?.toString() ?? null,
+      idempotencyKey,
+    });
+    return redirect(`/app/jobs/${job.id}`);
+  } catch (error) {
+    if (error instanceof BackgroundJobsUnavailableError) return { error: "JOBS_UNAVAILABLE" };
+    throw error;
+  }
 };
 
 export default function Products() {
   const data = useLoaderData<typeof loader>();
+  const bulk = useFetcher<typeof action>();
 
   if (!data.target) {
     return (
@@ -61,9 +109,48 @@ export default function Products() {
   }
 
   const locale = data.target.locale;
+  const bulkError = bulk.data && "error" in bulk.data ? bulk.data.error : null;
 
   return (
     <s-page heading="Products">
+      <bulk.Form method="post" slot="primary-action">
+        <input type="hidden" name="intent" value="bulk-translate" />
+        <input type="hidden" name="locale" value={locale} />
+        <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
+        <s-button
+          type="submit"
+          variant="primary"
+          disabled={!data.bulk.available || !data.bulk.consent}
+          {...(bulk.state !== "idle" ? { loading: true } : {})}
+        >
+          Translate all into {data.target.name}
+        </s-button>
+      </bulk.Form>
+
+      {data.bulk.available && !data.bulk.consent ? (
+        <s-banner tone="info" heading="Allow AI processing to translate in bulk">
+          <s-paragraph>
+            Bulk translation uses AI. Allow it under <s-link href="/app/settings">Settings</s-link> first.
+          </s-paragraph>
+        </s-banner>
+      ) : null}
+      {bulkError ? (
+        <s-banner tone="critical" heading="Bulk translation couldn't start">
+          <s-paragraph>
+            {bulkError === "JOBS_UNAVAILABLE"
+              ? "Background processing isn't configured for this app yet."
+              : "Please reload the page and try again."}
+          </s-paragraph>
+        </s-banner>
+      ) : null}
+      <s-section>
+        <s-paragraph>
+          Bulk translation fills in missing and outdated fields only. Existing
+          up-to-date translations, including your own edits, are never
+          overwritten. Results are published as soon as they pass the quality
+          checks; you can edit any product afterwards.
+        </s-paragraph>
+      </s-section>
       <s-section>
         <s-stack direction="inline" gap="small" alignItems="center">
           <s-text>Translate into:</s-text>

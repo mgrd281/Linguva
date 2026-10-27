@@ -61,6 +61,8 @@ model Shop {
   auditLogs     AuditLog[]
   revisions     TranslationRevision[]
   usage         UsageLedger[]
+  jobs          TranslationJob[]
+  jobItems      TranslationJobItem[]
 }
 
 enum InstallationEventType {
@@ -237,4 +239,80 @@ model UsageLedger {
 
   @@unique([shopId, idempotencyKey])
   @@index([shopId, periodKey])
+}
+
+enum TranslationJobStatus {
+  PENDING
+  DISCOVERING
+  RUNNING
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum TranslationJobItemStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  SKIPPED
+  FAILED
+  DEAD
+  CANCELLED
+}
+
+// A bulk translation run for one resource type into one target locale.
+model TranslationJob {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId            String               @db.Uuid
+  resourceType      String
+  targetLocale      String
+  status            TranslationJobStatus @default(PENDING)
+  requestedBy       String?
+  idempotencyKey    String
+  discoveryCursor   String?
+  discoveryDone     Boolean              @default(false)
+  totalItems        Int                  @default(0)
+  succeededItems    Int                  @default(0)
+  skippedItems      Int                  @default(0)
+  failedItems       Int                  @default(0)
+  charsBilled       Int                  @default(0)
+  errorCode         String?
+  cancelRequestedAt DateTime?            @db.Timestamptz(3)
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  startedAt         DateTime?            @db.Timestamptz(3)
+  finishedAt        DateTime?            @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @db.Timestamptz(3)
+
+  shop  Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items TranslationJobItem[]
+
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, createdAt])
+  @@index([shopId, status])
+}
+
+// One resource of a job. Its id is also the queue job id (idempotent enqueue).
+model TranslationJobItem {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId           String                   @db.Uuid
+  jobId            String                   @db.Uuid
+  resourceGid      String
+  // Id of the queue job that currently carries this item (sweeper check).
+  queueJobId       String?
+  status           TranslationJobItemStatus @default(PENDING)
+  attempts         Int                      @default(0)
+  errorCode        String?
+  fieldsTranslated Int                      @default(0)
+  fieldsRejected   Int                      @default(0)
+  charsBilled      Int                      @default(0)
+  createdAt        DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime                 @updatedAt @db.Timestamptz(3)
+  finishedAt       DateTime?                @db.Timestamptz(3)
+
+  shop Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  job  TranslationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, resourceGid])
+  @@index([jobId, status])
+  @@index([shopId, status])
 }

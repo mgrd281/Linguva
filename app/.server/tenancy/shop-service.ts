@@ -93,10 +93,16 @@ export async function markShopUninstalled(
   });
   await withTenant(
     shop.id,
-    (tx) =>
-      tx.shopInstallation.create({
+    async (tx) => {
+      await tx.shopInstallation.create({
         data: { shopId: shop.id, event: "UNINSTALLED" },
-      }),
+      });
+      // Background work stops with the installation.
+      await tx.translationJob.updateMany({
+        where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } },
+        data: { status: "CANCELLED", cancelRequestedAt: new Date(), finishedAt: new Date(), errorCode: "SHOP_UNINSTALLED" },
+      });
+    },
     client,
   );
   return updated;

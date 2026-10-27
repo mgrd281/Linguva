@@ -24,6 +24,17 @@ const schema = z.object({
   DEEPL_API_URL: z.string().url().optional(),
   // Monthly AI character allowance per shop until plans are wired to billing.
   AI_MONTHLY_CHAR_LIMIT: z.coerce.number().int().positive().default(20_000),
+  // "mock" returns marked pseudo-translations for development and tests.
+  TRANSLATION_PROVIDER: z.enum(["deepl", "mock"]).default("deepl"),
+  // Background jobs are disabled when no Redis is configured.
+  REDIS_URL: z.string().url().optional(),
+  // Per-shop Shopify Admin API budget used by background jobs (points).
+  SHOPIFY_JOB_BUCKET_SIZE: z.coerce.number().int().positive().default(800),
+  SHOPIFY_JOB_RESTORE_PER_SECOND: z.coerce.number().positive().default(80),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
+}).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock"), {
+  message: "the mock translation provider can't be used in production",
+  path: ["TRANSLATION_PROVIDER"],
 });
 
 export type AppConfig = z.infer<typeof schema>;

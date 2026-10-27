@@ -1,0 +1,189 @@
+// Linguva database schema. See docs/DATABASE_SCHEMA.md.
+//
+// Tenant-owned tables carry `shopId` and are protected by PostgreSQL
+// row-level security (see the `*_rls` migration). Access them only through
+// `withTenant()` in app/.server/tenancy/with-tenant.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Shopify session storage table (@shopify/shopify-app-session-storage-prisma).
+// accessToken / refreshToken hold ciphertext produced by EncryptedSessionStorage.
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  @@index([shop])
+}
+
+enum ShopStatus {
+  ACTIVE
+  UNINSTALLED
+}
+
+// Tenant root. Not under RLS: it is how a verified shop domain is resolved
+// to a tenant id.
+model Shop {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopDomain     String     @unique
+  shopifyShopGid String?    @unique
+  name           String?
+  status         ShopStatus @default(ACTIVE)
+  installedAt    DateTime   @default(now()) @db.Timestamptz(3)
+  uninstalledAt  DateTime?  @db.Timestamptz(3)
+  createdAt      DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
+
+  installations ShopInstallation[]
+  settings      ShopSettings?
+  locales       ShopLocale[]
+  auditLogs     AuditLog[]
+}
+
+enum InstallationEventType {
+  INSTALLED
+  REINSTALLED
+  UNINSTALLED
+  SCOPES_UPDATED
+}
+
+model ShopInstallation {
+  id         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId     String                @db.Uuid
+  event      InstallationEventType
+  scopes     String?
+  occurredAt DateTime              @default(now()) @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, occurredAt])
+}
+
+model ShopSettings {
+  shopId                    String    @id @db.Uuid
+  autoTranslateNew          Boolean   @default(false)
+  protectManualEdits        Boolean   @default(true)
+  reviewRequired            Boolean   @default(true)
+  aiDataProcessingConsentAt DateTime? @db.Timestamptz(3)
+  consentVersion            String?
+  createdAt                 DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime  @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+// Local mirror of Shopify `shopLocales`. Shopify stays authoritative.
+model ShopLocale {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId    String   @db.Uuid
+  locale    String
+  name      String
+  primary   Boolean
+  published Boolean
+  syncedAt  DateTime @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, locale])
+}
+
+enum WebhookEventStatus {
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+// Delivery log used for duplicate suppression. System table, not under RLS.
+// Stores no payload, only a hash of it.
+model WebhookEvent {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhookId   String             @unique
+  topic       String
+  shopDomain  String
+  apiVersion  String?
+  triggeredAt DateTime?          @db.Timestamptz(3)
+  payloadHash String
+  status      WebhookEventStatus @default(PROCESSING)
+  attempts    Int                @default(1)
+  errorCode   String?
+  receivedAt  DateTime           @default(now()) @db.Timestamptz(3)
+  processedAt DateTime?          @db.Timestamptz(3)
+
+  @@index([shopDomain, receivedAt])
+  @@index([status, receivedAt])
+}
+
+enum AuditActorType {
+  MERCHANT_USER
+  ADMIN
+  SYSTEM
+}
+
+// Append-only: the runtime role has no UPDATE/DELETE grant (see migration).
+// shopId is set to NULL when a shop is redacted, so the entry no longer
+// identifies the shop.
+model AuditLog {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId     String?        @db.Uuid
+  actorType  AuditActorType
+  actorId    String?
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+
+  shop Shop? @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, createdAt])
+  @@index([action, createdAt])
+}
+
+enum PrivacyTopic {
+  CUSTOMERS_DATA_REQUEST
+  CUSTOMERS_REDACT
+  SHOP_REDACT
+}
+
+enum PrivacyRequestStatus {
+  RECEIVED
+  COMPLETED
+}
+
+// Evidence that a mandatory compliance webhook was handled. Kept after
+// shop/redact on purpose (no FK to Shop). Customer identifiers aren't stored.
+model PrivacyRequest {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhookId   String               @unique
+  topic       PrivacyTopic
+  shopDomain  String
+  status      PrivacyRequestStatus @default(RECEIVED)
+  receivedAt  DateTime             @default(now()) @db.Timestamptz(3)
+  dueAt       DateTime             @db.Timestamptz(3)
+  completedAt DateTime?            @db.Timestamptz(3)
+  resolution  String?
+
+  @@index([shopDomain, receivedAt])
+  @@index([status, dueAt])
+}

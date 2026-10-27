@@ -1,16 +1,25 @@
 # Roadmap, Risks and Decisions
 
-Status as of 2026-10-27: **Phase 0 — documentation only.** No application code exists.
+Status as of 2026-10-27: **M1 and M2 implemented and tested locally. M3 is code-complete but not yet verified on a dev store.**
 
 ## 1. Progress checklist
 
+States: **Implemented** (code exists), **Tested** (automated tests pass), **Verified** (confirmed on a real Shopify dev store), **Planned**, **Blocked**.
+
 | Phase | Item | State |
 |---|---|---|
-| 0 | Environment assessment | Done (empty repo, tooling checked) |
-| 0 | Official API verification | Done for the items in SHOPIFY_API_MATRIX.md. Items marked ASSUMPTION remain open |
-| 0 | Architecture, DB, security, billing, cost proposals | Drafted, **awaiting owner review** |
-| 0 | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, SEO_ARCHITECTURE, DEPLOYMENT, TEST_PLAN | Not started (planned for M1–M4) |
-| 1+ | All implementation | Not started |
+| 0 | Environment assessment, API verification, design docs | Done. Items marked ASSUMPTION in SHOPIFY_API_MATRIX.md remain open |
+| M1 | App from official Shopify React Router template (commit `48b841a`, Admin API 2026-10), pnpm, strict TS, ESLint, Vitest, CI, docker-compose, `.env.example` | Implemented, Tested (local) |
+| M1 | GraphQL operations validated against the 2026-10 Admin schema via `@shopify/api-codegen-preset` | Implemented, Tested (local) |
+| M2 | PostgreSQL schema: Session, Shop, ShopInstallation, ShopSettings, ShopLocale, WebhookEvent, AuditLog, PrivacyRequest | Implemented, Tested |
+| M2 | Row-level security (fail-closed) + `withTenant()` + separate owner/runtime roles | Implemented, Tested (incl. a check that the tests fail when RLS is disabled) |
+| M2 | AES-256-GCM token encryption with key rotation (`EncryptedSessionStorage`) | Implemented, Tested |
+| M2 | Install / reinstall / uninstall lifecycle | Implemented, Tested (DB level). Not yet Verified on a dev store |
+| M2 | Webhooks: HMAC (401), duplicate suppression, retry after failure | Implemented, Tested (route level and against the running production build) |
+| M2 | Compliance webhooks: customers/data_request, customers/redact, shop/redact | Implemented, Tested. Not yet Verified via `shopify app webhook trigger` |
+| M3 | Overview and Languages pages reading `shopLocales` | Implemented. **Blocked on a dev store** for verification |
+| — | CI on GitHub | Implemented. First run happens after push |
+| — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, SEO_ARCHITECTURE, DEPLOYMENT, TEST_PLAN | Planned |
 
 ## 2. Milestones
 

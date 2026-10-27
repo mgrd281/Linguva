@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phase 0 — proposal.** No code exists yet. Everything below is the planned design.
+Status: the web app, tenancy, and webhooks (§2.1, §5 `app/`) are **implemented**. The worker, providers, and admin center are **planned**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
 
 ## 1. Principles
 

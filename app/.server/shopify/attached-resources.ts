@@ -21,8 +21,10 @@ type Admin = Pick<AdminApiContext, "graphql">;
 
 export interface AttachedResource extends TranslatableResourceData {
   kind: "IMAGE" | "METAFIELD";
-  /** Image preview URL, or "namespace.key" for a metafield. */
+  /** "Image", or the metafield's name (its definition's, or from its key). */
   label: string;
+  /** Technical identifier shown as detail ("namespace.key" for metafields). */
+  detail?: string;
   previewUrl?: string | null;
   /** Metafield type (for example multi_line_text_field). */
   valueType?: string;
@@ -105,6 +107,9 @@ const METAFIELDS = `#graphql
             key
             type
             translatable
+            definition {
+              name
+            }
           }
         }
       }
@@ -176,14 +181,26 @@ export async function listTranslatableMetafields(admin: Admin, ownerGid: string,
     key: string;
     type: string;
     translatable: boolean;
+    definition?: { name?: string | null } | null;
   }>;
   // Shopify decides translatability (type and owner settings): never guess.
   const translatable = all.filter((m) => m.translatable);
   const data = await byIds(admin, translatable.map((m) => m.id), locale);
   return translatable.flatMap((m) => {
     const d = data.get(m.id);
-    return d ? [{ ...d, kind: "METAFIELD" as const, label: `${m.namespace}.${m.key}`, valueType: m.type }] : [];
+    // The merchant's own name for the field when it has a definition; the
+    // technical key otherwise (shown as detail either way).
+    const technical = `${m.namespace}.${m.key}`;
+    return d
+      ? [{ ...d, kind: "METAFIELD" as const, label: m.definition?.name?.trim() || humanizeKey(m.key), detail: technical, valueType: m.type }]
+      : [];
   });
+}
+
+/** "care_instructions" → "Care instructions". */
+export function humanizeKey(key: string): string {
+  const words = key.replace(/[_.-]+/g, " ").trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : key;
 }
 
 /** Images and translatable metafields of a parent resource. */

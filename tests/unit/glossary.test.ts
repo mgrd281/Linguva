@@ -140,3 +140,14 @@ describe("segments made only of glossary terms", () => {
     expect(result.outcomes[0]).toMatchObject({ status: "translated", value: "KARINEX Kapuzenpullover 42" });
   });
 });
+
+describe("market input", () => {
+  it("accepts the market number from the Markets page or the full id, and nothing else", async () => {
+    const { termInputSchema } = await import("../../app/.server/glossary/glossary");
+    const parse = (market: string) => termInputSchema.safeParse({ rule: "DO_NOT_TRANSLATE", term: "Brand", market });
+    expect(parse("42").data?.market).toBe("gid://shopify/Market/42");
+    expect(parse(" gid://shopify/Market/7 ").data?.market).toBe("gid://shopify/Market/7");
+    expect(parse("").data?.market).toBe("");
+    for (const bad of ["abc", "gid://shopify/Product/1", "42; DROP", "-1"]) expect(parse(bad).success).toBe(false);
+  });
+});

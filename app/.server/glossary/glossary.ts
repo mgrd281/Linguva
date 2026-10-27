@@ -13,10 +13,12 @@ const locale = z
   .string()
   .trim()
   .regex(/^([a-z]{2,3}(-[A-Za-z0-9]{2,8})*)?$/, "must be a locale code such as de or pt-BR, or empty");
+// The market's number (as shown on the Markets page) or its full Shopify id.
 const market = z
   .string()
   .trim()
-  .regex(/^(gid:\/\/shopify\/Market\/\d+)?$/, "must be a Shopify market id or empty");
+  .transform((v) => (/^\d{1,20}$/.test(v) ? `gid://shopify/Market/${v}` : v))
+  .pipe(z.string().regex(/^(gid:\/\/shopify\/Market\/\d+)?$/, "must be a market number from the Markets page, or empty"));
 
 export const termInputSchema = z
   .object({

@@ -6,6 +6,7 @@ import type {
 import { Form, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
+import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import {
   approveMemoryEntry,
   deleteMemoryEntry,
@@ -23,15 +24,17 @@ function plain(markup: string): string {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { shop } = await requireShop(request);
+  const { admin, shop } = await requireShop(request);
   const url = new URL(request.url);
   const search = url.searchParams.get("q") ?? "";
   const targetLocale = url.searchParams.get("locale") ?? "";
-  const [entries, stats] = await Promise.all([
+  const [entries, stats, locales] = await Promise.all([
     listMemory(shop.id, { search, targetLocale: targetLocale || undefined, take: 100 }),
     memoryStats(shop.id),
+    fetchAndSyncShopLocales(admin, shop.id),
   ]);
   return {
+    languages: locales.locales.filter((l) => !l.primary).map((l) => ({ locale: l.locale, name: l.name })),
     search,
     targetLocale,
     stats,
@@ -76,11 +79,20 @@ export default function Memory() {
 
       <s-section>
         <Form method="get">
-          <s-stack direction="inline" gap="base" alignItems="end">
-            <s-text-field name="q" label="Search" value={data.search} />
-            <s-text-field name="locale" label="Target language" value={data.targetLocale} placeholder="de" />
-            <s-button type="submit">Search</s-button>
-          </s-stack>
+          <s-query-container>
+            <s-grid gridTemplateColumns="@container (inline-size > 560px) 2fr 1fr auto, 1fr" gap="base" alignItems="end">
+              <s-search-field name="q" label="Search" placeholder="Original or translation" value={data.search} />
+              <s-select name="locale" label="Language" value={data.targetLocale}>
+                <s-option value="">All languages</s-option>
+                {data.languages.map((l) => (
+                  <s-option key={l.locale} value={l.locale}>
+                    {l.name}
+                  </s-option>
+                ))}
+              </s-select>
+              <s-button type="submit">Search</s-button>
+            </s-grid>
+          </s-query-container>
         </Form>
       </s-section>
 

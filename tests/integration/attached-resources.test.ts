@@ -69,15 +69,18 @@ describe("image alt text and metafields in the editor", () => {
     store.addImage(P1, ""); // no alt text yet
     store.addVideo(P1);
     const mf = store.addMetafield(P1, { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Hand wash cold." });
+    const named = store.addMetafield(P1, { namespace: "custom", key: "fit_note", type: "single_line_text_field", value: "Runs small.", name: "Fit advice" });
     store.addMetafield(P1, { namespace: "custom", key: "sku_note", type: "single_line_text_field", value: "X-1", translatable: false });
     store.addMetafield(P1, { namespace: "custom", key: "details", type: "rich_text_field", value: '{"type":"root","children":[]}' });
     store.addImage(P2, "Other product image");
 
     const data = await loadEditorData(ctx(store, shop.id));
     expect(data.attached.available).toBe(true);
-    expect(data.attached.items.map((i) => [i.id, i.kind, i.label])).toEqual([
-      [img, "IMAGE", "Image"],
-      [mf, "METAFIELD", "custom.care"],
+    // Metafields by the merchant's own name (or a readable key), the technical key as detail.
+    expect(data.attached.items.map((i) => [i.id, i.kind, i.label, i.detail])).toEqual([
+      [img, "IMAGE", "Image", null],
+      [mf, "METAFIELD", "Care", "custom.care"],
+      [named, "METAFIELD", "Fit advice", "custom.fit_note"],
     ]);
     expect(data.attached.items[0]!.previewUrl).toMatch(/^https:\/\/cdn\.example\//);
     expect(data.attached.items[0]!.fields[0]).toMatchObject({ key: "alt", source: "Red wool jacket, front view", machine: true });

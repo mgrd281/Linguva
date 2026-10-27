@@ -94,46 +94,6 @@ export function ResourceList() {
           </s-paragraph>
         </s-banner>
       ) : null}
-      {data.kind.bulk ? (
-        <s-section>
-          <s-stack direction="block" gap="small">
-            <s-paragraph>
-              Bulk translation fills in missing and outdated fields only. Your
-              glossary and translation memory are applied. Up-to-date
-              translations are never touched, and outdated translations that you
-              wrote or approved are kept unless you allow replacing them below.
-            </s-paragraph>
-            <s-paragraph>
-              {data.bulk.publishMode === "AUTO_PUBLISH"
-                ? "Automatic publishing is on: results that pass the quality checks go live immediately; results with warnings wait in Review."
-                : "Results wait in Review until you approve them."}
-            </s-paragraph>
-            <bulk.Form method="post">
-              <input type="hidden" name="intent" value="bulk-translate" />
-              <input type="hidden" name="locale" value={locale} />
-              <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
-              <s-stack direction="block" gap="small">
-                <s-select name="fieldScope" label="What to translate">
-                  <s-option value="ALL">All fields</s-option>
-                  <s-option value="SEO">Only search engine listings (SEO title and description)</s-option>
-                </s-select>
-                <s-checkbox
-                  name="overwriteProtected"
-                  label="Also replace outdated translations that were written or approved by a person"
-                />
-                <s-button
-                  type="submit"
-                  variant="primary"
-                  disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
-                  {...(bulk.state !== "idle" ? { loading: true } : {})}
-                >
-                  Translate all into {data.target.name}
-                </s-button>
-              </s-stack>
-            </bulk.Form>
-          </s-stack>
-        </s-section>
-      ) : null}
       <s-section>
         <s-stack direction="inline" gap="small" alignItems="center">
           <s-text>Translate into:</s-text>
@@ -151,6 +111,47 @@ export function ResourceList() {
         </s-stack>
       </s-section>
 
+      {data.kind.bulk ? (
+        <s-section heading={`Translate all ${data.kind.plural}`}>
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Fills in missing and outdated fields with AI, using your glossary and translation memory. Up-to-date
+              translations are never touched; outdated ones that a person wrote or approved are kept unless you
+              allow replacing them.{" "}
+              {data.bulk.publishMode === "AUTO_PUBLISH"
+                ? "Automatic publishing is on: results that pass the quality checks go live immediately; results with warnings wait in Review."
+                : "Results wait in Review until you approve them."}
+            </s-paragraph>
+            <bulk.Form method="post">
+              <input type="hidden" name="intent" value="bulk-translate" />
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
+              <s-stack direction="block" gap="base">
+                <s-query-container>
+                  <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base" alignItems="end">
+                    <s-select name="fieldScope" label="What to translate">
+                      <s-option value="ALL">All fields</s-option>
+                      <s-option value="SEO">Only search engine listings (SEO title and description)</s-option>
+                    </s-select>
+                    <s-checkbox
+                      name="overwriteProtected"
+                      label="Also replace outdated translations that a person wrote or approved"
+                    />
+                  </s-grid>
+                </s-query-container>
+                <s-button
+                  type="submit"
+                  variant="primary"
+                  disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
+                  {...(bulk.state !== "idle" ? { loading: true } : {})}
+                >
+                  Translate all into {data.target.name}
+                </s-button>
+              </s-stack>
+            </bulk.Form>
+          </s-stack>
+        </s-section>
+      ) : null}
       <s-section padding="none">
         {data.items.length === 0 ? (
           <s-box padding="large">

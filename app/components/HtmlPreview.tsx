@@ -37,6 +37,13 @@ export function HtmlPreview({
   lang: string;
   dir?: "ltr" | "rtl" | "auto";
 }) {
+  if (!html.replace(/<[^>]*>/g, "").trim() && !/<img\b/i.test(html)) {
+    return (
+      <s-box padding="base" border="base" borderRadius="base">
+        <s-text color="subdued">The preview appears here once there is a translation.</s-text>
+      </s-box>
+    );
+  }
   // Height from the amount of text: short texts stay compact, long ones scroll.
   const height = Math.min(420, Math.max(120, 60 + Math.ceil(html.replace(/<[^>]*>/g, "").length / 90) * 22));
   return (

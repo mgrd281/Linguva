@@ -48,37 +48,41 @@ export default function Jobs() {
     <s-page heading="Translation jobs">
       <s-section>
         <Form method="get">
-          <s-stack direction="inline" gap="base" alignItems="end">
-            <s-select name="status" label="Status" value={filter.status ?? ""}>
-              <s-option value="">All</s-option>
-              <s-option value="active">Running</s-option>
-              <s-option value="completed">Completed</s-option>
-              <s-option value="failed">Stopped</s-option>
-              <s-option value="cancelled">Cancelled</s-option>
-            </s-select>
-            <s-select name="locale" label="Language" value={filter.locale ?? ""}>
-              <s-option value="">All languages</s-option>
-              {locales.map((l) => (
-                <s-option key={l.locale} value={l.locale}>
-                  {l.name}
-                </s-option>
-              ))}
-            </s-select>
-            <s-select name="type" label="Content" value={filter.resourceType ?? ""}>
-              <s-option value="">All</s-option>
-              {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
-                <s-option key={kind} value={kind}>
-                  {meta.label}
-                </s-option>
-              ))}
-            </s-select>
-            <s-button type="submit">Apply</s-button>
-            {filtered ? (
-              <s-button href="/app/jobs" variant="tertiary">
-                Clear
-              </s-button>
-            ) : null}
-          </s-stack>
+          <s-query-container>
+            <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 640px) 1fr 1fr 1fr auto, 1fr" gap="base" alignItems="end">
+              <s-select name="status" label="Status" value={filter.status ?? ""}>
+                <s-option value="">All</s-option>
+                <s-option value="active">Running</s-option>
+                <s-option value="completed">Completed</s-option>
+                <s-option value="failed">Stopped</s-option>
+                <s-option value="cancelled">Cancelled</s-option>
+              </s-select>
+              <s-select name="locale" label="Language" value={filter.locale ?? ""}>
+                <s-option value="">All languages</s-option>
+                {locales.map((l) => (
+                  <s-option key={l.locale} value={l.locale}>
+                    {l.name}
+                  </s-option>
+                ))}
+              </s-select>
+              <s-select name="type" label="Content" value={filter.resourceType ?? ""}>
+                <s-option value="">All</s-option>
+                {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
+                  <s-option key={kind} value={kind}>
+                    {meta.label}
+                  </s-option>
+                ))}
+              </s-select>
+              <s-stack direction="inline" gap="small">
+                <s-button type="submit">Apply</s-button>
+                {filtered ? (
+                  <s-button href="/app/jobs" variant="tertiary">
+                    Clear
+                  </s-button>
+                ) : null}
+              </s-stack>
+            </s-grid>
+          </s-query-container>
         </Form>
       </s-section>
       <s-section padding="none">

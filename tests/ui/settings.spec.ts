@@ -28,3 +28,13 @@ test("the translation style is saved per language @responsive", async ({ page })
   await expect(section.getByRole("combobox", { name: "Arabic", exact: true })).toHaveValue("default");
   await expect(section.getByRole("textbox", { name: "About your store" })).toHaveValue("Outdoor clothing for families, friendly and simple.");
 });
+
+test("usage on Settings uses the plan's allowance, like the Overview and Plan page", async ({ page }) => {
+  await openApp(page, "full", "/app/settings");
+  const usage = page.locator("s-section[heading^='AI usage in ']");
+  await expect(usage).toHaveAttribute("heading", /^AI usage in [A-Z][a-z]+ \d{4}$/);
+  // The full store is on the Pro plan (1,200,000 characters), not the server default.
+  await expect(usage.getByText(/ of 1,200,000 AI\s+characters used/)).toBeVisible();
+  await expect(usage.getByRole("progressbar", { name: "AI characters used this month" })).toHaveCount(1);
+});
+

@@ -5,7 +5,9 @@ import type {
 } from "react-router";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { aiUsageLimits, getConfig } from "../.server/lib/config";
+import { getConfig } from "../.server/lib/config";
+import { ProgressBar } from "../components/ProgressBar";
+import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { getTranslationProvider } from "../.server/providers";
 import {
   AI_STORE_CONTEXT_MAX,
@@ -20,13 +22,17 @@ import {
 } from "../.server/settings/shop-settings";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { requireShop } from "../.server/shopify/require-shop";
-import { shopBilling } from "../.server/billing/billing";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
-  const settings = await getShopSettings(shop.id);
-  const locales = await fetchAndSyncShopLocales(admin, shop.id);
+  const [settings, locales, billing] = await Promise.all([
+    getShopSettings(shop.id),
+    fetchAndSyncShopLocales(admin, shop.id),
+    shopBilling(admin, shop),
+  ]);
+  // The same allowance as the Overview, editor and Plan page (the plan's, when billing is on).
+  const limits = aiLimitsFor(getConfig(), billing);
   return {
     style: {
       languages: locales.locales
@@ -43,11 +49,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     aiAvailable: getTranslationProvider() !== null,
     period: periodKey(),
     used: await getMonthlyUsage(shop.id),
-    limit: getConfig().AI_MONTHLY_CHAR_LIMIT,
+    limit: limits.limit,
     usedToday: await getDailyUsage(shop.id),
-    dailyLimit: aiUsageLimits(getConfig()).dailyLimit,
+    dailyLimit: limits.dailyLimit,
   };
 };
+
+/** "2026-10" → "October 2026" (UTC, the same on server and browser). */
+function monthName(period: string) {
+  const date = new Date(`${period}-01T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? period : date.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, shop, actorId } = await requireShop(request);
@@ -153,13 +165,17 @@ export default function Settings() {
               forms (for example German &quot;Sie&quot; / &quot;du&quot;, French &quot;vous&quot; / &quot;tu&quot;).
             </s-paragraph>
             {data.style.languages.length ? (
-              data.style.languages.map((l) => (
-                <s-select key={l.locale} name={`formality:${l.locale}`} label={l.name} value={l.formality}>
-                  <s-option value="default">Automatic</s-option>
-                  <s-option value="more">Formal</s-option>
-                  <s-option value="less">Informal</s-option>
-                </s-select>
-              ))
+              <s-query-container>
+                <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 640px) 1fr 1fr 1fr, 1fr" gap="base">
+                  {data.style.languages.map((l) => (
+                    <s-select key={l.locale} name={`formality:${l.locale}`} label={l.name} value={l.formality}>
+                      <s-option value="default">Automatic</s-option>
+                      <s-option value="more">Formal</s-option>
+                      <s-option value="less">Informal</s-option>
+                    </s-select>
+                  ))}
+                </s-grid>
+              </s-query-container>
             ) : (
               <s-paragraph>Add a language in Shopify first.</s-paragraph>
             )}
@@ -252,20 +268,23 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
-      <s-section heading={`Usage in ${data.period}`}>
-        <s-paragraph>
-          {data.used.toLocaleString()} of {data.limit.toLocaleString()} AI
-          characters used ({percent}%).
-        </s-paragraph>
-        <s-paragraph>
-          Today: {data.usedToday.toLocaleString()} of {data.dailyLimit.toLocaleString()} characters
-          (the daily limit protects against unexpected costs and resets at midnight UTC).
-        </s-paragraph>
-        <s-paragraph>
-          Text reused from your translation memory, repeated sentences and
-          glossary-only text aren&apos;t sent to AI and don&apos;t count
-          towards this limit.
-        </s-paragraph>
+      <s-section heading={`AI usage in ${monthName(data.period)}`}>
+        <s-stack direction="block" gap="base">
+          <ProgressBar value={percent} label="AI characters used this month" tone={percent >= 100 ? "critical" : percent >= 80 ? "warning" : "success"} />
+          <s-paragraph>
+            {data.used.toLocaleString("en-US")} of {data.limit.toLocaleString("en-US")} AI
+            characters used ({percent}%).
+          </s-paragraph>
+          <s-paragraph>
+            Today: {data.usedToday.toLocaleString("en-US")} of {data.dailyLimit.toLocaleString("en-US")} characters
+            (the daily limit protects against unexpected costs and resets at midnight UTC).
+          </s-paragraph>
+          <s-paragraph>
+            Text reused from your translation memory, repeated sentences and
+            glossary-only text aren&apos;t sent to AI and don&apos;t count
+            towards this limit.
+          </s-paragraph>
+        </s-stack>
       </s-section>
     </s-page>
   );

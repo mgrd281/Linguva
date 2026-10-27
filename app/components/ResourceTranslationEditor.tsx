@@ -419,70 +419,70 @@ export function ResourceTranslationEditor() {
                     dir={data.target.rtl ? "rtl" : "auto"}
                   />
                 ) : null}
+                {field.key === "handle" ? (
+                  <s-stack direction="block" gap="small">
+                    <s-button
+                      variant="tertiary"
+                      onClick={() => {
+                        const title = currentValue("title") || fieldByKey.get("title")?.source || "";
+                        const suggestion = suggestHandle(title, data.target.locale);
+                        if (suggestion) setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), handle: suggestion } }));
+                      }}
+                    >
+                      Suggest from the translated title
+                    </s-button>
+                    {currentValue("handle") && validateHandle(currentValue("handle")) ? (
+                      <s-text tone="critical">{HANDLE_PROBLEM_MESSAGES[validateHandle(currentValue("handle"))!]}</s-text>
+                    ) : null}
+                    {field.translation && currentValue("handle") !== field.translation ? (
+                      <s-checkbox
+                        name="confirm-handle"
+                        label={`Change the published address. Links to …/${field.translation} in ${data.target.name} will stop working.`}
+                      />
+                    ) : null}
+                  </s-stack>
+                ) : null}
+                {isSeoKey(field.key) ? (
+                  <SeoCounter fieldKey={field.key} value={currentValue(field.key)} source={field.source} />
+                ) : null}
+                {field.outdated && draft === undefined && field.translation ? (
+                  <s-checkbox
+                    name={`confirm:${field.key}`}
+                    label="The source changed, but this translation is still correct"
+                  />
+                ) : null}
+                <s-stack direction="inline" gap="small">
+                  {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
+                  {draft !== undefined ? (
+                    <s-badge tone="info">
+                      {ai?.provider === "memory" ? `Memory ${ai.scores?.[field.key] ?? ""}% match` : "AI draft"}
+                    </s-badge>
+                  ) : null}
+                  {warnings?.length ? (
+                      <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge>
+                    ) : null}
+                  {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
+                  {field.translation && !(removed?.status === "removed" && removed.key === field.key) ? (
+                    <s-button
+                      variant="tertiary"
+                      tone="critical"
+                      onClick={() => {
+                        if (confirmRemove !== field.key) {
+                          setConfirmRemove(field.key);
+                          return;
+                        }
+                        setConfirmRemove(null);
+                        removeFetcher.submit({ intent: "remove", key: field.key }, { method: "post" });
+                      }}
+                    >
+                      {confirmRemove === field.key ? "Click again to remove the translation" : "Remove translation"}
+                    </s-button>
+                  ) : null}
+                  {!field.machine ? <s-badge>Manual only</s-badge> : null}
+                </s-stack>
               </s-stack>
             </s-grid>
           </s-query-container>
-          {field.key === "handle" ? (
-            <s-stack direction="block" gap="small">
-              <s-button
-                variant="tertiary"
-                onClick={() => {
-                  const title = currentValue("title") || fieldByKey.get("title")?.source || "";
-                  const suggestion = suggestHandle(title, data.target.locale);
-                  if (suggestion) setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), handle: suggestion } }));
-                }}
-              >
-                Suggest from the translated title
-              </s-button>
-              {currentValue("handle") && validateHandle(currentValue("handle")) ? (
-                <s-text tone="critical">{HANDLE_PROBLEM_MESSAGES[validateHandle(currentValue("handle"))!]}</s-text>
-              ) : null}
-              {field.translation && currentValue("handle") !== field.translation ? (
-                <s-checkbox
-                  name="confirm-handle"
-                  label={`Change the published address. Links to …/${field.translation} in ${data.target.name} will stop working.`}
-                />
-              ) : null}
-            </s-stack>
-          ) : null}
-          {isSeoKey(field.key) ? (
-            <SeoCounter fieldKey={field.key} value={currentValue(field.key)} source={field.source} />
-          ) : null}
-          {field.outdated && draft === undefined && field.translation ? (
-            <s-checkbox
-              name={`confirm:${field.key}`}
-              label="The source changed, but this translation is still correct"
-            />
-          ) : null}
-          <s-stack direction="inline" gap="small">
-            {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
-            {draft !== undefined ? (
-              <s-badge tone="info">
-                {ai?.provider === "memory" ? `Memory ${ai.scores?.[field.key] ?? ""}% match` : "AI draft"}
-              </s-badge>
-            ) : null}
-            {warnings?.length ? (
-                <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge>
-              ) : null}
-            {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
-            {field.translation && !(removed?.status === "removed" && removed.key === field.key) ? (
-              <s-button
-                variant="tertiary"
-                tone="critical"
-                onClick={() => {
-                  if (confirmRemove !== field.key) {
-                    setConfirmRemove(field.key);
-                    return;
-                  }
-                  setConfirmRemove(null);
-                  removeFetcher.submit({ intent: "remove", key: field.key }, { method: "post" });
-                }}
-              >
-                {confirmRemove === field.key ? "Click again to remove the translation" : "Remove translation"}
-              </s-button>
-            ) : null}
-            {!field.machine ? <s-badge>Manual only</s-badge> : null}
-          </s-stack>
           {field.history.length ? (
             <details>
               <summary>History ({field.history.length})</summary>

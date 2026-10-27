@@ -106,7 +106,8 @@ export function AttachedResourcesPanel({
                       <s-thumbnail src={`${item.previewUrl}${item.previewUrl.includes("?") ? "&" : "?"}width=96`} alt="" size="small" />
                     ) : null}
                     <s-text type="strong">{item.kind === "IMAGE" ? "Image alt text" : item.label}</s-text>
-                    {item.valueType ? <s-badge>{item.valueType.replace(/_/g, " ")}</s-badge> : null}
+                    {item.valueType ? <s-badge>{valueTypeLabel(item.valueType)}</s-badge> : null}
+                    {item.detail ? <s-text color="subdued">{item.detail}</s-text> : null}
                   </s-stack>
                   {item.fields.map((field) => {
                     const ref = refOf(item.id, field.key);
@@ -123,31 +124,46 @@ export function AttachedResourcesPanel({
                             ? "The AI result was discarded."
                             : undefined;
                     const multiline = field.type === "MULTI_LINE_TEXT_FIELD" || field.type === "HTML" || field.source.length > 120;
+                    // (key goes on the element itself, not through a spread.)
                     const props = {
-                      key: `${ref}:${draft ?? "base"}`,
                       name: fieldName("value", item.id, field.key),
-                      label: `${data.sourceName}: ${field.source.length > 80 ? `${field.source.slice(0, 80)}…` : field.source}`,
+                      label: data.target.name,
                       value: draft ?? field.translation,
                       ...(error ? { error } : {}),
                     };
+                    const fieldKey = `${ref}:${draft ?? "base"}`;
                     return (
                       <s-stack key={ref} direction="block" gap="small">
                         <input type="hidden" name={fieldName("digest", item.id, field.key)} value={field.digest} />
                         {draft !== undefined ? <input type="hidden" name={fieldName("origin", item.id, field.key)} value="AI" /> : null}
-                        {multiline ? <s-text-area {...props} rows={3} /> : <s-text-field {...props} />}
-                        {field.outdated && draft === undefined && field.translation ? (
-                          <s-checkbox
-                            name={fieldName("confirm", item.id, field.key)}
-                            label="The source changed, but this translation is still correct"
-                          />
-                        ) : null}
-                        <s-stack direction="inline" gap="small">
-                          {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
-                          {draft !== undefined ? <s-badge tone="info">AI draft</s-badge> : null}
-                          {warnings?.length ? <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge> : null}
-                          {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
-                          {!field.machine ? <s-badge>Manual only</s-badge> : null}
-                        </s-stack>
+                        <s-query-container>
+                          <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
+                            <s-stack direction="block" gap="small">
+                              <s-text color="subdued">{data.sourceName} (original)</s-text>
+                              <s-box padding="base" background="subdued" borderRadius="base">
+                                <s-paragraph>{field.source}</s-paragraph>
+                              </s-box>
+                            </s-stack>
+                            <s-stack direction="block" gap="small">
+                              <div lang={data.target.locale} {...(data.target.rtl ? { dir: "rtl" } : {})}>
+                                {multiline ? <s-text-area key={fieldKey} {...props} rows={3} /> : <s-text-field key={fieldKey} {...props} />}
+                              </div>
+                              {field.outdated && draft === undefined && field.translation ? (
+                                <s-checkbox
+                                  name={fieldName("confirm", item.id, field.key)}
+                                  label="The source changed, but this translation is still correct"
+                                />
+                              ) : null}
+                              <s-stack direction="inline" gap="small">
+                                {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
+                                {draft !== undefined ? <s-badge tone="info">AI draft</s-badge> : null}
+                                {warnings?.length ? <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge> : null}
+                                {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
+                                {!field.machine ? <s-badge>Manual only</s-badge> : null}
+                              </s-stack>
+                            </s-stack>
+                          </s-grid>
+                        </s-query-container>
                       </s-stack>
                     );
                   })}
@@ -164,4 +180,18 @@ export function AttachedResourcesPanel({
       </s-stack>
     </s-section>
   );
+}
+
+const VALUE_TYPES: Record<string, string> = {
+  single_line_text_field: "Text",
+  multi_line_text_field: "Long text",
+  rich_text_field: "Rich text",
+  json: "JSON",
+  url: "Link",
+  "list.single_line_text_field": "List of texts",
+};
+
+/** Readable metafield type: "multi_line_text_field" → "Long text". */
+function valueTypeLabel(type: string) {
+  return VALUE_TYPES[type] ?? type.replace(/^list\./, "list of ").replace(/_/g, " ");
 }

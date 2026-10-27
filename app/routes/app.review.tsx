@@ -151,33 +151,39 @@ export default function Review() {
         <s-section>
           <Form method="get">
             {data.filter.jobId ? <input type="hidden" name="job" value={data.filter.jobId} /> : null}
-            <s-stack direction="inline" gap="base" alignItems="end">
-              <s-search-field name="q" label="Search" placeholder="Title, original or translation" value={data.filter.search ?? ""} />
-              <s-select name="locale" label="Language" value={data.filter.locale ?? ""}>
-                <s-option value="">All languages</s-option>
-                {data.locales.map((l) => (
-                  <s-option key={l} value={l}>
-                    {data.names[l] ?? l}
-                  </s-option>
-                ))}
-              </s-select>
-              <s-select name="group" label="Fields" value={data.filter.group ?? ""}>
-                <s-option value="">All fields</s-option>
-                <s-option value="content">Content</s-option>
-                <s-option value="seo">Search engine listing</s-option>
-                <s-option value="handle">URL handles</s-option>
-              </s-select>
-              <s-select name="type" label="Type" value={data.filter.resourceType ?? ""}>
-                <s-option value="">All content</s-option>
-                {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
-                  <s-option key={kind} value={kind}>
-                    {meta.label}
-                  </s-option>
-                ))}
-              </s-select>
-              <s-checkbox name="flagged" value="1" label="Only with warnings" {...(data.filter.flagged ? { checked: true } : {})} />
-              <s-button type="submit">Apply</s-button>
-              {filtered ? <s-button href={data.filter.jobId ? `/app/review?job=${data.filter.jobId}` : "/app/review"} variant="tertiary">Clear</s-button> : null}
+            <s-stack direction="block" gap="base">
+              <s-query-container>
+                <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 760px) 2fr 1fr 1fr 1fr, 1fr" gap="base" alignItems="end">
+                  <s-search-field name="q" label="Search" placeholder="Title, original or translation" value={data.filter.search ?? ""} />
+                  <s-select name="locale" label="Language" value={data.filter.locale ?? ""}>
+                    <s-option value="">All languages</s-option>
+                    {data.locales.map((l) => (
+                      <s-option key={l} value={l}>
+                        {data.names[l] ?? l}
+                      </s-option>
+                    ))}
+                  </s-select>
+                  <s-select name="group" label="Fields" value={data.filter.group ?? ""}>
+                    <s-option value="">All fields</s-option>
+                    <s-option value="content">Content</s-option>
+                    <s-option value="seo">Search engine listing</s-option>
+                    <s-option value="handle">URL handles</s-option>
+                  </s-select>
+                  <s-select name="type" label="Type" value={data.filter.resourceType ?? ""}>
+                    <s-option value="">All content</s-option>
+                    {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
+                      <s-option key={kind} value={kind}>
+                        {meta.label}
+                      </s-option>
+                    ))}
+                  </s-select>
+                </s-grid>
+              </s-query-container>
+              <s-stack direction="inline" gap="base" alignItems="center">
+                <s-checkbox name="flagged" value="1" label="Only with warnings" {...(data.filter.flagged ? { checked: true } : {})} />
+                <s-button type="submit">Apply</s-button>
+                {filtered ? <s-button href={data.filter.jobId ? `/app/review?job=${data.filter.jobId}` : "/app/review"} variant="tertiary">Clear</s-button> : null}
+              </s-stack>
             </s-stack>
           </Form>
           {filtered ? <s-paragraph>{data.matching} matching.</s-paragraph> : null}

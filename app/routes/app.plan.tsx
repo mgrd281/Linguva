@@ -103,20 +103,22 @@ export default function Plan() {
           ) : null}
           <s-paragraph>Translation memory reuse never counts against your characters.</s-paragraph>
         </s-stack>
-        <s-stack direction="inline" gap="base">
-          {data.choosePlanUrl && !complimentary ? (
-            <s-button variant="primary" href={data.choosePlanUrl} target="_top">
-              {data.state === "ACTIVE" ? "Change plan" : "Choose a plan"}
-            </s-button>
-          ) : null}
-          {data.configured && !complimentary ? (
-            <refresh.Form method="post">
-              <s-button type="submit" {...(refresh.state !== "idle" ? { loading: true } : {})}>
-                Check again
+        <s-box paddingBlockStart="base">
+          <s-stack direction="inline" gap="base">
+            {data.choosePlanUrl && !complimentary ? (
+              <s-button variant="primary" href={data.choosePlanUrl} target="_top">
+                {data.state === "ACTIVE" ? "Change plan" : "Choose a plan"}
               </s-button>
-            </refresh.Form>
-          ) : null}
-        </s-stack>
+            ) : null}
+            {data.configured && !complimentary ? (
+              <refresh.Form method="post">
+                <s-button type="submit" {...(refresh.state !== "idle" ? { loading: true } : {})}>
+                  Check again
+                </s-button>
+              </refresh.Form>
+            ) : null}
+          </s-stack>
+        </s-box>
       </s-section>
 
       <s-section heading="Plans" padding="none">

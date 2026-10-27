@@ -102,9 +102,10 @@ export default function Markets() {
       {data.markets.map((market) => (
         <s-section key={market.id} heading={market.name}>
           <s-stack direction="block" gap="base">
-            <s-paragraph>
+            <s-stack direction="inline" gap="small" alignItems="center">
               {market.status === "ACTIVE" ? <s-badge tone="success">Active</s-badge> : <s-badge>{market.status.toLowerCase()}</s-badge>}
-            </s-paragraph>
+              <s-text color="subdued">Market number {market.id.replace("gid://shopify/Market/", "")} (for glossary terms)</s-text>
+            </s-stack>
             {market.webPresences.length === 0 ? (
               <s-paragraph>Uses your primary domain.</s-paragraph>
             ) : (

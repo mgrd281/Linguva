@@ -8,6 +8,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { ZodError } from "zod";
 import { requireShop } from "../.server/shopify/require-shop";
 import { shopBilling } from "../.server/billing/billing";
+import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import {
   deleteTerm,
   GlossaryLimitError,
@@ -25,9 +26,10 @@ const RULE_LABELS: Record<string, string> = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { shop } = await requireShop(request);
-  const terms = await listTerms(shop.id);
+  const { admin, shop } = await requireShop(request);
+  const [terms, locales] = await Promise.all([listTerms(shop.id), fetchAndSyncShopLocales(admin, shop.id)]);
   return {
+    languages: locales.locales.filter((l) => !l.primary).map((l) => ({ locale: l.locale, name: l.name })),
     terms: terms.map((t) => ({
       id: t.id,
       rule: t.rule,
@@ -114,7 +116,9 @@ async function downloadCsv() {
 }
 
 export default function GlossaryPage() {
-  const { terms } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
+  const { terms } = data;
+  const languageNames = Object.fromEntries(data.languages.map((l) => [l.locale, l.name]));
   const addFetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
@@ -131,16 +135,31 @@ export default function GlossaryPage() {
         <addFetcher.Form method="post">
           <input type="hidden" name="intent" value="add" />
           <s-stack direction="block" gap="base">
-            <s-select name="rule" label="Rule">
-              <s-option value="DO_NOT_TRANSLATE">Never translate (brands, product names, SKUs)</s-option>
-              <s-option value="PREFERRED">Always translate as…</s-option>
-              <s-option value="FORBIDDEN">Never use this wording in translations</s-option>
-            </s-select>
-            <s-text-field name="term" label="Term" required />
-            <s-text-field name="translation" label="Translation (for “Always translate as”)" />
-            <s-text-field name="targetLocale" label="Language code (empty = all languages)" placeholder="de" />
-            <s-text-field name="market" label="Market id (empty = all markets)" placeholder="gid://shopify/Market/123" />
-            <s-checkbox name="caseSensitive" label="Case sensitive" />
+            <s-query-container>
+              <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr 1fr, 1fr" gap="base">
+                <s-select name="rule" label="Rule">
+                  <s-option value="DO_NOT_TRANSLATE">Never translate (brands, product names, SKUs)</s-option>
+                  <s-option value="PREFERRED">Always translate as…</s-option>
+                  <s-option value="FORBIDDEN">Never use this wording in translations</s-option>
+                </s-select>
+                <s-text-field name="term" label="Term" required />
+                <s-text-field name="translation" label="Translation" details="Only for “Always translate as”." />
+                <s-select name="targetLocale" label="Language">
+                  <s-option value="">All languages</s-option>
+                  {data.languages.map((l) => (
+                    <s-option key={l.locale} value={l.locale}>
+                      {l.name}
+                    </s-option>
+                  ))}
+                </s-select>
+                <s-text-field
+                  name="market"
+                  label="Only in one market (optional)"
+                  details="Leave empty for all markets. Otherwise the market number shown on the Markets page."
+                />
+                <s-checkbox name="caseSensitive" label="Match upper and lower case exactly" />
+              </s-grid>
+            </s-query-container>
             <s-button type="submit" variant="primary" {...(addFetcher.state !== "idle" ? { loading: true } : {})}>
               Add term
             </s-button>
@@ -177,7 +196,7 @@ export default function GlossaryPage() {
                   </s-table-cell>
                   <s-table-cell>{RULE_LABELS[t.rule]}</s-table-cell>
                   <s-table-cell>{t.translation ?? "—"}</s-table-cell>
-                  <s-table-cell>{t.targetLocale || "All"}</s-table-cell>
+                  <s-table-cell>{t.targetLocale ? (languageNames[t.targetLocale] ?? t.targetLocale) : "All"}</s-table-cell>
                   <s-table-cell>{t.market ? t.market.replace("gid://shopify/Market/", "#") : "All"}</s-table-cell>
                   <s-table-cell>
                     <s-button

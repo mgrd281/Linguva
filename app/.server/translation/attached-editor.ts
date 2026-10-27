@@ -75,6 +75,7 @@ export async function loadAttachedData(admin: Admin, kind: TranslatableKind, par
         id: r.resourceId,
         kind: r.kind,
         label: r.label,
+        detail: r.detail ?? null,
         previewUrl: r.previewUrl ?? null,
         valueType: r.valueType ?? null,
         fields: fields.map((c) => ({

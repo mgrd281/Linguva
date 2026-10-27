@@ -61,7 +61,7 @@ export class FakeShopifyStore {
   readonly nestedImages = new Map<string, Array<{ id: string; type: string }>>();
   readonly metafields = new Map<
     string,
-    Array<{ id: string; namespace: string; key: string; type: string; translatable: boolean }>
+    Array<{ id: string; namespace: string; key: string; type: string; translatable: boolean; definition: { name: string } | null }>
   >();
   private nextSubId = 9000;
   /** The shop's languages (shopLocales). */
@@ -140,12 +140,12 @@ export class FakeShopifyStore {
   }
 
   /** Adds a metafield; translatable ones get translatable content under key "value". */
-  addMetafield(ownerGid: string, m: { namespace: string; key: string; type: string; value: string; translatable?: boolean }) {
+  addMetafield(ownerGid: string, m: { namespace: string; key: string; type: string; value: string; translatable?: boolean; name?: string }) {
     const id = `gid://shopify/Metafield/${++this.nextSubId}`;
     const translatable = m.translatable ?? true;
     this.metafields.set(ownerGid, [
       ...(this.metafields.get(ownerGid) ?? []),
-      { id, namespace: m.namespace, key: m.key, type: m.type, translatable },
+      { id, namespace: m.namespace, key: m.key, type: m.type, translatable, definition: m.name ? { name: m.name } : null },
     ]);
     if (translatable) this.products.set(id, [{ key: "value", value: m.value, type: m.type.toUpperCase() }]);
     return id;

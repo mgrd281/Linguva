@@ -19,6 +19,7 @@ export async function startBulkJob(input: {
   idempotencyKey: string;
   overwriteProtected?: boolean;
   fieldScope?: "ALL" | "SEO";
+  includeAttached?: boolean;
 }) {
   const queues = getQueues();
   if (!queues) throw new BackgroundJobsUnavailableError();

@@ -162,7 +162,7 @@ function toResource(node: {
 
 export async function listTranslatableResources(
   admin: Admin,
-  options: { resourceType: TranslatableKind; locale: string; first?: number; after?: string | null },
+  options: { resourceType: TranslatableKind | "MEDIA_IMAGE" | "COLLECTION_IMAGE" | "ARTICLE_IMAGE"; locale: string; first?: number; after?: string | null },
 ) {
   const response = await admin.graphql(LIST_QUERY, {
     variables: {

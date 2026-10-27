@@ -23,7 +23,7 @@ import {
   resourceTitle,
   type TranslatableKind,
 } from "../../lib/resource-kinds";
-import { isBulkResourceType } from "../jobs/bulk-jobs";
+import { ATTACHED_BULK_TYPES, isBulkResourceType } from "../jobs/bulk-jobs";
 
 export async function loadResourceList(request: Request, kind: TranslatableKind) {
   const { admin, shop } = await requireShop(request);
@@ -84,6 +84,8 @@ export async function loadResourceList(request: Request, kind: TranslatableKind)
       consent: hasCurrentAiConsent(settings),
       planAllowsBulk: billing.entitlements.bulk,
       planAllowsLocale: allowed.includes(target.locale),
+      // Image alt text and custom fields can be included for these types.
+      attached: ATTACHED_BULK_TYPES.has(kind),
     },
     denied: null,
   };
@@ -117,6 +119,7 @@ export async function runResourceListAction(request: Request, kind: Translatable
       idempotencyKey,
       overwriteProtected: form.get("overwriteProtected") === "on",
       fieldScope: form.get("fieldScope") === "SEO" ? "SEO" : "ALL",
+      includeAttached: form.get("includeAttached") === "on",
     });
     return redirect(`/app/jobs/${job.id}`);
   } catch (error) {

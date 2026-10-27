@@ -137,6 +137,13 @@ export function ResourceList() {
                       name="overwriteProtected"
                       label="Also replace outdated translations that a person wrote or approved"
                     />
+                    {data.bulk.attached ? (
+                      <s-checkbox
+                        name="includeAttached"
+                        label="Also translate image alt text and custom fields"
+                        details={`Checks every ${data.kind.singular}, so the job takes longer. Not used for "Only search engine listings".`}
+                      />
+                    ) : null}
                   </s-grid>
                 </s-query-container>
                 <s-button

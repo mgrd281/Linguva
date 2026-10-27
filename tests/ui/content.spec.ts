@@ -67,3 +67,15 @@ test("an invalid content reference is a not-found page", async ({ page }) => {
   expect(response?.status()).toBe(404);
   await expect(page.locator(`s-banner[heading="We couldn't find this page"]`)).toBeVisible();
 });
+
+test("bulk translation offers image alt text and custom fields where a type has them", async ({ page }) => {
+  await openApp(page, "full", "/app/products?locale=de");
+  const option = page.getByRole("checkbox", { name: "Also translate image alt text and custom fields" });
+  await expect(option).toBeVisible();
+  await expect(option).not.toBeChecked();
+  await expect(page.getByText("so the job takes longer")).toBeVisible();
+
+  await openApp(page, "full", "/app/content/menus?locale=de");
+  await expect(page.getByText("Translate all into German")).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Also translate image alt text and custom fields" })).toHaveCount(0);
+});

@@ -326,6 +326,8 @@ model TranslationJob {
   overwriteProtected Boolean              @default(false)
   // Which fields the job translates (ALL, or only search engine listings).
   fieldScope         JobFieldScope        @default(ALL)
+  // Also image alt text and custom fields of each item (checks every item).
+  includeAttached    Boolean              @default(false)
   memoryHits         Int                  @default(0)
   charsSaved         Int                  @default(0)
   protectedSkipped   Int                  @default(0)
@@ -467,6 +469,9 @@ model TranslationDraft {
   shopId        String      @db.Uuid
   jobId         String?     @db.Uuid
   resourceGid   String
+  // For image alt text and custom fields: the product, collection, page or
+  // blog post they belong to (editor links and type filters on Review).
+  parentGid     String?
   resourceTitle String?
   locale        String
   key           String

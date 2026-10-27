@@ -14,6 +14,8 @@ export const MAX_DRAFTS_PER_ACTION = 100;
 export interface DraftInput {
   jobId: string | null;
   resourceGid: string;
+  /** The product, collection, page or post an image or custom field belongs to. */
+  parentGid?: string | null;
   resourceTitle: string | null;
   locale: string;
   key: string;
@@ -41,6 +43,7 @@ export async function saveDrafts(
       for (const d of drafts) {
         const data = {
           jobId: d.jobId,
+          parentGid: d.parentGid ?? null,
           resourceTitle: d.resourceTitle,
           sourceDigest: d.sourceDigest,
           sourceValue: d.sourceValue,
@@ -158,8 +161,18 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
         : filter.group === "content"
           ? { key: { notIn: [...SEO_KEYS_LIST, "handle"] } }
           : {}),
+    // A type covers its own fields and those of its images and custom fields.
     ...(filter.resourceType && GID_PREFIX[filter.resourceType]
-      ? { resourceGid: { startsWith: GID_PREFIX[filter.resourceType] } }
+      ? {
+          AND: [
+            {
+              OR: [
+                { resourceGid: { startsWith: GID_PREFIX[filter.resourceType] } },
+                { parentGid: { startsWith: GID_PREFIX[filter.resourceType] } },
+              ],
+            },
+          ],
+        }
       : {}),
     ...(filter.flagged ? { NOT: [{ issues: { equals: Prisma.DbNull } }, { issues: { equals: [] } }] } : {}),
     ...(pattern

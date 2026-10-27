@@ -12,6 +12,7 @@ import { logger } from "../lib/logger";
 import { listAttachedResources, type AttachedResource } from "../shopify/attached-resources";
 import type { ResourceKind, TranslatableKind } from "../../lib/resource-kinds";
 import { collectEditorEdits } from "./editor-edits";
+import { sameRichTextStructure } from "./rich-text";
 import { isMachineTranslatable } from "./translate-fields";
 import type { TranslationEdit } from "./product-translation-service";
 
@@ -25,7 +26,7 @@ const ATTACHED_KINDS = new Set<TranslatableKind>(["PRODUCT", "COLLECTION", "PAGE
  * references have a structure a text box can break; they are counted and
  * left to Shopify's own editor for now.
  */
-const EDITABLE_TYPES = new Set(["SINGLE_LINE_TEXT_FIELD", "MULTI_LINE_TEXT_FIELD", "STRING", "HTML", "INLINE_RICH_TEXT"]);
+const EDITABLE_TYPES = new Set(["SINGLE_LINE_TEXT_FIELD", "MULTI_LINE_TEXT_FIELD", "STRING", "HTML", "INLINE_RICH_TEXT", "RICH_TEXT_FIELD"]);
 
 /** At most this many attached resources per AI request (cost and time). */
 export const MAX_ATTACHED_AI_RESOURCES = 25;
@@ -97,7 +98,7 @@ export async function loadAttachedData(admin: Admin, kind: TranslatableKind, par
 export function collectAttachedEdits(
   resources: readonly AttachedResource[],
   form: Pick<FormData, "get">,
-): Array<{ resource: AttachedResource; edits: TranslationEdit[] }> {
+): Array<{ resource: AttachedResource; edits: TranslationEdit[]; rejected: string[] }> {
   return resources.flatMap((resource) => {
     const scoped = {
       get(name: string) {
@@ -107,8 +108,17 @@ export function collectAttachedEdits(
       },
     };
     const editable = { ...resource, content: resource.content.filter(isEditableAttachedField) };
-    const edits = collectEditorEdits(editable, scoped);
-    return edits.length ? [{ resource, edits }] : [];
+    const sources = new Map(editable.content.map((c) => [c.key, c]));
+    const edits: TranslationEdit[] = [];
+    const rejected: string[] = [];
+    for (const edit of collectEditorEdits(editable, scoped)) {
+      const source = sources.get(edit.key);
+      // Rich text is saved only as rich text with the original's structure
+      // and links (a posted value is never trusted to be well-formed).
+      if (source?.type === "RICH_TEXT_FIELD" && !sameRichTextStructure(edit.value, source.value ?? "")) rejected.push(edit.key);
+      else edits.push(edit);
+    }
+    return edits.length || rejected.length ? [{ resource, edits, rejected }] : [];
   });
 }
 

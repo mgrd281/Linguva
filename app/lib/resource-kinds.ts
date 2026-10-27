@@ -160,3 +160,22 @@ export function resourceTitle(
   if (short?.value) return short.value.trim();
   return `${kindMeta(kind).singular.charAt(0).toUpperCase()}${kindMeta(kind).singular.slice(1)} (${content.length} text${content.length === 1 ? "" : "s"})`;
 }
+
+/** Image alt text rows of the coverage report, and the type they belong to. */
+export const IMAGE_COVERAGE_TYPES = {
+  MEDIA_IMAGE: { label: "Product images (alt text)", parent: "PRODUCT" },
+  COLLECTION_IMAGE: { label: "Collection images (alt text)", parent: "COLLECTION" },
+  ARTICLE_IMAGE: { label: "Blog post images (alt text)", parent: "ARTICLE" },
+} as const satisfies Record<string, { label: string; parent: ResourceKind }>;
+
+export type ImageCoverageType = keyof typeof IMAGE_COVERAGE_TYPES;
+
+export function isImageCoverageType(type: string): type is ImageCoverageType {
+  return Object.prototype.hasOwnProperty.call(IMAGE_COVERAGE_TYPES, type);
+}
+
+/** Label of a coverage report row type ("Products", "Product images (alt text)"). */
+export function coverageTypeLabel(type: string): string {
+  if (isImageCoverageType(type)) return IMAGE_COVERAGE_TYPES[type].label;
+  return (RESOURCE_KINDS as Record<string, { label: string }>)[type]?.label ?? type;
+}

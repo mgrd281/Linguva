@@ -21,6 +21,7 @@ import { fieldLabel } from "../lib/field-labels";
 import { issueLabel } from "../lib/issue-labels";
 import { sanitizeHtml } from "../.server/lib/sanitize-html";
 import { HtmlPreview } from "../components/HtmlPreview";
+import { richTextPreviewOrNull } from "../lib/rich-text-preview";
 
 const looksLikeHtml = (text: string) => /<\/?[a-z][a-z0-9]*[\s>/]/i.test(text);
 
@@ -49,15 +50,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     isFirstPage: !q("after"),
     drafts: page.drafts.map((d) => ({
       id: d.id,
-      href: editorPathFor(d.resourceGid, d.locale, d.resourceType),
+      // Images and custom fields are edited on their product's (or page's) editor.
+      href: editorPathFor(d.parentGid ?? d.resourceGid, d.locale, d.resourceType),
       title: d.resourceTitle ?? "(untitled)",
       locale: d.locale,
       key: d.key,
-      label: fieldLabel(d.key),
+      label: d.parentGid && d.key === "value" ? "Custom field" : fieldLabel(d.key),
       source: d.sourceValue,
       value: d.value,
       // HTML drafts are shown rendered (sanitised here, sandboxed in the page).
-      sourcePreview: looksLikeHtml(d.sourceValue) ? sanitizeHtml(d.sourceValue) : null,
+      sourcePreview: richTextPreviewOrNull(d.sourceValue) !== null
+        ? sanitizeHtml(richTextPreviewOrNull(d.sourceValue)!)
+        : looksLikeHtml(d.sourceValue)
+          ? sanitizeHtml(d.sourceValue)
+          : null,
+      // Rich text (JSON): shown rendered, approved as is (no raw JSON to edit).
+      valuePreview: richTextPreviewOrNull(d.value) !== null ? sanitizeHtml(richTextPreviewOrNull(d.value)!) : null,
       issues: Array.isArray(d.issues) ? (d.issues as Array<{ code?: string }>).map((i) => i.code ?? "") : [],
     })),
   };
@@ -222,6 +230,12 @@ export default function Review() {
                         </s-box>
                       )}
                     </s-stack>
+                    {d.valuePreview !== null ? (
+                      <s-stack direction="block" gap="small">
+                        <s-text color="subdued">{data.names[d.locale] ?? d.locale} (rich text, approved as shown)</s-text>
+                        <HtmlPreview html={d.valuePreview} title={`${d.title}, ${d.label}, translation preview`} lang={d.locale} />
+                      </s-stack>
+                    ) : (
                     <s-stack direction="block" gap="small">
                       <s-text-area
                         name={`value:${d.id}`}
@@ -233,6 +247,7 @@ export default function Review() {
                         <HtmlPreview html={edited[d.id] ?? d.value} title={`${d.title}, ${d.label}, translation preview`} lang={d.locale} />
                       ) : null}
                     </s-stack>
+                    )}
                   </s-grid>
                 </s-query-container>
                 <s-stack direction="inline" gap="small">

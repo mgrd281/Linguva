@@ -120,6 +120,15 @@ CI runs `pnpm audit --prod --audit-level high` and fails on any high or critical
 
 Development-only tools (not shipped, not run on user input) also have advisories as of 2026-10-27: `minimatch` (ReDoS) via ESLint plugins, `lodash` and `@graphql-tools/utils` via the GraphQL codegen preset. They run only on the repository's own files; they are reviewed when those tools are updated.
 
+## 5g. Database change review: images and custom fields in bulk jobs (migration 20261029160000)
+
+| Change | Review |
+|---|---|
+| `TranslationJob.includeAttached BOOLEAN NOT NULL DEFAULT false` | Set only by `createBulkJob`, and only true for all-field jobs of types with images and custom fields. Existing jobs keep false. No security meaning beyond "check more resources". |
+| `TranslationDraft.parentGid TEXT NULL` with a CHECK on the GID format | Written only by the worker, from the job item's own resource (never from request input). Used for the Review page's editor link and type filter (`startsWith` a fixed GID prefix; no user text reaches it). |
+| Row-level security | Unchanged: both tables keep `ENABLE` + `FORCE ROW LEVEL SECURITY` and their `tenant_isolation` policy on `shopId`, which covers new columns. No new grants, functions or roles. |
+| Cross-tenant risk | A draft's `resourceGid`/`parentGid` come from Shopify for the job's own shop; approval re-reads the resource from that shop's Admin API and checks the source digest before publishing. Security tests for drafts and bulk jobs cover cross-shop access (`tests/security/bulk-jobs-security.test.ts`, `memory-glossary-review-security.test.ts`). |
+
 ## 6. Admin control center
 
 - Separate deployment and domain. Email + password (argon2id) **plus mandatory TOTP/WebAuthn**.

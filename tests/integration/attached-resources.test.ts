@@ -71,7 +71,13 @@ describe("image alt text and metafields in the editor", () => {
     const mf = store.addMetafield(P1, { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Hand wash cold." });
     const named = store.addMetafield(P1, { namespace: "custom", key: "fit_note", type: "single_line_text_field", value: "Runs small.", name: "Fit advice" });
     store.addMetafield(P1, { namespace: "custom", key: "sku_note", type: "single_line_text_field", value: "X-1", translatable: false });
-    store.addMetafield(P1, { namespace: "custom", key: "details", type: "rich_text_field", value: '{"type":"root","children":[]}' });
+    const rich = store.addMetafield(P1, {
+      namespace: "custom",
+      key: "details",
+      type: "rich_text_field",
+      value: '{"type":"root","children":[{"type":"paragraph","children":[{"type":"text","value":"Soft merino."}]}]}',
+    });
+    store.addMetafield(P1, { namespace: "custom", key: "specs", type: "json", value: '{"weight":450}' });
     store.addImage(P2, "Other product image");
 
     const data = await loadEditorData(ctx(store, shop.id));
@@ -81,11 +87,13 @@ describe("image alt text and metafields in the editor", () => {
       [img, "IMAGE", "Image", null],
       [mf, "METAFIELD", "Care", "custom.care"],
       [named, "METAFIELD", "Fit advice", "custom.fit_note"],
+      [rich, "METAFIELD", "Details", "custom.details"],
     ]);
     expect(data.attached.items[0]!.previewUrl).toMatch(/^https:\/\/cdn\.example\//);
     expect(data.attached.items[0]!.fields[0]).toMatchObject({ key: "alt", source: "Red wool jacket, front view", machine: true });
     expect(data.attached.imagesWithoutAlt).toBe(1);
-    // Rich text is shown as "not supported here", never as a raw JSON text box.
+    // Rich text is translated keeping its structure; JSON stays "not supported here".
+    expect(data.attached.items.find((i) => i.id === rich)?.fields[0]).toMatchObject({ type: "RICH_TEXT_FIELD", machine: true });
     expect(data.attached.unsupported).toBe(1);
   });
 
@@ -144,6 +152,49 @@ describe("image alt text and metafields in the editor", () => {
     expect(store.translationOf(mf, "de", "value")).toBeUndefined();
     const revisions = await withTenant(shop.id, (tx) => tx.translationRevision.findMany({ where: { resourceGid: img } }), app);
     expect(revisions).toMatchObject([{ key: "alt", value: "Rote Wolljacke", approved: true }]);
+  });
+
+  it("translates rich text with AI keeping its structure, and refuses tampered structure on save", async () => {
+    const { shop, store } = await setup();
+    const source = JSON.stringify({
+      type: "root",
+      children: [
+        { type: "heading", level: 2, children: [{ type: "text", value: "Care" }] },
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", value: "Read the " },
+            { type: "link", url: "https://example.com/care", children: [{ type: "text", value: "care guide", bold: true }] },
+            { type: "text", value: " first." },
+          ],
+        },
+      ],
+    });
+    const rich = store.addMetafield(P1, { namespace: "custom", key: "details", type: "rich_text_field", value: source });
+
+    const ai = await runEditorAction(ctx(store, shop.id), form([["intent", "ai-translate-attached"]]));
+    if (!("kind" in ai) || ai.kind !== "attached-ai") throw new Error("unexpected result");
+    const draft = ai.drafts[attachedRef(rich, "value")]!;
+    const parsed = JSON.parse(draft);
+    expect(parsed.children[0]).toEqual({ type: "heading", level: 2, children: [{ type: "text", value: "[de] Care" }] });
+    expect(parsed.children[1].children.find((c: { type: string }) => c.type === "link")).toMatchObject({ url: "https://example.com/care" });
+
+    const data = await loadEditorData(ctx(store, shop.id));
+    const digest = data.attached.items.find((i) => i.id === rich)!.fields[0]!.digest;
+    // A posted value whose link points elsewhere is refused, nothing is published.
+    const tampered = draft.replace("https://example.com/care", "https://evil.example/");
+    const refused = await runEditorAction(ctx(store, shop.id), form([["intent", "save-attached"], ...saveEntries(rich, "value", tampered, digest)]));
+    expect((refused as { data: { outcomes: Array<{ status: string }> } }).data.outcomes).toEqual([
+      expect.objectContaining({ ref: attachedRef(rich, "value"), status: "error" }),
+    ]);
+    expect(store.translationOf(rich, "de", "value")).toBeUndefined();
+    // Malformed JSON is refused too.
+    await runEditorAction(ctx(store, shop.id), form([["intent", "save-attached"], ...saveEntries(rich, "value", "<p>not json</p>", digest)]));
+    expect(store.translationOf(rich, "de", "value")).toBeUndefined();
+
+    // The AI draft itself publishes.
+    await runEditorAction(ctx(store, shop.id), form([["intent", "save-attached"], ...saveEntries(rich, "value", draft, digest)]));
+    expect(store.translationOf(rich, "de", "value")).toBe(draft);
   });
 
   it("respects the plan's languages for AI on attached resources", async () => {

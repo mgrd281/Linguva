@@ -7,6 +7,8 @@
 import { useFetcher } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 import { issueLabel } from "../lib/issue-labels";
+import { richTextPreviewOrNull } from "../lib/rich-text-preview";
+import { HtmlPreview } from "./HtmlPreview";
 
 type EditorData = Awaited<ReturnType<typeof loadEditorData>>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
@@ -125,13 +127,14 @@ export function AttachedResourcesPanel({
                             : undefined;
                     const multiline = field.type === "MULTI_LINE_TEXT_FIELD" || field.type === "HTML" || field.source.length > 120;
                     // (key goes on the element itself, not through a spread.)
-                    const props = {
+                    const fieldProps = {
                       name: fieldName("value", item.id, field.key),
                       label: data.target.name,
                       value: draft ?? field.translation,
                       ...(error ? { error } : {}),
                     };
                     const fieldKey = `${ref}:${draft ?? "base"}`;
+                    const richText = field.type === "RICH_TEXT_FIELD";
                     return (
                       <s-stack key={ref} direction="block" gap="small">
                         <input type="hidden" name={fieldName("digest", item.id, field.key)} value={field.digest} />
@@ -140,14 +143,34 @@ export function AttachedResourcesPanel({
                           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                             <s-stack direction="block" gap="small">
                               <s-text color="subdued">{data.sourceName} (original)</s-text>
-                              <s-box padding="base" background="subdued" borderRadius="base">
-                                <s-paragraph>{field.source}</s-paragraph>
-                              </s-box>
+                              {richText ? (
+                                <HtmlPreview html={richTextPreviewOrNull(field.source) ?? ""} title={`${item.label}, ${data.sourceName} original`} lang={data.sourceLocale} />
+                              ) : (
+                                <s-box padding="base" background="subdued" borderRadius="base">
+                                  <s-paragraph>{field.source}</s-paragraph>
+                                </s-box>
+                              )}
                             </s-stack>
                             <s-stack direction="block" gap="small">
-                              <div lang={data.target.locale} {...(data.target.rtl ? { dir: "rtl" } : {})}>
-                                {multiline ? <s-text-area key={fieldKey} {...props} rows={3} /> : <s-text-field key={fieldKey} {...props} />}
-                              </div>
+                              {richText ? (
+                                <s-stack direction="block" gap="small">
+                                  <s-text color="subdued">{data.target.name}</s-text>
+                                  <HtmlPreview
+                                    html={richTextPreviewOrNull(draft ?? field.translation) ?? ""}
+                                    title={`${item.label}, ${data.target.name} preview`}
+                                    lang={data.target.locale}
+                                    dir={data.target.rtl ? "rtl" : "auto"}
+                                  />
+                                  {/* Only an AI draft is sent; formatting is checked again on the server. */}
+                                  {draft !== undefined ? <input type="hidden" name={fieldProps.name} value={draft} /> : null}
+                                  <s-text color="subdued">Rich text keeps its formatting. Change the wording in Shopify&apos;s editor, or translate it with AI here.</s-text>
+                                  {error ? <s-text tone="critical">{error}</s-text> : null}
+                                </s-stack>
+                              ) : (
+                                <div lang={data.target.locale} {...(data.target.rtl ? { dir: "rtl" } : {})}>
+                                  {multiline ? <s-text-area key={fieldKey} {...fieldProps} rows={3} /> : <s-text-field key={fieldKey} {...fieldProps} />}
+                                </div>
+                              )}
                               {field.outdated && draft === undefined && field.translation ? (
                                 <s-checkbox
                                   name={fieldName("confirm", item.id, field.key)}

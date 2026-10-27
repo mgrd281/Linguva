@@ -46,8 +46,8 @@ describe("coverage report isolation", () => {
     const forged = await runCoveragePage(a.deps, { shopId: b.id, reportId: a.report.id, segmentIndex: 0, cursor: null });
     expect(forged).toBeNull();
     const row = await withTenant(a.shop.id, (tx) => tx.coverageReport.findUniqueOrThrow({ where: { id: a.report.id } }), app);
-    // One page per content type (5), none from the forged payload.
-    expect(row.pagesScanned).toBe(5);
+    // One page per content and image type (5 + 3), none from the forged payload.
+    expect(row.pagesScanned).toBe(8);
 
     // Without a tenant, the runtime role sees no coverage rows at all.
     expect(await app.coverageStat.count()).toBe(0);

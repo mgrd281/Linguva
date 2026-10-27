@@ -15,7 +15,7 @@ import {
 import { getQueues } from "../.server/queue/client";
 import { getTranslationProvider } from "../.server/providers";
 import { getShopSettings, hasCurrentAiConsent } from "../.server/settings/shop-settings";
-import { editorPath, numericId, RESOURCE_KINDS } from "../lib/resource-kinds";
+import { coverageTypeLabel, editorPath, IMAGE_COVERAGE_TYPES, isImageCoverageType, numericId, RESOURCE_KINDS } from "../lib/resource-kinds";
 import { shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 
@@ -42,7 +42,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           finishedAt: report.finishedAt?.toISOString() ?? null,
           resourcesScanned: report.resourcesScanned,
           progress: { done: Math.min(report.segmentIndex, report.segments.length), total: report.segments.length },
-          scanning: current ? `${RESOURCE_KINDS[current.resourceType]?.label ?? current.resourceType} · ${names.get(current.locale) ?? current.locale}` : null,
+          scanning: current ? `${coverageTypeLabel(current.resourceType)} · ${names.get(current.locale) ?? current.locale}` : null,
         }
       : null,
     rows: (coverage?.rows ?? []).map((r) => ({ ...r, localeName: names.get(r.locale) ?? r.locale })),
@@ -79,7 +79,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (form.get("intent") === "fix") {
       const locale = String(form.get("locale") ?? "");
-      const resourceType = String(form.get("resourceType") ?? "");
+      const rowType = String(form.get("resourceType") ?? "");
+      // Image alt text is translated by its owner's job, with images included.
+      const resourceType = isImageCoverageType(rowType) ? IMAGE_COVERAGE_TYPES[rowType].parent : rowType;
       if (!locales.some((l) => l.locale === locale) || !isBulkResourceType(resourceType)) return { error: "INVALID_REQUEST" };
       const billing = await shopBilling(admin, shop);
       if (!billing.entitlements.bulk) return { error: "PLAN_BULK" };
@@ -93,6 +95,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         requestedBy: actorId,
         idempotencyKey,
         fieldScope: form.get("fieldScope") === "SEO" ? "SEO" : "ALL",
+        includeAttached: isImageCoverageType(rowType),
       });
       return redirect(`/app/jobs/${job.id}`);
     }
@@ -196,7 +199,7 @@ export default function Coverage() {
                 return (
                   <s-table-row key={`${r.locale}|${r.resourceType}`}>
                     <s-table-cell>{r.localeName}</s-table-cell>
-                    <s-table-cell>{RESOURCE_KINDS[r.resourceType as keyof typeof RESOURCE_KINDS]?.label ?? r.resourceType}</s-table-cell>
+                    <s-table-cell>{coverageTypeLabel(r.resourceType)}</s-table-cell>
                     <s-table-cell>{r.resources.toLocaleString()}</s-table-cell>
                     <s-table-cell>
                       {percent(c.translated, c.withSource)}% ({c.translated.toLocaleString()} fields)
@@ -204,9 +207,11 @@ export default function Coverage() {
                     <s-table-cell>{c.outdated.toLocaleString()}</s-table-cell>
                     <s-table-cell>{c.missing.toLocaleString()}</s-table-cell>
                     <s-table-cell>
-                      {seo.withSource
-                        ? `${percent(seo.translated, seo.withSource)}% translated${r.seoIssues ? `, ${r.seoIssues} to check` : ""}`
-                        : "None set"}
+                      {isImageCoverageType(r.resourceType)
+                        ? "—"
+                        : seo.withSource
+                          ? `${percent(seo.translated, seo.withSource)}% translated${r.seoIssues ? `, ${r.seoIssues} to check` : ""}`
+                          : "None set"}
                     </s-table-cell>
                     <s-table-cell>
                       <s-stack direction="inline" gap="small">

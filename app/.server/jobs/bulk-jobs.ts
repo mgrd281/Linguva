@@ -48,6 +48,9 @@ export function isBulkResourceType(value: string): value is BulkResourceType {
  * Creates a bulk job, or returns the existing one when the same request is
  * repeated (idempotency key) or a job for the same locale is still running.
  */
+/** Types whose image alt text and custom fields a job can include. */
+export const ATTACHED_BULK_TYPES: ReadonlySet<string> = new Set(["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"]);
+
 export async function createBulkJob(
   input: {
     shopId: string;
@@ -59,6 +62,8 @@ export async function createBulkJob(
     overwriteProtected?: boolean;
     /** ALL fields (default) or only search engine listings. */
     fieldScope?: "ALL" | "SEO";
+    /** Also image alt text and custom fields (all fields only; types that have them). */
+    includeAttached?: boolean;
   },
   client: PrismaClient = defaultClient,
 ): Promise<{ job: TranslationJob; created: boolean }> {
@@ -95,6 +100,8 @@ export async function createBulkJob(
           publishMode: settings?.bulkPublishMode ?? "DRAFT",
           overwriteProtected: input.overwriteProtected ?? false,
           fieldScope: input.fieldScope ?? "ALL",
+          includeAttached:
+            Boolean(input.includeAttached) && (input.fieldScope ?? "ALL") === "ALL" && ATTACHED_BULK_TYPES.has(input.resourceType),
         },
       });
       return { job, created: true };

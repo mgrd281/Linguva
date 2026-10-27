@@ -14,9 +14,17 @@ import { shopKey } from "../queue/redis";
 import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
 import { checkSeoField, SEO_TITLE_KEY } from "../../lib/seo";
-import type { ResourceKind } from "../../lib/resource-kinds";
+import { IMAGE_COVERAGE_TYPES, isImageCoverageType, type ImageCoverageType, type ResourceKind } from "../../lib/resource-kinds";
 
 export const COVERAGE_RESOURCE_TYPES: readonly ResourceKind[] = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"];
+/**
+ * Image alt text, listed by Shopify per image type (one request per 50
+ * images). Custom fields can't be listed this way: Shopify only exposes
+ * their translations through their owner, so they aren't in the report.
+ */
+export const COVERAGE_IMAGE_TYPES = Object.keys(IMAGE_COVERAGE_TYPES) as ImageCoverageType[];
+type CoverageImageType = ImageCoverageType;
+const isCoverageImageType = isImageCoverageType;
 export const COVERAGE_PAGE_SIZE = 50;
 /** Resources with gaps kept per language (the worst ones). */
 export const GAP_LIMIT_PER_LOCALE = 200;
@@ -43,7 +51,7 @@ export interface CoveragePagePayload {
 export function segmentOf(report: Pick<CoverageReport, "segments">, index: number) {
   const value = report.segments[index];
   if (!value) return null;
-  const [resourceType, locale] = value.split("|") as [ResourceKind, string];
+  const [resourceType, locale] = value.split("|") as [ResourceKind | CoverageImageType, string];
   return { resourceType, locale };
 }
 
@@ -80,7 +88,7 @@ export async function createCoverageReport(
           shopId: input.shopId,
           requestedBy: input.requestedBy,
           idempotencyKey: input.idempotencyKey,
-          segments: COVERAGE_RESOURCE_TYPES.flatMap((type) => locales.map((l) => `${type}|${l}`)),
+          segments: [...COVERAGE_RESOURCE_TYPES, ...COVERAGE_IMAGE_TYPES].flatMap((type) => locales.map((l) => `${type}|${l}`)),
         },
       });
       // Keep the latest few reports; older ones are only history.
@@ -208,6 +216,9 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
     first: deps.pageSize ?? COVERAGE_PAGE_SIZE,
   });
   const aggregate = aggregatePage(page.resources);
+  // An image's gap can't be opened on its own (it's edited on its product's
+  // page), so images count in the totals but not in the list of gaps.
+  if (isCoverageImageType(segment.resourceType)) aggregate.gaps = [];
 
   const more = page.pageInfo.hasNextPage && page.pageInfo.endCursor;
   const nextIndex = more ? payload.segmentIndex : payload.segmentIndex + 1;
@@ -316,7 +327,8 @@ export async function loadCoverage(shopId: string, client: PrismaClient = defaul
         const titleStat = stats.find(
           (s) => s.locale === row.locale && s.resourceType === row.resourceType && s.key === SEO_TITLE_KEY,
         );
-        row.seoTitlesMissingInSource = Math.max(0, row.resources - (titleStat?.withSource ?? 0));
+        // Images have no SEO title of their own.
+        row.seoTitlesMissingInSource = isCoverageImageType(row.resourceType) ? 0 : Math.max(0, row.resources - (titleStat?.withSource ?? 0));
       }
       // Duplicate SEO titles are counted per language (products and collections together).
       const dupesByLocale = new Map(dupes.map((d) => [d.locale, d._sum.count ?? 0]));

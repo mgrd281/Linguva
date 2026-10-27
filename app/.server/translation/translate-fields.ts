@@ -8,6 +8,7 @@ import {
 } from "./html-segmenter";
 import type { ProtectOptions } from "./protect";
 import { markupToPlainText, SegmentStructureError } from "./segment-markup";
+import { markupToRichText, richTextToMarkup, richTextToPreviewHtml, RichTextError } from "./rich-text";
 import { checkSeoField, plainText } from "../../lib/seo";
 import {
   hasBlockingIssue,
@@ -38,6 +39,8 @@ export type FieldOutcome =
 
 // LocalizableContentType values handled by the engine.
 const HTML_TYPES = new Set(["HTML", "INLINE_RICH_TEXT"]);
+// Shopify rich text (JSON), translated through its markup (rich-text.ts).
+const RICH_TEXT_TYPE = "RICH_TEXT_FIELD";
 const PLAIN_TYPES = new Set(["SINGLE_LINE_TEXT_FIELD", "MULTI_LINE_TEXT_FIELD", "STRING"]);
 // URL handles change storefront URLs and redirects; only merchants set them.
 const MANUAL_ONLY_KEYS = new Set(["handle"]);
@@ -45,14 +48,45 @@ const MANUAL_ONLY_KEYS = new Set(["handle"]);
 export function isMachineTranslatable(field: SourceField): boolean {
   return (
     !MANUAL_ONLY_KEYS.has(field.key) &&
-    (HTML_TYPES.has(field.type) || PLAIN_TYPES.has(field.type))
+    (HTML_TYPES.has(field.type) || PLAIN_TYPES.has(field.type) || field.type === RICH_TEXT_TYPE)
   );
 }
 
 export function segmentField(field: SourceField, protect: ProtectOptions = {}): SegmentedDocument {
+  if (field.type === RICH_TEXT_TYPE) return segmentRichText(field.value ?? "", protect);
   return HTML_TYPES.has(field.type)
     ? segmentHtml(field.value ?? "", protect)
     : segmentPlainText(field.value ?? "", protect);
+}
+
+/**
+ * Rich text: its markup is segmented like HTML; rendering turns the
+ * translation back into JSON and rejects any change of structure or links.
+ * Throws RichTextError for documents with unknown parts (not translated).
+ */
+function segmentRichText(json: string, protect: ProtectOptions): SegmentedDocument {
+  const doc = segmentHtml(richTextToMarkup(json), protect);
+  return {
+    segments: doc.segments,
+    render(translations) {
+      try {
+        return markupToRichText(doc.render(translations), json);
+      } catch (error) {
+        if (error instanceof RichTextError) throw new SegmentStructureError("MISSING_CODE", error.message);
+        throw error;
+      }
+    },
+  };
+}
+
+/** The readable text of a field value, for checks (rich text JSON → its words). */
+function readableText(type: string, value: string): string {
+  if (type !== RICH_TEXT_TYPE) return plainText(value);
+  try {
+    return plainText(richTextToPreviewHtml(value));
+  } catch {
+    return "";
+  }
 }
 
 /** Characters that a translation of these fields would send to a provider. */
@@ -106,7 +140,15 @@ export async function prepareTranslation(input: {
     } else if (!isMachineTranslatable(field)) {
       outcomes.push({ key: field.key, status: "skipped", reason: "NOT_TRANSLATABLE" });
     } else {
-      const doc = segmentField(field, protect);
+      let doc: SegmentedDocument;
+      try {
+        doc = segmentField(field, protect);
+      } catch (error) {
+        // Rich text with parts Linguva doesn't know: left to Shopify's editor.
+        if (!(error instanceof RichTextError)) throw error;
+        outcomes.push({ key: field.key, status: "skipped", reason: "NOT_TRANSLATABLE" });
+        continue;
+      }
       if (doc.segments.length === 0) {
         outcomes.push({ key: field.key, status: "skipped", reason: "NOT_TRANSLATABLE" });
       } else {
@@ -213,7 +255,7 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
         issues.push(...checkSeoField(field.key, field.value ?? "", value));
         // A result mostly outside the target language's script is likely wrong.
         // (Mostly product names or codes can also trigger it: a warning, the merchant decides.)
-        if (isWrongScript(input.targetLocale, plainText(value))) {
+        if (isWrongScript(input.targetLocale, readableText(field.type, value))) {
           issues.push({ code: "WRONG_SCRIPT", severity: "warning" });
         }
         if (!hasBlockingIssue(issues)) {

@@ -69,8 +69,8 @@ describe("coverage report", () => {
     store.translate("gid://shopify/Collection/1", "fr", "meta_title", "Collection hiver 1");
 
     const report = await runAll(deps, shop.id);
-    // 5 content types × 2 languages, each scanned to the end.
-    expect(await reportRow(shop.id, report.id)).toMatchObject({ status: "COMPLETED", resourcesScanned: 18, segmentIndex: 10 });
+    // (5 content types + 3 image types) × 2 languages, each scanned to the end.
+    expect(await reportRow(shop.id, report.id)).toMatchObject({ status: "COMPLETED", resourcesScanned: 18, segmentIndex: 16 });
 
     const coverage = (await loadCoverage(shop.id, app))!;
     const de = coverage.rows.find((r) => r.locale === "de" && r.resourceType === "PRODUCT")!;
@@ -87,6 +87,24 @@ describe("coverage report", () => {
     const gap = coverage.gaps.find((g) => g.resourceGid === "gid://shopify/Product/2" && g.locale === "de")!;
     expect(gap).toMatchObject({ missing: 2, outdated: 1 });
     expect(store.calls).not.toContain("LinguvaTranslationsRegister");
+  });
+
+  it("counts image alt text per image type, without SEO notes or gap links for images", async () => {
+    const { shop, store, deps } = await setup();
+    const img1 = store.addImage("gid://shopify/Product/1", "Red wool jacket, front view");
+    store.addImage("gid://shopify/Product/2", "Blue jacket, back view");
+    store.addImage("gid://shopify/Collection/1", "Winter collection banner");
+    store.translate(img1, "de", "alt", "Rote Wolljacke, Vorderansicht");
+    await runAll(deps, shop.id, ["de"]);
+
+    const coverage = (await loadCoverage(shop.id, app))!;
+    const productImages = coverage.rows.find((r) => r.locale === "de" && r.resourceType === "MEDIA_IMAGE")!;
+    expect(productImages.resources).toBe(2);
+    expect(productImages.groups.content).toEqual({ withSource: 2, translated: 1, outdated: 0, missing: 1 });
+    expect(productImages.seoTitlesMissingInSource).toBe(0);
+    expect(coverage.rows.find((r) => r.resourceType === "COLLECTION_IMAGE")?.groups.content.missing).toBe(1);
+    // Images are edited on their product's page: no gap rows of their own.
+    expect(coverage.gaps.some((g) => g.resourceType.endsWith("_IMAGE"))).toBe(false);
   });
 
   it("finds duplicate SEO titles in a language", async () => {

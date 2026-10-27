@@ -398,7 +398,11 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
   if (intent === "save-attached") {
     const resources = await listEditorAttachments(admin, ctx.kind, resourceId, target.locale);
     const outcomes: Array<{ ref: string; status: string; message?: string }> = [];
-    for (const { resource, edits } of collectAttachedEdits(resources, form)) {
+    for (const { resource, edits, rejected } of collectAttachedEdits(resources, form)) {
+      for (const key of rejected) {
+        outcomes.push({ ref: attachedRef(resource.resourceId, key), status: "error", message: "This rich text no longer matches the original's formatting. Translate it again with AI." });
+      }
+      if (!edits.length) continue;
       const saved = await saveResourceTranslations({
         admin,
         shopId,

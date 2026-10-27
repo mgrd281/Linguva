@@ -5,6 +5,7 @@ import { shopKey } from "../queue/redis";
 import {
   getTranslatableResource,
   listTranslatableResources,
+  type TranslatableResourceData,
 } from "../shopify/translations-api";
 import { providerContext, resourceTitle } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
@@ -22,6 +23,8 @@ import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { finishItem, isBulkResourceType, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
+import { listAttachedResources } from "../shopify/attached-resources";
+import { isEditableAttachedField } from "../translation/attached-editor";
 import type { Entitlements } from "../../lib/plans";
 
 export type Admin = Pick<AdminApiContext, "graphql">;
@@ -123,9 +126,12 @@ export async function runDiscoveryPage(
     latestRevisions(payload.shopId, pageGids, job.targetLocale, deps.prisma),
     pendingDraftDigests(payload.shopId, pageGids, job.targetLocale, deps.prisma),
   ]);
+  // With images and custom fields included, every item is checked: whether
+  // they need work is only known after listing them (per item).
   const gids = page.resources
     .filter(
       (r) =>
+        job.includeAttached ||
         planResourceWork(r, {
           latest,
           pendingDrafts,
@@ -215,7 +221,8 @@ export async function processItem(
   if (!deps.provider) throw new JobStopError("AI_NOT_CONFIGURED");
 
   // Rate limit before claiming, so a delayed item isn't counted as running.
-  await throttle(deps, payload.shopId, ITEM_SHOPIFY_COST);
+  // Images and custom fields need about three times the Admin API calls.
+  await throttle(deps, payload.shopId, job.includeAttached ? ITEM_SHOPIFY_COST * 3 : ITEM_SHOPIFY_COST);
   await withTenant(
     payload.shopId,
     (tx) =>
@@ -239,51 +246,175 @@ export async function processItem(
     await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "RESOURCE_GONE" }, deps.prisma);
     return { status: "SKIPPED", errorCode: "RESOURCE_GONE" };
   }
+  // Publishing needs automatic publishing on the job AND still on in the
+  // shop's settings: switching back to review stops running jobs publishing.
+  // Even then only results without quality warnings go live; flagged ones
+  // wait in Review.
+  const autoPublish =
+    job.publishMode === "AUTO_PUBLISH" &&
+    settings.bulkPublishMode === "AUTO_PUBLISH" &&
+    (billing ? billing.entitlements.autoPublish : true);
+  const run: RunContext = { deps, payload, attempt, jobId: job.id, targetLocale: job.targetLocale, overwriteProtected: job.overwriteProtected, settings, monthlyLimit, autoPublish, admin, itemId: item.id };
+
+  const parentTitle = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : null;
+  const results: ResourceRunResult[] = [];
+  const own = await translateOneResource(run, {
+    resource,
+    title: resource.content.find((c) => c.key === "title")?.value ?? null,
+    context: providerContext(resource.resourceId, parentTitle, job.resourceType),
+    onlyKeys: scopeKeys(job.fieldScope),
+  });
+  results.push(own);
+
+  // Image alt text and custom fields of the item, when the merchant included
+  // them (all fields only), with the same rules: drafts, protection, checks.
+  if (job.includeAttached) {
+    const attached = await listAttachedResources(admin, item.resourceGid, job.targetLocale);
+    for (const a of attached) {
+      const editable = { ...a, content: a.content.filter((c) => isEditableAttachedField(c)) };
+      const label = a.kind === "IMAGE" ? "Image" : `${a.label} (custom field)`;
+      results.push(
+        await translateOneResource(run, {
+          resource: editable,
+          parentGid: item.resourceGid,
+          title: parentTitle ? `${parentTitle} · ${label}` : label,
+          context: parentTitle
+            ? a.kind === "IMAGE"
+              ? `Image description (alt text) of: ${parentTitle}`
+              : `Custom field "${a.label}" of: ${parentTitle}`
+            : undefined,
+        }),
+      );
+    }
+  }
+
+  const sum = (pick: (r: ResourceRunResult) => number) => results.reduce((n, r) => n + pick(r), 0);
+  const planned = sum((r) => r.planned);
+  const protectedSkipped = sum((r) => r.protectedSkipped);
+  if (planned === 0) {
+    const errorCode = protectedSkipped ? "PROTECTED" : "UP_TO_DATE";
+    await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode, protectedSkipped }, deps.prisma);
+    return { status: "SKIPPED", errorCode };
+  }
+  const drafted = sum((r) => r.drafted);
+  const savedCount = sum((r) => r.saved);
+  const notSaved = sum((r) => r.notSaved);
+  const rejected = sum((r) => r.rejected);
+  const done = drafted + savedCount;
+
+  const status = done > 0 ? "SUCCEEDED" : "SKIPPED";
+  const errorCode =
+    done > 0
+      ? rejected + notSaved > 0
+        ? "PARTIAL"
+        : drafted > 0
+          ? "DRAFTED"
+          : null
+      : results.some((r) => r.conflict)
+        ? "SOURCE_CHANGED"
+        : "ALL_FIELDS_REJECTED";
+  await finishItem(
+    payload.shopId,
+    item.id,
+    {
+      status,
+      errorCode,
+      fieldsTranslated: done,
+      fieldsRejected: rejected + notSaved,
+      charsBilled: sum((r) => r.charsBilled),
+      memoryHits: sum((r) => r.memoryHits),
+      charsSaved: sum((r) => r.charsSaved),
+      protectedSkipped,
+    },
+    deps.prisma,
+  );
+  return { status, ...(errorCode ? { errorCode } : {}) };
+}
+
+interface RunContext {
+  deps: JobDependencies;
+  payload: ItemPayload;
+  attempt: number;
+  itemId: string;
+  jobId: string;
+  targetLocale: string;
+  overwriteProtected: boolean;
+  settings: Awaited<ReturnType<typeof getShopSettings>>;
+  monthlyLimit: number;
+  autoPublish: boolean;
+  admin: Admin;
+}
+
+interface ResourceRunResult {
+  planned: number;
+  protectedSkipped: number;
+  drafted: number;
+  saved: number;
+  notSaved: number;
+  rejected: number;
+  conflict: boolean;
+  charsBilled: number;
+  memoryHits: number;
+  charsSaved: number;
+}
+
+/**
+ * Translates what one resource needs (the item itself, or one of its images
+ * or custom fields): plan, reserve usage, translate, then drafts or (with
+ * automatic publishing) digest-checked publishing.
+ */
+async function translateOneResource(
+  run: RunContext,
+  target: {
+    resource: TranslatableResourceData;
+    parentGid?: string;
+    title: string | null;
+    context: string | undefined;
+    onlyKeys?: readonly string[];
+  },
+): Promise<ResourceRunResult> {
+  const { deps, payload } = run;
+  const { resource } = target;
+  const empty: ResourceRunResult = { planned: 0, protectedSkipped: 0, drafted: 0, saved: 0, notSaved: 0, rejected: 0, conflict: false, charsBilled: 0, memoryHits: 0, charsSaved: 0 };
   const [latest, pendingDrafts] = await Promise.all([
-    latestRevisions(payload.shopId, [item.resourceGid], job.targetLocale, deps.prisma),
-    pendingDraftDigests(payload.shopId, [item.resourceGid], job.targetLocale, deps.prisma),
+    latestRevisions(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma),
+    pendingDraftDigests(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma),
   ]);
   const { fields, protectedKeys } = planResourceWork(resource, {
     latest,
     pendingDrafts,
-    overwriteProtected: job.overwriteProtected,
-    onlyKeys: scopeKeys(job.fieldScope),
+    overwriteProtected: run.overwriteProtected,
+    ...(target.onlyKeys ? { onlyKeys: target.onlyKeys } : {}),
   });
-  if (fields.length === 0) {
-    const errorCode = protectedKeys.length ? "PROTECTED" : "UP_TO_DATE";
-    await finishItem(
-      payload.shopId,
-      item.id,
-      { status: "SKIPPED", errorCode, protectedSkipped: protectedKeys.length },
-      deps.prisma,
-    );
-    return { status: "SKIPPED", errorCode };
-  }
+  if (fields.length === 0) return { ...empty, protectedSkipped: protectedKeys.length };
 
   const sourceLocale = sourceLocaleOf(resource);
   const context = await loadTranslationContext(
     {
       shopId: payload.shopId,
       sourceLocale,
-      targetLocale: job.targetLocale,
-      reuseMachineMemory: settings.reuseMachineMemory,
+      targetLocale: run.targetLocale,
+      reuseMachineMemory: run.settings.reuseMachineMemory,
     },
     deps.prisma,
   );
   const prepared = await prepareTranslation({ fields, protect: context.glossary.protect, memory: context.memory });
 
-  // One reservation per attempt, for what the provider will actually be
-  // sent: a retried attempt is billed separately and a failed one released.
+  // One reservation per resource and attempt, for what the provider will
+  // actually be sent: a retried attempt is billed separately and a failed
+  // one released.
   const reservation = prepared.providerChars
     ? await reserveUsage(
         {
           shopId: payload.shopId,
-          key: `job-item:${item.id}:${attempt}`,
+          key: target.parentGid
+            ? `job-item:${run.itemId}:${run.attempt}:${resource.resourceId}`
+            : `job-item:${run.itemId}:${run.attempt}`,
           chars: prepared.providerChars,
-          limit: monthlyLimit,
+          limit: run.monthlyLimit,
           dailyLimit: deps.dailyLimit,
           platformDailyLimit: deps.platformDailyLimit,
-          provider: deps.provider.id,
+          provider: deps.provider!.id,
         },
         deps.prisma,
       )
@@ -291,14 +422,13 @@ export async function processItem(
 
   let result: Awaited<ReturnType<typeof completeTranslation>>;
   try {
-    const title = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : undefined;
     result = await completeTranslation(prepared, {
-      provider: deps.provider,
+      provider: deps.provider!,
       sourceLocale,
-      targetLocale: job.targetLocale,
+      targetLocale: run.targetLocale,
       glossary: context.glossary.rules,
-      context: translationContext(settings.aiStoreContext, providerContext(resource.resourceId, title, job.resourceType)),
-      formality: formalityFor(settings, job.targetLocale),
+      context: translationContext(run.settings.aiStoreContext, target.context),
+      formality: formalityFor(run.settings, run.targetLocale),
     });
   } catch (error) {
     if (reservation) await releaseUsage(reservation, deps.prisma);
@@ -310,33 +440,18 @@ export async function processItem(
   const fieldByKey = new Map(fields.map((f) => [f.key, f]));
   const translated = result.outcomes.flatMap((o) => (o.status === "translated" ? [o] : []));
   const rejected = result.outcomes.filter((o) => o.status === "rejected").length;
-  const stats = {
-    charsBilled: result.billedCharacters,
-    memoryHits: result.memoryHits,
-    charsSaved: result.charsSaved,
-    protectedSkipped: protectedKeys.length,
-  };
+  const toPublish = run.autoPublish ? translated.filter((o) => o.issues.length === 0) : [];
+  const toDraft = run.autoPublish ? translated.filter((o) => o.issues.length > 0) : translated;
 
-  // Publishing needs automatic publishing on the job AND still on in the
-  // shop's settings: switching back to review stops running jobs publishing.
-  // Even then only results without quality warnings go live; flagged ones
-  // wait in Review.
-  const autoPublish =
-    job.publishMode === "AUTO_PUBLISH" &&
-    settings.bulkPublishMode === "AUTO_PUBLISH" &&
-    (billing ? billing.entitlements.autoPublish : true);
-  const toPublish = autoPublish ? translated.filter((o) => o.issues.length === 0) : [];
-  const toDraft = autoPublish ? translated.filter((o) => o.issues.length > 0) : translated;
-
-  const title = resource.content.find((c) => c.key === "title")?.value ?? null;
   const drafted = toDraft.length
     ? await saveDrafts(
         payload.shopId,
         toDraft.map((o) => ({
-          jobId: job.id,
-          resourceGid: item.resourceGid,
-          resourceTitle: title,
-          locale: job.targetLocale,
+          jobId: run.jobId,
+          resourceGid: resource.resourceId,
+          parentGid: target.parentGid ?? null,
+          resourceTitle: target.title,
+          locale: run.targetLocale,
           key: o.key,
           sourceDigest: fieldByKey.get(o.key)!.digest!,
           sourceValue: fieldByKey.get(o.key)!.value ?? "",
@@ -354,11 +469,11 @@ export async function processItem(
   const saved = toPublish.length
     ? await saveResourceTranslations(
         {
-          admin,
+          admin: run.admin,
           shopId: payload.shopId,
           actorId: null,
-          resourceId: item.resourceGid,
-          locale: job.targetLocale,
+          resourceId: resource.resourceId,
+          locale: run.targetLocale,
           edits: toPublish.map((o) => ({
             key: o.key,
             value: o.value,
@@ -372,32 +487,17 @@ export async function processItem(
         deps.prisma,
       )
     : [];
-  const savedCount = saved.filter((s) => s.status === "saved").length;
-  const notSaved = saved.length - savedCount;
-  const done = drafted + savedCount;
-
-  const status = done > 0 ? "SUCCEEDED" : "SKIPPED";
-  const errorCode =
-    done > 0
-      ? rejected + notSaved > 0
-        ? "PARTIAL"
-        : drafted > 0
-          ? "DRAFTED"
-          : null
-      : saved.some((s) => s.status === "conflict")
-        ? "SOURCE_CHANGED"
-        : "ALL_FIELDS_REJECTED";
-  await finishItem(
-    payload.shopId,
-    item.id,
-    {
-      status,
-      errorCode,
-      fieldsTranslated: done,
-      fieldsRejected: rejected + notSaved,
-      ...stats,
-    },
-    deps.prisma,
-  );
-  return { status, ...(errorCode ? { errorCode } : {}) };
+  const savedCount = saved.filter((r) => r.status === "saved").length;
+  return {
+    planned: fields.length,
+    protectedSkipped: protectedKeys.length,
+    drafted,
+    saved: savedCount,
+    notSaved: saved.length - savedCount,
+    rejected,
+    conflict: saved.some((r) => r.status === "conflict"),
+    charsBilled: result.billedCharacters,
+    memoryHits: result.memoryHits,
+    charsSaved: result.charsSaved,
+  };
 }

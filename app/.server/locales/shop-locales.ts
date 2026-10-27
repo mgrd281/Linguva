@@ -108,23 +108,16 @@ export async function syncShopLocales(
       await tx.shopLocale.deleteMany({
         where: { shopId, locale: { notIn: locales.map((l) => l.locale) } },
       });
+      // Insert-if-missing, then update: safe when several pages sync at once
+      // (an upsert can hit the unique constraint when two inserts race).
+      await tx.shopLocale.createMany({
+        data: locales.map((l) => ({ shopId, locale: l.locale, name: l.name, primary: l.primary, published: l.published, syncedAt })),
+        skipDuplicates: true,
+      });
       for (const l of locales) {
-        await tx.shopLocale.upsert({
+        await tx.shopLocale.update({
           where: { shopId_locale: { shopId, locale: l.locale } },
-          create: {
-            shopId,
-            locale: l.locale,
-            name: l.name,
-            primary: l.primary,
-            published: l.published,
-            syncedAt,
-          },
-          update: {
-            name: l.name,
-            primary: l.primary,
-            published: l.published,
-            syncedAt,
-          },
+          data: { name: l.name, primary: l.primary, published: l.published, syncedAt },
         });
       }
     },

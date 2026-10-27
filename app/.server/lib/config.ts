@@ -65,6 +65,8 @@ const schema = z.object({
   SHOPIFY_JOB_BUCKET_SIZE: z.coerce.number().int().positive().default(800),
   SHOPIFY_JOB_RESTORE_PER_SECOND: z.coerce.number().positive().default(80),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
+  // Longest wait for one Shopify Admin API call before giving up (ms).
+  SHOPIFY_TIMEOUT_MS: z.coerce.number().int().min(500).max(120_000).default(15_000),
 }).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock"), {
   message: "the mock translation provider can't be used in production",
   path: ["TRANSLATION_PROVIDER"],

@@ -23,6 +23,13 @@ function describe(error: unknown) {
         retry: true,
       };
     }
+    if (error.status === 504) {
+      return {
+        heading: "Shopify is taking too long",
+        body: "Shopify didn't answer in time, so Linguva stopped waiting. Nothing was changed by this page. Try again in a moment.",
+        retry: true,
+      };
+    }
     if (error.status === 429 || error.status >= 500) {
       return {
         heading: "Shopify didn't respond",

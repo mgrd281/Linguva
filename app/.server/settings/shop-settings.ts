@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "../tenancy/with-tenant";
 
@@ -9,15 +9,39 @@ import { withTenant } from "../tenancy/with-tenant";
  */
 export const AI_CONSENT_VERSION = "2026-10-deepl-v1";
 
+type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
+
+/**
+ * Creates the settings row if it is missing. INSERT … ON CONFLICT DO NOTHING:
+ * safe when several requests do it at once (a Prisma upsert reads first and
+ * can fail with a unique violation when two requests insert together, which
+ * happened on a merchant's first open, when several pages load in parallel).
+ */
+async function ensureSettingsRow(tx: Tx, shopId: string) {
+  await tx.shopSettings.createMany({ data: [{ shopId }], skipDuplicates: true });
+}
+
+/** Updates settings, creating the row first if needed. */
+async function updateSettings(shopId: string, data: Prisma.ShopSettingsUpdateInput, client: PrismaClient) {
+  return withTenant(
+    shopId,
+    async (tx) => {
+      await ensureSettingsRow(tx, shopId);
+      return tx.shopSettings.update({ where: { shopId }, data });
+    },
+    client,
+  );
+}
+
 export async function getShopSettings(shopId: string, client: PrismaClient = defaultClient) {
   return withTenant(
     shopId,
-    (tx) =>
-      tx.shopSettings.upsert({
-        where: { shopId },
-        create: { shopId },
-        update: {},
-      }),
+    async (tx) => {
+      const existing = await tx.shopSettings.findUnique({ where: { shopId } });
+      if (existing) return existing;
+      await ensureSettingsRow(tx, shopId);
+      return tx.shopSettings.findUniqueOrThrow({ where: { shopId } });
+    },
     client,
   );
 }
@@ -33,21 +57,12 @@ export async function setAiConsent(
   input: { shopId: string; granted: boolean; actorId: string | null },
   client: PrismaClient = defaultClient,
 ) {
-  await withTenant(
+  await updateSettings(
     input.shopId,
-    (tx) =>
-      tx.shopSettings.upsert({
-        where: { shopId: input.shopId },
-        create: {
-          shopId: input.shopId,
-          aiDataProcessingConsentAt: input.granted ? new Date() : null,
-          consentVersion: input.granted ? AI_CONSENT_VERSION : null,
-        },
-        update: {
-          aiDataProcessingConsentAt: input.granted ? new Date() : null,
-          consentVersion: input.granted ? AI_CONSENT_VERSION : null,
-        },
-      }),
+    {
+      aiDataProcessingConsentAt: input.granted ? new Date() : null,
+      consentVersion: input.granted ? AI_CONSENT_VERSION : null,
+    },
     client,
   );
   // createMany: no RETURNING, so the runtime role needs no SELECT on AuditLog.
@@ -80,23 +95,13 @@ export async function setBulkPublishMode(
 ) {
   if (input.mode === "AUTO_PUBLISH" && !input.confirmed) throw new ConfirmationRequiredError();
   const auto = input.mode === "AUTO_PUBLISH";
-  await withTenant(
+  await updateSettings(
     input.shopId,
-    (tx) =>
-      tx.shopSettings.upsert({
-        where: { shopId: input.shopId },
-        create: {
-          shopId: input.shopId,
-          bulkPublishMode: input.mode,
-          autoPublishEnabledAt: auto ? new Date() : null,
-          autoPublishEnabledBy: auto ? input.actorId : null,
-        },
-        update: {
-          bulkPublishMode: input.mode,
-          autoPublishEnabledAt: auto ? new Date() : null,
-          autoPublishEnabledBy: auto ? input.actorId : null,
-        },
-      }),
+    {
+      bulkPublishMode: input.mode,
+      autoPublishEnabledAt: auto ? new Date() : null,
+      autoPublishEnabledBy: auto ? input.actorId : null,
+    },
     client,
   );
   // createMany: no RETURNING, so the runtime role needs no SELECT on AuditLog.
@@ -114,16 +119,7 @@ export async function setReuseMachineMemory(
   input: { shopId: string; enabled: boolean },
   client: PrismaClient = defaultClient,
 ) {
-  await withTenant(
-    input.shopId,
-    (tx) =>
-      tx.shopSettings.upsert({
-        where: { shopId: input.shopId },
-        create: { shopId: input.shopId, reuseMachineMemory: input.enabled },
-        update: { reuseMachineMemory: input.enabled },
-      }),
-    client,
-  );
+  await updateSettings(input.shopId, { reuseMachineMemory: input.enabled }, client);
 }
 
 export type Formality = "more" | "less";
@@ -151,16 +147,7 @@ export async function setTranslationStyle(
     if (input.allowedLocales.includes(locale) && (value === "more" || value === "less")) formalityByLocale[locale] = value;
   }
   const storeContext = input.storeContext.replace(/\s+/g, " ").trim().slice(0, AI_STORE_CONTEXT_MAX) || null;
-  await withTenant(
-    input.shopId,
-    (tx) =>
-      tx.shopSettings.upsert({
-        where: { shopId: input.shopId },
-        create: { shopId: input.shopId, formalityByLocale, aiStoreContext: storeContext },
-        update: { formalityByLocale, aiStoreContext: storeContext },
-      }),
-    client,
-  );
+  await updateSettings(input.shopId, { formalityByLocale, aiStoreContext: storeContext }, client);
   return { formalityByLocale, storeContext };
 }
 

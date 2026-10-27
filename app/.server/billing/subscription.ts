@@ -108,14 +108,14 @@ export async function refreshSubscription(
     currentPeriodEnd: sub?.currentPeriodEnd ?? null,
     checkedAt: now,
   };
+  // Insert-if-missing, then update: pages load in parallel and may refresh
+  // the cache at the same moment (an upsert can then hit the unique constraint).
   return withTenant(
     shop.id,
-    (tx) =>
-      tx.shopSubscription.upsert({
-        where: { shopId: shop.id },
-        create: { shopId: shop.id, ...data },
-        update: data,
-      }),
+    async (tx) => {
+      await tx.shopSubscription.createMany({ data: [{ shopId: shop.id, ...data }], skipDuplicates: true });
+      return tx.shopSubscription.update({ where: { shopId: shop.id }, data });
+    },
     client,
   );
 }

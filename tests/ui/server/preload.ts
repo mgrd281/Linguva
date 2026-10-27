@@ -27,7 +27,18 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-async function adminGraphql(shop: UiShop, body: { query: string; variables?: Record<string, unknown> }) {
+/** Waits like a slow network; an abort (the app's time limit) ends the wait as with real fetch. */
+function delay(ms: number, signal?: AbortSignal | null) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("aborted", "AbortError"));
+    });
+  });
+}
+
+async function adminGraphql(shop: UiShop, body: { query: string; variables?: Record<string, unknown> }, signal?: AbortSignal | null) {
   const name = /(query|mutation)\s+(\w+)/.exec(body.query)?.[2] ?? "anonymous";
   if (name === "LinguvaShopLocales") return json({ data: { shopLocales: shop.locales } });
   if (name === "LinguvaShopId") return json({ data: { shop: { id: shop.gid } } });
@@ -45,6 +56,7 @@ async function adminGraphql(shop: UiShop, body: { query: string; variables?: Rec
     });
   }
   if (shop.failing && /^LinguvaTranslatable/.test(name)) return json({ errors: "Service unavailable" }, 503);
+  if (shop.slowTranslationsMs && /^LinguvaTranslatable/.test(name)) await delay(shop.slowTranslationsMs, signal);
   try {
     const response = await storeFor(shop).graphql(body.query, { variables: body.variables });
     return json(await response.json());
@@ -87,7 +99,9 @@ globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => 
       refresh_token_expires_in: 2_592_000,
     });
   }
-  if (shop && /^\/admin\/api\/[\w-]+\/graphql\.json$/.test(url.pathname)) return adminGraphql(shop, await read());
+  if (shop && /^\/admin\/api\/[\w-]+\/graphql\.json$/.test(url.pathname)) {
+    return adminGraphql(shop, await read(), init?.signal ?? (input instanceof Request ? input.signal : null));
+  }
   if (/(^|\.)(shopify\.com|myshopify\.com|shopifycloud\.com)$/.test(url.hostname)) {
     throw new Error(`[ui-fake-shopify] refused request to ${url.hostname}: UI tests never call real Shopify`);
   }

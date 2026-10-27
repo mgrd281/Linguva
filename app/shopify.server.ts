@@ -10,6 +10,7 @@ import { TokenCipher } from "./.server/lib/crypto";
 import { prisma } from "./.server/lib/db";
 import { logger } from "./.server/lib/logger";
 import { EncryptedSessionStorage } from "./.server/shopify/encrypted-session-storage";
+import { withShopifyTimeout } from "./.server/shopify/admin-timeout";
 import { upsertInstalledShop } from "./.server/tenancy/shop-service";
 
 const config = getConfig();
@@ -31,7 +32,7 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ session, admin }) => {
-      const response = await admin.graphql(
+      const response = await withShopifyTimeout(admin, getConfig().SHOPIFY_TIMEOUT_MS, "page").graphql(
         `#graphql
         query LinguvaShopIdentity {
           shop {

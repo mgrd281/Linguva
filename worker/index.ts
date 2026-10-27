@@ -14,6 +14,7 @@ import { createQueues, createWorkers, requeueStalledItems } from "../app/.server
 import type { JobDependencies } from "../app/.server/jobs/processors";
 import { createRedis, keyPrefix } from "../app/.server/queue/redis";
 import { TokenBucket } from "../app/.server/queue/rate-limiter";
+import { withShopifyTimeout } from "../app/.server/shopify/admin-timeout";
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -29,7 +30,8 @@ async function main() {
   const limits = aiUsageLimits(config);
   const deps: JobDependencies = {
     prisma,
-    adminFor: async (shopDomain) => (await unauthenticated.admin(shopDomain)).admin,
+    adminFor: async (shopDomain) =>
+      withShopifyTimeout((await unauthenticated.admin(shopDomain)).admin, config.SHOPIFY_TIMEOUT_MS, "worker"),
     provider: getTranslationProvider(),
     monthlyLimit: limits.limit,
     dailyLimit: limits.dailyLimit,

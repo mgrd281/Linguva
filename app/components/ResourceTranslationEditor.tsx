@@ -50,6 +50,13 @@ export function ResourceTranslationEditor() {
   const [filledFrom, setFilledFrom] = useState<"ai" | "memory">("ai");
   // HTML fields show a rendered preview; the merchant can switch to the code.
   const [codeView, setCodeView] = useState<ReadonlySet<string>>(new Set());
+  const [historyOpen, setHistoryOpen] = useState<ReadonlySet<string>>(new Set());
+  const toggleHistory = (key: string) =>
+    setHistoryOpen((v) => {
+      const next = new Set(v);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   const toggleCode = (key: string) =>
     setCodeView((v) => {
       const next = new Set(v);
@@ -270,7 +277,9 @@ export function ResourceTranslationEditor() {
           </memoryFetcher.Form>
           <s-text color="subdued">
             {data.ai.available
-              ? `${remaining.toLocaleString()} AI characters available (${Math.max(0, data.ai.limit - data.ai.used).toLocaleString()} of ${data.ai.limit.toLocaleString()} left this month, at most ${data.ai.dailyLimit.toLocaleString()} per day)`
+              ? remaining === Math.max(0, data.ai.limit - data.ai.used)
+                ? `${remaining.toLocaleString("en-US")} of ${data.ai.limit.toLocaleString("en-US")} AI characters left this month`
+                : `${remaining.toLocaleString("en-US")} AI characters left today (${Math.max(0, data.ai.limit - data.ai.used).toLocaleString("en-US")} of ${data.ai.limit.toLocaleString("en-US")} this month)`
               : "AI translation isn't configured"}
           </s-text>
         </s-stack>
@@ -484,31 +493,35 @@ export function ResourceTranslationEditor() {
             </s-grid>
           </s-query-container>
           {field.history.length ? (
-            <details>
-              <summary>History ({field.history.length})</summary>
-              <s-stack direction="block" gap="small">
-                {field.history.map((h) => (
-                  <s-box key={h.id} padding="small" borderWidth="base" borderRadius="base">
-                    <s-text color="subdued">
-                      {new Date(h.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                      {" · "}
-                      {h.origin === "EXTERNAL" ? "Before Linguva" : h.origin === "AI" ? (h.approved ? "AI, approved" : "AI") : "Manual"}
-                    </s-text>
-                    <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
-                    {h.restorable ? (
-                      <s-button
-                        variant="tertiary"
-                        onClick={() =>
-                          restoreFetcher.submit({ intent: "restore", revisionId: h.id }, { method: "post" })
-                        }
-                      >
-                        Restore this version
-                      </s-button>
-                    ) : null}
-                  </s-box>
-                ))}
-              </s-stack>
-            </details>
+            <s-stack direction="block" gap="small">
+              <s-button variant="tertiary" onClick={() => toggleHistory(field.key)}>
+                {historyOpen.has(field.key) ? "Hide history" : `Show history (${field.history.length})`}
+              </s-button>
+              {historyOpen.has(field.key) ? (
+                <s-stack direction="block" gap="small">
+                  {field.history.map((h) => (
+                    <s-box key={h.id} padding="small" borderWidth="base" borderRadius="base">
+                      <s-text color="subdued">
+                        {new Date(h.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                        {" · "}
+                        {h.origin === "EXTERNAL" ? "Before Linguva" : h.origin === "AI" ? (h.approved ? "AI, approved" : "AI") : "Manual"}
+                      </s-text>
+                      <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
+                      {h.restorable ? (
+                        <s-button
+                          variant="tertiary"
+                          onClick={() =>
+                            restoreFetcher.submit({ intent: "restore", revisionId: h.id }, { method: "post" })
+                          }
+                        >
+                          Restore this version
+                        </s-button>
+                      ) : null}
+                    </s-box>
+                  ))}
+                </s-stack>
+              ) : null}
+            </s-stack>
           ) : null}
         </s-stack>
       </s-section>

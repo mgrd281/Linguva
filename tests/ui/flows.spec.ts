@@ -20,7 +20,10 @@ test("translate with AI, edit and publish; the published value is read back from
   await openApp(page, "full", "/app/products/5?locale=de");
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Warme Jacke Nummer 5");
   // The previous state is in the history and can be restored.
-  await expect(page.getByText(/History \(\d+\)/).first()).toBeVisible();
+  const history = page.getByRole("button", { name: /^Show history \(\d+\)$/ }).first();
+  await history.click();
+  await expect(page.getByRole("button", { name: "Hide history" }).first()).toBeVisible();
+  await expect(page.getByText(/· (Manual|AI|Before Linguva)/).first()).toBeVisible();
 });
 
 test("image alt text is translated and published separately", async ({ page }) => {

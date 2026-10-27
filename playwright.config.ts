@@ -28,6 +28,8 @@ const serverEnv: Record<string, string> = {
   AI_MONTHLY_CHAR_LIMIT: "1000000",
   AI_USER_REQUESTS_PER_MINUTE: "1000",
   AI_SHOP_REQUESTS_PER_MINUTE: "1000",
+  // Short, so the timeout test doesn't wait 15 s.
+  SHOPIFY_TIMEOUT_MS: "3000",
 };
 // The global setup seeds the same database with the app's own modules.
 Object.assign(process.env, serverEnv);

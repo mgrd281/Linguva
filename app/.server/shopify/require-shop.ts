@@ -1,5 +1,7 @@
 import { authenticate } from "../../shopify.server";
+import { getConfig } from "../lib/config";
 import { ensureDatabasePosture } from "../lib/db-guard";
+import { withShopifyTimeout } from "./admin-timeout";
 import {
   findShopByDomain,
   upsertInstalledShop,
@@ -32,5 +34,6 @@ export async function requireShop(request: Request) {
   const redirect = context.redirect;
   // Optional scopes (for example read_markets) are queried and requested here.
   const scopes = context.scopes;
-  return { admin, session, shop, actorId, redirect, scopes };
+  // Every Admin API call from a page has a time limit (see admin-timeout.ts).
+  return { admin: withShopifyTimeout(admin, getConfig().SHOPIFY_TIMEOUT_MS, "page"), session, shop, actorId, redirect, scopes };
 }

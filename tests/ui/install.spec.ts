@@ -86,3 +86,13 @@ test("pages and data responses carry the security headers, and the admin may sti
   const login = await page.request.get(new URL("/auth/login", UI_ENV.appUrl).toString());
   expect(login.headers()["content-security-policy"]).toContain("frame-ancestors https://admin.shopify.com https://*.myshopify.com;");
 });
+
+test("the public start page describes Linguva and asks no one to type a shop domain", async ({ page }) => {
+  const response = await page.goto(new URL("/", UI_ENV.appUrl).toString());
+  expect(response?.status()).toBe(200);
+  await expect(page.getByText("Translate your Shopify store, carefully")).toBeVisible();
+  await expect(page.locator('s-section[heading="Every part of your store"]')).toHaveCount(1);
+  // No template placeholders, and installs go through Shopify (App Store requirement).
+  expect(await page.content()).not.toMatch(/\[your app\]|Product feature/);
+  await expect(page.locator('s-text-field[name="shop"]')).toHaveCount(0);
+});

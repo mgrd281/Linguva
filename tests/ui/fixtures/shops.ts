@@ -23,6 +23,8 @@ export interface UiShop {
   plan: string | null;
   /** Every Admin API call fails (Shopify outage or revoked access). */
   failing?: boolean;
+  /** Translation queries answer only after this many ms (a hanging Shopify). */
+  slowTranslationsMs?: number;
   /** Optional access scopes the merchant granted. */
   grantedOptionalScopes?: string[];
   build(): FakeShopifyStore;
@@ -99,6 +101,25 @@ export const UI_SHOPS = {
     locales: [en, de],
     plan: null,
     build: () => new FakeShopifyStore(5),
+  },
+  visual: {
+    // Fixed content for screenshot comparisons; no test changes it.
+    domain: "ui-visual.myshopify.com",
+    gid: "gid://shopify/Shop/91008",
+    name: "Visual Test Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: false }],
+    plan: "pro",
+    build: () => new FakeShopifyStore(6),
+  },
+  slow: {
+    // Shopify hangs on translation queries: longer than the app's time limit.
+    domain: "ui-slow.myshopify.com",
+    gid: "gid://shopify/Shop/91007",
+    name: "Slow Store",
+    locales: [en, de],
+    plan: "starter",
+    slowTranslationsMs: 20_000,
+    build: () => new FakeShopifyStore(3),
   },
   fresh: {
     // Never seeded: installs through token exchange in the test.

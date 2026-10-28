@@ -8,7 +8,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
 import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
@@ -47,7 +47,8 @@ const runId = randomBytes(4).toString("hex");
 const created = new Set<string>();
 const prisma = new PrismaClient();
 const admin = settings ? createLiveAdmin(settings) : null!;
-const locale = settings?.targetLocale ?? "de";
+// Chosen and checked once by tests/live/global-setup.ts.
+const locale = inject("liveTargetLocale");
 let product: { id: string; handle: string };
 let collection: { id: string; handle: string };
 

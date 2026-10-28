@@ -53,7 +53,7 @@ pnpm db:up && pnpm db:migrate        # local PostgreSQL (the test database is us
 export LIVE_SHOPIFY_SHOP=your-dev-store.myshopify.com
 export LIVE_SHOPIFY_CLIENT_ID=...    # or LIVE_SHOPIFY_ADMIN_TOKEN=...
 export LIVE_SHOPIFY_CLIENT_SECRET=...
-export LIVE_TARGET_LOCALE=de         # must already be enabled on the store
+export LIVE_TARGET_LOCALE=fr         # optional: default is the store's first additional language (unpublished is fine)
 pnpm test:live                       # read-only checks
 LIVE_ALLOW_WRITES=yes pnpm test:live # adds fixture writes
 ```
@@ -81,7 +81,7 @@ LIVE_ALLOW_WRITES=yes pnpm test:live # adds fixture writes
 
 The full list of test cases, with expected results and the beta exit criteria, is in DEV_STORE_TEST_PLAN.md. The short list below is the minimum.
 
-Run `pnpm dev` (Shopify CLI tunnel) with the dev store and `TRANSLATION_PROVIDER=mock`, and Redis for bulk jobs. Record each result in §4.
+Run `pnpm dev` (Shopify CLI tunnel; it starts the worker too when the CLI has a worker web configuration, otherwise also `pnpm worker:dev`) with the dev store and `TRANSLATION_PROVIDER=mock`, and Redis for bulk jobs. Record each result in §4.
 
 1. Install: OAuth/token exchange, Overview page, a `Shop` row, sessions encrypted in the database.
 2. Languages page: lists the store's languages, the 20-language limit, the RTL warning.

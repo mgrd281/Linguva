@@ -28,7 +28,7 @@ pnpm db:migrate                  # runs migrations as the owner role
 pnpm config:link                 # once: create or choose the Linguva development app
 pnpm preflight                   # checks the local setup (no Shopify calls)
 pnpm dev                         # shopify app dev on your development store
-pnpm worker:dev                  # second terminal: bulk jobs and coverage (needs REDIS_URL)
+pnpm worker:dev                  # only if `pnpm dev` doesn't start the worker (see docs/SHOPIFY_CLI_SETUP.md §5)
 ```
 
 Step by step, with scopes, webhooks and billing: [docs/SHOPIFY_CLI_SETUP.md](docs/SHOPIFY_CLI_SETUP.md). Use `TRANSLATION_PROVIDER=mock` without a DeepL key.

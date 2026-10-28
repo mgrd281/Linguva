@@ -9,7 +9,7 @@ import { parseEnv } from "node:util";
 import { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { TokenCipher } from "../../app/.server/lib/crypto";
-import type { LiveSettings } from "./guard";
+import { LiveTestRefused, type LiveSettings } from "./guard";
 
 export const LIVE_API_VERSION = "2026-10";
 
@@ -38,7 +38,7 @@ async function requestToken(shop: string, clientId: string, clientSecret: string
  * file, not the environment, because live tests run with the test
  * database's environment. Kept in memory only.
  */
-export async function appSessionToken(shop: string, file = join(process.cwd(), ".env")): Promise<string> {
+export async function appSessionToken(shop: string, file = join(process.cwd(), ".env"), now = new Date()): Promise<string> {
   if (!existsSync(file)) throw new Error("LIVE_USE_APP_SESSION: no .env in the project folder");
   const env = parseEnv(readFileSync(file, "utf8")) as Record<string, string | undefined>;
   if (!env.DATABASE_URL || !env.TOKEN_ENCRYPTION_KEYS) throw new Error("LIVE_USE_APP_SESSION: .env needs DATABASE_URL and TOKEN_ENCRYPTION_KEYS");
@@ -46,6 +46,13 @@ export async function appSessionToken(shop: string, file = join(process.cwd(), "
   try {
     const session = await db.session.findFirst({ where: { shop, isOnline: false }, orderBy: { expires: "desc" } });
     if (!session?.accessToken) throw new Error(`LIVE_USE_APP_SESSION: no offline session for ${shop}. Open Linguva on the store once with \`pnpm dev\` running.`);
+    // Linguva uses expiring offline tokens; the app renews them when it is opened.
+    if (session.expires && session.expires.getTime() < now.getTime() + 2 * 60_000) {
+      throw new Error(
+        `LIVE_USE_APP_SESSION: the app's stored token for ${shop} expired at ${session.expires.toISOString()}. ` +
+          "Open Linguva in the store admin once with `pnpm dev` running (that renews it), then run the live tests again.",
+      );
+    }
     return TokenCipher.fromKeyring(env.TOKEN_ENCRYPTION_KEYS).decrypt(session.accessToken);
   } finally {
     await db.$disconnect();
@@ -66,7 +73,13 @@ export function createLiveAdmin(settings: LiveSettings): LiveAdmin & { calls: st
           : requestToken(settings.shop, credentials.clientId, credentials.clientSecret));
 
   const graphql = async (query: string, options?: { variables?: Record<string, unknown> }) => {
-    const name = /(query|mutation)\s+(\w+)/.exec(query)?.[2] ?? "anonymous";
+    const operation = /(query|mutation)\s+(\w+)/.exec(query);
+    const name = operation?.[2] ?? "anonymous";
+    // Read-only unless fixture writes were explicitly allowed: a mutation is
+    // refused here, before anything is sent to Shopify.
+    if (!settings.allowWrites && (operation?.[1] === "mutation" || /^\s*(#graphql\s*)?mutation\b/.test(query))) {
+      throw new LiveTestRefused(`${name} is a Shopify mutation; live tests are read-only without LIVE_ALLOW_WRITES=yes`);
+    }
     calls.push(name);
     for (let attempt = 1; ; attempt++) {
       const response = await fetch(endpoint, {
@@ -77,7 +90,14 @@ export function createLiveAdmin(settings: LiveSettings): LiveAdmin & { calls: st
       if (response.status === 401 || response.status === 403) {
         throw new Error(`${name}: Shopify answered ${response.status}. Check the token and its scopes.`);
       }
-      const body = (await response.json()) as { data?: unknown; errors?: Array<{ message: string; extensions?: { code?: string } }> };
+      if (response.status === 404) {
+        throw new Error(`${name}: Shopify answered 404 for ${settings.shop}. Is LIVE_SHOPIFY_SHOP the store's *.myshopify.com domain (Settings → Domains)?`);
+      }
+      const raw = (await response.json().catch(() => null)) as { data?: unknown; errors?: unknown } | null;
+      if (!raw || (raw.errors !== undefined && !Array.isArray(raw.errors))) {
+        throw new Error(`${name}: unexpected answer from Shopify (HTTP ${response.status}${raw?.errors ? `: ${String(raw.errors).slice(0, 120)}` : ""})`);
+      }
+      const body = raw as { data?: unknown; errors?: Array<{ message: string; extensions?: { code?: string } }> };
       const throttled = response.status === 429 || body.errors?.some((e) => e.extensions?.code === "THROTTLED");
       if (throttled && attempt < 5) {
         await sleep(1000 * attempt);

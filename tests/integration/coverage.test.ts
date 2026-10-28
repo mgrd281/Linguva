@@ -147,6 +147,28 @@ describe("coverage scan", () => {
     expect(await typeCounts(shop.id, "de", "PRODUCT")).toMatchObject({ missing: 6 });
   });
 
+  it("reads theme resources a few at a time (each carries thousands of texts) and still counts them all", async () => {
+    const { shop, store } = await setup(1, 0);
+    for (let i = 1; i <= 7; i++) {
+      store.addResource("ONLINE_STORE_THEME_LOCALE_CONTENT", `${i}`, [{ key: `general.text_${i}`, value: `Theme text ${i}`, type: "STRING" }]);
+    }
+    const sizes: number[] = [];
+    const admin = store.asAdmin();
+    const deps: CoverageDeps = {
+      prisma: app,
+      keyPrefix: "lv:test:cov",
+      adminFor: async () => ({
+        graphql: (query: string, options?: { variables?: Record<string, unknown> }) => {
+          if (options?.variables?.resourceType === "ONLINE_STORE_THEME_LOCALE_CONTENT") sizes.push(Number(options.variables.first));
+          return admin.graphql(query, options as never);
+        },
+      }) as never,
+    };
+    await runAll(deps, shop.id, ["de"]);
+    expect(sizes).toEqual([5, 5]);
+    expect(await typeCounts(shop.id, "de", "ONLINE_STORE_THEME_LOCALE_CONTENT")).toMatchObject({ missing: 7 });
+  });
+
   it("removes resources deleted in Shopify at the next scan", async () => {
     const { shop, store, deps } = await setup(3, 0);
     await runAll(deps, shop.id, ["de"]);

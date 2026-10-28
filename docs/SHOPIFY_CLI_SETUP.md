@@ -7,7 +7,7 @@ What runs where:
 | Part | Where | Started by |
 |---|---|---|
 | Embedded app (React Router web server) | Your machine, reached by Shopify through the CLI tunnel | `pnpm dev` (`shopify app dev`) |
-| Worker (bulk jobs, coverage) | Your machine | `pnpm worker:dev` |
+| Worker (bulk jobs, coverage) | Your machine | Started by `pnpm dev` when the CLI has a worker web configuration; otherwise `pnpm worker:dev` |
 | PostgreSQL 16, Redis 7 | Your machine | `pnpm db:up` (Docker) or local services |
 | App configuration, scopes, webhooks | Shopify, applied to the dev store by `shopify app dev` | `shopify.app.toml` |
 
@@ -81,11 +81,13 @@ Terminal 1:
 pnpm dev               # = shopify app dev; choose your development store when asked
 ```
 
-Terminal 2:
+The worker (bulk jobs, coverage scans, automatic translation) must run as well. If your Shopify CLI setup starts it together with the app (a worker web configuration with its own `dev` command), `pnpm dev`'s output shows the worker's `"worker started"` line; then don't start it again. Otherwise, in a second terminal:
 
 ```bash
-pnpm worker:dev        # bulk jobs and coverage reports
+pnpm worker:dev        # only if `pnpm dev` doesn't already start the worker
 ```
+
+Two workers at once give no wrong results (jobs are idempotent) but double the Shopify API use and make logs confusing.
 
 What happens on the first run:
 
@@ -147,5 +149,5 @@ Owner complimentary access for your own stores is a separate, server-side mechan
 | "Invalid environment configuration (…)" | `.env` incomplete; `pnpm preflight` names the variables |
 | "Database security posture check failed" | `DATABASE_URL` uses the owner or a superuser role; use `linguva_app` |
 | App loads but Products is empty | The store has no products, or a missing scope (reinstall after approving scopes) |
-| Bulk job stays "Pending" | Worker not running (`pnpm worker:dev`) or Redis unreachable |
+| Bulk job stays "Pending" | Worker not running (no `"worker started"` line in `pnpm dev`'s output: start `pnpm worker:dev`) or Redis unreachable |
 | Markets page asks for permission | Expected: `read_markets` is optional; approve it on the page |

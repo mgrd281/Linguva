@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { assertDevelopmentStore, readLiveSettings } from "../live/guard";
+import { describe, expect, it, vi } from "vitest";
+import { createLiveAdmin } from "../live/admin-client";
+import { assertDevelopmentStore, chooseTargetLocale, LiveTestRefused, readLiveSettings } from "../live/guard";
 
 const base = { LIVE_SHOPIFY_SHOP: "linguva-dev.myshopify.com", LIVE_SHOPIFY_ADMIN_TOKEN: "test-token" };
 
@@ -59,5 +60,69 @@ describe("live test guard", () => {
     expect(() => readLiveSettings({ ...shop, LIVE_USE_APP_SESSION: "yes", LIVE_ALLOW_WRITES: "yes" })).toThrow(/read-only/);
     expect(() => readLiveSettings({ ...shop, LIVE_USE_APP_SESSION: "yes", LIVE_SHOPIFY_ADMIN_TOKEN: "x" })).toThrow(/exactly one/);
     expect(() => readLiveSettings({ LIVE_SHOPIFY_SHOP: "karinex-de.myshopify.com", LIVE_USE_APP_SESSION: "yes" })).toThrow(/deny list/);
+  });
+});
+
+describe("live test target language", () => {
+  const shop = "linguva-test-lab.myshopify.com";
+  const en = { locale: "en", primary: true, published: true };
+
+  it("uses the store's first additional language, also when it is unpublished", () => {
+    expect(chooseTargetLocale([en, { locale: "fr", primary: false, published: false }], null, shop)).toEqual({ ok: true, locale: "fr", published: false });
+    expect(chooseTargetLocale([en, { locale: "fr", primary: false, published: false }], "fr", shop)).toEqual({ ok: true, locale: "fr", published: false });
+  });
+
+  it("explains how to add a language when the store has none", () => {
+    const choice = chooseTargetLocale([en], null, shop);
+    expect(choice.ok).toBe(false);
+    if (!choice.ok) {
+      expect(choice.message).toContain("has no additional language yet");
+      expect(choice.message).toContain("https://admin.shopify.com/store/linguva-test-lab/settings/languages");
+      expect(choice.message).toContain("It can stay unpublished");
+    }
+  });
+
+  it("names the languages to choose from when LIVE_TARGET_LOCALE doesn't match", () => {
+    const choice = chooseTargetLocale([en, { locale: "fr", primary: false, published: false }], "de", shop);
+    expect(choice).toMatchObject({ ok: false });
+    if (!choice.ok) expect(choice.message).toMatch(/LIVE_TARGET_LOCALE=de isn't enabled[\s\S]*fr \(unpublished\)[\s\S]*LIVE_TARGET_LOCALE=fr/);
+    const primary = chooseTargetLocale([en, { locale: "fr", primary: false, published: true }], "en", shop);
+    if (!primary.ok) expect(primary.message).toContain("primary language");
+  });
+});
+
+describe("live Admin client", () => {
+  const settings = (allowWrites: boolean) =>
+    ({ shop: "linguva-test-lab.myshopify.com", credentials: { kind: "token", token: "t" }, targetLocale: null, allowWrites }) as const;
+
+  it("refuses Shopify mutations before sending anything unless fixture writes are allowed", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      return Response.json({ data: {} });
+    });
+    try {
+      const readOnly = createLiveAdmin(settings(false));
+      await expect(readOnly.graphql(`#graphql\n  mutation LinguvaTranslationsRegister($id: ID!) { x }`)).rejects.toThrow(/read-only without LIVE_ALLOW_WRITES=yes/);
+      await expect(readOnly.graphql(`mutation { productDelete(input: {}) { userErrors { message } } }`)).rejects.toThrow(LiveTestRefused);
+      expect(calls).toEqual([]);
+      await readOnly.graphql(`#graphql\n  query LinguvaShopLocales { shopLocales { locale } }`);
+      expect(calls).toHaveLength(1);
+      await createLiveAdmin(settings(true)).graphql(`mutation LinguvaTranslationsRegister { x }`);
+      expect(calls).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("explains a mistyped store domain instead of a parser error", async () => {
+    vi.stubGlobal("fetch", async () => Response.json({ errors: "Not Found" }, { status: 404 }));
+    try {
+      await expect(createLiveAdmin(settings(false)).graphql(`query LinguvaLiveShopFacts { shop { id } }`)).rejects.toThrow(
+        /answered 404 for linguva-test-lab\.myshopify\.com\. Is LIVE_SHOPIFY_SHOP the store's \*\.myshopify\.com domain/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

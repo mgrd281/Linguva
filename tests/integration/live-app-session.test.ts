@@ -42,6 +42,18 @@ describe("live tests with the app's own session", () => {
     expect(await appSessionToken("linguva-test-lab.myshopify.com", envFile(keys))).toBe("shpat_dev_store");
   });
 
+  it("asks to open the app when the stored token has expired (expiring offline tokens)", async () => {
+    const keys = `k1:${randomBytes(32).toString("base64")}`;
+    const cipher = TokenCipher.fromKeyring(keys);
+    await app.session.create({
+      data: { id: "offline_linguva-test-lab.myshopify.com", shop: "linguva-test-lab.myshopify.com", state: "", isOnline: false, accessToken: cipher.encrypt("shpat_old"), expires: new Date(Date.now() - 60_000) },
+    });
+    await expect(appSessionToken("linguva-test-lab.myshopify.com", envFile(keys))).rejects.toThrow(/expired at .* Open Linguva in the store admin once/);
+    // Still valid for a while: used.
+    await app.session.update({ where: { id: "offline_linguva-test-lab.myshopify.com" }, data: { expires: new Date(Date.now() + 30 * 60_000) } });
+    expect(await appSessionToken("linguva-test-lab.myshopify.com", envFile(keys))).toBe("shpat_old");
+  });
+
   it("explains what's missing instead of guessing", async () => {
     const keys = `k1:${randomBytes(32).toString("base64")}`;
     await expect(appSessionToken("linguva-test-lab.myshopify.com", envFile(keys))).rejects.toThrow(/no offline session/);

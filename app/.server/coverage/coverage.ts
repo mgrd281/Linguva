@@ -35,6 +35,15 @@ export const COVERAGE_TYPES: readonly string[] = [
   ...Object.keys(CONTENT_TYPES),
 ];
 export const COVERAGE_PAGE_SIZE = 50;
+/**
+ * Theme resources carry thousands of texts each (a theme's language file),
+ * so they are read a few at a time to keep each response small and fast.
+ */
+export const THEME_PAGE_SIZE = 5;
+
+export function pageSizeFor(resourceType: string, pageSize: number): number {
+  return resourceType.startsWith("ONLINE_STORE_THEME") ? Math.min(pageSize, THEME_PAGE_SIZE) : pageSize;
+}
 const PAGE_COST = 60;
 const ACTIVE: CoverageReport["status"][] = ["QUEUED", "RUNNING"];
 /** A report with no progress for this long is treated as lost (for example Redis was down). */
@@ -229,7 +238,7 @@ async function readPage(admin: Admin, resourceType: string, locale: string, curs
       endCursor: result.pageInfo.endCursor,
     };
   }
-  const result = await listTranslatableResources(admin, { resourceType: resourceType as TranslatableKind, locale, after: cursor, first: pageSize });
+  const result = await listTranslatableResources(admin, { resourceType: resourceType as TranslatableKind, locale, after: cursor, first: pageSizeFor(resourceType, pageSize) });
   return {
     changes: result.resources.map((r) => toChange(r, null)),
     scanned: result.resources.length,

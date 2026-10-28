@@ -19,7 +19,8 @@ export type LiveCredentials =
 export interface LiveSettings {
   shop: string;
   credentials: LiveCredentials;
-  targetLocale: string;
+  /** LIVE_TARGET_LOCALE, or null: the store's first additional language is used. */
+  targetLocale: string | null;
   allowWrites: boolean;
 }
 
@@ -66,8 +67,8 @@ export function readLiveSettings(env: NodeJS.ProcessEnv = process.env): LiveSett
       .filter(Boolean),
   ];
   if (denied.some((d) => shop.includes(d))) throw new LiveTestRefused(`${shop} is on the deny list`);
-  const targetLocale = env.LIVE_TARGET_LOCALE?.trim() || "de";
-  if (!/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(targetLocale)) {
+  const targetLocale = env.LIVE_TARGET_LOCALE?.trim() || null;
+  if (targetLocale !== null && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(targetLocale)) {
     throw new LiveTestRefused("LIVE_TARGET_LOCALE is not a locale code");
   }
   return { shop, credentials, targetLocale, allowWrites: env.LIVE_ALLOW_WRITES === "yes" };
@@ -87,3 +88,50 @@ export function assertDevelopmentStore(settings: LiveSettings, facts: ShopFacts)
     throw new LiveTestRefused(`${settings.shop} is not a Partner development store`);
   }
 }
+
+export interface ShopLocale {
+  locale: string;
+  name?: string;
+  primary: boolean;
+  published: boolean;
+}
+
+export type TargetChoice = { ok: true; locale: string; published: boolean } | { ok: false; message: string };
+
+/**
+ * The language live tests translate into: LIVE_TARGET_LOCALE if set (it must
+ * be an additional language of the store), otherwise the store's first
+ * additional language. Published or not doesn't matter: Shopify stores
+ * translations for unpublished languages too, and customers don't see them.
+ */
+export function chooseTargetLocale(shopLocales: readonly ShopLocale[], requested: string | null, shop: string): TargetChoice {
+  const additional = shopLocales.filter((l) => !l.primary);
+  const list = additional.length
+    ? additional.map((l) => `${l.locale}${l.published ? "" : " (unpublished)"}`).join(", ")
+    : "none";
+  if (requested) {
+    const match = additional.find((l) => l.locale === requested);
+    if (match) return { ok: true, locale: match.locale, published: match.published };
+    const primary = shopLocales.find((l) => l.primary)?.locale;
+    return {
+      ok: false,
+      message: [
+        requested === primary
+          ? `LIVE_TARGET_LOCALE=${requested} is the store's primary language; live tests need an additional language.`
+          : `LIVE_TARGET_LOCALE=${requested} isn't enabled on ${shop}.`,
+        `Additional languages on the store: ${list}.`,
+        additional.length
+          ? `Use one of them (for example LIVE_TARGET_LOCALE=${additional[0]!.locale}), or leave LIVE_TARGET_LOCALE unset to use the first.`
+          : ADD_LANGUAGE_STEPS(shop),
+      ].join("\n"),
+    };
+  }
+  if (!additional.length) {
+    return { ok: false, message: [`${shop} has no additional language yet, so there is nothing to translate into.`, ADD_LANGUAGE_STEPS(shop)].join("\n") };
+  }
+  const first = additional[0]!;
+  return { ok: true, locale: first.locale, published: first.published };
+}
+
+const ADD_LANGUAGE_STEPS = (shop: string) =>
+  `Add one in the store admin: https://admin.shopify.com/store/${shop.replace(/\.myshopify\.com$/, "")}/settings/languages → Add language (for example French). It can stay unpublished. Then run the live tests again.`;

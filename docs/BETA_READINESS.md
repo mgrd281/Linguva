@@ -58,7 +58,7 @@ Quality scores per area with evidence: QUALITY_AUDIT.md (7.1/10 on average after
 | Images and metafields aren't in bulk jobs or the coverage report | Editor only |
 | Rich text, JSON and list metafields aren't editable | Need structure-aware editing |
 | Market-specific translations | Markets page is read-only |
-| Bulk jobs started from the UI need the worker (`pnpm worker:dev`) | Documented; the UI tests don't run a worker |
+| Bulk jobs started from the UI need the worker (started by `pnpm dev` with a worker web configuration, or `pnpm worker:dev`) | Documented; the UI tests don't run a worker |
 | Polaris tables: axe can't read roles set through `ElementInternals` | Checked in Chromium's accessibility tree instead (UI_TESTING.md) |
 | Shopify's library logs `config.future.expiringOfflineAccessTokens` on every token exchange | Library behaviour, harmless |
 

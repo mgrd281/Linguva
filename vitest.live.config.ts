@@ -10,7 +10,7 @@ export default defineConfig({
     name: "live",
     include: ["tests/live/**/*.live.test.ts"],
     env: testEnv,
-    globalSetup: ["tests/support/integration-global-setup.ts"],
+    globalSetup: ["tests/support/integration-global-setup.ts", "tests/live/global-setup.ts"],
     fileParallelism: false,
     // Real network calls, and tests in a file build on each other.
     sequence: { concurrent: false },

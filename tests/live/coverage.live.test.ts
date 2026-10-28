@@ -12,7 +12,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { COVERAGE_TYPES, createCoverageReport, runCoveragePage, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
 import { listCoverageItems, loadCoverageSummary } from "../../app/.server/coverage/summary";
 import { rebuildCountsTx } from "../../app/.server/coverage/items";
@@ -33,7 +33,8 @@ const live = describe.skipIf(!settings);
 const writes = describe.skipIf(!settings?.allowWrites);
 const prisma = new PrismaClient();
 const admin = settings ? createLiveAdmin(settings) : null!;
-const locale = settings?.targetLocale ?? "de";
+// Chosen and checked once by tests/live/global-setup.ts.
+const locale = inject("liveTargetLocale");
 const runId = randomBytes(4).toString("hex");
 const created = new Set<string>();
 let shopId: string;

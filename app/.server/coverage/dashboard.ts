@@ -55,8 +55,26 @@ export function bulkTargetOf(coverageType: string): { resourceType: BulkResource
 
 const SEO_GROUPS: readonly FieldGroup[] = ["seo_title", "seo_description"];
 
+type MarketsResult = Awaited<ReturnType<typeof readMarkets>>;
+/**
+ * The page refreshes every few seconds while a scan or job runs; scopes and
+ * markets rarely change, so they are read at most once a minute per shop
+ * (per process). Granting a scope takes effect within that minute.
+ */
+export const MARKETS_CACHE_MS = 60_000;
+const marketsCache = new Map<string, { at: number; value: MarketsResult }>();
+
+async function loadMarkets(shopId: string, admin: Parameters<typeof fetchMarkets>[0], isGranted: () => Promise<boolean>, now = Date.now()) {
+  const cached = marketsCache.get(shopId);
+  if (cached && now - cached.at < MARKETS_CACHE_MS) return cached.value;
+  const value = await readMarkets(admin, await isGranted());
+  marketsCache.set(shopId, { at: now, value });
+  if (marketsCache.size > 1000) marketsCache.delete(marketsCache.keys().next().value!);
+  return value;
+}
+
 /** Languages offered by each active market (markets need the optional read_markets scope). */
-async function loadMarkets(admin: Parameters<typeof fetchMarkets>[0], granted: boolean) {
+async function readMarkets(admin: Parameters<typeof fetchMarkets>[0], granted: boolean) {
   if (!granted) return { available: false as const, markets: [] };
   try {
     const markets = await fetchMarkets(admin);
@@ -79,13 +97,12 @@ async function loadMarkets(admin: Parameters<typeof fetchMarkets>[0], granted: b
 export async function loadCoverageDashboard(request: Request) {
   const { admin, shop, scopes } = await requireShop(request);
   const url = new URL(request.url);
-  const [locales, summary, settings, granted] = await Promise.all([
+  const [locales, summary, settings, markets] = await Promise.all([
     fetchAndSyncShopLocales(admin, shop.id),
     loadCoverageSummary(shop.id),
     getShopSettings(shop.id),
-    scopes.query().then((s) => s.granted.includes(MARKETS_SCOPE)),
+    loadMarkets(shop.id, admin, () => scopes.query().then((s) => s.granted.includes(MARKETS_SCOPE))),
   ]);
-  const markets = await loadMarkets(admin, granted);
   const allTargets = locales.locales.filter((l) => !l.primary);
   const market = markets.markets.find((m) => m.id === url.searchParams.get("market")) ?? null;
   const targets = market ? allTargets.filter((l) => market.locales.includes(l.locale)) : allTargets;

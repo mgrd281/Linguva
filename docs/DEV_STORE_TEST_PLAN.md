@@ -13,7 +13,7 @@ Store: `linguva-test-lab.myshopify.com` (connected 2026-10-28). Exact commands, 
 | P2 | Test catalog: at least 30 products (Shopify's sample data), 3 collections with images, 2 pages, 1 blog with 2 posts with featured images. Some product images with alt text, one without |
 | P3 | Two text metafield definitions on products (`custom.care`, multi-line text; `custom.subtitle`, single-line text) and one rich text definition, with values on a few products |
 | P4 | Markets: the primary market plus one market (for example Germany) with a German subfolder or domain |
-| P5 | App: follow SHOPIFY_CLI_SETUP.md (`pnpm config:link`, `pnpm preflight` without ✗, `pnpm dev` against the dev store, `pnpm worker:dev`). Local `.env` only, never committed |
+| P5 | App: follow SHOPIFY_CLI_SETUP.md (`pnpm config:link`, `pnpm preflight` without ✗, `pnpm dev` against the dev store; it starts the worker with the CLI's worker configuration, otherwise `pnpm worker:dev`). Local `.env` only, never committed |
 | P6 | AI: `TRANSLATION_PROVIDER=mock` for every case except C7. A DeepL Free key only with the owner's approval |
 | P7 | Billing (section L): the four plans `free`, `starter`, `pro`, `business` created in the Partner Dashboard, Partner API client with "Manage apps", the variables from `.env.example` set locally. On development stores every plan costs $0: **no real charges** |
 | P8 | Run the automated live tests first: `pnpm test:live` (read-only), then `LIVE_ALLOW_WRITES=yes pnpm test:live`. Log the result in §3 |
@@ -184,3 +184,5 @@ The first beta can start when:
 |---|---|---|---|---|
 | 2026-10-28 | linguva-test-lab.myshopify.com | Setup: CLI link, PostgreSQL, Redis, migrations, preflight | Reported by the owner | Not a test case; prerequisite |
 | 2026-10-28 | linguva-test-lab.myshopify.com | A1 (part): app installs and opens embedded in the admin | Reported by the owner | Reload, new tab and re-install not yet checked (DEV_STORE_VERIFICATION.md §3.1) |
+| 2026-10-28 | linguva-test-lab.myshopify.com | Setup at commit 0904246: 21 migrations applied, preflight passes, worker started by Shopify CLI with the mock provider | Reported by the owner | Prerequisite |
+| 2026-10-28 | linguva-test-lab.myshopify.com | `pnpm test:live` (read-only), `LIVE_TARGET_LOCALE=de`, then `fr` | **Not run**: `LiveTestRefused`, no additional language on the store; 20 tests skipped | Nothing verified. French (unpublished) being added; the setup check now explains this case once (DEV_STORE_VERIFICATION.md §4) |

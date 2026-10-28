@@ -62,7 +62,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Memory() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const { t, number } = useI18n();
+  const { t, number, language } = useI18n();
   const totalEntries = data.stats.reduce((s, r) => s + r.entries, 0);
   const totalUses = data.stats.reduce((s, r) => s + r.uses, 0);
 
@@ -89,7 +89,7 @@ export default function Memory() {
                 <s-option value="">{t("common.allLanguages")}</s-option>
                 {data.languages.map((l) => (
                   <s-option key={l.locale} value={l.locale}>
-                    {l.name}
+                    {language(l.locale, l.name)}
                   </s-option>
                 ))}
               </s-select>

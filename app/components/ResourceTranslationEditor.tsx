@@ -40,6 +40,8 @@ function saveErrorMessage(i18n: I18n, outcome: { message?: string; code?: string
 export function ResourceTranslationEditor() {
   const data = useLoaderData<EditorLoader>();
   const i18n = useI18n();
+  const sourceName = i18n.language(data.sourceLocale, data.sourceName);
+  const targetName = i18n.language(data.target.locale, data.target.name);
   const { t } = i18n;
   const singular = kindSingular(i18n, data.kind.type);
   const aiFetcher = useFetcher<EditorAction>();
@@ -233,7 +235,7 @@ export function ResourceTranslationEditor() {
         </s-banner>
       ) : null}
 
-      <s-section heading={`${data.sourceName} → ${data.target.name}`}>
+      <s-section heading={`${sourceName} → ${targetName}`}>
         <s-stack direction="inline" gap="base" alignItems="center">
           <aiFetcher.Form method="post" onSubmit={() => setFilledFrom("ai")}>
             <input type="hidden" name="intent" value="ai-translate" />
@@ -330,7 +332,7 @@ export function ResourceTranslationEditor() {
         {data.seoPreview ? (
           <s-section heading={t("editor.seo.heading")}>
             <s-stack direction="block" gap="base">
-              <s-paragraph>{t("editor.seo.intro", { singular, language: data.target.name })}</s-paragraph>
+              <s-paragraph>{t("editor.seo.intro", { singular, language: targetName })}</s-paragraph>
               <SeoPreview
                 value={currentValue}
                 source={(k) => fieldByKey.get(k)?.source ?? ""}
@@ -384,7 +386,7 @@ export function ResourceTranslationEditor() {
             <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
               <s-stack direction="block" gap="small">
                 <s-stack direction="inline" gap="small" alignItems="center" justifyContent="space-between">
-                  <s-text color="subdued">{t("editor.field.original", { language: data.sourceName })}</s-text>
+                  <s-text color="subdued">{t("editor.field.original", { language: sourceName })}</s-text>
                   {field.sourcePreview !== null ? (
                     <s-button variant="tertiary" onClick={() => toggleCode(field.key)}>
                       {showCode ? t("editor.field.showPreview") : t("editor.field.showHtml")}
@@ -394,7 +396,7 @@ export function ResourceTranslationEditor() {
                 {field.sourcePreview !== null && !showCode ? (
                   <HtmlPreview
                     html={field.sourcePreview}
-                    title={t("editor.field.originalFrame", { field: label, language: data.sourceName })}
+                    title={t("editor.field.originalFrame", { field: label, language: sourceName })}
                     lang={data.sourceLocale}
                   />
                 ) : (
@@ -409,7 +411,7 @@ export function ResourceTranslationEditor() {
                     <s-text-area
                       key={`${field.key}:${draft ?? "base"}`}
                       name={`value:${field.key}`}
-                      label={data.target.name}
+                      label={targetName}
                       value={value}
                       rows={field.type === "HTML" ? 8 : 3}
                       {...(error ? { error } : {})}
@@ -419,7 +421,7 @@ export function ResourceTranslationEditor() {
                     <s-text-field
                       key={`${field.key}:${draft ?? "base"}`}
                       name={`value:${field.key}`}
-                      label={data.target.name}
+                      label={targetName}
                       value={field.key === "handle" ? currentValue("handle") : value}
                       {...(error ? { error } : {})}
                       {...(field.key === "handle" ? { details: t("editor.field.handleDetails") } : {})}
@@ -429,7 +431,7 @@ export function ResourceTranslationEditor() {
                 {field.sourcePreview !== null && !showCode ? (
                   <HtmlPreview
                     html={currentValue(field.key)}
-                    title={t("editor.field.previewFrame", { field: label, language: data.target.name })}
+                    title={t("editor.field.previewFrame", { field: label, language: targetName })}
                     lang={data.target.locale}
                     dir={data.target.rtl ? "rtl" : "auto"}
                   />
@@ -454,7 +456,7 @@ export function ResourceTranslationEditor() {
                     {field.translation && currentValue("handle") !== field.translation ? (
                       <s-checkbox
                         name="confirm-handle"
-                        label={t("editor.handle.confirm", { handle: field.translation, language: data.target.name })}
+                        label={t("editor.handle.confirm", { handle: field.translation, language: targetName })}
                       />
                     ) : null}
                   </s-stack>

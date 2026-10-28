@@ -50,6 +50,8 @@ test("navigation, product list and editor are German; merchant content stays as 
   await expect(page.locator("s-app-nav s-link", { hasText: "Produkte" })).toHaveCount(1);
   await expect(page.locator("s-app-nav s-link", { hasText: "Einstellungen" })).toHaveCount(1);
   await expect(page.getByText("Product 1 jacket").first()).toBeVisible();
+  // Language names in German, not Shopify's English names.
+  await expect(page.locator("s-badge", { hasText: "Französisch" })).toBeVisible();
   await page.getByText("Product 1 jacket").first().click();
   await expect(page).toHaveURL(/\/app\/products\/1\?lang=fr/);
   // The interface stays German after moving inside the app (no `locale` on in-app links).

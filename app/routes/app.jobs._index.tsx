@@ -45,7 +45,7 @@ export default function Jobs() {
   const { jobs, filter, locales, nextCursor, isFirstPage } = useLoaderData<typeof loader>();
   const i18n = useI18n();
   const { t } = i18n;
-  const languageName = (code: string) => locales.find((l) => l.locale === code)?.name ?? code;
+  const languageName = (code: string) => i18n.language(code, locales.find((l) => l.locale === code)?.name);
   const filtered = Boolean(filter.status || filter.locale || filter.resourceType);
   const pageHref = (after: string | null) => {
     const params = new URLSearchParams();
@@ -74,7 +74,7 @@ export default function Jobs() {
                 <s-option value="">{t("common.allLanguages")}</s-option>
                 {locales.map((l) => (
                   <s-option key={l.locale} value={l.locale}>
-                    {l.name}
+                    {i18n.language(l.locale, l.name)}
                   </s-option>
                 ))}
               </s-select>

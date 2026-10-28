@@ -13,7 +13,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Overview() {
   const data = useLoaderData<typeof loader>();
-  const { t, msg, date, dateTime } = useI18n();
+  const { t, msg, date, dateTime, language } = useI18n();
   const done = data.checklist.filter((s) => s.done).length;
   const next = data.checklist.find((s) => !s.done);
   const usagePercent = data.usage.limit ? (data.usage.used / data.usage.limit) * 100 : 100;
@@ -92,7 +92,7 @@ export default function Overview() {
               <s-table-body>
                 {data.progress.map((l) => (
                   <s-table-row key={l.locale}>
-                    <s-table-cell>{l.name}</s-table-cell>
+                    <s-table-cell>{language(l.locale, l.name)}</s-table-cell>
                     <s-table-cell>
                       {l.published ? (
                         <s-badge tone="success">{t("common.state.published")}</s-badge>
@@ -106,7 +106,7 @@ export default function Overview() {
                       ) : (
                         <s-stack direction="inline" gap="small" alignItems="center">
                           <s-box inlineSize="120px">
-                            <ProgressBar value={l.percent} label={t("overview.languages.progressLabel", { language: l.name })} />
+                            <ProgressBar value={l.percent} label={t("overview.languages.progressLabel", { language: language(l.locale, l.name) })} />
                           </s-box>
                           <s-text>{l.percent} %</s-text>
                         </s-stack>
@@ -115,7 +115,7 @@ export default function Overview() {
                     <s-table-cell>
                       <s-link
                         href={`/app/products?lang=${encodeURIComponent(l.locale)}`}
-                        accessibilityLabel={t("overview.languages.translateLabel", { language: l.name })}
+                        accessibilityLabel={t("overview.languages.translateLabel", { language: language(l.locale, l.name) })}
                       >
                         {t("overview.languages.translate")}
                       </s-link>

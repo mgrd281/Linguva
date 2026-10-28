@@ -89,7 +89,7 @@ export function ResourceList() {
           heading={
             !data.bulk.planAllowsBulk
               ? t("resources.plan.bulkHeading")
-              : t("resources.plan.localeHeading", { language: data.target.name })
+              : t("resources.plan.localeHeading", { language: i18n.language(data.target.locale, data.target.name) })
           }
         >
           <s-paragraph>
@@ -113,11 +113,11 @@ export function ResourceList() {
           {data.targets.map((t) =>
             t.locale === locale ? (
               <s-badge key={t.locale} tone="info">
-                {t.name}
+                {i18n.language(t.locale, t.name)}
               </s-badge>
             ) : (
               <s-link key={t.locale} href={`${data.kind.path}?lang=${encodeURIComponent(t.locale)}`}>
-                {t.name}
+                {i18n.language(t.locale, t.name)}
               </s-link>
             ),
           )}
@@ -173,7 +173,7 @@ export function ResourceList() {
               <s-paragraph>
                 {t("resources.empty.body", {
                   label,
-                  language: data.targets.find((l) => l.locale === locale)?.name ?? t("resources.empty.yourLanguages"),
+                  language: data.targets.some((l) => l.locale === locale) ? i18n.language(locale, data.targets.find((l) => l.locale === locale)?.name) : t("resources.empty.yourLanguages"),
                 })}
               </s-paragraph>
             </s-stack>

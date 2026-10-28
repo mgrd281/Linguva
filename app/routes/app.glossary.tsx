@@ -131,7 +131,7 @@ export default function GlossaryPage() {
   const i18n = useI18n();
   const { t } = i18n;
   const { terms } = data;
-  const languageNames = Object.fromEntries(data.languages.map((l) => [l.locale, l.name]));
+  const languageNames = Object.fromEntries(data.languages.map((l) => [l.locale, i18n.language(l.locale, l.name)]));
   const addFetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
@@ -161,7 +161,7 @@ export default function GlossaryPage() {
                   <s-option value="">{t("common.allLanguages")}</s-option>
                   {data.languages.map((l) => (
                     <s-option key={l.locale} value={l.locale}>
-                      {l.name}
+                      {i18n.language(l.locale, l.name)}
                     </s-option>
                   ))}
                 </s-select>

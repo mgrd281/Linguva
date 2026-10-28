@@ -207,7 +207,7 @@ export default function Coverage() {
                 const fixKey = `${data.idempotencyKey}-${i}`;
                 return (
                   <s-table-row key={`${r.locale}|${r.resourceType}`}>
-                    <s-table-cell>{r.localeName}</s-table-cell>
+                    <s-table-cell>{i18n.language(r.locale, r.localeName)}</s-table-cell>
                     <s-table-cell>{kindLabel(i18n, r.resourceType)}</s-table-cell>
                     <s-table-cell>{i18n.number(r.resources)}</s-table-cell>
                     <s-table-cell>
@@ -269,7 +269,7 @@ export default function Coverage() {
               r.seoTitlesMissingInSource > 0 ? (
                 <s-paragraph key={`m-${r.locale}-${r.resourceType}`}>
                   {t("coverage.seo.noSourceTitle", {
-                    language: r.localeName,
+                    language: i18n.language(r.locale, r.localeName),
                     count: r.seoTitlesMissingInSource,
                     kind: isResourceKind(r.resourceType) ? kindPlural(i18n, r.resourceType) : t("coverage.seo.items"),
                   })}
@@ -280,7 +280,7 @@ export default function Coverage() {
               count > 0 ? (
                 <s-paragraph key={`d-${locale}`}>
                   {t("coverage.seo.duplicates", {
-                    language: data.targets.find((target) => target.locale === locale)?.name ?? locale,
+                    language: i18n.language(locale, data.targets.find((target) => target.locale === locale)?.name),
                     count,
                   })}
                 </s-paragraph>
@@ -289,7 +289,7 @@ export default function Coverage() {
             {data.targets
               .filter((target) => !target.published)
               .map((target) => (
-                <s-paragraph key={`u-${target.locale}`}>{t("coverage.seo.unpublished", { language: target.name })}</s-paragraph>
+                <s-paragraph key={`u-${target.locale}`}>{t("coverage.seo.unpublished", { language: i18n.language(target.locale, target.name) })}</s-paragraph>
               ))}
           </s-stack>
         </s-section>

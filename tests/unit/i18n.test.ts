@@ -4,7 +4,7 @@
  * that is the same on server and browser.
  */
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, formatMonth, formatNumber, resolveLocale, translate, translator } from "../../app/i18n/i18n";
+import { formatDate, formatDateTime, formatMonth, formatNumber, languageName, resolveLocale, translate, translator } from "../../app/i18n/i18n";
 import { MESSAGES, NAMESPACES, type Message } from "../../app/i18n/messages";
 import { fieldName, issueName, jobStatus, kindLabel } from "../../app/i18n/labels";
 
@@ -71,6 +71,14 @@ describe("interface language", () => {
       .filter(([, en]) => typeof en !== "string" || !(SAME_IN_BOTH.has(en) || /^[\W\d]*$/.test(en) || /^\{\w+\}$/.test(en)))
       .map(([key]) => key);
     expect(untranslated).toEqual([]);
+  });
+
+  it("names languages in the interface language, keeping Shopify's names in English", () => {
+    expect(languageName("de", "fr", "French")).toBe("Französisch");
+    expect(languageName("de", "pt-BR", "Portuguese (Brazil)")).toBe("Portugiesisch (Brasilien)");
+    expect(languageName("en", "pt-BR", "Portuguese (Brazil)")).toBe("Portuguese (Brazil)");
+    expect(languageName("de", "not a code!", "Klingon")).toBe("Klingon");
+    expect(languageName("de", "xx", null)).toBe("xx");
   });
 
   it("names content types, fields, checks and job states in the language, with fallbacks", () => {

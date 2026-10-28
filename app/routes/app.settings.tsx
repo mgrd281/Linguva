@@ -125,7 +125,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Settings() {
   const data = useLoaderData<typeof loader>();
-  const { t, date, month, number } = useI18n();
+  const { t, date, month, number, language } = useI18n();
   const fetcher = useFetcher<typeof action>();
   const modeFetcher = useFetcher<typeof action>();
   const memoryFetcher = useFetcher<typeof action>();
@@ -181,7 +181,7 @@ export default function Settings() {
               <s-query-container>
                 <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 640px) 1fr 1fr 1fr, 1fr" gap="base">
                   {data.style.languages.map((l) => (
-                    <s-select key={l.locale} name={`formality:${l.locale}`} label={l.name} value={l.formality}>
+                    <s-select key={l.locale} name={`formality:${l.locale}`} label={language(l.locale, l.name)} value={l.formality}>
                       <s-option value="default">{t("common.automatic")}</s-option>
                       <s-option value="more">{t("settings.style.formal")}</s-option>
                       <s-option value="less">{t("settings.style.informal")}</s-option>
@@ -269,7 +269,7 @@ export default function Settings() {
               <s-badge tone="success">{t("common.state.on")}</s-badge>{" "}
               {data.style.languages
                 .filter((l) => data.auto.locales.includes(l.locale))
-                .map((l) => l.name)
+                .map((l) => language(l.locale, l.name))
                 .join(", ")}
             </s-paragraph>
           ) : (
@@ -297,7 +297,7 @@ export default function Settings() {
                 <s-choice-list name="locale" label={t("settings.auto.languages")} multiple>
                   {data.style.languages.map((l) => (
                     <s-choice key={l.locale} value={l.locale} defaultSelected={data.auto.locales.includes(l.locale)}>
-                      {l.name}
+                      {language(l.locale, l.name)}
                     </s-choice>
                   ))}
                 </s-choice-list>

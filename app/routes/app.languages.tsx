@@ -13,7 +13,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Languages() {
   const summary = useLoaderData<typeof loader>();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const hasRtl = summary.locales.some((l) => l.rtl);
 
   return (
@@ -50,7 +50,7 @@ export default function Languages() {
             {summary.locales.map((l) => (
               <s-table-row key={l.locale}>
                 <s-table-cell>
-                  {l.name}
+                  {language(l.locale, l.name)}
                   {l.rtl ? " (RTL)" : ""}
                 </s-table-cell>
                 <s-table-cell>{l.locale}</s-table-cell>

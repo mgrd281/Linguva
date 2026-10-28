@@ -28,6 +28,8 @@ export function AttachedResourcesPanel({
   errorMessage: (code: string) => string;
 }) {
   const i18n = useI18n();
+  const sourceName = i18n.language(data.sourceLocale, data.sourceName);
+  const targetName = i18n.language(data.target.locale, data.target.name);
   const { t } = i18n;
   const aiFetcher = useFetcher<EditorAction>();
   const saveFetcher = useFetcher<EditorAction>();
@@ -132,7 +134,7 @@ export function AttachedResourcesPanel({
                     // (key goes on the element itself, not through a spread.)
                     const fieldProps = {
                       name: fieldName("value", item.id, field.key),
-                      label: data.target.name,
+                      label: targetName,
                       value: draft ?? field.translation,
                       ...(error ? { error } : {}),
                     };
@@ -145,11 +147,11 @@ export function AttachedResourcesPanel({
                         <s-query-container>
                           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                             <s-stack direction="block" gap="small">
-                              <s-text color="subdued">{t("editor.field.original", { language: data.sourceName })}</s-text>
+                              <s-text color="subdued">{t("editor.field.original", { language: sourceName })}</s-text>
                               {richText ? (
                                 <HtmlPreview
                                   html={richTextPreviewOrNull(field.source) ?? ""}
-                                  title={t("editor.field.originalFrame", { field: itemLabel(item), language: data.sourceName })}
+                                  title={t("editor.field.originalFrame", { field: itemLabel(item), language: sourceName })}
                                   lang={data.sourceLocale}
                                 />
                               ) : (
@@ -161,10 +163,10 @@ export function AttachedResourcesPanel({
                             <s-stack direction="block" gap="small">
                               {richText ? (
                                 <s-stack direction="block" gap="small">
-                                  <s-text color="subdued">{data.target.name}</s-text>
+                                  <s-text color="subdued">{targetName}</s-text>
                                   <HtmlPreview
                                     html={richTextPreviewOrNull(draft ?? field.translation) ?? ""}
-                                    title={t("editor.field.previewFrame", { field: itemLabel(item), language: data.target.name })}
+                                    title={t("editor.field.previewFrame", { field: itemLabel(item), language: targetName })}
                                     lang={data.target.locale}
                                     dir={data.target.rtl ? "rtl" : "auto"}
                                   />

@@ -102,6 +102,23 @@ export function translate(locale: AppLocale, key: MessageKey, vars?: MessageVars
   });
 }
 
+/**
+ * A language's name in the interface language ("Französisch"). English
+ * keeps Shopify's own name; other interface languages name the code with
+ * Intl, falling back to Shopify's name.
+ */
+export function languageName(locale: AppLocale, code: string, shopifyName?: string | null): string {
+  if (locale !== "en") {
+    try {
+      const name = new Intl.DisplayNames([INTL_LOCALE[locale]], { type: "language", fallback: "none" }).of(code);
+      if (name) return name.charAt(0).toLocaleUpperCase(INTL_LOCALE[locale]) + name.slice(1);
+    } catch {
+      // Not a valid language code: use Shopify's name.
+    }
+  }
+  return shopifyName || code;
+}
+
 export type Translate = (key: MessageKey, vars?: MessageVars) => string;
 
 export function translator(locale: AppLocale) {
@@ -115,6 +132,7 @@ export function translator(locale: AppLocale) {
     date: (value: string | Date, style?: "medium" | "long") => formatDate(locale, value, style),
     dateTime: (value: string | Date) => formatDateTime(locale, value),
     month: (period: string) => formatMonth(locale, period),
+    language: (code: string, shopifyName?: string | null) => languageName(locale, code, shopifyName),
   };
 }
 

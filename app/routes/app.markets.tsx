@@ -64,7 +64,7 @@ function statusLabel(status: string, t: I18n["t"]) {
 export default function Markets() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   if (!data.access) {
     return (
@@ -131,7 +131,7 @@ export default function Markets() {
                     [wp.defaultLocale, ...wp.alternateLocales].map((l) => (
                       <s-table-row key={`${wp.id}:${l.locale}`}>
                         <s-table-cell>
-                          {l.name}
+                          {language(l.locale, l.name)}
                           {l.locale === wp.defaultLocale.locale ? ` (${t("markets.market.default")})` : ""}
                         </s-table-cell>
                         <s-table-cell>

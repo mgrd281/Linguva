@@ -70,6 +70,9 @@ test("translate, edit and publish a product with the keyboard only", async ({ pa
 
 test("leaving with unpublished changes: focus is on Stay, Enter stays", async ({ page }) => {
   await openApp(page, "full", "/app/products/7?lang=fr");
+  // A slow machine (CI runners are): the notice's button may not take focus in its first frame.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
   await page.locator('s-text-field[name="value:title"] input').fill("Veste 7");
   await page.locator('s-link[slot="breadcrumb-actions"]').evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator('s-banner[heading="Leave without publishing?"]')).toBeVisible();

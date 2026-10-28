@@ -119,7 +119,16 @@ export function ResourceTranslationEditor() {
   useEffect(() => {
     if (blocker.state !== "blocked") return;
     window.scrollTo({ top: 0 });
-    document.getElementById("editor-stay")?.focus();
+    // The Polaris button may not be ready to take focus in the first frame: retry briefly.
+    let frame = 0;
+    let tries = 0;
+    const focusStay = () => {
+      const stay = document.getElementById("editor-stay");
+      stay?.focus();
+      if (document.activeElement !== stay && tries++ < 30) frame = requestAnimationFrame(focusStay);
+    };
+    focusStay();
+    return () => cancelAnimationFrame(frame);
   }, [blocker.state]);
   useEffect(() => {
     if (!unpublished) return;

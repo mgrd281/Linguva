@@ -17,11 +17,11 @@ import {
   rejectDrafts,
 } from "../.server/review/drafts";
 import { editorPathFor, RESOURCE_KINDS } from "../lib/resource-kinds";
-import { fieldLabel } from "../lib/field-labels";
-import { issueLabel } from "../lib/issue-labels";
 import { sanitizeHtml } from "../.server/lib/sanitize-html";
 import { HtmlPreview } from "../components/HtmlPreview";
 import { richTextPreviewOrNull } from "../lib/rich-text-preview";
+import { useI18n } from "../i18n/react";
+import { fieldName, issueName, kindLabel } from "../i18n/labels";
 
 const looksLikeHtml = (text: string) => /<\/?[a-z][a-z0-9]*[\s>/]/i.test(text);
 
@@ -30,7 +30,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const q = (name: string) => url.searchParams.get(name) || null;
   const filter = {
-    locale: q("locale"),
+    locale: q("lang"),
     jobId: q("job"),
     group: q("group"),
     resourceType: q("type"),
@@ -52,10 +52,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       id: d.id,
       // Images and custom fields are edited on their product's (or page's) editor.
       href: editorPathFor(d.parentGid ?? d.resourceGid, d.locale, d.resourceType),
-      title: d.resourceTitle ?? "(untitled)",
+      // Null: shown as "(untitled)" in the interface language.
+      title: d.resourceTitle ?? null,
       locale: d.locale,
       key: d.key,
-      label: d.parentGid && d.key === "value" ? "Custom field" : fieldLabel(d.key),
+      customField: Boolean(d.parentGid && d.key === "value"),
       source: d.sourceValue,
       value: d.value,
       // HTML drafts are shown rendered (sanitised here, sandboxed in the page).
@@ -94,6 +95,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Review() {
   const data = useLoaderData<typeof loader>();
+  const i18n = useI18n();
+  const { t } = i18n;
   const fetcher = useFetcher<typeof action>();
   const busy = fetcher.state !== "idle";
   const result = fetcher.data;
@@ -105,7 +108,7 @@ export default function Review() {
     const params = new URLSearchParams();
     if (data.filter.jobId) params.set("job", data.filter.jobId);
     if (data.filter.search) params.set("q", data.filter.search);
-    if (data.filter.locale) params.set("locale", data.filter.locale);
+    if (data.filter.locale) params.set("lang", data.filter.locale);
     if (data.filter.group) params.set("group", data.filter.group);
     if (data.filter.resourceType) params.set("type", data.filter.resourceType);
     if (data.filter.flagged) params.set("flagged", "1");
@@ -131,27 +134,29 @@ export default function Review() {
   };
 
   return (
-    <s-page heading="Review translations">
+    <s-page heading={t("review.page.heading")}>
       <s-section>
         <s-paragraph>
-          {data.total === 0
-            ? "Nothing to review. Bulk translations appear here before they are published."
-            : `${data.total} translation${data.total === 1 ? "" : "s"} waiting for review. Nothing is visible to customers until you approve it.`}
+          {data.total === 0 ? t("review.intro.empty") : t("review.intro.waiting", { count: data.total })}
         </s-paragraph>
       </s-section>
 
       {result?.kind === "approved" ? (
-        <s-banner tone={result.stale || result.failed ? "warning" : "success"} heading="Review saved">
+        <s-banner tone={result.stale || result.failed ? "warning" : "success"} heading={t("review.saved.heading")}>
           <s-paragraph>
-            Published: {result.published}
-            {result.stale ? ` · Source changed, not published: ${result.stale}` : ""}
-            {result.failed ? ` · Failed: ${result.failed}` : ""}
+            {[
+              t("review.saved.published", { count: result.published }),
+              result.stale ? t("review.saved.stale", { count: result.stale }) : null,
+              result.failed ? t("review.saved.failed", { count: result.failed }) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </s-paragraph>
         </s-banner>
       ) : null}
       {result?.kind === "rejected" ? (
-        <s-banner tone="info" heading="Drafts rejected">
-          <s-paragraph>{result.count} draft(s) discarded. They won&apos;t be published.</s-paragraph>
+        <s-banner tone="info" heading={t("review.rejected.heading")}>
+          <s-paragraph>{t("review.rejected.body", { count: result.count })}</s-paragraph>
         </s-banner>
       ) : null}
 
@@ -162,39 +167,48 @@ export default function Review() {
             <s-stack direction="block" gap="base">
               <s-query-container>
                 <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 760px) 2fr 1fr 1fr 1fr, 1fr" gap="base" alignItems="end">
-                  <s-search-field name="q" label="Search" placeholder="Title, original or translation" value={data.filter.search ?? ""} />
-                  <s-select name="locale" label="Language" value={data.filter.locale ?? ""}>
-                    <s-option value="">All languages</s-option>
+                  <s-search-field
+                    name="q"
+                    label={t("common.action.search")}
+                    placeholder={t("review.filter.searchPlaceholder")}
+                    value={data.filter.search ?? ""}
+                  />
+                  <s-select name="lang" label={t("common.language")} value={data.filter.locale ?? ""}>
+                    <s-option value="">{t("common.allLanguages")}</s-option>
                     {data.locales.map((l) => (
                       <s-option key={l} value={l}>
                         {data.names[l] ?? l}
                       </s-option>
                     ))}
                   </s-select>
-                  <s-select name="group" label="Fields" value={data.filter.group ?? ""}>
-                    <s-option value="">All fields</s-option>
-                    <s-option value="content">Content</s-option>
-                    <s-option value="seo">Search engine listing</s-option>
-                    <s-option value="handle">URL handles</s-option>
+                  <s-select name="group" label={t("review.filter.fields")} value={data.filter.group ?? ""}>
+                    <s-option value="">{t("review.filter.allFields")}</s-option>
+                    <s-option value="content">{t("review.filter.group.content")}</s-option>
+                    <s-option value="seo">{t("review.filter.group.seo")}</s-option>
+                    <s-option value="handle">{t("review.filter.group.handle")}</s-option>
                   </s-select>
-                  <s-select name="type" label="Type" value={data.filter.resourceType ?? ""}>
-                    <s-option value="">All content</s-option>
-                    {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
+                  <s-select name="type" label={t("review.filter.type")} value={data.filter.resourceType ?? ""}>
+                    <s-option value="">{t("review.filter.allContent")}</s-option>
+                    {Object.keys(RESOURCE_KINDS).map((kind) => (
                       <s-option key={kind} value={kind}>
-                        {meta.label}
+                        {kindLabel(i18n, kind)}
                       </s-option>
                     ))}
                   </s-select>
                 </s-grid>
               </s-query-container>
               <s-stack direction="inline" gap="base" alignItems="center">
-                <s-checkbox name="flagged" value="1" label="Only with warnings" {...(data.filter.flagged ? { checked: true } : {})} />
-                <s-button type="submit">Apply</s-button>
-                {filtered ? <s-button href={data.filter.jobId ? `/app/review?job=${data.filter.jobId}` : "/app/review"} variant="tertiary">Clear</s-button> : null}
+                <s-checkbox name="flagged" value="1" label={t("review.filter.flagged")} {...(data.filter.flagged ? { checked: true } : {})} />
+                <s-button type="submit">{t("review.filter.apply")}</s-button>
+                {filtered ? (
+                  <s-button href={data.filter.jobId ? `/app/review?job=${data.filter.jobId}` : "/app/review"} variant="tertiary">
+                    {t("review.filter.clear")}
+                  </s-button>
+                ) : null}
               </s-stack>
             </s-stack>
           </Form>
-          {filtered ? <s-paragraph>{data.matching} matching.</s-paragraph> : null}
+          {filtered ? <s-paragraph>{t("review.filter.matching", { count: data.matching })}</s-paragraph> : null}
         </s-section>
       ) : null}
 
@@ -204,73 +218,80 @@ export default function Review() {
           <s-section>
             <s-stack direction="inline" gap="base" alignItems="center">
               <s-button variant="primary" onClick={() => submit("approve")} {...(busy ? { loading: true } : {})}>
-                Approve and publish selected
+                {t("review.actions.approve")}
               </s-button>
               <s-button tone="critical" onClick={() => submit("reject")} {...(busy ? { loading: true } : {})}>
-                Reject selected
+                {t("review.actions.reject")}
               </s-button>
-              <s-text color="subdued">
-                {data.drafts.length} on this page. Untick the ones you don&apos;t want to change.
-              </s-text>
+              <s-text color="subdued">{t("review.actions.onPage", { count: data.drafts.length })}</s-text>
             </s-stack>
           </s-section>
-          {data.drafts.map((d) => (
-            <s-section key={d.id} heading={`${d.title} · ${d.label} · ${data.names[d.locale] ?? d.locale}`}>
-              <s-stack direction="block" gap="base">
-                <s-checkbox name="draft" value={d.id} label="Include" defaultChecked />
-                <s-query-container>
-                  <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
-                    <s-stack direction="block" gap="small">
-                      <s-text color="subdued">Original</s-text>
-                      {d.sourcePreview !== null ? (
-                        <HtmlPreview html={d.sourcePreview} title={`${d.title}, ${d.label}, original`} lang="" />
-                      ) : (
-                        <s-box padding="base" background="subdued" borderRadius="base">
-                          <s-paragraph>{d.source}</s-paragraph>
-                        </s-box>
-                      )}
-                    </s-stack>
-                    {d.valuePreview !== null ? (
+          {data.drafts.map((d) => {
+            const title = d.title ?? t("review.draft.untitled");
+            const field = d.customField ? t("review.draft.customField") : fieldName(i18n, d.key);
+            const language = data.names[d.locale] ?? d.locale;
+            return (
+              <s-section key={d.id} heading={`${title} · ${field} · ${language}`}>
+                <s-stack direction="block" gap="base">
+                  <s-checkbox name="draft" value={d.id} label={t("review.draft.include")} defaultChecked />
+                  <s-query-container>
+                    <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                       <s-stack direction="block" gap="small">
-                        <s-text color="subdued">{data.names[d.locale] ?? d.locale} (rich text, approved as shown)</s-text>
-                        <HtmlPreview html={d.valuePreview} title={`${d.title}, ${d.label}, translation preview`} lang={d.locale} />
+                        <s-text color="subdued">{t("review.draft.original")}</s-text>
+                        {d.sourcePreview !== null ? (
+                          <HtmlPreview html={d.sourcePreview} title={t("review.draft.originalTitle", { title, field })} lang="" />
+                        ) : (
+                          <s-box padding="base" background="subdued" borderRadius="base">
+                            <s-paragraph>{d.source}</s-paragraph>
+                          </s-box>
+                        )}
                       </s-stack>
-                    ) : (
-                    <s-stack direction="block" gap="small">
-                      <s-text-area
-                        name={`value:${d.id}`}
-                        label={`${data.names[d.locale] ?? d.locale} (you can edit before approving)`}
-                        value={d.value}
-                        rows={d.value.length > 200 ? 6 : 2}
-                      />
-                      {d.sourcePreview !== null ? (
-                        <HtmlPreview html={edited[d.id] ?? d.value} title={`${d.title}, ${d.label}, translation preview`} lang={d.locale} />
-                      ) : null}
-                    </s-stack>
-                    )}
-                  </s-grid>
-                </s-query-container>
-                <s-stack direction="inline" gap="small">
-                  {d.issues.length ? <s-badge tone="warning">Check: {d.issues.map(issueLabel).join(", ")}</s-badge> : null}
-                  {d.href ? <s-link href={d.href}>Open in editor</s-link> : null}
+                      {d.valuePreview !== null ? (
+                        <s-stack direction="block" gap="small">
+                          <s-text color="subdued">{t("review.draft.richText", { language })}</s-text>
+                          <HtmlPreview html={d.valuePreview} title={t("review.draft.previewTitle", { title, field })} lang={d.locale} />
+                        </s-stack>
+                      ) : (
+                      <s-stack direction="block" gap="small">
+                        <s-text-area
+                          name={`value:${d.id}`}
+                          label={t("review.draft.editLabel", { language })}
+                          value={d.value}
+                          rows={d.value.length > 200 ? 6 : 2}
+                        />
+                        {d.sourcePreview !== null ? (
+                          <HtmlPreview html={edited[d.id] ?? d.value} title={t("review.draft.previewTitle", { title, field })} lang={d.locale} />
+                        ) : null}
+                      </s-stack>
+                      )}
+                    </s-grid>
+                  </s-query-container>
+                  <s-stack direction="inline" gap="small">
+                    {d.issues.length ? (
+                      <s-badge tone="warning">
+                        {t("review.draft.check", { issues: d.issues.map((code) => issueName(i18n, code)).join(", ") })}
+                      </s-badge>
+                    ) : null}
+                    {d.href ? <s-link href={d.href}>{t("review.draft.openEditor")}</s-link> : null}
+                  </s-stack>
                 </s-stack>
-              </s-stack>
-            </s-section>
-          ))}
+              </s-section>
+            );
+          })}
           <s-stack direction="inline" gap="base">
             <s-button variant="primary" onClick={() => submit("approve")} {...(busy ? { loading: true } : {})}>
-              Approve and publish selected
+              {t("review.actions.approve")}
             </s-button>
             <s-button tone="critical" onClick={() => submit("reject")} {...(busy ? { loading: true } : {})}>
-              Reject selected
+              {t("review.actions.reject")}
             </s-button>
           </s-stack>
         </fetcher.Form>
       ) : null}
 
       <s-stack direction="inline" gap="base">
-        {!data.isFirstPage ? <s-button href={pageHref(null)}>First page</s-button> : null}
-        {data.nextCursor ? <s-button href={pageHref(data.nextCursor)}>Next page</s-button> : null}
+        {!data.isFirstPage ? <s-button href={pageHref(null)}>{t("review.pagination.first")}</s-button> : null}
+        {data.nextCursor ? <s-button href={pageHref(data.nextCursor)}>{t("review.pagination.next")}</s-button> : null}
       </s-stack>
     </s-page>
   );

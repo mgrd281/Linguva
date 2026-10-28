@@ -6,6 +6,7 @@ import { shopBilling } from "../.server/billing/billing";
 import { getConfig } from "../.server/lib/config";
 import { getDailyUsage, getMonthlyUsage } from "../.server/usage/usage-ledger";
 import { estimatedCostUsd, PLANS, planSelectionUrl } from "../lib/plans";
+import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -41,79 +42,88 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { state: billing.state, stale: billing.stale };
 };
 
-const date = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" }) : "";
-
 export default function Plan() {
   const data = useLoaderData<typeof loader>();
   const refresh = useFetcher<typeof action>();
+  const i18n = useI18n();
+  const { t } = i18n;
+  const date = (iso: string | null) => (iso ? i18n.date(iso, "medium") : "");
+  const yesNo = (value: boolean) => (value ? t("plan.current.yes") : t("plan.current.no"));
   const e = data.entitlements;
   const planName = (handle: string) => handle.charAt(0).toUpperCase() + handle.slice(1);
   const complimentary = data.state === "COMPLIMENTARY";
-  const currentPlan = complimentary ? "Complimentary access" : data.state === "ACTIVE" ? planName(e.plan) : "none";
+  const currentPlan = complimentary
+    ? t("plan.complimentary.heading")
+    : data.state === "ACTIVE"
+      ? planName(e.plan)
+      : t("plan.current.none");
 
   return (
-    <s-page heading="Plan">
+    <s-page heading={t("common.nav.plan")}>
       {complimentary ? (
-        <s-banner tone="success" heading="Complimentary access">
-          <s-paragraph>
-            This store has every feature without a subscription. AI usage is still counted, and the monthly allowance
-            below protects against unexpected costs.
-          </s-paragraph>
+        <s-banner tone="success" heading={t("plan.complimentary.heading")}>
+          <s-paragraph>{t("plan.complimentary.body")}</s-paragraph>
         </s-banner>
       ) : null}
       {!data.configured ? (
-        <s-banner tone="info" heading="Billing isn't set up yet">
-          <s-paragraph>All features are available while plans are being prepared.</s-paragraph>
+        <s-banner tone="info" heading={t("plan.unconfigured.heading")}>
+          <s-paragraph>{t("plan.unconfigured.body")}</s-paragraph>
         </s-banner>
       ) : null}
       {data.welcome && data.state === "ACTIVE" ? (
-        <s-banner tone="success" heading="Thanks for choosing a plan">
-          <s-paragraph>Your plan is active. You can start translating now.</s-paragraph>
+        <s-banner tone="success" heading={t("plan.welcome.heading")}>
+          <s-paragraph>{t("plan.welcome.body")}</s-paragraph>
         </s-banner>
       ) : null}
       {data.stale || (data.configured && data.state === "UNKNOWN") ? (
-        <s-banner tone="warning" heading="We couldn't confirm your plan with Shopify just now">
-          <s-paragraph>Nothing is blocked because of this. We&apos;ll check again automatically.</s-paragraph>
+        <s-banner tone="warning" heading={t("plan.stale.heading")}>
+          <s-paragraph>{t("plan.stale.body")}</s-paragraph>
         </s-banner>
       ) : null}
 
-      <s-section heading={data.configured ? `Current plan: ${currentPlan}` : "Current plan"}>
+      <s-section heading={data.configured ? t("plan.current.headingWithPlan", { plan: currentPlan }) : t("plan.current.heading")}>
         <s-stack direction="block" gap="small">
-          {data.subscription?.trialEndsAt ? <s-paragraph>Free trial until {date(data.subscription.trialEndsAt)}.</s-paragraph> : null}
+          {data.subscription?.trialEndsAt ? (
+            <s-paragraph>{t("plan.current.trial", { date: date(data.subscription.trialEndsAt) })}</s-paragraph>
+          ) : null}
           {data.subscription?.cancelAtEndOfCycle ? (
-            <s-paragraph>Your plan ends on {date(data.subscription.currentPeriodEnd)}. Your translations stay in your store.</s-paragraph>
+            <s-paragraph>{t("plan.current.ends", { date: date(data.subscription.currentPeriodEnd) })}</s-paragraph>
           ) : null}
           {data.subscription?.pendingPlanHandle ? (
-            <s-paragraph>Changes to {planName(data.subscription.pendingPlanHandle)} at the next billing cycle.</s-paragraph>
+            <s-paragraph>{t("plan.current.pending", { plan: planName(data.subscription.pendingPlanHandle) })}</s-paragraph>
           ) : null}
           <s-paragraph>
-            AI characters this month: {data.usage.month.toLocaleString()} of {e.monthlyChars.toLocaleString()} · today:{" "}
-            {data.usage.today.toLocaleString()}
+            {t("plan.current.usage", { month: data.usage.month, limit: e.monthlyChars, today: data.usage.today })}
           </s-paragraph>
           <s-paragraph>
-            Languages: up to {e.maxTargetLocales} · Bulk translation: {e.bulk ? "yes" : "no"} · Glossary: {e.glossary ? "yes" : "no"} ·
-            Automatic publishing: {e.autoPublish ? "yes" : "no"}
+            {t("plan.current.features", {
+              languages: e.maxTargetLocales,
+              bulk: yesNo(e.bulk),
+              glossary: yesNo(e.glossary),
+              autoPublish: yesNo(e.autoPublish),
+            })}
           </s-paragraph>
           {complimentary ? (
             <s-paragraph>
-              Estimated AI cost this month (internal): ${estimatedCostUsd(data.usage.month, data.costPerMillion).toFixed(2)} at $
-              {data.costPerMillion} per million characters.
+              {t("plan.current.cost", {
+                cost: estimatedCostUsd(data.usage.month, data.costPerMillion).toFixed(2),
+                rate: String(data.costPerMillion),
+              })}
             </s-paragraph>
           ) : null}
-          <s-paragraph>Translation memory reuse never counts against your characters.</s-paragraph>
+          <s-paragraph>{t("plan.current.memory")}</s-paragraph>
         </s-stack>
         <s-box paddingBlockStart="base">
           <s-stack direction="inline" gap="base">
             {data.choosePlanUrl && !complimentary ? (
               <s-button variant="primary" href={data.choosePlanUrl} target="_top">
-                {data.state === "ACTIVE" ? "Change plan" : "Choose a plan"}
+                {data.state === "ACTIVE" ? t("common.action.changePlan") : t("plan.current.choose")}
               </s-button>
             ) : null}
             {data.configured && !complimentary ? (
               <refresh.Form method="post">
                 <s-button type="submit" {...(refresh.state !== "idle" ? { loading: true } : {})}>
-                  Check again
+                  {t("plan.current.checkAgain")}
                 </s-button>
               </refresh.Form>
             ) : null}
@@ -121,23 +131,23 @@ export default function Plan() {
         </s-box>
       </s-section>
 
-      <s-section heading="Plans" padding="none">
+      <s-section heading={t("plan.plans.heading")} padding="none">
         <s-table>
           <s-table-header-row>
-            <s-table-header listSlot="primary">Plan</s-table-header>
-            <s-table-header format="numeric">AI characters / month</s-table-header>
-            <s-table-header format="numeric">Languages</s-table-header>
-            <s-table-header>Bulk</s-table-header>
-            <s-table-header>Glossary</s-table-header>
+            <s-table-header listSlot="primary">{t("plan.plans.name")}</s-table-header>
+            <s-table-header format="numeric">{t("plan.plans.characters")}</s-table-header>
+            <s-table-header format="numeric">{t("common.languages")}</s-table-header>
+            <s-table-header>{t("plan.plans.bulk")}</s-table-header>
+            <s-table-header>{t("common.nav.glossary")}</s-table-header>
           </s-table-header-row>
           <s-table-body>
             {Object.values(PLANS).map((p) => (
               <s-table-row key={p.plan}>
                 <s-table-cell>{planName(p.plan)}</s-table-cell>
-                <s-table-cell>{p.monthlyChars.toLocaleString()}</s-table-cell>
+                <s-table-cell>{i18n.number(p.monthlyChars)}</s-table-cell>
                 <s-table-cell>{p.maxTargetLocales}</s-table-cell>
-                <s-table-cell>{p.bulk ? "Yes" : "No"}</s-table-cell>
-                <s-table-cell>{p.glossary ? "Yes" : "No"}</s-table-cell>
+                <s-table-cell>{p.bulk ? t("plan.plans.yes") : t("plan.plans.no")}</s-table-cell>
+                <s-table-cell>{p.glossary ? t("plan.plans.yes") : t("plan.plans.no")}</s-table-cell>
               </s-table-row>
             ))}
           </s-table-body>

@@ -41,7 +41,7 @@ test("translation memory: search with a language chosen by name @responsive", as
   await expect(page.getByRole("combobox", { name: "Language" })).toBeVisible();
   await page.getByRole("combobox", { name: "Language" }).selectOption({ label: "French" });
   await page.getByRole("button", { name: "Search" }).click();
-  await expect(page).toHaveURL(/locale=fr/);
+  await expect(page).toHaveURL(/lang=fr/);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

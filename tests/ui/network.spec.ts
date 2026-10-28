@@ -8,7 +8,7 @@ import { openApp } from "./helpers";
 
 test("a Shopify that doesn't answer ends in a clear page within the time limit @responsive", async ({ page }) => {
   const started = Date.now();
-  const response = await openApp(page, "slow", "/app/products?locale=de");
+  const response = await openApp(page, "slow", "/app/products?lang=de");
   // The app's limit in the UI tests is 3 s; Shopify would take 20 s.
   expect(Date.now() - started).toBeLessThan(10_000);
   expect(response?.status()).toBe(504);
@@ -34,7 +34,7 @@ test("on a slow connection, navigation shows the admin loading bar and arrives",
 });
 
 test("on a slow connection, AI translation shows its progress and can't be sent twice", async ({ page }) => {
-  await openApp(page, "full", "/app/products/8?locale=fr");
+  await openApp(page, "full", "/app/products/8?lang=fr");
   let posts = 0;
   await page.route(/\/app\/products\/8\.data/, async (route) => {
     if (route.request().method() === "POST") {

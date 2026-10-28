@@ -41,7 +41,7 @@ export function kindOfGid(gid: string): ResourceKind | null {
 export function editorPath(gid: string, locale: string): string | null {
   const kind = kindOfGid(gid);
   if (!kind) return null;
-  return `${RESOURCE_KINDS[kind].path}/${numericId(gid)}?locale=${encodeURIComponent(locale)}`;
+  return `${RESOURCE_KINDS[kind].path}/${numericId(gid)}?lang=${encodeURIComponent(locale)}`;
 }
 
 /** Short hint for the translation provider, e.g. "Collection: Summer sale" or "Menu: Main menu". */
@@ -142,7 +142,7 @@ export function contentGid(ref: string): string | null {
 /** Editor URL for any resource; content types need their resource type. */
 export function editorPathFor(gid: string, locale: string, resourceType?: string | null): string | null {
   if (resourceType && isContentType(resourceType)) {
-    return `/app/content/${CONTENT_TYPES[resourceType].slug}/${contentRef(gid)}?locale=${encodeURIComponent(locale)}`;
+    return `/app/content/${CONTENT_TYPES[resourceType].slug}/${contentRef(gid)}?lang=${encodeURIComponent(locale)}`;
   }
   return editorPath(gid, locale);
 }

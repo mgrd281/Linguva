@@ -32,9 +32,10 @@ export async function loadResourceList(request: Request, kind: TranslatableKind)
   const locales = await fetchAndSyncShopLocales(admin, shop.id);
   const targets = locales.locales.filter((l) => !l.primary);
   const caution = isContentType(kind) ? ((CONTENT_TYPES[kind] as { caution?: "legal" | "liquid" }).caution ?? null) : null;
-  const kindInfo = { label: meta.label, singular: meta.singular, plural: meta.plural, path: meta.path, caution, bulk: isBulkResourceType(kind) };
+  // English names as before; the page names the type by `type` in its language.
+  const kindInfo = { type: kind, label: meta.label, singular: meta.singular, plural: meta.plural, path: meta.path, caution, bulk: isBulkResourceType(kind) };
 
-  const requested = url.searchParams.get("locale");
+  const requested = url.searchParams.get("lang");
   const target = targets.find((l) => l.locale === requested) ?? targets[0];
   if (!target) {
     return { kind: kindInfo, targets: [], target: null, items: [], nextCursor: null, isFirstPage: true, bulk: null, denied: null };

@@ -6,8 +6,10 @@
  */
 import { useFetcher } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
-import { issueLabel } from "../lib/issue-labels";
 import { richTextPreviewOrNull } from "../lib/rich-text-preview";
+import { useI18n } from "../i18n/react";
+import type { I18n } from "../i18n/i18n";
+import { fieldName as fieldLabel, hasMessage, issueName } from "../i18n/labels";
 import { HtmlPreview } from "./HtmlPreview";
 
 type EditorData = Awaited<ReturnType<typeof loadEditorData>>;
@@ -19,11 +21,14 @@ const refOf = (id: string, key: string) => `${id}:${key}`;
 
 export function AttachedResourcesPanel({
   data,
-  errorMessages,
+  errorMessage,
 }: {
   data: EditorData;
-  errorMessages: Record<string, string>;
+  /** Text for an AI error code, in the interface language. */
+  errorMessage: (code: string) => string;
 }) {
+  const i18n = useI18n();
+  const { t } = i18n;
   const aiFetcher = useFetcher<EditorAction>();
   const saveFetcher = useFetcher<EditorAction>();
   const attached = data.attached;
@@ -32,40 +37,36 @@ export function AttachedResourcesPanel({
   const saved = saveFetcher.data?.kind === "attached-saved" ? saveFetcher.data.outcomes : null;
   const saveStatus = new Map(saved?.map((o) => [o.ref, o]) ?? []);
   const canAi = data.ai.available && data.ai.consent;
+  // Images are named by the app; metafields by their definition (merchant data).
+  const itemLabel = (item: { kind: string; label: string }) => (item.kind === "IMAGE" ? t("editor.attached.image") : item.label);
   const hasMachine = attached.items.some((i) => i.fields.some((f) => f.machine && (!f.translation || f.outdated)));
 
   if (!attached.available) {
     return (
-      <s-section heading="Images and custom fields">
-        <s-paragraph>Image alt text and custom fields couldn&apos;t be loaded. Reload the page to try again.</s-paragraph>
+      <s-section heading={t("editor.attached.heading")}>
+        <s-paragraph>{t("editor.attached.unavailable")}</s-paragraph>
       </s-section>
     );
   }
   if (!attached.items.length && !attached.imagesWithoutAlt && !attached.unsupported) return null;
 
   return (
-    <s-section heading="Images and custom fields">
+    <s-section heading={t("editor.attached.heading")}>
       <s-stack direction="block" gap="base">
-        <s-paragraph>
-          Alt text describes images for screen readers and image search. Custom fields are metafields that
-          Shopify marks as translatable.
-        </s-paragraph>
+        <s-paragraph>{t("editor.attached.intro")}</s-paragraph>
         {attached.imagesWithoutAlt ? (
-          <s-banner tone="info" heading={`${attached.imagesWithoutAlt} image${attached.imagesWithoutAlt === 1 ? " has" : "s have"} no alt text`}>
-            <s-paragraph>Add alt text in Shopify first; then it can be translated here.</s-paragraph>
+          <s-banner tone="info" heading={t("editor.attached.noAlt", { count: attached.imagesWithoutAlt })}>
+            <s-paragraph>{t("editor.attached.noAltBody")}</s-paragraph>
           </s-banner>
         ) : null}
         {attached.unsupported ? (
-          <s-paragraph>
-            {attached.unsupported} custom field{attached.unsupported === 1 ? "" : "s"} with rich text, lists, links or
-            files can&apos;t be edited here yet.
-          </s-paragraph>
+          <s-paragraph>{t("editor.attached.unsupported", { count: attached.unsupported })}</s-paragraph>
         ) : null}
         {aiError || ai?.stopped ? (
-          <s-banner tone="critical" heading="AI translation failed">
+          <s-banner tone="critical" heading={t("editor.aiError.heading")}>
             <s-paragraph>
-              {errorMessages[aiError?.code ?? ai?.stopped ?? ""] ?? "Something went wrong."}
-              {ai?.stopped && Object.keys(ai.drafts).length ? " The drafts created before the problem are filled in below." : ""}
+              {errorMessage(aiError?.code ?? ai?.stopped ?? "")}
+              {ai?.stopped && Object.keys(ai.drafts).length ? ` ${t("editor.attached.stoppedDrafts")}` : ""}
             </s-paragraph>
           </s-banner>
         ) : null}
@@ -74,16 +75,16 @@ export function AttachedResourcesPanel({
             tone={saved.every((o) => o.status === "saved") ? "success" : "warning"}
             heading={
               saved.length === 0
-                ? "Nothing to save"
+                ? t("editor.saved.nothingHeading")
                 : saved.every((o) => o.status === "saved")
-                  ? "Translations published"
-                  : "Some fields weren't saved"
+                  ? t("editor.saved.heading")
+                  : t("editor.saved.partialHeading")
             }
           >
             <s-paragraph>
               {saved.length === 0
-                ? "No fields were changed."
-                : `${saved.filter((o) => o.status === "saved").length} of ${saved.length} saved to Shopify.`}
+                ? t("editor.saved.nothingBody")
+                : t("editor.attached.savedCount", { saved: saved.filter((o) => o.status === "saved").length, total: saved.length })}
             </s-paragraph>
           </s-banner>
         ) : null}
@@ -91,7 +92,7 @@ export function AttachedResourcesPanel({
           <aiFetcher.Form method="post">
             <input type="hidden" name="intent" value="ai-translate-attached" />
             <s-button type="submit" disabled={!canAi} {...(aiFetcher.state !== "idle" ? { loading: true } : {})}>
-              Translate missing alt text and fields with AI
+              {t("editor.attached.translateAi")}
             </s-button>
           </aiFetcher.Form>
         ) : null}
@@ -107,8 +108,8 @@ export function AttachedResourcesPanel({
                     {item.previewUrl ? (
                       <s-thumbnail src={`${item.previewUrl}${item.previewUrl.includes("?") ? "&" : "?"}width=96`} alt="" size="small" />
                     ) : null}
-                    <s-text type="strong">{item.kind === "IMAGE" ? "Image alt text" : item.label}</s-text>
-                    {item.valueType ? <s-badge>{valueTypeLabel(item.valueType)}</s-badge> : null}
+                    <s-text type="strong">{item.kind === "IMAGE" ? fieldLabel(i18n, "alt") : item.label}</s-text>
+                    {item.valueType ? <s-badge>{valueTypeLabel(i18n, item.valueType)}</s-badge> : null}
                     {item.detail ? <s-text color="subdued">{item.detail}</s-text> : null}
                   </s-stack>
                   {item.fields.map((field) => {
@@ -119,11 +120,13 @@ export function AttachedResourcesPanel({
                     const warnings = ai?.warnings[ref];
                     const error =
                       status?.status === "conflict"
-                        ? "The source text changed in Shopify. Reload and translate again."
+                        ? t("editor.field.conflict")
                         : status?.status === "error"
-                          ? status.message ?? "Not saved."
+                          ? status.code === "RICH_TEXT_CHANGED"
+                            ? t("editor.attached.richTextChanged")
+                            : (status.message ?? t("editor.field.notSaved"))
                           : rejected
-                            ? "The AI result was discarded."
+                            ? t("editor.field.discarded")
                             : undefined;
                     const multiline = field.type === "MULTI_LINE_TEXT_FIELD" || field.type === "HTML" || field.source.length > 120;
                     // (key goes on the element itself, not through a spread.)
@@ -142,9 +145,13 @@ export function AttachedResourcesPanel({
                         <s-query-container>
                           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                             <s-stack direction="block" gap="small">
-                              <s-text color="subdued">{data.sourceName} (original)</s-text>
+                              <s-text color="subdued">{t("editor.field.original", { language: data.sourceName })}</s-text>
                               {richText ? (
-                                <HtmlPreview html={richTextPreviewOrNull(field.source) ?? ""} title={`${item.label}, ${data.sourceName} original`} lang={data.sourceLocale} />
+                                <HtmlPreview
+                                  html={richTextPreviewOrNull(field.source) ?? ""}
+                                  title={t("editor.field.originalFrame", { field: itemLabel(item), language: data.sourceName })}
+                                  lang={data.sourceLocale}
+                                />
                               ) : (
                                 <s-box padding="base" background="subdued" borderRadius="base">
                                   <s-paragraph>{field.source}</s-paragraph>
@@ -157,13 +164,13 @@ export function AttachedResourcesPanel({
                                   <s-text color="subdued">{data.target.name}</s-text>
                                   <HtmlPreview
                                     html={richTextPreviewOrNull(draft ?? field.translation) ?? ""}
-                                    title={`${item.label}, ${data.target.name} preview`}
+                                    title={t("editor.field.previewFrame", { field: itemLabel(item), language: data.target.name })}
                                     lang={data.target.locale}
                                     dir={data.target.rtl ? "rtl" : "auto"}
                                   />
                                   {/* Only an AI draft is sent; formatting is checked again on the server. */}
                                   {draft !== undefined ? <input type="hidden" name={fieldProps.name} value={draft} /> : null}
-                                  <s-text color="subdued">Rich text keeps its formatting. Change the wording in Shopify&apos;s editor, or translate it with AI here.</s-text>
+                                  <s-text color="subdued">{t("editor.attached.richTextNote")}</s-text>
                                   {error ? <s-text tone="critical">{error}</s-text> : null}
                                 </s-stack>
                               ) : (
@@ -174,15 +181,21 @@ export function AttachedResourcesPanel({
                               {field.outdated && draft === undefined && field.translation ? (
                                 <s-checkbox
                                   name={fieldName("confirm", item.id, field.key)}
-                                  label="The source changed, but this translation is still correct"
+                                  label={t("editor.field.stillCorrect")}
                                 />
                               ) : null}
                               <s-stack direction="inline" gap="small">
-                                {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
-                                {draft !== undefined ? <s-badge tone="info">AI draft</s-badge> : null}
-                                {warnings?.length ? <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge> : null}
-                                {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
-                                {!field.machine ? <s-badge>Manual only</s-badge> : null}
+                                {field.outdated && draft === undefined ? (
+                                  <s-badge tone="warning">{t("common.translationStatus.outdated")}</s-badge>
+                                ) : null}
+                                {draft !== undefined ? <s-badge tone="info">{t("editor.badge.aiDraft")}</s-badge> : null}
+                                {warnings?.length ? (
+                                  <s-badge tone="warning">
+                                    {t("editor.badge.review", { issues: warnings.map((code) => issueName(i18n, code)).join(", ") })}
+                                  </s-badge>
+                                ) : null}
+                                {status?.status === "saved" ? <s-badge tone="success">{t("common.state.published")}</s-badge> : null}
+                                {!field.machine ? <s-badge>{t("editor.badge.manualOnly")}</s-badge> : null}
                               </s-stack>
                             </s-stack>
                           </s-grid>
@@ -195,7 +208,7 @@ export function AttachedResourcesPanel({
             ))}
             {attached.items.length ? (
               <s-button type="submit" variant="primary" {...(saveFetcher.state !== "idle" ? { loading: true } : {})}>
-                Publish alt text and fields
+                {t("editor.attached.publish")}
               </s-button>
             ) : null}
           </s-stack>
@@ -205,16 +218,9 @@ export function AttachedResourcesPanel({
   );
 }
 
-const VALUE_TYPES: Record<string, string> = {
-  single_line_text_field: "Text",
-  multi_line_text_field: "Long text",
-  rich_text_field: "Rich text",
-  json: "JSON",
-  url: "Link",
-  "list.single_line_text_field": "List of texts",
-};
-
-/** Readable metafield type: "multi_line_text_field" → "Long text". */
-function valueTypeLabel(type: string) {
-  return VALUE_TYPES[type] ?? type.replace(/^list\./, "list of ").replace(/_/g, " ");
+/** Readable metafield type: "multi_line_text_field" → "Long text". Unknown types stay technical. */
+function valueTypeLabel(i18n: I18n, type: string) {
+  if (type === "json") return "JSON";
+  const key = `editor.valueType.${type}`;
+  return hasMessage(key) ? i18n.t(key) : type.replace(/^list\./, "list of ").replace(/_/g, " ");
 }

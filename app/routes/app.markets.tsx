@@ -6,6 +6,9 @@ import { allowedTargetLocales } from "../.server/billing/subscription";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { analyzeMarkets, fetchMarkets, MARKETS_SCOPE, MarketsAccessError, type MarketFinding } from "../.server/markets/markets";
 import { requireShop } from "../.server/shopify/require-shop";
+import type { I18n } from "../i18n/i18n";
+import { hasMessage } from "../i18n/labels";
+import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -39,36 +42,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: true };
 };
 
-function findingText(f: MarketFinding, name: (locale: string) => string) {
+function findingText(f: MarketFinding, name: (locale: string) => string, t: I18n["t"]) {
   switch (f.code) {
     case "UNPUBLISHED_LOCALE":
-      return `${f.market} offers ${name(f.locale)}, but the language isn't published, so customers see the default language. Publish it under Languages.`;
+      return t("markets.finding.UNPUBLISHED_LOCALE", { market: f.market, language: name(f.locale) });
     case "LOCALE_IN_NO_MARKET":
-      return `${name(f.locale)} is published, but no active market offers it, so no storefront address serves it. Add it to a market in Shopify.`;
+      return t("markets.finding.LOCALE_IN_NO_MARKET", { language: name(f.locale) });
     case "LOCALE_NOT_IN_PLAN":
-      return `${name(f.locale)} is offered in a market, but your plan doesn't include AI translation into it.`;
+      return t("markets.finding.LOCALE_NOT_IN_PLAN", { language: name(f.locale) });
     case "NO_WEB_PRESENCE":
-      return `${f.market} has no domain or subfolder of its own; customers reach it through your primary domain and the country selector.`;
+      return t("markets.finding.NO_WEB_PRESENCE", { market: f.market });
   }
+}
+
+/** Shopify's market status ("draft"), in the language when known. */
+function statusLabel(status: string, t: I18n["t"]) {
+  const key = `markets.market.status.${status}`;
+  return hasMessage(key) ? t(key) : status.toLowerCase();
 }
 
 export default function Markets() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const { t } = useI18n();
 
   if (!data.access) {
     return (
-      <s-page heading="Markets">
-        <s-section heading="See your languages per market">
+      <s-page heading={t("common.nav.markets")}>
+        <s-section heading={t("markets.access.heading")}>
           <s-stack direction="block" gap="base">
-            <s-paragraph>
-              Linguva can show which languages each of your markets offers, under which web address, and what
-              stops customers from seeing your translations. For this, Linguva needs permission to read your
-              markets. It never changes them.
-            </s-paragraph>
+            <s-paragraph>{t("markets.access.body")}</s-paragraph>
             <fetcher.Form method="post">
               <s-button type="submit" variant="primary" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
-                Allow reading markets
+                {t("markets.access.allow")}
               </s-button>
             </fetcher.Form>
           </s-stack>
@@ -79,23 +85,24 @@ export default function Markets() {
 
   const name = (locale: string) => data.names[locale] ?? locale;
   return (
-    <s-page heading="Markets">
-      <s-section heading="Checks">
+    <s-page heading={t("common.nav.markets")}>
+      <s-section heading={t("markets.checks.heading")}>
         {data.findings.length ? (
           <s-stack direction="block" gap="small">
             {data.findings.map((f, i) => (
               <s-banner key={i} tone={f.code === "NO_WEB_PRESENCE" || f.code === "LOCALE_NOT_IN_PLAN" ? "info" : "warning"}>
-                <s-paragraph>{findingText(f, name)}</s-paragraph>
+                <s-paragraph>{findingText(f, name, t)}</s-paragraph>
               </s-banner>
             ))}
           </s-stack>
         ) : (
           <s-paragraph>
-            <s-badge tone="success">No problems found</s-badge> Every published language is offered in a market.
+            <s-badge tone="success">{t("markets.checks.none")}</s-badge> {t("markets.checks.allOffered")}
           </s-paragraph>
         )}
         <s-paragraph>
-          How complete each language is: see <s-link href="/app/coverage">Coverage</s-link>.
+          {t("markets.checks.coverageBefore")} <s-link href="/app/coverage">{t("markets.checks.coverageLink")}</s-link>
+          {t("markets.checks.coverageAfter")}
         </s-paragraph>
       </s-section>
 
@@ -103,17 +110,21 @@ export default function Markets() {
         <s-section key={market.id} heading={market.name}>
           <s-stack direction="block" gap="base">
             <s-stack direction="inline" gap="small" alignItems="center">
-              {market.status === "ACTIVE" ? <s-badge tone="success">Active</s-badge> : <s-badge>{market.status.toLowerCase()}</s-badge>}
-              <s-text color="subdued">Market number {market.id.replace("gid://shopify/Market/", "")} (for glossary terms)</s-text>
+              {market.status === "ACTIVE" ? (
+                <s-badge tone="success">{t("markets.market.active")}</s-badge>
+              ) : (
+                <s-badge>{statusLabel(market.status, t)}</s-badge>
+              )}
+              <s-text color="subdued">{t("markets.market.number", { id: market.id.replace("gid://shopify/Market/", "") })}</s-text>
             </s-stack>
             {market.webPresences.length === 0 ? (
-              <s-paragraph>Uses your primary domain.</s-paragraph>
+              <s-paragraph>{t("markets.market.primaryDomain")}</s-paragraph>
             ) : (
               <s-table>
                 <s-table-header-row>
-                  <s-table-header>Language</s-table-header>
-                  <s-table-header>Address</s-table-header>
-                  <s-table-header>Status</s-table-header>
+                  <s-table-header>{t("common.language")}</s-table-header>
+                  <s-table-header>{t("markets.market.address")}</s-table-header>
+                  <s-table-header>{t("common.status")}</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
                   {market.webPresences.flatMap((wp) =>
@@ -121,13 +132,17 @@ export default function Markets() {
                       <s-table-row key={`${wp.id}:${l.locale}`}>
                         <s-table-cell>
                           {l.name}
-                          {l.locale === wp.defaultLocale.locale ? " (default)" : ""}
+                          {l.locale === wp.defaultLocale.locale ? ` (${t("markets.market.default")})` : ""}
                         </s-table-cell>
                         <s-table-cell>
                           {wp.rootUrls.find((u) => u.locale === l.locale)?.url ?? (wp.host ?? "—")}
                         </s-table-cell>
                         <s-table-cell>
-                          {l.published ? <s-badge tone="success">Published</s-badge> : <s-badge tone="warning">Not published</s-badge>}
+                          {l.published ? (
+                            <s-badge tone="success">{t("common.state.published")}</s-badge>
+                          ) : (
+                            <s-badge tone="warning">{t("common.state.notPublished")}</s-badge>
+                          )}
                         </s-table-cell>
                       </s-table-row>
                     )),

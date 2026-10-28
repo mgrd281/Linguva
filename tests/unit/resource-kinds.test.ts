@@ -19,8 +19,8 @@ describe("resource kinds", () => {
     expect(kindOfGid("gid://shopify/Collection/3")).toBe("COLLECTION");
     expect(kindOfGid("gid://shopify/Metafield/3")).toBeNull();
     expect(kindOfGid("gid://shopify/Product/x")).toBeNull();
-    expect(editorPath("gid://shopify/Collection/3", "pt-BR")).toBe("/app/collections/3?locale=pt-BR");
-    expect(editorPath("gid://shopify/Product/9", "de")).toBe("/app/products/9?locale=de");
+    expect(editorPath("gid://shopify/Collection/3", "pt-BR")).toBe("/app/collections/3?lang=pt-BR");
+    expect(editorPath("gid://shopify/Product/9", "de")).toBe("/app/products/9?lang=de");
     expect(editorPath("gid://shopify/OnlineStorePage/9", "de")).toBeNull();
   });
 

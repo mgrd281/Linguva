@@ -57,7 +57,7 @@ describe("pages, blog posts and blogs", () => {
     await runJob(deps, shop.id, "ARTICLE");
     const { drafts } = await searchPendingDrafts(shop.id, { resourceType: "ARTICLE" }, app);
     expect(drafts.length).toBe(9); // title, body, summary × 3
-    expect(editorPath(drafts[0]!.resourceGid, "de")).toMatch(/^\/app\/articles\/\d+\?locale=de$/);
+    expect(editorPath(drafts[0]!.resourceGid, "de")).toMatch(/^\/app\/articles\/\d+\?lang=de$/);
     expect((await searchPendingDrafts(shop.id, { resourceType: "PAGE" }, app)).total).toBe(0);
 
     const ctx = {

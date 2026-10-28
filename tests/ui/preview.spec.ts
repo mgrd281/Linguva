@@ -15,7 +15,7 @@ test("the editor shows HTML rendered and safe, next to the translation @responsi
     dialogs.push(d.message());
     void d.dismiss();
   });
-  await openApp(page, "full", "/app/products/5?locale=fr");
+  await openApp(page, "full", "/app/products/5?lang=fr");
 
   // The original, rendered: bold text is bold, no tags as text.
   const source = page.frameLocator(SOURCE_FRAME);

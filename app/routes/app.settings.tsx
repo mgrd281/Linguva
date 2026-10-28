@@ -25,6 +25,7 @@ import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { getQueues } from "../.server/queue/client";
 import { requireShop } from "../.server/shopify/require-shop";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
+import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -63,12 +64,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     dailyLimit: limits.dailyLimit,
   };
 };
-
-/** "2026-10" → "October 2026" (UTC, the same on server and browser). */
-function monthName(period: string) {
-  const date = new Date(`${period}-01T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? period : date.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, shop, actorId } = await requireShop(request);
@@ -130,6 +125,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Settings() {
   const data = useLoaderData<typeof loader>();
+  const { t, date, month, number } = useI18n();
   const fetcher = useFetcher<typeof action>();
   const modeFetcher = useFetcher<typeof action>();
   const memoryFetcher = useFetcher<typeof action>();
@@ -140,24 +136,18 @@ export default function Settings() {
   const percent = data.limit ? Math.min(100, Math.round((data.used / data.limit) * 100)) : 0;
 
   return (
-    <s-page heading="Settings">
-      <s-section heading="AI translation">
+    <s-page heading={t("common.nav.settings")}>
+      <s-section heading={t("settings.ai.heading")}>
         <s-stack direction="block" gap="base">
-          <s-paragraph>
-            When you translate with AI, the product text you select is sent to
-            DeepL SE (Germany) for processing. Linguva sends no customer
-            data. Every AI result is a draft until you publish it.
-          </s-paragraph>
+          <s-paragraph>{t("settings.ai.body")}</s-paragraph>
           {data.consent ? (
             <s-paragraph>
-              <s-badge tone="success">Allowed</s-badge>{" "}
-              {data.consentAt
-                ? `since ${new Date(data.consentAt).toLocaleDateString(undefined, { dateStyle: "long" })}`
-                : null}
+              <s-badge tone="success">{t("common.state.allowed")}</s-badge>{" "}
+              {data.consentAt ? t("settings.ai.since", { date: date(data.consentAt, "long") }) : null}
             </s-paragraph>
           ) : (
             <s-paragraph>
-              <s-badge>Not allowed</s-badge>
+              <s-badge>{t("settings.ai.notAllowed")}</s-badge>
             </s-paragraph>
           )}
           <fetcher.Form method="post">
@@ -171,77 +161,69 @@ export default function Settings() {
               variant={data.consent ? "secondary" : "primary"}
               {...(busy ? { loading: true } : {})}
             >
-              {data.consent ? "Withdraw permission" : "Allow AI processing"}
+              {data.consent ? t("settings.ai.withdraw") : t("settings.ai.allow")}
             </s-button>
           </fetcher.Form>
           {!data.aiAvailable ? (
-            <s-banner tone="warning" heading="AI provider not configured">
-              <s-paragraph>
-                The app operator hasn&apos;t configured a translation provider yet.
-                Manual translation works without it.
-              </s-paragraph>
+            <s-banner tone="warning" heading={t("settings.ai.notConfigured.heading")}>
+              <s-paragraph>{t("settings.ai.notConfigured.body")}</s-paragraph>
             </s-banner>
           ) : null}
         </s-stack>
       </s-section>
 
-      <s-section heading="Translation style">
+      <s-section heading={t("settings.style.heading")}>
         <styleFetcher.Form method="post">
           <input type="hidden" name="intent" value="style" />
           <s-stack direction="block" gap="base">
-            <s-paragraph>
-              Choose how AI addresses your customers in each language. Applies where a language has formal and informal
-              forms (for example German &quot;Sie&quot; / &quot;du&quot;, French &quot;vous&quot; / &quot;tu&quot;).
-            </s-paragraph>
+            <s-paragraph>{t("settings.style.body")}</s-paragraph>
             {data.style.languages.length ? (
               <s-query-container>
                 <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 640px) 1fr 1fr 1fr, 1fr" gap="base">
                   {data.style.languages.map((l) => (
                     <s-select key={l.locale} name={`formality:${l.locale}`} label={l.name} value={l.formality}>
-                      <s-option value="default">Automatic</s-option>
-                      <s-option value="more">Formal</s-option>
-                      <s-option value="less">Informal</s-option>
+                      <s-option value="default">{t("common.automatic")}</s-option>
+                      <s-option value="more">{t("settings.style.formal")}</s-option>
+                      <s-option value="less">{t("settings.style.informal")}</s-option>
                     </s-select>
                   ))}
                 </s-grid>
               </s-query-container>
             ) : (
-              <s-paragraph>Add a language in Shopify first.</s-paragraph>
+              <s-paragraph>{t("settings.style.noLanguages")}</s-paragraph>
             )}
             <s-text-area
               name="storeContext"
-              label="About your store"
-              details={`What you sell and how you speak, for example "Outdoor clothing for families, friendly and simple." Helps AI pick the right words. Up to ${data.style.maxContext} characters; not translated.`}
+              label={t("settings.style.storeContext.label")}
+              details={t("settings.style.storeContext.details", { max: data.style.maxContext })}
               value={data.style.storeContext}
               maxLength={data.style.maxContext}
               rows={2}
             />
             <s-stack direction="inline" gap="base" alignItems="center">
               <s-button type="submit" {...(styleFetcher.state !== "idle" ? { loading: true } : {})}>
-                Save translation style
+                {t("settings.style.save")}
               </s-button>
               {styleFetcher.data && "saved" in styleFetcher.data && styleFetcher.state === "idle" ? (
-                <s-text tone="success">Saved. New AI translations use this style.</s-text>
+                <s-text tone="success">{t("settings.style.saved")}</s-text>
               ) : null}
             </s-stack>
           </s-stack>
         </styleFetcher.Form>
       </s-section>
 
-      <s-section heading="Bulk translation publishing">
+      <s-section heading={t("settings.publish.heading")}>
         <s-stack direction="block" gap="base">
           {data.publishMode === "AUTO_PUBLISH" ? (
             <s-paragraph>
-              <s-badge tone="warning">Automatic publishing</s-badge> Bulk translations that pass the quality checks go
-              live without review
+              <s-badge tone="warning">{t("settings.publish.autoBadge")}</s-badge>{" "}
               {data.autoPublishEnabledAt
-                ? ` (enabled ${new Date(data.autoPublishEnabledAt).toLocaleDateString(undefined, { dateStyle: "long" })})`
-                : ""}
-              .
+                ? t("settings.publish.autoBodySince", { date: date(data.autoPublishEnabledAt, "long") })
+                : t("settings.publish.autoBody")}
             </s-paragraph>
           ) : (
             <s-paragraph>
-              <s-badge tone="success">Review first</s-badge> Bulk translations wait in Review until you approve them.
+              <s-badge tone="success">{t("settings.publish.reviewBadge")}</s-badge> {t("settings.publish.reviewBody")}
             </s-paragraph>
           )}
           <modeFetcher.Form method="post">
@@ -249,48 +231,42 @@ export default function Settings() {
             {data.publishMode === "AUTO_PUBLISH" ? (
               <>
                 <input type="hidden" name="mode" value="DRAFT" />
-                <s-button type="submit">Switch back to review first</s-button>
+                <s-button type="submit">{t("settings.publish.switchBack")}</s-button>
               </>
             ) : (
               <s-stack direction="block" gap="small">
                 <input type="hidden" name="mode" value="AUTO_PUBLISH" />
-                <s-checkbox
-                  name="confirm"
-                  label="I understand that machine translations will be published to my storefront without my review."
-                />
+                <s-checkbox name="confirm" label={t("settings.publish.confirm")} />
                 <s-button type="submit" variant="secondary">
-                  Enable automatic publishing
+                  {t("settings.publish.enable")}
                 </s-button>
               </s-stack>
             )}
           </modeFetcher.Form>
           {modeFetcher.data && "error" in modeFetcher.data ? (
             modeFetcher.data.error === "PLAN_AUTO_PUBLISH" ? (
-              <s-banner tone="info" heading="Automatic publishing is part of the Pro and Business plans">
+              <s-banner tone="info" heading={t("settings.publish.planHeading")}>
                 <s-paragraph>
-                  <s-link href="/app/plan">See plans</s-link>
+                  <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
                 </s-paragraph>
               </s-banner>
             ) : (
-              <s-banner tone="critical" heading="Please confirm">
-                <s-paragraph>Tick the confirmation box to enable automatic publishing.</s-paragraph>
+              <s-banner tone="critical" heading={t("settings.publish.confirmHeading")}>
+                <s-paragraph>{t("settings.publish.confirmBody")}</s-paragraph>
               </s-banner>
             )
           ) : null}
         </s-stack>
       </s-section>
 
-      <s-section heading="Automatic translation">
+      <s-section heading={t("settings.auto.heading")}>
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            Translates new and changed products and collections about a minute after you save them. Only missing or
-            outdated texts are translated, translations you wrote or approved are kept, and results follow the
-            publishing setting above{data.publishMode === "AUTO_PUBLISH" ? " (currently: published automatically)" : " (currently: wait in Review)"}.
-            It uses your AI allowance.
+            {data.publishMode === "AUTO_PUBLISH" ? t("settings.auto.bodyAutoPublish") : t("settings.auto.bodyReview")}
           </s-paragraph>
           {data.auto.enabled ? (
             <s-paragraph>
-              <s-badge tone="success">On</s-badge>{" "}
+              <s-badge tone="success">{t("common.state.on")}</s-badge>{" "}
               {data.style.languages
                 .filter((l) => data.auto.locales.includes(l.locale))
                 .map((l) => l.name)
@@ -298,27 +274,27 @@ export default function Settings() {
             </s-paragraph>
           ) : (
             <s-paragraph>
-              <s-badge>Off</s-badge> Changes are translated when you start a translation.
+              <s-badge>{t("common.state.off")}</s-badge> {t("settings.auto.offBody")}
             </s-paragraph>
           )}
           {!data.auto.available ? (
-            <s-banner tone="info" heading="Not available on this installation">
-              <s-paragraph>Automatic translation needs AI translation and background jobs to be set up.</s-paragraph>
+            <s-banner tone="info" heading={t("settings.auto.unavailable.heading")}>
+              <s-paragraph>{t("settings.auto.unavailable.body")}</s-paragraph>
             </s-banner>
           ) : !data.auto.planIncludes ? (
-            <s-banner tone="info" heading="Automatic translation is part of the plans with bulk translation">
+            <s-banner tone="info" heading={t("settings.auto.planHeading")}>
               <s-paragraph>
-                <s-link href="/app/plan">See plans</s-link>
+                <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
               </s-paragraph>
             </s-banner>
           ) : data.style.languages.length === 0 ? (
-            <s-paragraph>Add a language first.</s-paragraph>
+            <s-paragraph>{t("settings.auto.noLanguages")}</s-paragraph>
           ) : (
             <autoFetcher.Form method="post">
               <input type="hidden" name="intent" value="auto" />
               <input type="hidden" name="enabled" value="true" />
               <s-stack direction="block" gap="small">
-                <s-choice-list name="locale" label="Languages to translate automatically" multiple>
+                <s-choice-list name="locale" label={t("settings.auto.languages")} multiple>
                   {data.style.languages.map((l) => (
                     <s-choice key={l.locale} value={l.locale} defaultSelected={data.auto.locales.includes(l.locale)}>
                       {l.name}
@@ -327,14 +303,14 @@ export default function Settings() {
                 </s-choice-list>
                 <s-stack direction="inline" gap="small">
                   <s-button type="submit" variant="secondary" {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
-                    {data.auto.enabled ? "Save languages" : "Turn on automatic translation"}
+                    {data.auto.enabled ? t("settings.auto.saveLanguages") : t("settings.auto.turnOn")}
                   </s-button>
                   {data.auto.enabled ? (
                     <s-button
                       type="button"
                       onClick={() => autoFetcher.submit({ intent: "auto", enabled: "false" }, { method: "post" })}
                     >
-                      Turn off
+                      {t("settings.auto.turnOff")}
                     </s-button>
                   ) : null}
                 </s-stack>
@@ -342,64 +318,52 @@ export default function Settings() {
             </autoFetcher.Form>
           )}
           {autoError === "CONSENT_REQUIRED" ? (
-            <s-banner tone="critical" heading="Allow AI translation first">
-              <s-paragraph>Automatic translation sends texts to the AI service. Allow it in the section above.</s-paragraph>
+            <s-banner tone="critical" heading={t("settings.auto.consent.heading")}>
+              <s-paragraph>{t("settings.auto.consent.body")}</s-paragraph>
             </s-banner>
           ) : autoError === "NO_LANGUAGE" ? (
-            <s-banner tone="critical" heading="Choose at least one language">
-              <s-paragraph>Tick the languages new and changed content should be translated into.</s-paragraph>
+            <s-banner tone="critical" heading={t("settings.auto.noLanguage.heading")}>
+              <s-paragraph>{t("settings.auto.noLanguage.body")}</s-paragraph>
             </s-banner>
           ) : autoError === "PLAN_BULK" ? (
-            <s-banner tone="info" heading="Automatic translation is part of the plans with bulk translation">
+            <s-banner tone="info" heading={t("settings.auto.planHeading")}>
               <s-paragraph>
-                <s-link href="/app/plan">See plans</s-link>
+                <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
               </s-paragraph>
             </s-banner>
           ) : autoFetcher.data && "autoEnabled" in autoFetcher.data ? (
-            <s-banner tone="success" heading="Saved">
+            <s-banner tone="success" heading={t("common.state.saved")}>
               <s-paragraph>
-                {autoFetcher.data.autoEnabled
-                  ? "Products and collections you save from now on are translated about a minute later."
-                  : "Automatic translation is off."}
+                {autoFetcher.data.autoEnabled ? t("settings.auto.savedOn") : t("settings.auto.savedOff")}
               </s-paragraph>
             </s-banner>
           ) : null}
         </s-stack>
       </s-section>
 
-      <s-section heading="Translation memory">
+      <s-section heading={t("common.nav.memory")}>
         <s-stack direction="block" gap="base">
-          <s-paragraph>
-            Approved translations are always reused for identical text. You
-            can also reuse unreviewed machine translations, which keeps wording
-            consistent and avoids paying twice for the same sentence.
-          </s-paragraph>
+          <s-paragraph>{t("settings.memory.body")}</s-paragraph>
           <memoryFetcher.Form method="post">
             <input type="hidden" name="intent" value="reuse-memory" />
             <input type="hidden" name="enabled" value={data.reuseMachineMemory ? "false" : "true"} />
             <s-button type="submit">
-              {data.reuseMachineMemory ? "Reuse approved translations only" : "Also reuse machine translations"}
+              {data.reuseMachineMemory ? t("settings.memory.approvedOnly") : t("settings.memory.alsoMachine")}
             </s-button>
           </memoryFetcher.Form>
         </s-stack>
       </s-section>
 
-      <s-section heading={`AI usage in ${monthName(data.period)}`}>
+      <s-section heading={t("settings.usage.heading", { month: month(data.period) })}>
         <s-stack direction="block" gap="base">
-          <ProgressBar value={percent} label="AI characters used this month" tone={percent >= 100 ? "critical" : percent >= 80 ? "warning" : "success"} />
+          <ProgressBar value={percent} label={t("settings.usage.progress")} tone={percent >= 100 ? "critical" : percent >= 80 ? "warning" : "success"} />
           <s-paragraph>
-            {data.used.toLocaleString("en-US")} of {data.limit.toLocaleString("en-US")} AI
-            characters used ({percent}%).
+            {t("settings.usage.month", { used: number(data.used), limit: number(data.limit), percent })}
           </s-paragraph>
           <s-paragraph>
-            Today: {data.usedToday.toLocaleString("en-US")} of {data.dailyLimit.toLocaleString("en-US")} characters
-            (the daily limit protects against unexpected costs and resets at midnight UTC).
+            {t("settings.usage.today", { used: number(data.usedToday), limit: number(data.dailyLimit) })}
           </s-paragraph>
-          <s-paragraph>
-            Text reused from your translation memory, repeated sentences and
-            glossary-only text aren&apos;t sent to AI and don&apos;t count
-            towards this limit.
-          </s-paragraph>
+          <s-paragraph>{t("settings.usage.notCounted")}</s-paragraph>
         </s-stack>
       </s-section>
     </s-page>

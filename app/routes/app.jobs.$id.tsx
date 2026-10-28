@@ -9,17 +9,14 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, isBulkResourceType, listProblemItems } from "../.server/jobs/bulk-jobs";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
-import { editorPathFor, numericId, kindMeta } from "../lib/resource-kinds";
-import {
-  ITEM_ERROR_MESSAGES,
-  JOB_ERROR_MESSAGES,
-  JOB_STATUS_LABELS,
-  jobProgress,
-} from "../lib/job-display";
+import { editorPathFor, numericId, type TranslatableKind } from "../lib/resource-kinds";
+import { jobProgress } from "../lib/job-display";
+import { useI18n } from "../i18n/react";
+import { itemErrorMessage, jobErrorMessage, jobStatus, kindLabel, kindPlural } from "../i18n/labels";
 
-function kindInfo(resourceType: string) {
-  const meta = kindMeta(isBulkResourceType(resourceType) ? resourceType : "PRODUCT");
-  return { label: meta.label, plural: meta.plural };
+/** The content type named on the page (named in the interface language). */
+function pageKind(resourceType: string): TranslatableKind {
+  return isBulkResourceType(resourceType) ? resourceType : "PRODUCT";
 }
 
 const ACTIVE = new Set(["PENDING", "DISCOVERING", "RUNNING"]);
@@ -34,7 +31,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       id: job.id,
       status: job.status,
       targetLocale: job.targetLocale,
-      kind: kindInfo(job.resourceType),
+      kind: pageKind(job.resourceType),
       fieldScope: job.fieldScope,
       automatic: job.requestedBy === AUTO_REQUESTED_BY,
       errorCode: job.errorCode,
@@ -79,10 +76,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
 export default function JobDetail() {
   const { job, problems } = useLoaderData<typeof loader>();
+  const i18n = useI18n();
+  const { t } = i18n;
+  const kind = { label: kindLabel(i18n, job.kind), plural: kindPlural(i18n, job.kind) };
   const fetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
   const active = ACTIVE.has(job.status);
-  const label = JOB_STATUS_LABELS[job.status];
+  const label = jobStatus(i18n, job.status);
 
   // Refresh progress while the job runs.
   useEffect(() => {
@@ -94,24 +94,24 @@ export default function JobDetail() {
   }, [active, revalidator]);
 
   return (
-    <s-page heading={`Bulk translation into ${job.targetLocale}`}>
+    <s-page heading={t("jobs.detail.heading", { locale: job.targetLocale })}>
       <s-link slot="breadcrumb-actions" href="/app/jobs">
-        Jobs
+        {t("jobs.detail.breadcrumb")}
       </s-link>
 
       {job.status === "FAILED" ? (
-        <s-banner tone="critical" heading="The job stopped">
-          <s-paragraph>{JOB_ERROR_MESSAGES[job.errorCode ?? ""] ?? "The job stopped unexpectedly."}</s-paragraph>
+        <s-banner tone="critical" heading={t("jobs.detail.stopped.heading")}>
+          <s-paragraph>{jobErrorMessage(i18n, job.errorCode ?? "") ?? t("jobs.detail.stopped.unexpected")}</s-paragraph>
         </s-banner>
       ) : null}
 
-      <s-section heading="Progress">
+      <s-section heading={t("jobs.detail.progress.heading")}>
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="base" alignItems="center">
             <s-badge tone={label.tone}>{label.label}</s-badge>
             <s-text>
-              {job.progress.done} of {job.progress.total} {job.kind.plural}
-              {!job.discoveryDone ? ` (still finding ${job.kind.plural})` : ""}
+              {t("jobs.detail.progress.count", { done: job.progress.done, total: job.progress.total, kind: kind.plural })}
+              {!job.discoveryDone ? ` ${t("jobs.detail.progress.discovering", { kind: kind.plural })}` : ""}
             </s-text>
           </s-stack>
           <s-box background="subdued" borderRadius="base" padding="none">
@@ -120,7 +120,7 @@ export default function JobDetail() {
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={job.progress.percent}
-              aria-label="Job progress"
+              aria-label={t("jobs.detail.progress.label")}
               style={{
                 height: 8,
                 width: `${job.progress.percent}%`,
@@ -130,24 +130,26 @@ export default function JobDetail() {
             />
           </s-box>
           <s-paragraph>
-            {job.publishMode === "DRAFT" ? "Drafted for review" : "Translated"}: {job.succeeded} · Already up to date
-            or skipped: {job.skipped} · Failed: {job.failed}
+            {[
+              t(job.publishMode === "DRAFT" ? "jobs.detail.counts.drafted" : "jobs.detail.counts.translated", { count: job.succeeded }),
+              t("jobs.detail.counts.skipped", { count: job.skipped }),
+              t("jobs.detail.counts.failed", { count: job.failed }),
+            ].join(" · ")}
           </s-paragraph>
-          {job.fieldScope === "SEO" ? <s-paragraph>Scope: search engine listings only.</s-paragraph> : null}
-          {job.automatic ? (
-            <s-paragraph>
-              Started automatically for {job.kind.plural.toLowerCase()} you created or changed today (Settings, automatic
-              translation).
-            </s-paragraph>
-          ) : null}
+          {job.fieldScope === "SEO" ? <s-paragraph>{t("jobs.detail.scopeSeo")}</s-paragraph> : null}
+          {job.automatic ? <s-paragraph>{t("jobs.detail.automatic", { kind: kind.plural })}</s-paragraph> : null}
           <s-paragraph>
-            AI characters: {job.charsBilled.toLocaleString()} · Reused from memory: {job.memoryHits.toLocaleString()}{" "}
-            segments ({job.charsSaved.toLocaleString()} characters saved)
-            {job.protectedSkipped ? ` · Protected translations kept: ${job.protectedSkipped}` : ""}
+            {[
+              t("jobs.detail.usage.ai", { count: job.charsBilled }),
+              t("jobs.detail.usage.memory", { segments: job.memoryHits, saved: job.charsSaved }),
+              job.protectedSkipped ? t("jobs.detail.usage.protected", { count: job.protectedSkipped }) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </s-paragraph>
           {job.publishMode === "DRAFT" && job.succeeded > 0 ? (
             <s-button href={`/app/review?job=${job.id}`} variant="primary">
-              Review translations
+              {t("jobs.detail.review")}
             </s-button>
           ) : null}
         </s-stack>
@@ -158,7 +160,7 @@ export default function JobDetail() {
           <fetcher.Form method="post">
             <input type="hidden" name="intent" value="cancel" />
             <s-button type="submit" tone="critical" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
-              Cancel job
+              {t("jobs.detail.cancel")}
             </s-button>
           </fetcher.Form>
         ) : null}
@@ -166,19 +168,19 @@ export default function JobDetail() {
           <fetcher.Form method="post">
             <input type="hidden" name="intent" value="retry" />
             <s-button type="submit" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
-              {job.status === "FAILED" ? "Resume job" : `Retry failed ${job.kind.plural}`}
+              {job.status === "FAILED" ? t("jobs.detail.resume") : t("jobs.detail.retryFailed", { kind: kind.plural })}
             </s-button>
           </fetcher.Form>
         ) : null}
       </s-stack>
 
       {problems.length ? (
-        <s-section heading={`${job.kind.label} that failed`} padding="none">
+        <s-section heading={t("jobs.detail.failed.heading", { kind: kind.label })} padding="none">
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">{job.kind.label}</s-table-header>
-              <s-table-header>Reason</s-table-header>
-              <s-table-header format="numeric">Attempts</s-table-header>
+              <s-table-header listSlot="primary">{kind.label}</s-table-header>
+              <s-table-header>{t("jobs.detail.failed.reason")}</s-table-header>
+              <s-table-header format="numeric">{t("jobs.detail.failed.attempts")}</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {problems.map((p) => (
@@ -186,8 +188,10 @@ export default function JobDetail() {
                   <s-table-cell>
                     {p.href ? <s-link href={p.href}>{p.label}</s-link> : p.label}
                   </s-table-cell>
-                  <s-table-cell>{ITEM_ERROR_MESSAGES[p.errorCode ?? ""] ?? p.errorCode ?? "Unknown"}</s-table-cell>
-                  <s-table-cell>{p.attempts}</s-table-cell>
+                  <s-table-cell>
+                    {itemErrorMessage(i18n, p.errorCode ?? "") ?? p.errorCode ?? t("jobs.detail.failed.unknown")}
+                  </s-table-cell>
+                  <s-table-cell>{i18n.number(p.attempts)}</s-table-cell>
                 </s-table-row>
               ))}
             </s-table-body>

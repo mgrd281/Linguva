@@ -7,6 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
 import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { loadOverview } from "../../app/.server/overview/overview";
+import { translator } from "../../app/i18n/i18n";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { approveDrafts, listPendingDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
@@ -38,7 +39,7 @@ describe("getting started", () => {
     await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
     overview = await loadOverview(store.asAdmin(), shop, app);
     expect(steps(overview)).toMatchObject({ language: true, consent: true, "first-translation": false });
-    expect(overview.checklist.find((s) => s.id === "first-translation")?.href).toBe("/app/products?locale=de");
+    expect(overview.checklist.find((s) => s.id === "first-translation")?.href).toBe("/app/products?lang=de");
 
     // A bulk job in review mode: drafts to review, nothing published yet.
     const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: new MockTranslationProvider(), monthlyLimit: 1_000_000, keyPrefix: "lv:test:overview" };
@@ -47,7 +48,8 @@ describe("getting started", () => {
     for (const id of page.itemIds) await processItem(deps, { shopId: shop.id, itemId: id }, 1);
     overview = await loadOverview(store.asAdmin(), shop, app);
     expect(overview.pendingDrafts).toBe(4);
-    expect(overview.checklist.find((s) => s.id === "review")?.label).toBe("Review 4 translations");
+    expect(overview.checklist.find((s) => s.id === "review")?.label).toEqual({ key: "overview.checklist.review.labelCount", vars: { count: 4 } });
+    expect(translator("en").msg(overview.checklist.find((s) => s.id === "review")!.label)).toBe("Review 4 translations");
 
     const drafts = await listPendingDrafts(shop.id, {}, app);
     await approveDrafts({ admin: store.asAdmin(), shopId: shop.id, actorId: "1", draftIds: drafts.map((d) => d.id) }, app);

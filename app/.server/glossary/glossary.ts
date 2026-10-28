@@ -1,5 +1,6 @@
 import type { GlossaryRule as Rule, PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import type { MessageRef } from "../../i18n/i18n";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "../tenancy/with-tenant";
 import type { ProtectOptions } from "../translation/protect";
@@ -9,16 +10,21 @@ import { parseCsv, toCsv } from "./csv";
 export const MAX_TERMS_PER_SHOP = 5_000;
 export const DEFAULT_GLOSSARY = "Default";
 
+// Messages of the schema's own checks; issueMessages() turns them into interface texts.
+const LOCALE_MESSAGE = "must be a locale code such as de or pt-BR, or empty";
+const MARKET_MESSAGE = "must be a market number from the Markets page, or empty";
+const REQUIRED_FOR_PREFERRED = "is required for preferred terms";
+
 const locale = z
   .string()
   .trim()
-  .regex(/^([a-z]{2,3}(-[A-Za-z0-9]{2,8})*)?$/, "must be a locale code such as de or pt-BR, or empty");
+  .regex(/^([a-z]{2,3}(-[A-Za-z0-9]{2,8})*)?$/, LOCALE_MESSAGE);
 // The market's number (as shown on the Markets page) or its full Shopify id.
 const market = z
   .string()
   .trim()
   .transform((v) => (/^\d{1,20}$/.test(v) ? `gid://shopify/Market/${v}` : v))
-  .pipe(z.string().regex(/^(gid:\/\/shopify\/Market\/\d+)?$/, "must be a market number from the Markets page, or empty"));
+  .pipe(z.string().regex(/^(gid:\/\/shopify\/Market\/\d+)?$/, MARKET_MESSAGE));
 
 export const termInputSchema = z
   .object({
@@ -33,15 +39,35 @@ export const termInputSchema = z
   .superRefine((value, ctx) => {
     if (value.rule === "PREFERRED") {
       if (!value.translation) {
-        ctx.addIssue({ code: "custom", path: ["translation"], message: "is required for preferred terms" });
+        ctx.addIssue({ code: "custom", path: ["translation"], message: REQUIRED_FOR_PREFERRED });
       }
       if (!value.targetLocale) {
-        ctx.addIssue({ code: "custom", path: ["targetLocale"], message: "is required for preferred terms" });
+        ctx.addIssue({ code: "custom", path: ["targetLocale"], message: REQUIRED_FOR_PREFERRED });
       }
     }
   });
 
 export type TermInput = z.input<typeof termInputSchema>;
+
+/** Validation problems as interface texts ("field: problem"), in the merchant's language. */
+export function issueMessages(issues: ReadonlyArray<z.core.$ZodIssue>): MessageRef[] {
+  return issues.map((issue): MessageRef => {
+    const field = issue.path.join(".") || "row";
+    if (issue.message === LOCALE_MESSAGE) return { key: "glossary.issue.locale", vars: { field } };
+    if (issue.message === MARKET_MESSAGE) return { key: "glossary.issue.market", vars: { field } };
+    if (issue.message === REQUIRED_FOR_PREFERRED) return { key: "glossary.issue.requiredForPreferred", vars: { field } };
+    if (issue.code === "invalid_value") {
+      return { key: "glossary.issue.invalidOption", vars: { field, options: issue.values.map((v) => JSON.stringify(v)).join("|") } };
+    }
+    if (issue.code === "too_small" && issue.origin === "string" && issue.inclusive !== false) {
+      return { key: "glossary.issue.tooShort", vars: { field, min: Number(issue.minimum) } };
+    }
+    if (issue.code === "too_big" && issue.origin === "string" && issue.inclusive !== false) {
+      return { key: "glossary.issue.tooLong", vars: { field, max: Number(issue.maximum) } };
+    }
+    return { key: "glossary.issue.other", vars: { detail: `${field}: ${issue.message}` } };
+  });
+}
 type ParsedTerm = z.output<typeof termInputSchema>;
 
 export class GlossaryLimitError extends Error {
@@ -217,7 +243,8 @@ export const CSV_HEADER = ["rule", "term", "translation", "target_locale", "mark
 
 export interface CsvImportResult {
   terms: TermInput[];
-  errors: Array<{ line: number; message: string }>;
+  /** Line 0: the whole file. Each message is shown as is; a row's messages are joined with "; ". */
+  errors: Array<{ line: number; messages: MessageRef[] }>;
 }
 
 /** Parses a glossary CSV. Every row is validated; errors name the line. */
@@ -225,17 +252,18 @@ export function parseGlossaryCsv(text: string): CsvImportResult {
   let rows: string[][];
   try {
     rows = parseCsv(text);
-  } catch (error) {
-    return { terms: [], errors: [{ line: 0, message: (error as Error).message }] };
+  } catch {
+    // parseCsv only throws for an unterminated quoted field.
+    return { terms: [], errors: [{ line: 0, messages: [{ key: "glossary.csv.unterminated" }] }] };
   }
-  if (rows.length === 0) return { terms: [], errors: [{ line: 0, message: "The file is empty" }] };
+  if (rows.length === 0) return { terms: [], errors: [{ line: 0, messages: [{ key: "glossary.csv.empty" }] }] };
   const header = rows[0]!.map((h) => h.trim().toLowerCase());
   const index = (name: string) => header.indexOf(name);
   if (index("rule") < 0 || index("term") < 0) {
-    return { terms: [], errors: [{ line: 1, message: "Header must include at least: rule, term" }] };
+    return { terms: [], errors: [{ line: 1, messages: [{ key: "glossary.csv.header" }] }] };
   }
   if (rows.length - 1 > MAX_TERMS_PER_SHOP) {
-    return { terms: [], errors: [{ line: 0, message: `At most ${MAX_TERMS_PER_SHOP} rows` }] };
+    return { terms: [], errors: [{ line: 0, messages: [{ key: "glossary.csv.tooManyRows", vars: { max: MAX_TERMS_PER_SHOP } }] }] };
   }
   const cell = (row: string[], name: string) => (index(name) >= 0 ? (row[index(name)] ?? "").trim() : "");
   const terms: TermInput[] = [];
@@ -254,10 +282,7 @@ export function parseGlossaryCsv(text: string): CsvImportResult {
     const parsed = termInputSchema.safeParse(candidate);
     if (parsed.success) terms.push(candidate as TermInput);
     else {
-      errors.push({
-        line,
-        message: parsed.error.issues.map((issue) => `${issue.path.join(".") || "row"}: ${issue.message}`).join("; "),
-      });
+      errors.push({ line, messages: issueMessages(parsed.error.issues) });
     }
   });
   return { terms, errors };

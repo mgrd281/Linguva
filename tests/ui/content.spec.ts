@@ -23,7 +23,7 @@ test("the content overview lists every content type with its status @responsive"
 });
 
 test("a menu: list, AI draft, publish, read back", async ({ page }) => {
-  await openApp(page, "full", "/app/content/menus?locale=de");
+  await openApp(page, "full", "/app/content/menus?lang=de");
   await page.getByRole("link", { name: "Main menu" }).click();
   await expect(page.getByText("English → German")).toBeVisible();
   // No storefront search preview for menus.
@@ -34,13 +34,13 @@ test("a menu: list, AI draft, publish, read back", async ({ page }) => {
   await page.getByRole("button", { name: "Publish translations" }).click();
   await expect(page.locator('s-banner[heading="Translations published"]')).toBeVisible();
 
-  await openApp(page, "full", "/app/content/menus?locale=de");
+  await openApp(page, "full", "/app/content/menus?lang=de");
   await expect(page.getByText("Translate all into German")).toBeVisible();
   await expectAccessible(page);
 });
 
 test("theme content with many texts is searched and paged @responsive", async ({ page }) => {
-  await openApp(page, "full", `/app/content/theme-templates/${contentRef(UI_THEME_GID)}?locale=de`);
+  await openApp(page, "full", `/app/content/theme-templates/${contentRef(UI_THEME_GID)}?lang=de`);
   await expect(page.locator('s-section[heading="120 texts"]')).toHaveCount(1);
   await expect(page.getByText(/Showing 1–50 of 120/)).toBeVisible();
   await page.locator("s-button", { hasText: "Next" }).click();
@@ -55,7 +55,7 @@ test("theme content with many texts is searched and paged @responsive", async ({
 });
 
 test("content behind a permission asks for it instead of failing", async ({ page }) => {
-  const response = await openApp(page, "full", "/app/content/policies?locale=de");
+  const response = await openApp(page, "full", "/app/content/policies?lang=de");
   expect(response?.status()).toBe(200);
   await expect(page.locator('s-section[heading="Allow Linguva to read your policies"]')).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Allow access" })).toBeVisible();
@@ -63,19 +63,19 @@ test("content behind a permission asks for it instead of failing", async ({ page
 });
 
 test("an invalid content reference is a not-found page", async ({ page }) => {
-  const response = await openApp(page, "full", "/app/content/menus/not-a-valid-ref!?locale=de");
+  const response = await openApp(page, "full", "/app/content/menus/not-a-valid-ref!?lang=de");
   expect(response?.status()).toBe(404);
   await expect(page.locator(`s-banner[heading="We couldn't find this page"]`)).toBeVisible();
 });
 
 test("bulk translation offers image alt text and custom fields where a type has them", async ({ page }) => {
-  await openApp(page, "full", "/app/products?locale=de");
+  await openApp(page, "full", "/app/products?lang=de");
   const option = page.getByRole("checkbox", { name: "Also translate image alt text and custom fields" });
   await expect(option).toBeVisible();
   await expect(option).not.toBeChecked();
   await expect(page.getByText("so the job takes longer")).toBeVisible();
 
-  await openApp(page, "full", "/app/content/menus?locale=de");
+  await openApp(page, "full", "/app/content/menus?lang=de");
   await expect(page.getByText("Translate all into German")).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Also translate image alt text and custom fields" })).toHaveCount(0);
 });

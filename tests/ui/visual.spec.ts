@@ -11,8 +11,8 @@ import { openApp } from "./helpers";
 
 const PAGES: Array<[string, string]> = [
   ["overview", "/app"],
-  ["products", "/app/products?locale=de"],
-  ["editor", "/app/products/2?locale=de"],
+  ["products", "/app/products?lang=de"],
+  ["editor", "/app/products/2?lang=de"],
   ["review-empty", "/app/review"],
   ["glossary", "/app/glossary"],
   ["settings", "/app/settings"],

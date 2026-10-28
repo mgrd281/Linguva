@@ -12,7 +12,8 @@ import {
   seoWidth,
   truncateForPreview,
 } from "../lib/seo";
-import { issueLabel } from "../lib/issue-labels";
+import { useI18n } from "../i18n/react";
+import { issueName } from "../i18n/labels";
 
 export interface SeoPanelProps {
   /** Current value per field key (translation as typed, or the draft). */
@@ -27,6 +28,7 @@ export interface SeoPanelProps {
 }
 
 export function SeoCounter({ fieldKey, value, source }: { fieldKey: string; value: string; source: string }) {
+  const i18n = useI18n();
   const limits = SEO_LIMITS[fieldKey as keyof typeof SEO_LIMITS];
   if (!limits) return null;
   const width = seoWidth(value);
@@ -38,7 +40,7 @@ export function SeoCounter({ fieldKey, value, source }: { fieldKey: string; valu
       </s-text>
       {issues.map((i) => (
         <s-badge key={i.code} tone="warning">
-          {issueLabel(i.code)}
+          {issueName(i18n, i.code)}
         </s-badge>
       ))}
     </s-stack>
@@ -46,6 +48,7 @@ export function SeoCounter({ fieldKey, value, source }: { fieldKey: string; valu
 }
 
 export function SeoPreview(props: SeoPanelProps) {
+  const { t } = useI18n();
   const pick = (...keys: string[]) => {
     for (const k of keys) {
       const v = props.value(k).trim();
@@ -68,12 +71,12 @@ export function SeoPreview(props: SeoPanelProps) {
       </s-stack>
       <s-stack direction="block" gap="small-300">
         {title.fallback && props.hasField(SEO_TITLE_KEY) === false ? (
-          <s-text color="subdued">No SEO title: Shopify uses the translated title.</s-text>
+          <s-text color="subdued">{t("editor.seo.noTitle")}</s-text>
         ) : null}
         {!descriptionValue ? (
-          <s-text color="subdued">No SEO description in this language: search engines may use the description text.</s-text>
+          <s-text color="subdued">{t("editor.seo.noDescription")}</s-text>
         ) : null}
-        <s-text color="subdued">Example address; the real one depends on your domains and markets.</s-text>
+        <s-text color="subdued">{t("editor.seo.exampleAddress")}</s-text>
       </s-stack>
     </s-box>
   );

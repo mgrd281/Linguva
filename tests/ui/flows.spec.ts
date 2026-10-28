@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 import { expectAccessible, openApp } from "./helpers";
 
 test("translate with AI, edit and publish; the published value is read back from Shopify", async ({ page }) => {
-  await openApp(page, "full", "/app/products/5?locale=de");
+  await openApp(page, "full", "/app/products/5?lang=de");
   await page.getByRole("button", { name: "Translate with AI" }).click();
   await expect(page.getByText(/AI drafts are filled in below/)).toBeVisible();
 
@@ -17,7 +17,7 @@ test("translate with AI, edit and publish; the published value is read back from
   await page.getByRole("button", { name: "Publish translations" }).click();
   await expect(page.locator('s-banner[heading="Translations published"]')).toBeVisible();
 
-  await openApp(page, "full", "/app/products/5?locale=de");
+  await openApp(page, "full", "/app/products/5?lang=de");
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Warme Jacke Nummer 5");
   // The previous state is in the history and can be restored.
   const history = page.getByRole("button", { name: /^Show history \(\d+\)$/ }).first();
@@ -27,7 +27,7 @@ test("translate with AI, edit and publish; the published value is read back from
 });
 
 test("image alt text is translated and published separately", async ({ page }) => {
-  await openApp(page, "full", "/app/products/1?locale=de");
+  await openApp(page, "full", "/app/products/1?lang=de");
   await page.getByRole("button", { name: "Translate missing alt text and fields with AI" }).click();
   await expect(page.locator('s-text-field[name$=":alt"] input')).toHaveValue("[de] Red wool jacket, front view");
   await page.getByRole("button", { name: "Publish alt text and fields" }).click();

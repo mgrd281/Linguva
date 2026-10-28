@@ -1,17 +1,20 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { Fragment, type ReactNode } from "react";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { AUTO_REQUESTED_BY, isBulkResourceType, listJobsPage } from "../.server/jobs/bulk-jobs";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
-import { JOB_STATUS_LABELS, jobProgress } from "../lib/job-display";
-import { kindMeta, RESOURCE_KINDS } from "../lib/resource-kinds";
+import { jobProgress } from "../lib/job-display";
+import { RESOURCE_KINDS } from "../lib/resource-kinds";
+import { useI18n } from "../i18n/react";
+import { jobStatus, kindLabel } from "../i18n/labels";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
   const url = new URL(request.url);
   const q = (name: string) => url.searchParams.get(name) || null;
-  const filter = { status: q("status"), locale: q("locale"), resourceType: q("type") };
+  const filter = { status: q("status"), locale: q("lang"), resourceType: q("type") };
   const page = await listJobsPage(shop.id, { ...filter, cursor: q("after"), take: 25 });
   const locales = (await fetchAndSyncShopLocales(admin, shop.id)).locales.filter((l) => !l.primary);
   return {
@@ -22,7 +25,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     jobs: page.jobs.map((j) => ({
       id: j.id,
       targetLocale: j.targetLocale,
-      type: isBulkResourceType(j.resourceType) ? kindMeta(j.resourceType).label : j.resourceType,
+      // Named in the interface language; other types show their code.
+      type: j.resourceType,
+      known: isBulkResourceType(j.resourceType),
       status: j.status,
       createdAt: j.createdAt.toISOString(),
       automatic: j.requestedBy === AUTO_REQUESTED_BY,
@@ -31,14 +36,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+/** A text whose {placeholders} are replaced by elements (e.g. links). */
+function withElements(text: string, elements: Record<string, ReactNode>): ReactNode {
+  return text.split(/\{(\w+)\}/).map((part, i) => <Fragment key={i}>{i % 2 ? (elements[part] ?? `{${part}}`) : part}</Fragment>);
+}
+
 export default function Jobs() {
   const { jobs, filter, locales, nextCursor, isFirstPage } = useLoaderData<typeof loader>();
+  const i18n = useI18n();
+  const { t } = i18n;
   const languageName = (code: string) => locales.find((l) => l.locale === code)?.name ?? code;
   const filtered = Boolean(filter.status || filter.locale || filter.resourceType);
   const pageHref = (after: string | null) => {
     const params = new URLSearchParams();
     if (filter.status) params.set("status", filter.status);
-    if (filter.locale) params.set("locale", filter.locale);
+    if (filter.locale) params.set("lang", filter.locale);
     if (filter.resourceType) params.set("type", filter.resourceType);
     if (after) params.set("after", after);
     const query = params.toString();
@@ -46,39 +58,39 @@ export default function Jobs() {
   };
 
   return (
-    <s-page heading="Translation jobs">
+    <s-page heading={t("jobs.list.heading")}>
       <s-section>
         <Form method="get">
           <s-query-container>
             <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 640px) 1fr 1fr 1fr auto, 1fr" gap="base" alignItems="end">
-              <s-select name="status" label="Status" value={filter.status ?? ""}>
-                <s-option value="">All</s-option>
-                <s-option value="active">Running</s-option>
-                <s-option value="completed">Completed</s-option>
-                <s-option value="failed">Stopped</s-option>
-                <s-option value="cancelled">Cancelled</s-option>
+              <s-select name="status" label={t("common.status")} value={filter.status ?? ""}>
+                <s-option value="">{t("common.state.all")}</s-option>
+                <s-option value="active">{t("jobs.filter.running")}</s-option>
+                <s-option value="completed">{jobStatus(i18n, "COMPLETED").label}</s-option>
+                <s-option value="failed">{jobStatus(i18n, "FAILED").label}</s-option>
+                <s-option value="cancelled">{jobStatus(i18n, "CANCELLED").label}</s-option>
               </s-select>
-              <s-select name="locale" label="Language" value={filter.locale ?? ""}>
-                <s-option value="">All languages</s-option>
+              <s-select name="lang" label={t("common.language")} value={filter.locale ?? ""}>
+                <s-option value="">{t("common.allLanguages")}</s-option>
                 {locales.map((l) => (
                   <s-option key={l.locale} value={l.locale}>
                     {l.name}
                   </s-option>
                 ))}
               </s-select>
-              <s-select name="type" label="Content" value={filter.resourceType ?? ""}>
-                <s-option value="">All</s-option>
-                {Object.entries(RESOURCE_KINDS).map(([kind, meta]) => (
+              <s-select name="type" label={t("common.contentType")} value={filter.resourceType ?? ""}>
+                <s-option value="">{t("common.state.all")}</s-option>
+                {Object.keys(RESOURCE_KINDS).map((kind) => (
                   <s-option key={kind} value={kind}>
-                    {meta.label}
+                    {kindLabel(i18n, kind)}
                   </s-option>
                 ))}
               </s-select>
               <s-stack direction="inline" gap="small">
-                <s-button type="submit">Apply</s-button>
+                <s-button type="submit">{t("jobs.filter.apply")}</s-button>
                 {filtered ? (
                   <s-button href="/app/jobs" variant="tertiary">
-                    Clear
+                    {t("jobs.filter.clear")}
                   </s-button>
                 ) : null}
               </s-stack>
@@ -89,63 +101,61 @@ export default function Jobs() {
       <s-section padding="none">
         {jobs.length === 0 && filtered ? (
           <s-box padding="base">
-            <s-paragraph>No jobs match these filters.</s-paragraph>
+            <s-paragraph>{t("jobs.list.noMatches")}</s-paragraph>
           </s-box>
         ) : jobs.length === 0 ? (
           <s-box padding="base">
             <s-paragraph>
-              No jobs yet. Start a bulk translation from the{" "}
-              <s-link href="/app/products">Products</s-link>, <s-link href="/app/collections">Collections</s-link>{" "}
-              or <s-link href="/app/pages">Pages</s-link> page.
+              {withElements(t("jobs.list.empty"), {
+                products: <s-link href="/app/products">{kindLabel(i18n, "PRODUCT")}</s-link>,
+                collections: <s-link href="/app/collections">{kindLabel(i18n, "COLLECTION")}</s-link>,
+                pages: <s-link href="/app/pages">{kindLabel(i18n, "PAGE")}</s-link>,
+              })}
             </s-paragraph>
           </s-box>
         ) : (
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">Started</s-table-header>
-              <s-table-header>Content</s-table-header>
-              <s-table-header>Language</s-table-header>
-              <s-table-header>Status</s-table-header>
-              <s-table-header format="numeric">Progress</s-table-header>
+              <s-table-header listSlot="primary">{t("jobs.list.started")}</s-table-header>
+              <s-table-header>{t("common.contentType")}</s-table-header>
+              <s-table-header>{t("common.language")}</s-table-header>
+              <s-table-header>{t("common.status")}</s-table-header>
+              <s-table-header format="numeric">{t("jobs.list.progress")}</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {jobs.map((job) => (
-                <s-table-row key={job.id}>
-                  <s-table-cell>
-                    <s-link href={`/app/jobs/${job.id}`}>
-                      {new Date(job.createdAt).toLocaleString(undefined, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                    </s-link>
-                  </s-table-cell>
-                  <s-table-cell>
-                    {job.type}
-                    {job.automatic ? (
-                      <>
-                        {" "}
-                        <s-badge>Automatic</s-badge>
-                      </>
-                    ) : null}
-                  </s-table-cell>
-                  <s-table-cell>{languageName(job.targetLocale)}</s-table-cell>
-                  <s-table-cell>
-                    <s-badge tone={JOB_STATUS_LABELS[job.status].tone}>
-                      {JOB_STATUS_LABELS[job.status].label}
-                    </s-badge>
-                  </s-table-cell>
-                  <s-table-cell>
-                    {job.progress.done} / {job.progress.total}
-                  </s-table-cell>
-                </s-table-row>
-              ))}
+              {jobs.map((job) => {
+                const status = jobStatus(i18n, job.status);
+                return (
+                  <s-table-row key={job.id}>
+                    <s-table-cell>
+                      <s-link href={`/app/jobs/${job.id}`}>{i18n.dateTime(job.createdAt)}</s-link>
+                    </s-table-cell>
+                    <s-table-cell>
+                      {job.known ? kindLabel(i18n, job.type) : job.type}
+                      {job.automatic ? (
+                        <>
+                          {" "}
+                          <s-badge>{t("common.automatic")}</s-badge>
+                        </>
+                      ) : null}
+                    </s-table-cell>
+                    <s-table-cell>{languageName(job.targetLocale)}</s-table-cell>
+                    <s-table-cell>
+                      <s-badge tone={status.tone}>{status.label}</s-badge>
+                    </s-table-cell>
+                    <s-table-cell>
+                      {i18n.number(job.progress.done)} / {i18n.number(job.progress.total)}
+                    </s-table-cell>
+                  </s-table-row>
+                );
+              })}
             </s-table-body>
           </s-table>
         )}
       </s-section>
       <s-stack direction="inline" gap="base">
-        {!isFirstPage ? <s-button href={pageHref(null)}>First page</s-button> : null}
-        {nextCursor ? <s-button href={pageHref(nextCursor)}>Next page</s-button> : null}
+        {!isFirstPage ? <s-button href={pageHref(null)}>{t("jobs.pagination.first")}</s-button> : null}
+        {nextCursor ? <s-button href={pageHref(nextCursor)}>{t("jobs.pagination.next")}</s-button> : null}
       </s-stack>
     </s-page>
   );

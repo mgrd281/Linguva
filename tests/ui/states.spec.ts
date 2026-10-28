@@ -19,7 +19,7 @@ test.describe("empty states", () => {
   });
 
   test("an empty catalog, no jobs and nothing to review @responsive", async ({ page }) => {
-    await openApp(page, "emptyCatalog", "/app/products?locale=de");
+    await openApp(page, "emptyCatalog", "/app/products?lang=de");
     await expect(page.getByText("No products yet")).toBeVisible();
     await expect(page.getByText(/appear here, ready to translate into German/)).toBeVisible();
     await expectNoHorizontalScroll(page);
@@ -34,7 +34,7 @@ test.describe("empty states", () => {
 
 test.describe("error states", () => {
   test("a Shopify outage shows a clear message, keeps the app usable and leaks nothing @responsive", async ({ page }) => {
-    const response = await openApp(page, "failing", "/app/products?locale=de");
+    const response = await openApp(page, "failing", "/app/products?lang=de");
     expect(response?.status()).toBe(503);
     const banner = page.locator(`s-banner[heading="Shopify didn't respond"]`);
     await expect(banner).toBeVisible();
@@ -56,7 +56,7 @@ test.describe("error states", () => {
   });
 
   test("a resource that doesn't exist shows a not-found page", async ({ page }) => {
-    const response = await openApp(page, "full", "/app/products/999999?locale=de");
+    const response = await openApp(page, "full", "/app/products/999999?lang=de");
     expect(response?.status()).toBe(404);
     await expect(page.locator(`s-banner[heading="We couldn't find this page"]`)).toBeVisible();
     await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
@@ -66,7 +66,7 @@ test.describe("error states", () => {
 
 test.describe("loading states", () => {
   test("AI translation shows progress and then fills the drafts without publishing", async ({ page }) => {
-    await openApp(page, "full", "/app/products/4?locale=de");
+    await openApp(page, "full", "/app/products/4?lang=de");
     // Hold the action response so the in-between state is observable.
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -82,7 +82,7 @@ test.describe("loading states", () => {
     await expect(page.getByText(/AI drafts are filled in below/)).toBeVisible();
     await expect(page.getByText("AI draft").first()).toBeVisible();
     // Nothing is published until the merchant clicks Publish: reload shows Shopify's value.
-    await openApp(page, "full", "/app/products/4?locale=de");
+    await openApp(page, "full", "/app/products/4?lang=de");
     await expect(page.getByText("AI draft")).toHaveCount(0);
   });
 

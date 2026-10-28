@@ -7,7 +7,7 @@
 import { expect, test } from "@playwright/test";
 import { openApp } from "./helpers";
 
-const PATHS = ["/app", "/app/products?locale=de", "/app/products/1?locale=de", "/app/review", "/app/jobs", "/app/content", "/app/plan", "/app/settings"];
+const PATHS = ["/app", "/app/products?lang=de", "/app/products/1?lang=de", "/app/review", "/app/jobs", "/app/content", "/app/plan", "/app/settings"];
 
 test("main pages respond quickly", async ({ page }) => {
   const rows: string[] = [];

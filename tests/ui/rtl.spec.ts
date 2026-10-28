@@ -8,7 +8,7 @@ import { expectAccessible, openApp } from "./helpers";
 
 
 test("Arabic fields are right to left, the URL handle stays left to right @responsive", async ({ page }) => {
-  await openApp(page, "full", "/app/products/1?locale=ar");
+  await openApp(page, "full", "/app/products/1?lang=ar");
   await expect(page.locator('s-banner[heading="Right-to-left language"]')).toBeVisible();
 
   const title = page.locator('s-text-field[name="value:title"] input');
@@ -26,7 +26,7 @@ test("Arabic fields are right to left, the URL handle stays left to right @respo
 });
 
 test("left-to-right languages are unchanged", async ({ page }) => {
-  await openApp(page, "full", "/app/products/1?locale=de");
+  await openApp(page, "full", "/app/products/1?lang=de");
   const title = page.locator('s-text-field[name="value:title"] input');
   expect(await title.evaluate((el) => getComputedStyle(el).direction)).toBe("ltr");
   expect(await page.locator('s-text-field[name="value:title"]').evaluate((el) => el.closest("[dir]"))).toBeNull();

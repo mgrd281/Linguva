@@ -14,6 +14,7 @@ import {
   memoryStats,
 } from "../.server/memory/translation-memory";
 import { markupToPlainText } from "../.server/translation/segment-markup";
+import { useI18n } from "../i18n/react";
 
 function plain(markup: string): string {
   try {
@@ -27,7 +28,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
   const url = new URL(request.url);
   const search = url.searchParams.get("q") ?? "";
-  const targetLocale = url.searchParams.get("locale") ?? "";
+  const targetLocale = url.searchParams.get("lang") ?? "";
   const [entries, stats, locales] = await Promise.all([
     listMemory(shop.id, { search, targetLocale: targetLocale || undefined, take: 100 }),
     memoryStats(shop.id),
@@ -61,19 +62,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Memory() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const { t, number } = useI18n();
   const totalEntries = data.stats.reduce((s, r) => s + r.entries, 0);
   const totalUses = data.stats.reduce((s, r) => s + r.uses, 0);
 
   return (
-    <s-page heading="Translation memory">
+    <s-page heading={t("common.nav.memory")}>
       <s-section>
+        <s-paragraph>{t("memory.intro")}</s-paragraph>
         <s-paragraph>
-          Every translation you publish is remembered sentence by sentence.
-          Identical text is reused automatically and isn&apos;t sent to AI
-          again, so it costs nothing. Your memory is private to your store.
-        </s-paragraph>
-        <s-paragraph>
-          {totalEntries.toLocaleString()} entries · reused {totalUses.toLocaleString()} times
+          {t("memory.stats.entries", { count: totalEntries })} · {t("memory.stats.reused", { count: totalUses })}
         </s-paragraph>
       </s-section>
 
@@ -81,16 +79,21 @@ export default function Memory() {
         <Form method="get">
           <s-query-container>
             <s-grid gridTemplateColumns="@container (inline-size > 560px) 2fr 1fr auto, 1fr" gap="base" alignItems="end">
-              <s-search-field name="q" label="Search" placeholder="Original or translation" value={data.search} />
-              <s-select name="locale" label="Language" value={data.targetLocale}>
-                <s-option value="">All languages</s-option>
+              <s-search-field
+                name="q"
+                label={t("common.action.search")}
+                placeholder={t("memory.search.placeholder")}
+                value={data.search}
+              />
+              <s-select name="lang" label={t("common.language")} value={data.targetLocale}>
+                <s-option value="">{t("common.allLanguages")}</s-option>
                 {data.languages.map((l) => (
                   <s-option key={l.locale} value={l.locale}>
                     {l.name}
                   </s-option>
                 ))}
               </s-select>
-              <s-button type="submit">Search</s-button>
+              <s-button type="submit">{t("common.action.search")}</s-button>
             </s-grid>
           </s-query-container>
         </Form>
@@ -99,17 +102,17 @@ export default function Memory() {
       <s-section padding="none">
         {data.entries.length === 0 ? (
           <s-box padding="base">
-            <s-paragraph>No entries yet. Publish translations to build your memory.</s-paragraph>
+            <s-paragraph>{t("memory.empty")}</s-paragraph>
           </s-box>
         ) : (
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">Source</s-table-header>
-              <s-table-header>Translation</s-table-header>
-              <s-table-header>Languages</s-table-header>
-              <s-table-header>Status</s-table-header>
-              <s-table-header format="numeric">Uses</s-table-header>
-              <s-table-header>Actions</s-table-header>
+              <s-table-header listSlot="primary">{t("memory.column.source")}</s-table-header>
+              <s-table-header>{t("memory.column.translation")}</s-table-header>
+              <s-table-header>{t("common.languages")}</s-table-header>
+              <s-table-header>{t("common.status")}</s-table-header>
+              <s-table-header format="numeric">{t("memory.column.uses")}</s-table-header>
+              <s-table-header>{t("memory.column.actions")}</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {data.entries.map((e) => (
@@ -118,9 +121,13 @@ export default function Memory() {
                   <s-table-cell>{e.target}</s-table-cell>
                   <s-table-cell>{e.pair}</s-table-cell>
                   <s-table-cell>
-                    {e.status === "APPROVED" ? <s-badge tone="success">Approved</s-badge> : <s-badge>Machine</s-badge>}
+                    {e.status === "APPROVED" ? (
+                      <s-badge tone="success">{t("memory.status.approved")}</s-badge>
+                    ) : (
+                      <s-badge>{t("memory.status.machine")}</s-badge>
+                    )}
                   </s-table-cell>
-                  <s-table-cell>{e.uses}</s-table-cell>
+                  <s-table-cell>{number(e.uses)}</s-table-cell>
                   <s-table-cell>
                     <s-stack direction="inline" gap="small">
                       {e.status !== "APPROVED" ? (
@@ -128,7 +135,7 @@ export default function Memory() {
                           variant="tertiary"
                           onClick={() => fetcher.submit({ intent: "approve", entryId: e.id }, { method: "post" })}
                         >
-                          Approve
+                          {t("memory.action.approve")}
                         </s-button>
                       ) : null}
                       <s-button
@@ -136,7 +143,7 @@ export default function Memory() {
                         tone="critical"
                         onClick={() => fetcher.submit({ intent: "delete", entryId: e.id }, { method: "post" })}
                       >
-                        Delete
+                        {t("common.action.delete")}
                       </s-button>
                     </s-stack>
                   </s-table-cell>

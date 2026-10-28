@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { loadOverview } from "../.server/overview/overview";
 import { ProgressBar } from "../components/ProgressBar";
+import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -12,36 +13,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Overview() {
   const data = useLoaderData<typeof loader>();
+  const { t, msg, date, dateTime } = useI18n();
   const done = data.checklist.filter((s) => s.done).length;
   const next = data.checklist.find((s) => !s.done);
   const usagePercent = data.usage.limit ? (data.usage.used / data.usage.limit) * 100 : 100;
 
   return (
-    <s-page heading="Overview">
+    <s-page heading={t("common.nav.overview")}>
       {data.usage.level === "exhausted" ? (
-        <s-banner tone="critical" heading="This month's AI allowance is used up">
+        <s-banner tone="critical" heading={t("overview.banner.exhausted.heading")}>
           <s-paragraph>
-            AI translation pauses until next month. Manual translation and translation memory keep working.{" "}
-            <s-link href="/app/plan">Change plan</s-link>
+            {t("overview.banner.exhausted.body")}{" "}
+            <s-link href="/app/plan">{t("common.action.changePlan")}</s-link>
           </s-paragraph>
         </s-banner>
       ) : data.usage.level === "high" ? (
-        <s-banner tone="warning" heading={`${Math.floor(usagePercent)} % of this month's AI allowance used`}>
+        <s-banner tone="warning" heading={t("overview.banner.high.heading", { percent: Math.floor(usagePercent) })}>
           <s-paragraph>
-            Large bulk jobs may stop when the allowance runs out. <s-link href="/app/plan">See plans</s-link>
+            {t("overview.banner.high.body")} <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
           </s-paragraph>
         </s-banner>
       ) : null}
 
       {next ? (
-        <s-section heading="Get started">
+        <s-section heading={t("overview.start.heading")}>
           <s-stack direction="block" gap="base">
             <s-stack direction="inline" gap="base" alignItems="center">
-              <s-text>
-                {done} of {data.checklist.length} steps done
-              </s-text>
+              <s-text>{t("overview.start.progress", { done, total: data.checklist.length })}</s-text>
               <s-box inlineSize="200px">
-                <ProgressBar value={(done / data.checklist.length) * 100} label="Setup progress" />
+                <ProgressBar value={(done / data.checklist.length) * 100} label={t("overview.start.progressLabel")} />
               </s-box>
             </s-stack>
             <s-stack direction="block" gap="small">
@@ -50,10 +50,10 @@ export default function Overview() {
                   <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
                     <s-stack direction="block" gap="small-300">
                       <s-stack direction="inline" gap="small" alignItems="center">
-                        {step.done ? <s-badge tone="success">Done</s-badge> : <s-badge>To do</s-badge>}
-                        <s-text type="strong">{step.label}</s-text>
+                        {step.done ? <s-badge tone="success">{t("common.state.done")}</s-badge> : <s-badge>{t("common.state.toDo")}</s-badge>}
+                        <s-text type="strong">{msg(step.label)}</s-text>
                       </s-stack>
-                      {!step.done ? <s-text color="subdued">{step.detail}</s-text> : null}
+                      {!step.done ? <s-text color="subdued">{msg(step.detail)}</s-text> : null}
                     </s-stack>
                     {!step.done ? (
                       <s-button
@@ -61,7 +61,7 @@ export default function Overview() {
                         variant={step === next ? "primary" : "secondary"}
                         {...(step.external ? { target: "_top" } : {})}
                       >
-                        {step.action}
+                        {msg(step.action)}
                       </s-button>
                     ) : null}
                   </s-stack>
@@ -72,48 +72,52 @@ export default function Overview() {
         </s-section>
       ) : null}
 
-      <s-section heading="Your languages">
+      <s-section heading={t("overview.languages.heading")}>
         {data.progress.length === 0 ? (
           <s-stack direction="block" gap="base">
-            <s-paragraph>
-              Your store only has its primary language ({data.primary ?? "unknown"}). Add the languages you sell in
-              under Settings → Languages in Shopify, then come back here.
-            </s-paragraph>
+            <s-paragraph>{t("overview.languages.onlyPrimary", { primary: data.primary ?? t("overview.languages.unknown") })}</s-paragraph>
             <s-button href="shopify://admin/settings/languages" target="_top">
-              Open language settings
+              {t("overview.checklist.languageSettings")}
             </s-button>
           </s-stack>
         ) : (
           <s-stack direction="block" gap="base">
             <s-table>
               <s-table-header-row>
-                <s-table-header listSlot="primary">Language</s-table-header>
-                <s-table-header listSlot="secondary">On your storefront</s-table-header>
-                <s-table-header>Translated</s-table-header>
-                <s-table-header>Action</s-table-header>
+                <s-table-header listSlot="primary">{t("common.language")}</s-table-header>
+                <s-table-header listSlot="secondary">{t("overview.languages.storefront")}</s-table-header>
+                <s-table-header>{t("common.translationStatus.translated")}</s-table-header>
+                <s-table-header>{t("overview.languages.action")}</s-table-header>
               </s-table-header-row>
               <s-table-body>
                 {data.progress.map((l) => (
                   <s-table-row key={l.locale}>
                     <s-table-cell>{l.name}</s-table-cell>
                     <s-table-cell>
-                      {l.published ? <s-badge tone="success">Published</s-badge> : <s-badge>Hidden</s-badge>}
+                      {l.published ? (
+                        <s-badge tone="success">{t("common.state.published")}</s-badge>
+                      ) : (
+                        <s-badge>{t("overview.languages.hidden")}</s-badge>
+                      )}
                     </s-table-cell>
                     <s-table-cell>
                       {l.percent === null ? (
-                        <s-text color="subdued">Not measured yet</s-text>
+                        <s-text color="subdued">{t("overview.languages.notMeasured")}</s-text>
                       ) : (
                         <s-stack direction="inline" gap="small" alignItems="center">
                           <s-box inlineSize="120px">
-                            <ProgressBar value={l.percent} label={`${l.name} translated`} />
+                            <ProgressBar value={l.percent} label={t("overview.languages.progressLabel", { language: l.name })} />
                           </s-box>
                           <s-text>{l.percent} %</s-text>
                         </s-stack>
                       )}
                     </s-table-cell>
                     <s-table-cell>
-                      <s-link href={`/app/products?locale=${encodeURIComponent(l.locale)}`} accessibilityLabel={`Translate into ${l.name}`}>
-                        Translate
+                      <s-link
+                        href={`/app/products?lang=${encodeURIComponent(l.locale)}`}
+                        accessibilityLabel={t("overview.languages.translateLabel", { language: l.name })}
+                      >
+                        {t("overview.languages.translate")}
                       </s-link>
                     </s-table-cell>
                   </s-table-row>
@@ -122,65 +126,59 @@ export default function Overview() {
             </s-table>
             <s-paragraph>
               {data.coverageCheckedAt
-                ? `Measured ${new Date(data.coverageCheckedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}. `
-                : "Run the coverage report to see how complete each language is. "}
-              <s-link href="/app/coverage">{data.coverageCheckedAt ? "Update coverage report" : "Open coverage report"}</s-link>
+                ? t("overview.languages.measured", { date: dateTime(data.coverageCheckedAt) })
+                : t("overview.languages.runCoverage")}{" "}
+              <s-link href="/app/coverage">
+                {data.coverageCheckedAt ? t("overview.languages.updateCoverage") : t("overview.languages.openCoverage")}
+              </s-link>
             </s-paragraph>
           </s-stack>
         )}
       </s-section>
 
-      <s-section heading="What do you want to translate?">
+      <s-section heading={t("overview.translate.heading")}>
         <s-stack direction="inline" gap="base">
-          <s-button href="/app/products">Products</s-button>
-          <s-button href="/app/collections">Collections</s-button>
-          <s-button href="/app/content">Pages, menus, theme and more</s-button>
+          <s-button href="/app/products">{t("common.nav.products")}</s-button>
+          <s-button href="/app/collections">{t("common.nav.collections")}</s-button>
+          <s-button href="/app/content">{t("overview.translate.content")}</s-button>
         </s-stack>
       </s-section>
 
-      <s-section slot="aside" heading="Needs your attention">
+      <s-section slot="aside" heading={t("overview.attention.heading")}>
         <s-stack direction="block" gap="small">
           {data.pendingDrafts ? (
             <s-paragraph>
-              <s-link href="/app/review">
-                {data.pendingDrafts.toLocaleString()} translation{data.pendingDrafts === 1 ? "" : "s"} to review
-              </s-link>
+              <s-link href="/app/review">{t("overview.attention.drafts", { count: data.pendingDrafts })}</s-link>
             </s-paragraph>
           ) : (
-            <s-paragraph>Nothing waiting for review.</s-paragraph>
+            <s-paragraph>{t("overview.attention.noDrafts")}</s-paragraph>
           )}
           {data.activeJobs ? (
             <s-paragraph>
-              <s-link href="/app/jobs">
-                {data.activeJobs} translation job{data.activeJobs === 1 ? "" : "s"} running
-              </s-link>
+              <s-link href="/app/jobs">{t("overview.attention.jobs", { count: data.activeJobs })}</s-link>
             </s-paragraph>
           ) : null}
         </s-stack>
       </s-section>
 
-      <s-section slot="aside" heading="AI usage this month">
+      <s-section slot="aside" heading={t("overview.usage.heading")}>
         <s-stack direction="block" gap="small">
           <ProgressBar
             value={usagePercent}
-            label="AI usage this month"
+            label={t("overview.usage.heading")}
             tone={data.usage.level === "exhausted" ? "critical" : data.usage.level === "high" ? "warning" : "success"}
           />
-          <s-text>
-            {data.usage.used.toLocaleString()} of {data.usage.limit.toLocaleString()} characters
-          </s-text>
-          <s-text color="subdued">Text reused from your translation memory is free.</s-text>
+          <s-text>{t("overview.usage.characters", { used: data.usage.used, limit: data.usage.limit })}</s-text>
+          <s-text color="subdued">{t("overview.usage.memoryFree")}</s-text>
         </s-stack>
       </s-section>
 
       <s-section slot="aside" heading={data.shopName}>
         <s-paragraph>
-          {data.enabledCount} of {data.maxLocales} languages enabled, {data.publishedCount} published.{" "}
-          <s-link href="/app/languages">Languages</s-link>
+          {t("overview.store.languages", { enabled: data.enabledCount, max: data.maxLocales, published: data.publishedCount })}{" "}
+          <s-link href="/app/languages">{t("common.languages")}</s-link>
         </s-paragraph>
-        <s-paragraph>
-          Installed {new Date(data.installedAt).toLocaleDateString(undefined, { dateStyle: "long" })}
-        </s-paragraph>
+        <s-paragraph>{t("overview.store.installed", { date: date(data.installedAt, "long") })}</s-paragraph>
       </s-section>
     </s-page>
   );

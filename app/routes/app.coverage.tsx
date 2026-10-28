@@ -15,9 +15,14 @@ import {
 import { getQueues } from "../.server/queue/client";
 import { getTranslationProvider } from "../.server/providers";
 import { getShopSettings, hasCurrentAiConsent } from "../.server/settings/shop-settings";
-import { coverageTypeLabel, editorPath, IMAGE_COVERAGE_TYPES, isImageCoverageType, numericId, RESOURCE_KINDS } from "../lib/resource-kinds";
+import { editorPath, IMAGE_COVERAGE_TYPES, isImageCoverageType, numericId, RESOURCE_KINDS, type ResourceKind } from "../lib/resource-kinds";
 import { shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
+import { useI18n } from "../i18n/react";
+import type { I18n } from "../i18n/i18n";
+import { hasMessage, kindLabel, kindPlural, kindSingular } from "../i18n/labels";
+
+const isResourceKind = (type: string): type is ResourceKind => Object.prototype.hasOwnProperty.call(RESOURCE_KINDS, type);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -42,7 +47,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           finishedAt: report.finishedAt?.toISOString() ?? null,
           resourcesScanned: report.resourcesScanned,
           progress: { done: Math.min(report.segmentIndex, report.segments.length), total: report.segments.length },
-          scanning: current ? `${coverageTypeLabel(current.resourceType)} · ${names.get(current.locale) ?? current.locale}` : null,
+          // Shown as "<content type> · <language>", the type named in the interface language.
+          scanning: current ? { type: current.resourceType, language: names.get(current.locale) ?? current.locale } : null,
         }
       : null,
     rows: (coverage?.rows ?? []).map((r) => ({ ...r, localeName: names.get(r.locale) ?? r.locale })),
@@ -50,7 +56,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     gaps: (coverage?.gaps ?? []).slice(0, 50).map((g) => ({
       id: g.id,
       locale: names.get(g.locale) ?? g.locale,
-      kind: RESOURCE_KINDS[g.resourceType as keyof typeof RESOURCE_KINDS]?.singular ?? g.resourceType,
+      kind: g.resourceType,
       label: `${numericId(g.resourceGid)}`,
       href: editorPath(g.resourceGid, g.locale),
       missing: g.missing,
@@ -108,18 +114,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 const percent = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 100);
 
-const ERRORS: Record<string, string> = {
-  JOBS_UNAVAILABLE: "Background processing isn't configured for this app yet.",
-  NO_LANGUAGES: "Add a language under Settings → Languages first.",
-  SHOP_AUTH: "Shopify rejected the app's access. Open the app again to re-authorise it.",
-  STALLED: "The last report stopped making progress. Run it again.",
-  PLAN_BULK: "Bulk translation is part of paid plans. See Plan to change your plan.",
-  PLAN_LANGUAGE: "Your plan doesn't include this language. See Plan to change your plan.",
-  SCAN_FAILED: "Shopify didn't answer reliably. Run the report again later.",
-};
+/** The explanation for an error code, or null for codes without one. */
+function errorMessage(i18n: I18n, code: string | null | undefined): string | null {
+  if (code === "SHOP_AUTH") return i18n.t("common.jobError.SHOP_AUTH");
+  const key = `coverage.error.${code ?? ""}`;
+  return code && hasMessage(key) ? i18n.t(key) : null;
+}
 
 export default function Coverage() {
   const data = useLoaderData<typeof loader>();
+  const i18n = useI18n();
+  const { t } = i18n;
   const runner = useFetcher<typeof action>();
   const fixer = useFetcher<typeof action>();
   const revalidator = useRevalidator();
@@ -136,21 +141,18 @@ export default function Coverage() {
   const actionError = [runner.data, fixer.data].find((d) => d && "error" in d) as { error: string } | undefined;
 
   return (
-    <s-page heading="Translation coverage">
+    <s-page heading={t("coverage.page.heading")}>
       <s-section>
         <s-stack direction="block" gap="base">
-          <s-paragraph>
-            The report checks every product and collection in each of your languages: what is translated, missing or
-            outdated, and how search engine listings look. It only reads from Shopify and doesn&apos;t use AI.
-          </s-paragraph>
+          <s-paragraph>{t("coverage.intro")}</s-paragraph>
           {actionError ? (
-            <s-banner tone="critical" heading="Couldn't start">
-              <s-paragraph>{ERRORS[actionError.error] ?? "Please reload the page and try again."}</s-paragraph>
+            <s-banner tone="critical" heading={t("coverage.startFailed.heading")}>
+              <s-paragraph>{errorMessage(i18n, actionError.error) ?? t("coverage.startFailed.fallback")}</s-paragraph>
             </s-banner>
           ) : null}
           {data.report?.status === "FAILED" ? (
-            <s-banner tone="warning" heading="The last report didn't finish">
-              <s-paragraph>{ERRORS[data.report.errorCode ?? ""] ?? "Run the report again."}</s-paragraph>
+            <s-banner tone="warning" heading={t("coverage.lastFailed.heading")}>
+              <s-paragraph>{errorMessage(i18n, data.report.errorCode) ?? t("coverage.lastFailed.fallback")}</s-paragraph>
             </s-banner>
           ) : null}
           <runner.Form method="post">
@@ -163,13 +165,20 @@ export default function Coverage() {
                 disabled={!data.jobsAvailable || active || data.targets.length === 0}
                 {...(runner.state !== "idle" ? { loading: true } : {})}
               >
-                {data.report ? "Run the report again" : "Run coverage report"}
+                {data.report ? t("coverage.run.again") : t("coverage.run.first")}
               </s-button>
               {data.report ? (
                 <s-text color="subdued">
                   {active
-                    ? `Scanning ${data.report.scanning ?? ""} (${data.report.progress.done} of ${data.report.progress.total} parts, ${data.report.resourcesScanned.toLocaleString()} items so far)`
-                    : `Last report: ${new Date(data.report.finishedAt ?? data.report.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`}
+                    ? t("coverage.run.scanning", {
+                        scanning: data.report.scanning
+                          ? `${kindLabel(i18n, data.report.scanning.type)} · ${data.report.scanning.language}`
+                          : "",
+                        done: data.report.progress.done,
+                        total: data.report.progress.total,
+                        items: data.report.resourcesScanned,
+                      })
+                    : t("coverage.run.last", { date: i18n.dateTime(data.report.finishedAt ?? data.report.createdAt) })}
                 </s-text>
               ) : null}
             </s-stack>
@@ -178,17 +187,17 @@ export default function Coverage() {
       </s-section>
 
       {data.rows.length ? (
-        <s-section heading="By language" padding="none">
+        <s-section heading={t("coverage.byLanguage.heading")} padding="none">
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">Language</s-table-header>
-              <s-table-header>Content</s-table-header>
-              <s-table-header format="numeric">Items</s-table-header>
-              <s-table-header format="numeric">Translated</s-table-header>
-              <s-table-header format="numeric">Outdated</s-table-header>
-              <s-table-header format="numeric">Missing</s-table-header>
-              <s-table-header format="numeric">SEO listings</s-table-header>
-              <s-table-header>Fix</s-table-header>
+              <s-table-header listSlot="primary">{t("common.language")}</s-table-header>
+              <s-table-header>{t("common.contentType")}</s-table-header>
+              <s-table-header format="numeric">{t("coverage.byLanguage.items")}</s-table-header>
+              <s-table-header format="numeric">{t("common.translationStatus.translated")}</s-table-header>
+              <s-table-header format="numeric">{t("common.translationStatus.outdated")}</s-table-header>
+              <s-table-header format="numeric">{t("coverage.byLanguage.missing")}</s-table-header>
+              <s-table-header format="numeric">{t("coverage.byLanguage.seo")}</s-table-header>
+              <s-table-header>{t("coverage.byLanguage.fix")}</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {data.rows.map((r, i) => {
@@ -199,19 +208,24 @@ export default function Coverage() {
                 return (
                   <s-table-row key={`${r.locale}|${r.resourceType}`}>
                     <s-table-cell>{r.localeName}</s-table-cell>
-                    <s-table-cell>{coverageTypeLabel(r.resourceType)}</s-table-cell>
-                    <s-table-cell>{r.resources.toLocaleString()}</s-table-cell>
+                    <s-table-cell>{kindLabel(i18n, r.resourceType)}</s-table-cell>
+                    <s-table-cell>{i18n.number(r.resources)}</s-table-cell>
                     <s-table-cell>
-                      {percent(c.translated, c.withSource)}% ({c.translated.toLocaleString()} fields)
+                      {t("coverage.byLanguage.fields", { percent: percent(c.translated, c.withSource), count: c.translated })}
                     </s-table-cell>
-                    <s-table-cell>{c.outdated.toLocaleString()}</s-table-cell>
-                    <s-table-cell>{c.missing.toLocaleString()}</s-table-cell>
+                    <s-table-cell>{i18n.number(c.outdated)}</s-table-cell>
+                    <s-table-cell>{i18n.number(c.missing)}</s-table-cell>
                     <s-table-cell>
                       {isImageCoverageType(r.resourceType)
                         ? "—"
                         : seo.withSource
-                          ? `${percent(seo.translated, seo.withSource)}% translated${r.seoIssues ? `, ${r.seoIssues} to check` : ""}`
-                          : "None set"}
+                          ? [
+                              t("coverage.byLanguage.seoTranslated", { percent: percent(seo.translated, seo.withSource) }),
+                              r.seoIssues ? t("coverage.byLanguage.seoToCheck", { count: r.seoIssues }) : null,
+                            ]
+                              .filter(Boolean)
+                              .join(", ")
+                          : t("coverage.byLanguage.seoNone")}
                     </s-table-cell>
                     <s-table-cell>
                       <s-stack direction="inline" gap="small">
@@ -222,7 +236,7 @@ export default function Coverage() {
                             <input type="hidden" name="locale" value={r.locale} />
                             <input type="hidden" name="resourceType" value={r.resourceType} />
                             <s-button type="submit" variant="tertiary" disabled={!data.canTranslate || !data.jobsAvailable}>
-                              Translate gaps
+                              {t("coverage.byLanguage.translateGaps")}
                             </s-button>
                           </fixer.Form>
                         ) : null}
@@ -234,7 +248,7 @@ export default function Coverage() {
                             <input type="hidden" name="resourceType" value={r.resourceType} />
                             <input type="hidden" name="fieldScope" value="SEO" />
                             <s-button type="submit" variant="tertiary" disabled={!data.canTranslate || !data.jobsAvailable}>
-                              SEO only
+                              {t("coverage.byLanguage.seoOnly")}
                             </s-button>
                           </fixer.Form>
                         ) : null}
@@ -249,56 +263,59 @@ export default function Coverage() {
       ) : null}
 
       {data.rows.length ? (
-        <s-section heading="Search engine listings">
+        <s-section heading={t("coverage.seo.heading")}>
           <s-stack direction="block" gap="small">
             {data.rows.map((r) =>
               r.seoTitlesMissingInSource > 0 ? (
                 <s-paragraph key={`m-${r.locale}-${r.resourceType}`}>
-                  {r.localeName}: {r.seoTitlesMissingInSource.toLocaleString()}{" "}
-                  {RESOURCE_KINDS[r.resourceType as keyof typeof RESOURCE_KINDS]?.plural ?? "items"} have no SEO title in
-                  the original language, so search engines see the regular title.
+                  {t("coverage.seo.noSourceTitle", {
+                    language: r.localeName,
+                    count: r.seoTitlesMissingInSource,
+                    kind: isResourceKind(r.resourceType) ? kindPlural(i18n, r.resourceType) : t("coverage.seo.items"),
+                  })}
                 </s-paragraph>
               ) : null,
             )}
             {Object.entries(data.duplicates).map(([locale, count]) =>
               count > 0 ? (
                 <s-paragraph key={`d-${locale}`}>
-                  {data.targets.find((t) => t.locale === locale)?.name ?? locale}: {count} items share an SEO title with
-                  another item. Unique titles help search engines tell pages apart.
+                  {t("coverage.seo.duplicates", {
+                    language: data.targets.find((target) => target.locale === locale)?.name ?? locale,
+                    count,
+                  })}
                 </s-paragraph>
               ) : null,
             )}
             {data.targets
-              .filter((t) => !t.published)
-              .map((t) => (
-                <s-paragraph key={`u-${t.locale}`}>
-                  {t.name} isn&apos;t published, so customers and search engines don&apos;t see these translations yet.
-                </s-paragraph>
+              .filter((target) => !target.published)
+              .map((target) => (
+                <s-paragraph key={`u-${target.locale}`}>{t("coverage.seo.unpublished", { language: target.name })}</s-paragraph>
               ))}
           </s-stack>
         </s-section>
       ) : null}
 
       {data.gaps.length ? (
-        <s-section heading="Items with the most gaps" padding="none">
+        <s-section heading={t("coverage.gaps.heading")} padding="none">
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">Item</s-table-header>
-              <s-table-header>Language</s-table-header>
-              <s-table-header format="numeric">Missing fields</s-table-header>
-              <s-table-header format="numeric">Outdated fields</s-table-header>
+              <s-table-header listSlot="primary">{t("coverage.gaps.item")}</s-table-header>
+              <s-table-header>{t("common.language")}</s-table-header>
+              <s-table-header format="numeric">{t("coverage.gaps.missing")}</s-table-header>
+              <s-table-header format="numeric">{t("coverage.gaps.outdated")}</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {data.gaps.map((g) => (
-                <s-table-row key={g.id}>
-                  <s-table-cell>
-                    {g.href ? <s-link href={g.href}>{`${g.kind} ${g.label}`}</s-link> : `${g.kind} ${g.label}`}
-                  </s-table-cell>
-                  <s-table-cell>{g.locale}</s-table-cell>
-                  <s-table-cell>{g.missing}</s-table-cell>
-                  <s-table-cell>{g.outdated}</s-table-cell>
-                </s-table-row>
-              ))}
+              {data.gaps.map((g) => {
+                const name = `${isResourceKind(g.kind) ? kindSingular(i18n, g.kind) : g.kind} ${g.label}`;
+                return (
+                  <s-table-row key={g.id}>
+                    <s-table-cell>{g.href ? <s-link href={g.href}>{name}</s-link> : name}</s-table-cell>
+                    <s-table-cell>{g.locale}</s-table-cell>
+                    <s-table-cell>{i18n.number(g.missing)}</s-table-cell>
+                    <s-table-cell>{i18n.number(g.outdated)}</s-table-cell>
+                  </s-table-row>
+                );
+              })}
             </s-table-body>
           </s-table>
         </s-section>

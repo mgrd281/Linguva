@@ -86,7 +86,7 @@ export async function resolveEditorContext(
 
   const locales = await fetchAndSyncShopLocales(admin, shop.id);
   const url = new URL(request.url);
-  const requested = url.searchParams.get("locale");
+  const requested = url.searchParams.get("lang");
   const target = locales.locales.find((l) => !l.primary && l.locale === requested);
   if (!target) throw new Response("Unknown language", { status: 404 });
 
@@ -176,7 +176,8 @@ export async function loadEditorData(ctx: EditorContext) {
   const caution = isContentType(ctx.kind) ? ((CONTENT_TYPES[ctx.kind] as { caution?: "legal" | "liquid" }).caution ?? null) : null;
   return {
     attached,
-    kind: { label: meta.label, singular: meta.singular, path: meta.path, plural: meta.plural },
+    // English names stay for the URL path; the page names the type by `type` in its language.
+    kind: { type: ctx.kind, label: meta.label, singular: meta.singular, path: meta.path, plural: meta.plural },
     shopDomain: ctx.shopDomain ?? "",
     title: resourceTitle(ctx.kind, resource.content),
     target,
@@ -219,10 +220,10 @@ export type EditorActionResult =
       /** Set when translation stopped early (drafts so far are kept). */
       stopped?: string;
     }
-  | { kind: "attached-saved"; outcomes: Array<{ ref: string; status: string; message?: string }> }
+  | { kind: "attached-saved"; outcomes: Array<{ ref: string; status: string; message?: string; code?: string }> }
   | { kind: "restored"; status: string }
   | { kind: "removed"; key: string; status: string }
-  | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string }> }
+  | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string; code?: string }> }
   | { kind: "consent" }
   | { kind: "error"; code: string; retryAfterSeconds?: number };
 
@@ -256,12 +257,13 @@ function planAllowsTarget(ctx: EditorContext) {
  */
 export function checkHandleEdits(resource: TranslatableResourceData, edits: TranslationEdit[], form: Pick<FormData, "get">) {
   const current = resource.translations.find((t) => t.key === "handle")?.value ?? "";
-  const refused: Array<{ key: string; status: "error"; message: string }> = [];
+  // `code` names the problem for the page (editor.handle.problem.*); `message` is the English text.
+  const refused: Array<{ key: string; status: "error"; message: string; code: string }> = [];
   const kept = edits.filter((edit) => {
     if (edit.key !== "handle") return true;
     const problem = validateHandle(edit.value);
     if (problem) {
-      refused.push({ key: "handle", status: "error", message: HANDLE_PROBLEM_MESSAGES[problem] });
+      refused.push({ key: "handle", status: "error", message: HANDLE_PROBLEM_MESSAGES[problem], code: problem });
       return false;
     }
     if (current && current !== edit.value && form.get("confirm-handle") !== "on") {
@@ -269,6 +271,7 @@ export function checkHandleEdits(resource: TranslatableResourceData, edits: Tran
         key: "handle",
         status: "error",
         message: "Confirm the URL change below: links to the old address in this language will stop working.",
+        code: "CONFIRM",
       });
       return false;
     }
@@ -397,10 +400,15 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
 
   if (intent === "save-attached") {
     const resources = await listEditorAttachments(admin, ctx.kind, resourceId, target.locale);
-    const outcomes: Array<{ ref: string; status: string; message?: string }> = [];
+    const outcomes: Array<{ ref: string; status: string; message?: string; code?: string }> = [];
     for (const { resource, edits, rejected } of collectAttachedEdits(resources, form)) {
       for (const key of rejected) {
-        outcomes.push({ ref: attachedRef(resource.resourceId, key), status: "error", message: "This rich text no longer matches the original's formatting. Translate it again with AI." });
+        outcomes.push({
+          ref: attachedRef(resource.resourceId, key),
+          status: "error",
+          message: "This rich text no longer matches the original's formatting. Translate it again with AI.",
+          code: "RICH_TEXT_CHANGED",
+        });
       }
       if (!edits.length) continue;
       const saved = await saveResourceTranslations({

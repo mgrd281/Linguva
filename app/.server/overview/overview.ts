@@ -16,16 +16,17 @@ import { getDailyUsage, getMonthlyUsage } from "../usage/usage-ledger";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { MAX_ENABLED_LOCALES } from "../../lib/locale-limits";
 import { usageLevel } from "../../lib/usage";
+import type { MessageRef } from "../../i18n/i18n";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
 export interface ChecklistStep {
   id: "language" | "consent" | "first-translation" | "review" | "publish-language";
-  label: string;
-  detail: string;
+  label: MessageRef;
+  detail: MessageRef;
   done: boolean;
   href: string;
-  action: string;
+  action: MessageRef;
   external?: boolean;
 }
 
@@ -54,44 +55,46 @@ export async function loadOverview(
   const checklist: ChecklistStep[] = [
     {
       id: "language",
-      label: "Add a language",
-      detail: "Choose the languages you sell in, in Shopify's language settings.",
+      label: { key: "overview.checklist.language.label" },
+      detail: { key: "overview.checklist.language.detail" },
       done: targets.length > 0,
       href: "shopify://admin/settings/languages",
-      action: "Open language settings",
+      action: { key: "overview.checklist.languageSettings" },
       external: true,
     },
     {
       id: "consent",
-      label: "Allow AI translation",
-      detail: "AI drafts are reviewed by you before anything is published.",
+      label: { key: "overview.checklist.consent.label" },
+      detail: { key: "overview.checklist.consent.detail" },
       done: consent,
       href: "/app/settings",
-      action: "Open settings",
+      action: { key: "overview.checklist.consent.action" },
     },
     {
       id: "first-translation",
-      label: "Publish your first translation",
-      detail: "Open a product, translate it with AI, check the result and publish.",
+      label: { key: "overview.checklist.firstTranslation.label" },
+      detail: { key: "overview.checklist.firstTranslation.detail" },
       done: published > 0,
-      href: firstTarget ? `/app/products?locale=${encodeURIComponent(firstTarget)}` : "/app/products",
-      action: "Translate products",
+      href: firstTarget ? `/app/products?lang=${encodeURIComponent(firstTarget)}` : "/app/products",
+      action: { key: "overview.checklist.firstTranslation.action" },
     },
     {
       id: "review",
-      label: pendingDrafts ? `Review ${pendingDrafts.toLocaleString()} translation${pendingDrafts === 1 ? "" : "s"}` : "Review bulk translations",
-      detail: "Bulk translations wait for your approval before customers see them.",
+      label: pendingDrafts
+        ? { key: "overview.checklist.review.labelCount", vars: { count: pendingDrafts } }
+        : { key: "overview.checklist.review.label" },
+      detail: { key: "overview.checklist.review.detail" },
       done: published > 0 && pendingDrafts === 0,
       href: "/app/review",
-      action: "Open Review",
+      action: { key: "overview.checklist.review.action" },
     },
     {
       id: "publish-language",
-      label: "Show a language to customers",
-      detail: "Publish the language in Shopify when its translations are ready.",
+      label: { key: "overview.checklist.publishLanguage.label" },
+      detail: { key: "overview.checklist.publishLanguage.detail" },
       done: targets.some((l) => l.published),
       href: "shopify://admin/settings/languages",
-      action: "Open language settings",
+      action: { key: "overview.checklist.languageSettings" },
       external: true,
     },
   ];

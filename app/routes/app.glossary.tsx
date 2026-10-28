@@ -12,18 +12,27 @@ import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import {
   deleteTerm,
   GlossaryLimitError,
+  issueMessages,
   listTerms,
+  MAX_TERMS_PER_SHOP,
   parseGlossaryCsv,
   upsertTerms,
 } from "../.server/glossary/glossary";
+import type { I18n, MessageRef } from "../i18n/i18n";
+import { hasMessage } from "../i18n/labels";
+import { useI18n } from "../i18n/react";
 
 const MAX_IMPORT_BYTES = 1024 * 1024;
 
-const RULE_LABELS: Record<string, string> = {
-  DO_NOT_TRANSLATE: "Never translate",
-  PREFERRED: "Always translate as",
-  FORBIDDEN: "Never use",
-};
+function ruleLabel(i18n: I18n, rule: string): string {
+  const key = `glossary.rule.${rule}`;
+  return hasMessage(key) ? i18n.t(key) : rule;
+}
+
+/** A row's (or the form's) problems, joined like "translation: …; targetLocale: …". */
+function problems(i18n: I18n, messages: MessageRef[]): string {
+  return messages.map(i18n.msg).join("; ");
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -45,17 +54,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 type Result =
   | { kind: "added" }
   | { kind: "deleted" }
-  | { kind: "imported"; count: number; errors: Array<{ line: number; message: string }> }
-  | { kind: "error"; message: string };
+  | { kind: "imported"; count: number; errors: Array<{ line: number; messages: MessageRef[] }> }
+  | { kind: "error"; messages: MessageRef[] };
+
+const failure = (ref: MessageRef): Result => ({ kind: "error", messages: [ref] });
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Result> => {
   const { admin, shop } = await requireShop(request);
   if (!(await shopBilling(admin, shop)).entitlements.glossary) {
-    return { kind: "error", message: "The glossary is part of the Pro and Business plans. See Plan to change your plan." };
+    return failure({ key: "glossary.error.notOnPlan" });
   }
   // Refuse oversized uploads before the body is read into memory.
   const length = Number(request.headers.get("content-length") ?? "0");
-  if (length > MAX_IMPORT_BYTES + 64 * 1024) return { kind: "error", message: "The upload is larger than 1 MB." };
+  if (length > MAX_IMPORT_BYTES + 64 * 1024) return failure({ key: "glossary.error.uploadTooLarge" });
   const form = await request.formData();
   const intent = form.get("intent");
 
@@ -82,10 +93,10 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Result> =
       const pasted = form.get("csv");
       let text = typeof pasted === "string" ? pasted : "";
       if (file instanceof File && file.size > 0) {
-        if (file.size > MAX_IMPORT_BYTES) return { kind: "error", message: "The file is larger than 1 MB." };
+        if (file.size > MAX_IMPORT_BYTES) return failure({ key: "glossary.error.fileTooLarge" });
         text = await file.text();
       }
-      if (text.length > MAX_IMPORT_BYTES) return { kind: "error", message: "The CSV is larger than 1 MB." };
+      if (text.length > MAX_IMPORT_BYTES) return failure({ key: "glossary.error.csvTooLarge" });
       const parsed = parseGlossaryCsv(text);
       // Nothing is imported unless every row is valid.
       if (parsed.errors.length) return { kind: "imported", count: 0, errors: parsed.errors.slice(0, 20) };
@@ -94,12 +105,12 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Result> =
     }
   } catch (error) {
     if (error instanceof ZodError) {
-      return { kind: "error", message: error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+      return { kind: "error", messages: issueMessages(error.issues) };
     }
-    if (error instanceof GlossaryLimitError) return { kind: "error", message: error.message };
+    if (error instanceof GlossaryLimitError) return failure({ key: "glossary.error.limit", vars: { max: MAX_TERMS_PER_SHOP } });
     throw error;
   }
-  return { kind: "error", message: "Unknown action" };
+  return failure({ key: "glossary.error.unknownAction" });
 };
 
 // fetch() inside the embedded app carries the session token (App Bridge),
@@ -117,6 +128,8 @@ async function downloadCsv() {
 
 export default function GlossaryPage() {
   const data = useLoaderData<typeof loader>();
+  const i18n = useI18n();
+  const { t } = i18n;
   const { terms } = data;
   const languageNames = Object.fromEntries(data.languages.map((l) => [l.locale, l.name]));
   const addFetcher = useFetcher<typeof action>();
@@ -126,26 +139,26 @@ export default function GlossaryPage() {
   const importResult = importFetcher.data;
 
   return (
-    <s-page heading="Glossary">
+    <s-page heading={t("common.nav.glossary")}>
       <s-button slot="primary-action" onClick={downloadCsv}>
-        Export CSV
+        {t("glossary.exportCsv")}
       </s-button>
 
-      <s-section heading="Add a term">
+      <s-section heading={t("glossary.add.heading")}>
         <addFetcher.Form method="post">
           <input type="hidden" name="intent" value="add" />
           <s-stack direction="block" gap="base">
             <s-query-container>
               <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr 1fr, 1fr" gap="base">
-                <s-select name="rule" label="Rule">
-                  <s-option value="DO_NOT_TRANSLATE">Never translate (brands, product names, SKUs)</s-option>
-                  <s-option value="PREFERRED">Always translate as…</s-option>
-                  <s-option value="FORBIDDEN">Never use this wording in translations</s-option>
+                <s-select name="rule" label={t("glossary.field.rule")}>
+                  <s-option value="DO_NOT_TRANSLATE">{t("glossary.option.DO_NOT_TRANSLATE")}</s-option>
+                  <s-option value="PREFERRED">{t("glossary.option.PREFERRED")}</s-option>
+                  <s-option value="FORBIDDEN">{t("glossary.option.FORBIDDEN")}</s-option>
                 </s-select>
-                <s-text-field name="term" label="Term" required />
-                <s-text-field name="translation" label="Translation" details="Only for “Always translate as”." />
-                <s-select name="targetLocale" label="Language">
-                  <s-option value="">All languages</s-option>
+                <s-text-field name="term" label={t("glossary.field.term")} required />
+                <s-text-field name="translation" label={t("glossary.field.translation")} details={t("glossary.field.translationDetails")} />
+                <s-select name="targetLocale" label={t("common.language")}>
+                  <s-option value="">{t("common.allLanguages")}</s-option>
                   {data.languages.map((l) => (
                     <s-option key={l.locale} value={l.locale}>
                       {l.name}
@@ -154,57 +167,59 @@ export default function GlossaryPage() {
                 </s-select>
                 <s-text-field
                   name="market"
-                  label="Only in one market (optional)"
-                  details="Leave empty for all markets. Otherwise the market number shown on the Markets page."
+                  label={t("glossary.field.market")}
+                  details={t("glossary.field.marketDetails")}
                 />
-                <s-checkbox name="caseSensitive" label="Match upper and lower case exactly" />
+                <s-checkbox name="caseSensitive" label={t("glossary.field.caseSensitive")} />
               </s-grid>
             </s-query-container>
             <s-button type="submit" variant="primary" {...(addFetcher.state !== "idle" ? { loading: true } : {})}>
-              Add term
+              {t("glossary.add.submit")}
             </s-button>
           </s-stack>
         </addFetcher.Form>
         {addResult?.kind === "error" ? (
-          <s-banner tone="critical" heading="Term not added">
-            <s-paragraph>{addResult.message}</s-paragraph>
+          <s-banner tone="critical" heading={t("glossary.add.failed")}>
+            <s-paragraph>{problems(i18n, addResult.messages)}</s-paragraph>
           </s-banner>
         ) : null}
       </s-section>
 
-      <s-section heading={`Terms (${terms.length})`} padding="none">
+      <s-section heading={t("glossary.terms.heading", { count: terms.length })} padding="none">
         {terms.length === 0 ? (
           <s-box padding="base">
-            <s-paragraph>No terms yet. Add your brand and product names so they are never translated.</s-paragraph>
+            <s-paragraph>{t("glossary.terms.empty")}</s-paragraph>
           </s-box>
         ) : (
           <s-table>
             <s-table-header-row>
-              <s-table-header listSlot="primary">Term</s-table-header>
-              <s-table-header>Rule</s-table-header>
-              <s-table-header>Translation</s-table-header>
-              <s-table-header>Language</s-table-header>
-              <s-table-header>Market</s-table-header>
-              <s-table-header>Actions</s-table-header>
+              <s-table-header listSlot="primary">{t("glossary.field.term")}</s-table-header>
+              <s-table-header>{t("glossary.field.rule")}</s-table-header>
+              <s-table-header>{t("glossary.field.translation")}</s-table-header>
+              <s-table-header>{t("common.language")}</s-table-header>
+              <s-table-header>{t("glossary.terms.market")}</s-table-header>
+              <s-table-header>{t("glossary.terms.actions")}</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {terms.map((t) => (
-                <s-table-row key={t.id}>
+              {terms.map((term) => (
+                <s-table-row key={term.id}>
                   <s-table-cell>
-                    {t.term}
-                    {t.caseSensitive ? " (Aa)" : ""}
+                    {term.term}
+                    {term.caseSensitive ? " (Aa)" : ""}
                   </s-table-cell>
-                  <s-table-cell>{RULE_LABELS[t.rule]}</s-table-cell>
-                  <s-table-cell>{t.translation ?? "—"}</s-table-cell>
-                  <s-table-cell>{t.targetLocale ? (languageNames[t.targetLocale] ?? t.targetLocale) : "All"}</s-table-cell>
-                  <s-table-cell>{t.market ? t.market.replace("gid://shopify/Market/", "#") : "All"}</s-table-cell>
+                  <s-table-cell>{ruleLabel(i18n, term.rule)}</s-table-cell>
+                  <s-table-cell>{term.translation ?? "—"}</s-table-cell>
+                  <s-table-cell>
+                    {term.targetLocale ? (languageNames[term.targetLocale] ?? term.targetLocale) : t("common.state.all")}
+                  </s-table-cell>
+                  <s-table-cell>{term.market ? term.market.replace("gid://shopify/Market/", "#") : t("common.state.all")}</s-table-cell>
                   <s-table-cell>
                     <s-button
                       variant="tertiary"
                       tone="critical"
-                      onClick={() => deleteFetcher.submit({ intent: "delete", termId: t.id }, { method: "post" })}
+                      onClick={() => deleteFetcher.submit({ intent: "delete", termId: term.id }, { method: "post" })}
                     >
-                      Delete
+                      {t("common.action.delete")}
                     </s-button>
                   </s-table-cell>
                 </s-table-row>
@@ -214,43 +229,39 @@ export default function GlossaryPage() {
         )}
       </s-section>
 
-      <s-section heading="Import from CSV">
+      <s-section heading={t("glossary.import.heading")}>
         <importFetcher.Form method="post" encType="multipart/form-data">
           <input type="hidden" name="intent" value="import" />
           <s-stack direction="block" gap="base">
-            <s-paragraph>
-              Columns: rule, term, translation, target_locale, market,
-              case_sensitive, notes. Rules: DO_NOT_TRANSLATE, PREFERRED,
-              FORBIDDEN. Nothing is imported if any row is invalid.
-            </s-paragraph>
-            <input type="file" name="file" accept=".csv,text/csv" aria-label="CSV file" />
-            <s-text-area name="csv" label="…or paste CSV" rows={4} />
-            <s-checkbox name="replaceAll" label="Replace all existing terms" />
+            <s-paragraph>{t("glossary.import.columns")}</s-paragraph>
+            <input type="file" name="file" accept=".csv,text/csv" aria-label={t("glossary.import.file")} />
+            <s-text-area name="csv" label={t("glossary.import.paste")} rows={4} />
+            <s-checkbox name="replaceAll" label={t("glossary.import.replaceAll")} />
             <s-button type="submit" {...(importFetcher.state !== "idle" ? { loading: true } : {})}>
-              Import
+              {t("glossary.import.submit")}
             </s-button>
           </s-stack>
         </importFetcher.Form>
         {importResult?.kind === "imported" ? (
           importResult.errors.length ? (
-            <s-banner tone="critical" heading="Import rejected">
+            <s-banner tone="critical" heading={t("glossary.import.rejected")}>
               <s-unordered-list>
                 {importResult.errors.map((e) => (
                   <s-list-item key={e.line}>
-                    Line {e.line}: {e.message}
+                    {t("glossary.import.line", { line: e.line, message: problems(i18n, e.messages) })}
                   </s-list-item>
                 ))}
               </s-unordered-list>
             </s-banner>
           ) : (
-            <s-banner tone="success" heading="Import complete">
-              <s-paragraph>{importResult.count} term(s) imported.</s-paragraph>
+            <s-banner tone="success" heading={t("glossary.import.complete")}>
+              <s-paragraph>{t("glossary.import.count", { count: importResult.count })}</s-paragraph>
             </s-banner>
           )
         ) : null}
         {importResult?.kind === "error" ? (
-          <s-banner tone="critical" heading="Import failed">
-            <s-paragraph>{importResult.message}</s-paragraph>
+          <s-banner tone="critical" heading={t("glossary.import.failed")}>
+            <s-paragraph>{problems(i18n, importResult.messages)}</s-paragraph>
           </s-banner>
         ) : null}
       </s-section>

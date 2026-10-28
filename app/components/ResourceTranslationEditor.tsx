@@ -10,35 +10,38 @@ import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
 import { HtmlPreview } from "./HtmlPreview";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
-import { HANDLE_PROBLEM_MESSAGES, suggestHandle, validateHandle } from "../lib/handles";
-import { issueLabel } from "../lib/issue-labels";
+import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
+import { useI18n } from "../i18n/react";
+import type { I18n } from "../i18n/i18n";
+import { fieldName, hasMessage, issueName, kindLabel, kindSingular } from "../i18n/labels";
 
 type EditorLoader = () => ReturnType<typeof loadEditorData>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
 
-const ERROR_MESSAGES: Record<string, string> = {
-  AI_NOT_CONFIGURED: "AI translation isn't configured for this app yet.",
-  CONSENT_REQUIRED: "Allow AI processing below before translating with AI.",
-  QUOTA_EXCEEDED: "This month's AI translation allowance is used up.",
-  DAILY_LIMIT: "Today's AI translation allowance is used up. It resets at midnight UTC.",
-  PLATFORM_LIMIT: "AI translation is paused for today because of high demand. Please try again tomorrow.",
-  REQUEST_TOO_LARGE: "This is too much text for one request. Translate fewer fields at a time, or use bulk translation.",
-  PLAN_LANGUAGE: "Your plan doesn't include AI translation into this language. Change your plan under Plan, or translate by hand.",
-  RATE_LIMITED_USER: "You're translating very quickly. Please wait a moment and try again.",
-  RATE_LIMITED_SHOP: "Your team is sending many AI requests right now. Please wait a moment and try again.",
-  PROVIDER_RETRYABLE: "The translation service is busy. Please try again in a moment.",
-  PROVIDER_QUOTA: "The translation service quota is exhausted. Please contact support.",
-  PROVIDER_AUTH: "The translation service rejected our credentials. Please contact support.",
-  PROVIDER_INVALID: "The translation service doesn't support this language pair.",
-};
+/** Text for an AI or memory error code (editor.aiError.*). */
+function aiErrorMessage(i18n: I18n, code: string) {
+  const key = `editor.aiError.${code}`;
+  return hasMessage(key) ? i18n.t(key) : i18n.t("editor.aiError.generic");
+}
 
-const REJECTION_MESSAGES: Record<string, string> = {
-  VALIDATION_FAILED: "The AI result changed numbers or used forbidden wording, so it was discarded.",
-  MISSING_CODE: "The AI result lost part of the formatting, so it was discarded.",
-};
+/** Text for why an AI result was discarded (editor.rejection.*). */
+function rejectionMessage(i18n: I18n, reason: string) {
+  const key = `editor.rejection.${reason}`;
+  return hasMessage(key) ? i18n.t(key) : i18n.t("editor.field.discarded");
+}
+
+/** Text for a field that wasn't saved: a known code in the language, else the server's message. */
+function saveErrorMessage(i18n: I18n, outcome: { message?: string; code?: string }) {
+  const key = `editor.handle.problem.${outcome.code ?? ""}`;
+  if (outcome.code && hasMessage(key)) return i18n.t(key, { max: MAX_HANDLE_LENGTH });
+  return outcome.message ?? i18n.t("editor.field.notSaved");
+}
 
 export function ResourceTranslationEditor() {
   const data = useLoaderData<EditorLoader>();
+  const i18n = useI18n();
+  const { t } = i18n;
+  const singular = kindSingular(i18n, data.kind.type);
   const aiFetcher = useFetcher<EditorAction>();
   const saveFetcher = useFetcher<EditorAction>();
   const consentFetcher = useFetcher<EditorAction>();
@@ -121,7 +124,7 @@ export function ResourceTranslationEditor() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [unpublished]);
   const pageHref = (page: number) => {
-    const params = new URLSearchParams({ locale: data.target.locale, page: String(page) });
+    const params = new URLSearchParams({ lang: data.target.locale, page: String(page) });
     if (data.paging?.query) params.set("q", data.paging.query);
     return `?${params.toString()}`;
   };
@@ -129,59 +132,58 @@ export function ResourceTranslationEditor() {
 
   return (
     <s-page heading={data.title}>
-      <s-link slot="breadcrumb-actions" href={`${data.kind.path}?locale=${encodeURIComponent(data.target.locale)}`}>
-        {data.kind.label}
+      <s-link slot="breadcrumb-actions" href={`${data.kind.path}?lang=${encodeURIComponent(data.target.locale)}`}>
+        {kindLabel(i18n, data.kind.type)}
       </s-link>
 
       {blocker.state === "blocked" ? (
-        <s-banner tone="warning" heading="Leave without publishing?">
-          <s-paragraph>Your changes to this translation aren&apos;t published yet. They will be lost if you leave.</s-paragraph>
+        <s-banner tone="warning" heading={t("editor.leave.heading")}>
+          <s-paragraph>{t("editor.leave.body")}</s-paragraph>
           <s-stack direction="inline" gap="base">
             <s-button id="editor-stay" variant="primary" onClick={() => blocker.reset()}>
-              Stay on this page
+              {t("editor.leave.stay")}
             </s-button>
             <s-button tone="critical" onClick={() => blocker.proceed()}>
-              Leave without publishing
+              {t("editor.leave.leave")}
             </s-button>
           </s-stack>
         </s-banner>
       ) : null}
 
       {data.ai.available && !data.ai.consent ? (
-        <s-banner tone="info" heading="Allow AI translation">
-          <s-paragraph>
-            To translate with AI, the {data.kind.singular} text you choose is sent to our
-            translation provider (DeepL SE, Germany) for processing. No
-            customer data is sent. You can review every result before it is
-            published.
-          </s-paragraph>
+        <s-banner tone="info" heading={t("editor.consent.heading")}>
+          <s-paragraph>{t("editor.consent.body", { singular })}</s-paragraph>
           <consentFetcher.Form method="post">
             <input type="hidden" name="intent" value="grant-consent" />
             <s-button type="submit" {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
-              Allow AI processing
+              {t("editor.consent.allow")}
             </s-button>
           </consentFetcher.Form>
         </s-banner>
       ) : null}
 
       {removed ? (
-        <s-banner tone={removed.status === "removed" ? "success" : "warning"} heading={removed.status === "removed" ? "Translation removed" : "Couldn't remove the translation"}>
+        <s-banner
+          tone={removed.status === "removed" ? "success" : "warning"}
+          heading={removed.status === "removed" ? t("editor.removed.heading") : t("editor.removed.failedHeading")}
+        >
           <s-paragraph>
-            {removed.status === "removed"
-              ? "Customers now see the original text for this field. The removed version is kept in the history."
-              : "Please reload the page and try again."}
+            {removed.status === "removed" ? t("editor.removed.body") : t("editor.reloadAndRetry")}
           </s-paragraph>
         </s-banner>
       ) : null}
 
       {restored ? (
-        <s-banner tone={restored === "restored" ? "success" : "warning"} heading={restored === "restored" ? "Version restored" : "Couldn't restore this version"}>
+        <s-banner
+          tone={restored === "restored" ? "success" : "warning"}
+          heading={restored === "restored" ? t("editor.restored.heading") : t("editor.restored.failedHeading")}
+        >
           <s-paragraph>
             {restored === "restored"
-              ? "The earlier translation is published again."
+              ? t("editor.restored.body")
               : restored === "source_changed"
-                ? "The source text has changed since that version, so Shopify won't accept it."
-                : "Please reload the page and try again."}
+                ? t("editor.restored.sourceChanged")
+                : t("editor.reloadAndRetry")}
           </s-paragraph>
         </s-banner>
       ) : null}
@@ -189,12 +191,12 @@ export function ResourceTranslationEditor() {
       {actionError ? (
         <s-banner
           tone={actionError.code.startsWith("RATE_LIMITED") ? "warning" : "critical"}
-          heading={filledFrom === "memory" ? "Memory suggestions failed" : "AI translation failed"}
+          heading={filledFrom === "memory" ? t("editor.aiError.memoryHeading") : t("editor.aiError.heading")}
         >
           <s-paragraph>
-            {ERROR_MESSAGES[actionError.code] ?? "Something went wrong."}
+            {aiErrorMessage(i18n, actionError.code)}
             {"retryAfterSeconds" in actionError && actionError.retryAfterSeconds
-              ? ` Try again in ${actionError.retryAfterSeconds} s.`
+              ? ` ${t("editor.aiError.retryAfter", { seconds: Number(actionError.retryAfterSeconds) })}`
               : ""}
           </s-paragraph>
         </s-banner>
@@ -202,43 +204,32 @@ export function ResourceTranslationEditor() {
 
       {saved ? (
         saved.every((o) => o.status === "saved") ? (
-          <s-banner tone="success" heading={saved.length ? "Translations published" : "Nothing to save"}>
+          <s-banner tone="success" heading={saved.length ? t("editor.saved.heading") : t("editor.saved.nothingHeading")}>
             <s-paragraph>
-              {saved.length
-                ? `${saved.length} field${saved.length === 1 ? "" : "s"} saved to Shopify and verified.`
-                : "No fields were changed."}
+              {saved.length ? t("editor.saved.body", { count: saved.length }) : t("editor.saved.nothingBody")}
             </s-paragraph>
           </s-banner>
         ) : (
-          <s-banner tone="warning" heading="Some fields weren't saved">
-            <s-paragraph>
-              Fields marked below need attention. If the source text changed
-              in Shopify, reload this page and translate again.
-            </s-paragraph>
+          <s-banner tone="warning" heading={t("editor.saved.partialHeading")}>
+            <s-paragraph>{t("editor.saved.partialBody")}</s-paragraph>
           </s-banner>
         )
       ) : null}
 
       {data.caution === "legal" ? (
-        <s-banner tone="warning" heading="Legal text">
-          <s-paragraph>
-            Policies are legal documents. Have every translation checked by someone qualified before you publish it.
-            AI results are drafts and are never published on their own.
-          </s-paragraph>
+        <s-banner tone="warning" heading={t("editor.caution.legalHeading")}>
+          <s-paragraph>{t("editor.caution.legalBody")}</s-paragraph>
         </s-banner>
       ) : null}
       {data.caution === "liquid" ? (
-        <s-banner tone="warning" heading="Template with Liquid code">
-          <s-paragraph>
-            Only the visible text is translated; Liquid tags and variables are kept exactly as in the original. Send
-            yourself a test notification after publishing.
-          </s-paragraph>
+        <s-banner tone="warning" heading={t("editor.caution.liquidHeading")}>
+          <s-paragraph>{t("editor.caution.liquidBody")}</s-paragraph>
         </s-banner>
       ) : null}
 
       {data.target.rtl ? (
-        <s-banner tone="info" heading="Right-to-left language">
-          <s-paragraph>Check the storefront layout after publishing.</s-paragraph>
+        <s-banner tone="info" heading={t("editor.rtl.heading")}>
+          <s-paragraph>{t("editor.rtl.body")}</s-paragraph>
         </s-banner>
       ) : null}
 
@@ -255,7 +246,7 @@ export function ResourceTranslationEditor() {
               disabled={!data.ai.available || !data.ai.consent || machineKeys.length === 0}
               {...(translating ? { loading: true } : {})}
             >
-              Translate with AI
+              {t("editor.toolbar.translateAi")}
             </s-button>
           </aiFetcher.Form>
           {seoMachineKeys.length ? (
@@ -265,53 +256,68 @@ export function ResourceTranslationEditor() {
                 <input key={k} type="hidden" name="key" value={k} />
               ))}
               <s-button type="submit" disabled={!data.ai.available || !data.ai.consent}>
-                Translate SEO fields only
+                {t("editor.toolbar.translateSeo")}
               </s-button>
             </aiFetcher.Form>
           ) : null}
           <memoryFetcher.Form method="post" onSubmit={() => setFilledFrom("memory")}>
             <input type="hidden" name="intent" value="memory-suggest" />
             <s-button type="submit" {...(memoryFetcher.state !== "idle" ? { loading: true } : {})}>
-              Fill from memory
+              {t("editor.toolbar.fillMemory")}
             </s-button>
           </memoryFetcher.Form>
           <s-text color="subdued">
             {data.ai.available
               ? remaining === Math.max(0, data.ai.limit - data.ai.used)
-                ? `${remaining.toLocaleString("en-US")} of ${data.ai.limit.toLocaleString("en-US")} AI characters left this month`
-                : `${remaining.toLocaleString("en-US")} AI characters left today (${Math.max(0, data.ai.limit - data.ai.used).toLocaleString("en-US")} of ${data.ai.limit.toLocaleString("en-US")} this month)`
-              : "AI translation isn't configured"}
+                ? t("editor.toolbar.leftThisMonth", { remaining, limit: data.ai.limit })
+                : t("editor.toolbar.leftToday", {
+                    remaining,
+                    monthRemaining: Math.max(0, data.ai.limit - data.ai.used),
+                    limit: data.ai.limit,
+                  })
+              : t("editor.toolbar.notConfigured")}
           </s-text>
         </s-stack>
         {ai ? (
           <s-paragraph>
             {ai.provider === "memory"
               ? Object.keys(ai.drafts).length
-                ? "Similar translations from your memory are filled in below. Check them carefully, then publish."
-                : "No similar translations found in your memory."
-              : `AI drafts are filled in below${ai.memoryHits ? ` (${ai.memoryHits} segment${ai.memoryHits === 1 ? "" : "s"} reused from memory at no cost)` : ""}. Review them, then publish.`}
+                ? t("editor.fill.memory")
+                : t("editor.fill.memoryNone")
+              : ai.memoryHits
+                ? t("editor.fill.aiWithMemory", { count: ai.memoryHits })
+                : t("editor.fill.ai")}
           </s-paragraph>
         ) : null}
       </s-section>
 
       {data.paging ? (
-        <s-section heading={`${data.paging.total.toLocaleString()} texts`}>
+        <s-section heading={t("editor.paging.texts", { count: data.paging.total })}>
           <s-stack direction="block" gap="small">
             <Form method="get">
-              <input type="hidden" name="locale" value={data.target.locale} />
+              <input type="hidden" name="lang" value={data.target.locale} />
               <s-stack direction="inline" gap="small" alignItems="end">
-                <s-search-field name="q" label="Find a text" placeholder="Key, original or translation" value={data.paging.query} />
-                <s-button type="submit">Search</s-button>
+                <s-search-field
+                  name="q"
+                  label={t("editor.paging.findLabel")}
+                  placeholder={t("editor.paging.findPlaceholder")}
+                  value={data.paging.query}
+                />
+                <s-button type="submit">{t("common.action.search")}</s-button>
               </s-stack>
             </Form>
             <s-text color="subdued">
               {data.paging.matching === 0
-                ? "No texts match your search."
-                : `Showing ${((data.paging.page - 1) * data.paging.pageSize + 1).toLocaleString()}–${Math.min(data.paging.page * data.paging.pageSize, data.paging.matching).toLocaleString()} of ${data.paging.matching.toLocaleString()}${data.paging.query ? " matching" : ""}. Publish each page before moving on.`}
+                ? t("editor.paging.noMatch")
+                : t(data.paging.query ? "editor.paging.showingMatching" : "editor.paging.showing", {
+                    from: (data.paging.page - 1) * data.paging.pageSize + 1,
+                    to: Math.min(data.paging.page * data.paging.pageSize, data.paging.matching),
+                    total: data.paging.matching,
+                  })}
             </s-text>
             <s-stack direction="inline" gap="small">
-              {data.paging.page > 1 ? <s-button href={pageHref(data.paging.page - 1)}>Previous</s-button> : null}
-              {data.paging.page < data.paging.pages ? <s-button href={pageHref(data.paging.page + 1)}>Next</s-button> : null}
+              {data.paging.page > 1 ? <s-button href={pageHref(data.paging.page - 1)}>{t("common.action.previous")}</s-button> : null}
+              {data.paging.page < data.paging.pages ? <s-button href={pageHref(data.paging.page + 1)}>{t("common.action.next")}</s-button> : null}
             </s-stack>
           </s-stack>
         </s-section>
@@ -322,11 +328,9 @@ export function ResourceTranslationEditor() {
         {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
         {data.fields.filter((f) => !data.seoPreview || !isSeoKey(f.key)).map((field) => renderField(field))}
         {data.seoPreview ? (
-          <s-section heading="Search engine listing">
+          <s-section heading={t("editor.seo.heading")}>
             <s-stack direction="block" gap="base">
-              <s-paragraph>
-                How this {data.kind.singular} may appear in search results in {data.target.name}.
-              </s-paragraph>
+              <s-paragraph>{t("editor.seo.intro", { singular, language: data.target.name })}</s-paragraph>
               <SeoPreview
                 value={currentValue}
                 source={(k) => fieldByKey.get(k)?.source ?? ""}
@@ -336,10 +340,7 @@ export function ResourceTranslationEditor() {
                 pathSegment={data.kind.plural}
               />
               {seoFields.length === 0 ? (
-                <s-paragraph>
-                  This {data.kind.singular} has no SEO title or description of its own. Add them in Shopify to
-                  control search results per language.
-                </s-paragraph>
+                <s-paragraph>{t("editor.seo.noFields", { singular })}</s-paragraph>
               ) : null}
             </s-stack>
           </s-section>
@@ -347,12 +348,12 @@ export function ResourceTranslationEditor() {
         {data.seoPreview ? seoFields.map((field) => renderField(field)) : null}
         <s-stack direction="inline" gap="base">
           <s-button type="submit" variant="primary" {...(saving ? { loading: true } : {})}>
-            Publish translations
+            {t("editor.publish")}
           </s-button>
         </s-stack>
       </saveFetcher.Form>
 
-      <AttachedResourcesPanel data={data} errorMessages={ERROR_MESSAGES} />
+      <AttachedResourcesPanel data={data} errorMessage={(code) => aiErrorMessage(i18n, code)} />
     </s-page>
   );
 
@@ -364,17 +365,18 @@ export function ResourceTranslationEditor() {
     const warnings = ai?.warnings[field.key];
     const showCode = codeView.has(field.key);
     const multiline = field.type === "HTML" || field.type === "MULTI_LINE_TEXT_FIELD" || field.source.length > 120;
+    const label = fieldName(i18n, field.key);
     const error =
       status?.status === "conflict"
-        ? "The source text changed in Shopify. Reload and translate again."
+        ? t("editor.field.conflict")
         : status?.status === "error"
-          ? status.message ?? "Not saved."
+          ? saveErrorMessage(i18n, status)
           : rejected
-            ? REJECTION_MESSAGES[rejected] ?? "The AI result was discarded."
+            ? rejectionMessage(i18n, rejected)
             : undefined;
 
     return (
-      <s-section key={field.key} heading={field.label}>
+      <s-section key={field.key} heading={label}>
         <input type="hidden" name={`digest:${field.key}`} value={field.digest} />
         {draft !== undefined ? <input type="hidden" name={`origin:${field.key}`} value="AI" /> : null}
         <s-stack direction="block" gap="base">
@@ -382,15 +384,19 @@ export function ResourceTranslationEditor() {
             <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
               <s-stack direction="block" gap="small">
                 <s-stack direction="inline" gap="small" alignItems="center" justifyContent="space-between">
-                  <s-text color="subdued">{data.sourceName} (original)</s-text>
+                  <s-text color="subdued">{t("editor.field.original", { language: data.sourceName })}</s-text>
                   {field.sourcePreview !== null ? (
                     <s-button variant="tertiary" onClick={() => toggleCode(field.key)}>
-                      {showCode ? "Show preview" : "Show HTML"}
+                      {showCode ? t("editor.field.showPreview") : t("editor.field.showHtml")}
                     </s-button>
                   ) : null}
                 </s-stack>
                 {field.sourcePreview !== null && !showCode ? (
-                  <HtmlPreview html={field.sourcePreview} title={`${field.label}, ${data.sourceName} original`} lang={data.sourceLocale} />
+                  <HtmlPreview
+                    html={field.sourcePreview}
+                    title={t("editor.field.originalFrame", { field: label, language: data.sourceName })}
+                    lang={data.sourceLocale}
+                  />
                 ) : (
                   <s-box padding="base" background="subdued" borderRadius="base">
                     <s-paragraph>{field.source}</s-paragraph>
@@ -407,7 +413,7 @@ export function ResourceTranslationEditor() {
                       value={value}
                       rows={field.type === "HTML" ? 8 : 3}
                       {...(error ? { error } : {})}
-                      {...(field.type === "HTML" ? { details: "HTML. Formatting must match the source." } : {})}
+                      {...(field.type === "HTML" ? { details: t("editor.field.htmlDetails") } : {})}
                     />
                   ) : (
                     <s-text-field
@@ -416,14 +422,14 @@ export function ResourceTranslationEditor() {
                       label={data.target.name}
                       value={field.key === "handle" ? currentValue("handle") : value}
                       {...(error ? { error } : {})}
-                      {...(field.key === "handle" ? { details: "Changing a URL handle changes the page address for this language." } : {})}
+                      {...(field.key === "handle" ? { details: t("editor.field.handleDetails") } : {})}
                     />
                   )}
                 </div>
                 {field.sourcePreview !== null && !showCode ? (
                   <HtmlPreview
                     html={currentValue(field.key)}
-                    title={`${field.label}, ${data.target.name} preview`}
+                    title={t("editor.field.previewFrame", { field: label, language: data.target.name })}
                     lang={data.target.locale}
                     dir={data.target.rtl ? "rtl" : "auto"}
                   />
@@ -438,15 +444,17 @@ export function ResourceTranslationEditor() {
                         if (suggestion) setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), handle: suggestion } }));
                       }}
                     >
-                      Suggest from the translated title
+                      {t("editor.handle.suggest")}
                     </s-button>
                     {currentValue("handle") && validateHandle(currentValue("handle")) ? (
-                      <s-text tone="critical">{HANDLE_PROBLEM_MESSAGES[validateHandle(currentValue("handle"))!]}</s-text>
+                      <s-text tone="critical">
+                        {t(`editor.handle.problem.${validateHandle(currentValue("handle"))!}`, { max: MAX_HANDLE_LENGTH })}
+                      </s-text>
                     ) : null}
                     {field.translation && currentValue("handle") !== field.translation ? (
                       <s-checkbox
                         name="confirm-handle"
-                        label={`Change the published address. Links to …/${field.translation} in ${data.target.name} will stop working.`}
+                        label={t("editor.handle.confirm", { handle: field.translation, language: data.target.name })}
                       />
                     ) : null}
                   </s-stack>
@@ -457,20 +465,24 @@ export function ResourceTranslationEditor() {
                 {field.outdated && draft === undefined && field.translation ? (
                   <s-checkbox
                     name={`confirm:${field.key}`}
-                    label="The source changed, but this translation is still correct"
+                    label={t("editor.field.stillCorrect")}
                   />
                 ) : null}
                 <s-stack direction="inline" gap="small">
-                  {field.outdated && draft === undefined ? <s-badge tone="warning">Outdated</s-badge> : null}
+                  {field.outdated && draft === undefined ? <s-badge tone="warning">{t("common.translationStatus.outdated")}</s-badge> : null}
                   {draft !== undefined ? (
                     <s-badge tone="info">
-                      {ai?.provider === "memory" ? `Memory ${ai.scores?.[field.key] ?? ""}% match` : "AI draft"}
+                      {ai?.provider === "memory"
+                        ? t("editor.badge.memoryMatch", { score: ai.scores?.[field.key] ?? "" })
+                        : t("editor.badge.aiDraft")}
                     </s-badge>
                   ) : null}
                   {warnings?.length ? (
-                      <s-badge tone="warning">Review: {warnings.map(issueLabel).join(", ")}</s-badge>
-                    ) : null}
-                  {status?.status === "saved" ? <s-badge tone="success">Published</s-badge> : null}
+                    <s-badge tone="warning">
+                      {t("editor.badge.review", { issues: warnings.map((code) => issueName(i18n, code)).join(", ") })}
+                    </s-badge>
+                  ) : null}
+                  {status?.status === "saved" ? <s-badge tone="success">{t("common.state.published")}</s-badge> : null}
                   {field.translation && !(removed?.status === "removed" && removed.key === field.key) ? (
                     <s-button
                       variant="tertiary"
@@ -484,10 +496,10 @@ export function ResourceTranslationEditor() {
                         removeFetcher.submit({ intent: "remove", key: field.key }, { method: "post" });
                       }}
                     >
-                      {confirmRemove === field.key ? "Click again to remove the translation" : "Remove translation"}
+                      {confirmRemove === field.key ? t("editor.remove.confirm") : t("editor.remove.button")}
                     </s-button>
                   ) : null}
-                  {!field.machine ? <s-badge>Manual only</s-badge> : null}
+                  {!field.machine ? <s-badge>{t("editor.badge.manualOnly")}</s-badge> : null}
                 </s-stack>
               </s-stack>
             </s-grid>
@@ -495,16 +507,24 @@ export function ResourceTranslationEditor() {
           {field.history.length ? (
             <s-stack direction="block" gap="small">
               <s-button variant="tertiary" onClick={() => toggleHistory(field.key)}>
-                {historyOpen.has(field.key) ? "Hide history" : `Show history (${field.history.length})`}
+                {historyOpen.has(field.key)
+                  ? t("editor.history.hide")
+                  : t("editor.history.show", { count: field.history.length })}
               </s-button>
               {historyOpen.has(field.key) ? (
                 <s-stack direction="block" gap="small">
                   {field.history.map((h) => (
                     <s-box key={h.id} padding="small" borderWidth="base" borderRadius="base">
                       <s-text color="subdued">
-                        {new Date(h.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                        {i18n.dateTime(h.createdAt)}
                         {" · "}
-                        {h.origin === "EXTERNAL" ? "Before Linguva" : h.origin === "AI" ? (h.approved ? "AI, approved" : "AI") : "Manual"}
+                        {h.origin === "EXTERNAL"
+                          ? t("editor.history.origin.external")
+                          : h.origin === "AI"
+                            ? h.approved
+                              ? t("editor.history.origin.aiApproved")
+                              : t("editor.history.origin.ai")
+                            : t("editor.history.origin.manual")}
                       </s-text>
                       <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
                       {h.restorable ? (
@@ -514,7 +534,7 @@ export function ResourceTranslationEditor() {
                             restoreFetcher.submit({ intent: "restore", revisionId: h.id }, { method: "post" })
                           }
                         >
-                          Restore this version
+                          {t("editor.history.restore")}
                         </s-button>
                       ) : null}
                     </s-box>

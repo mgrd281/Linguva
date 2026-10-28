@@ -88,9 +88,9 @@ describe("content references", () => {
   });
 
   it("build editor links per type", () => {
-    expect(editorPathFor("gid://shopify/Menu/7", "de", "MENU")).toBe(`/app/content/menus/${contentRef("gid://shopify/Menu/7")}?locale=de`);
-    expect(editorPathFor("gid://shopify/Product/7", "de", "PRODUCT")).toBe("/app/products/7?locale=de");
-    expect(editorPathFor("gid://shopify/Product/7", "de")).toBe("/app/products/7?locale=de");
+    expect(editorPathFor("gid://shopify/Menu/7", "de", "MENU")).toBe(`/app/content/menus/${contentRef("gid://shopify/Menu/7")}?lang=de`);
+    expect(editorPathFor("gid://shopify/Product/7", "de", "PRODUCT")).toBe("/app/products/7?lang=de");
+    expect(editorPathFor("gid://shopify/Product/7", "de")).toBe("/app/products/7?lang=de");
     expect(kindMeta("SHOP_POLICY").path).toBe("/app/content/policies");
   });
 });

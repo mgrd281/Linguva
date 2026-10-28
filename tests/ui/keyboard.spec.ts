@@ -44,7 +44,7 @@ async function tabTo(page: Page, match: (f: Awaited<ReturnType<typeof focused>>)
 }
 
 test("translate, edit and publish a product with the keyboard only", async ({ page }) => {
-  await openApp(page, "full", "/app/products/6?locale=de");
+  await openApp(page, "full", "/app/products/6?lang=de");
   await page.locator("body").focus();
 
   const ai = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Translate with AI");
@@ -69,7 +69,7 @@ test("translate, edit and publish a product with the keyboard only", async ({ pa
 });
 
 test("leaving with unpublished changes: focus is on Stay, Enter stays", async ({ page }) => {
-  await openApp(page, "full", "/app/products/7?locale=fr");
+  await openApp(page, "full", "/app/products/7?lang=fr");
   await page.locator('s-text-field[name="value:title"] input').fill("Veste 7");
   await page.locator('s-link[slot="breadcrumb-actions"]').evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator('s-banner[heading="Leave without publishing?"]')).toBeVisible();

@@ -32,7 +32,7 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
   },
   {
     name: "Products",
-    path: "/app/products?locale=de",
+    path: "/app/products?lang=de",
     check: async (page) => {
       await expect(page.getByRole("link", { name: "Product 1 jacket" })).toBeVisible();
       await expect(page.getByText("Outdated").first()).toBeVisible();
@@ -41,7 +41,7 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
   },
   {
     name: "Editor",
-    path: "/app/products/1?locale=de",
+    path: "/app/products/1?lang=de",
     check: async (page) => {
       await expect(page.getByText("English → German")).toBeVisible();
       await expect(page.getByText("Search engine listing")).toBeVisible();

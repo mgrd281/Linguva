@@ -4,6 +4,8 @@
  * to the app, plus a policy that only loads HTTPS images. Server-provided
  * HTML is also sanitised before it gets here (.server/lib/sanitize-html).
  */
+import { useI18n } from "../i18n/react";
+
 const FRAME_POLICY = "default-src 'none'; img-src https:; style-src 'unsafe-inline'";
 // Close to the admin's text styles; nothing the content can rely on.
 const FRAME_CSS = `
@@ -37,10 +39,11 @@ export function HtmlPreview({
   lang: string;
   dir?: "ltr" | "rtl" | "auto";
 }) {
+  const { t } = useI18n();
   if (!html.replace(/<[^>]*>/g, "").trim() && !/<img\b/i.test(html)) {
     return (
       <s-box padding="base" border="base" borderRadius="base">
-        <s-text color="subdued">The preview appears here once there is a translation.</s-text>
+        <s-text color="subdued">{t("editor.preview.empty")}</s-text>
       </s-box>
     );
   }

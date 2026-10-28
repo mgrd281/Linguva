@@ -7,6 +7,11 @@ import {
   resolveTerms,
 } from "../../app/.server/glossary/glossary";
 import { findProtectedSpans } from "../../app/.server/translation/protect";
+import { translate, type MessageRef } from "../../app/i18n/i18n";
+
+// A row's problems as the page shows them.
+const text = (error: { messages: MessageRef[] } | undefined, locale: "en" | "de" = "en") =>
+  (error?.messages ?? []).map((m) => translate(locale, m.key, m.vars)).join("; ");
 
 describe("CSV", () => {
   it("parses quotes, escaped quotes, CRLF, BOM and blank lines", () => {
@@ -48,16 +53,21 @@ describe("parseGlossaryCsv", () => {
     const result = parseGlossaryCsv(csv);
     expect(result.terms).toHaveLength(2);
     expect(result.errors.map((e) => e.line)).toEqual([4, 5, 6]);
-    expect(result.errors[0]!.message).toMatch(/translation/);
+    expect(text(result.errors[0])).toBe("translation: is required for preferred terms");
+    expect(text(result.errors[1])).toBe('rule: Invalid option: expected one of "DO_NOT_TRANSLATE"|"PREFERRED"|"FORBIDDEN"');
+    expect(text(result.errors[2])).toBe("targetLocale: must be a locale code such as de or pt-BR, or empty");
+    expect(text(result.errors[2], "de")).toBe("targetLocale: muss ein Sprachcode wie de oder pt-BR sein oder leer bleiben");
   });
 
   it("requires the rule and term columns", () => {
-    expect(parseGlossaryCsv("foo,bar\n1,2").errors[0]!.message).toMatch(/rule, term/);
+    expect(text(parseGlossaryCsv("foo,bar\n1,2").errors[0])).toMatch(/rule, term/);
+    expect(text(parseGlossaryCsv("").errors[0])).toBe("The file is empty");
+    expect(text(parseGlossaryCsv('rule,term\nPREFERRED,"open').errors[0])).toMatch(/Unterminated/);
   });
 
   it("caps the number of rows", () => {
     const rows = ["rule,term", ...Array.from({ length: MAX_TERMS_PER_SHOP + 1 }, (_, i) => `DO_NOT_TRANSLATE,t${i}`)];
-    expect(parseGlossaryCsv(rows.join("\n")).errors[0]!.message).toMatch(/At most/);
+    expect(text(parseGlossaryCsv(rows.join("\n")).errors[0])).toMatch(/At most/);
   });
 
   it("imports what it exports, including formula-like terms", () => {

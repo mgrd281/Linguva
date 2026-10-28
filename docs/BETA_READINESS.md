@@ -2,7 +2,7 @@
 
 Review date: 2026-10-27, branch `claude/gallant-pasteur-8opy75` (draft PR, not merged, not deployed). Feature states are in FEATURE_STATUS.md, test cases in DEV_STORE_TEST_PLAN.md.
 
-**Verdict: not ready for a beta yet.** The code is feature-complete for a first beta and tested locally: 513 unit, integration, security and performance tests and 81 browser tests, all in CI. What is missing is verification on Shopify and the operator's accounts and decisions, listed below. **No feature is Verified on Shopify.**
+**Verdict: not ready for a beta yet.** The code is feature-complete for a first beta and tested locally: 513 unit, integration, security and performance tests and 81 browser tests, all in CI. What is missing is verification on Shopify and the operator's accounts and decisions, listed below. **Verified on Shopify so far: the read-only checks** on the development store (2026-10-28: read contract, every content type probed, coverage scan equal to an independent recount on a small store). Nothing that writes to Shopify, no webhook, billing or admin UI check yet (FEATURE_STATUS.md).
 
 ## 1. Blockers
 

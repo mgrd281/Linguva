@@ -183,6 +183,30 @@ Order: Postgres and Redis running → roles (§5.2) → variables (§5.3) → **
 
 Record the results in DEV_STORE_TEST_PLAN.md §3 like the store checks.
 
+### 6a. Results on Railway staging (2026-10-28, owner's screenshots and terminal output)
+
+Environment `staging` with `Linguva` (web), `worker`, Postgres and Redis; Shopify app "Linguva Staging" (version `linguva-staging-2`) installed on linguva-test-lab only; provider mock.
+
+| Check | Result |
+|---|---|
+| Build and deploy of `web` | Deployment successful on `2b38f89` |
+| `pnpm ops:smoke --url https://linguva-staging.up.railway.app --refused-shop karinex.myshopify.com` | **All 6 checks passed**: health 200 with database, public page 200, `nosniff`, unsigned webhook 401, app page without session 410, KARINEX 403 on `/app`, `/auth/login`, `/auth/callback` |
+| Authentication | Linguva Staging opens embedded in linguva-test-lab; Overview loads (store, languages, AI usage) |
+| Translation stays mock | Product "Premium Baumwoll-T-Shirt" → French: drafts `[fr] …`; usage 98 characters of the 20,000 allowance; no DeepL key exists in staging |
+| Publishing to Shopify | Owner published the two drafts on purpose: "2 Übersetzungen veröffentlicht"; the editor's search preview then shows `[fr] …` read back from Shopify. French stays unpublished in the store |
+| Background jobs | A bulk job stayed "In der Warteschlange" while no `worker` service existed; after adding `worker` (start `node build/worker/index.js`, variables of `web` without `MIGRATION_DATABASE_URL`), the queued job ran and finished ("Abgeschlossen", nothing left to translate) |
+| Webhooks | Product title changed in the Shopify admin to "Premium Baumwoll-T-Shirt 2": Linguva marked the French title **Veraltet** (outdated) within 30 s, the unchanged description stayed "Übersetzt" |
+
+Problems met on the way, for the next environment:
+
+- 401 Unauthorized when opening the app: `SHOPIFY_API_SECRET` in Railway still belonged to the development app. It must be the client secret of the app whose client ID is `SHOPIFY_API_KEY`.
+- `shopify app deploy --config staging` asks "Create this project as a new app?": answer **No, connect it to an existing app** and pick "Linguva Staging"; release only when the prompt names "Linguva Staging".
+- The `worker` service is required: without it bulk jobs, coverage scans and automatic translation wait forever in the queue.
+
+Still open on staging: coverage scan from the app, an automatic-translation job triggered by a webhook, and the clean-up below.
+
+Clean-up the owner still has to do: new passwords for `linguva_owner` and `linguva_app` (they appeared in a terminal transcript) and updated `DATABASE_URL` / `MIGRATION_DATABASE_URL`; remove Postgres's public TCP proxy; rotate the development app's client secret that was pasted earlier.
+
 ## 7. Validated locally (2026-10-28, Tested Locally)
 
 With the image built from this branch, local PostgreSQL 16 and Redis, staging variables with throwaway secrets:

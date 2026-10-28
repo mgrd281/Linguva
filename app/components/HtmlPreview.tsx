@@ -27,6 +27,18 @@ export function previewDocument(html: string, lang: string, dir: "ltr" | "rtl" |
   );
 }
 
+/**
+ * Frame height from the amount of text and the number of paragraphs, list
+ * items and headings (the sandboxed frame can't report its own height):
+ * short texts stay compact, long ones scroll.
+ */
+export function previewHeight(html: string): number {
+  const text = html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().length;
+  const blocks = (html.match(/<(p|li|h[1-6]|tr|br|blockquote|div)\b/gi) ?? []).length;
+  const lines = Math.ceil(text / 55) + blocks;
+  return Math.min(420, Math.max(96, 32 + lines * 21 + blocks * 6));
+}
+
 export function HtmlPreview({
   html,
   title,
@@ -47,8 +59,7 @@ export function HtmlPreview({
       </s-box>
     );
   }
-  // Height from the amount of text: short texts stay compact, long ones scroll.
-  const height = Math.min(420, Math.max(120, 60 + Math.ceil(html.replace(/<[^>]*>/g, "").length / 90) * 22));
+  const height = previewHeight(html);
   return (
     <s-box border="base" borderRadius="base" overflow="hidden">
       <iframe

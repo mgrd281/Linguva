@@ -12,11 +12,25 @@ export const STATE_COLOURS: Record<FieldState, string> = {
   draft: "#0094d5",
   failed: "#c70a24",
   outdated: "#b98900",
-  missing: "#b5b5b5",
+  // Light: what is missing reads as the open part of the bar, not as a value.
+  missing: "#d4d4d4",
 };
 
+/** Empty part of every bar (Polaris' subdued surface). */
+export const TRACK_COLOUR = "#ebebeb";
+
+/**
+ * Drafts and translations waiting for review aren't live yet: striped, so a
+ * bar full of drafts never looks like a complete one.
+ */
+const NOT_LIVE: ReadonlySet<FieldState> = new Set(["review", "draft"]);
+export function stateFill(state: FieldState): string {
+  const colour = STATE_COLOURS[state];
+  return NOT_LIVE.has(state) ? `repeating-linear-gradient(135deg, ${colour} 0 4px, ${colour}66 4px 7px)` : colour;
+}
+
 /** One bar per item: complete, needs review, draft, failed, outdated and missing, left to right. */
-export function StateBar({ counts, label, i18n, height = 10 }: { counts: StateCounts; label: string; i18n: I18n; height?: number }) {
+export function StateBar({ counts, label, i18n, height = 8 }: { counts: StateCounts; label: string; i18n: I18n; height?: number }) {
   const total = totalOf(counts);
   const description = FIELD_STATES.filter((s) => counts[s] > 0)
     .map((s) => `${i18n.t(`coverage.state.${s}`)} ${i18n.number(counts[s])}`)
@@ -25,18 +39,27 @@ export function StateBar({ counts, label, i18n, height = 10 }: { counts: StateCo
     <div
       role="img"
       aria-label={`${label}: ${description || i18n.t("coverage.types.empty")}`}
-      style={{ display: "flex", background: "#e3e3e3", borderRadius: height / 2, height, width: "100%", minWidth: 80, overflow: "hidden" }}
+      style={{ display: "flex", gap: total > 0 ? 1 : 0, background: TRACK_COLOUR, borderRadius: height / 2, height, width: "100%", minWidth: 80, overflow: "hidden" }}
     >
       {total > 0
         ? FIELD_STATES.map((s) =>
             counts[s] > 0 ? (
-              <div
-                key={s}
-                style={{ background: STATE_COLOURS[s], width: `${(counts[s] / total) * 100}%`, minWidth: 2, transition: "width 0.3s ease" }}
-              />
+              <div key={s} style={{ background: stateFill(s), width: `${(counts[s] / total) * 100}%`, minWidth: 3, transition: "width 0.3s ease" }} />
             ) : null,
           )
         : null}
+    </div>
+  );
+}
+
+/** Percentage and bar on one line, the percentage aligned for scanning down a table. */
+export function CoverageMeter({ counts, complete, total, label, i18n }: { counts: StateCounts; complete: number; total: number; label: string; i18n: I18n }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 140 }}>
+      <div style={{ flex: "1 1 auto", minWidth: 80 }}>
+        <StateBar counts={counts} label={label} i18n={i18n} />
+      </div>
+      <span style={{ flex: "0 0 auto", minWidth: 40, textAlign: "end", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{percentLabel(i18n, complete, total)}</span>
     </div>
   );
 }
@@ -45,7 +68,7 @@ export function StateDot({ state }: { state: FieldState }) {
   return (
     <span
       aria-hidden="true"
-      style={{ display: "inline-block", width: 10, height: 10, borderRadius: 5, background: STATE_COLOURS[state], marginInlineEnd: 6, verticalAlign: "middle" }}
+      style={{ display: "inline-block", width: 10, height: 10, borderRadius: 5, background: stateFill(state), marginInlineEnd: 6, verticalAlign: "middle" }}
     />
   );
 }
@@ -71,6 +94,22 @@ export function StateLegend({
           <StateDot state={s} />
           {i18n.t(`coverage.state.${s}`)} {i18n.number(counts[s])}
         </s-link>
+      ))}
+    </s-stack>
+  );
+}
+
+/** The states with fields, as a key to the bar: "● Complete 11 ● Draft 18 …" (text, no links). */
+export function StateSummary({ counts, i18n }: { counts: StateCounts; i18n: I18n }) {
+  const shown = FIELD_STATES.filter((s) => counts[s] > 0);
+  if (!shown.length) return null;
+  return (
+    <s-stack direction="inline" gap="base">
+      {shown.map((s) => (
+        <s-text key={s} color="subdued">
+          <StateDot state={s} />
+          {i18n.t(`coverage.state.${s}`)} {i18n.number(counts[s])}
+        </s-text>
       ))}
     </s-stack>
   );

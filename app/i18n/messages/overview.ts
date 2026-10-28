@@ -9,6 +9,7 @@ export const en = {
 
   "overview.start.heading": "Get started",
   "overview.start.progress": "{done} of {total} steps done",
+  "overview.start.doneLabel": "Done:",
   "overview.start.progressLabel": "Setup progress",
 
   "overview.checklist.languageSettings": "Open language settings",
@@ -67,6 +68,7 @@ export const de: Translation<typeof en> = {
 
   "overview.start.heading": "Erste Schritte",
   "overview.start.progress": "{done} von {total} Schritten erledigt",
+  "overview.start.doneLabel": "Erledigt:",
   "overview.start.progressLabel": "Fortschritt der Einrichtung",
 
   "overview.checklist.languageSettings": "Spracheinstellungen öffnen",
@@ -125,6 +127,7 @@ export const fr: Translation<typeof en> = {
 
   "overview.start.heading": "Premiers pas",
   "overview.start.progress": "Étapes terminées : {done} sur {total}",
+  "overview.start.doneLabel": "Terminé :",
   "overview.start.progressLabel": "Progression de la configuration",
 
   "overview.checklist.languageSettings": "Ouvrir les paramètres de langue",
@@ -183,6 +186,7 @@ export const es: Translation<typeof en> = {
 
   "overview.start.heading": "Primeros pasos",
   "overview.start.progress": "{done} de {total} pasos completados",
+  "overview.start.doneLabel": "Listo:",
   "overview.start.progressLabel": "Progreso de la configuración",
 
   "overview.checklist.languageSettings": "Abrir la configuración de idiomas",

@@ -20,6 +20,17 @@ test("shows the whole store, each language and what to do next @responsive", asy
   const next = page.locator('s-section[heading="Next step"]');
   await expect(next).toContainText(/Review \d+ drafts in French/);
   await expect(next.locator('s-button[href^="/app/review?lang=fr"]')).toHaveCount(1);
+  // The action says what it does, not just "Open".
+  await expect(next.getByRole("link", { name: "Review drafts" })).toBeVisible();
+  // The whole-store bar has a key with every state that has fields.
+  await expect(page.locator('s-section[heading="Whole store"]')).toContainText(/Complete \d+/);
+  await expect(page.locator('s-section[heading="Whole store"]')).toContainText(/Draft \d+/);
+  // How it's counted: folded away, opens on demand.
+  const rules = page.locator("details", { hasText: "How coverage is counted" });
+  await expect(rules).not.toHaveAttribute("open");
+  await rules.locator("summary").click();
+  await expect(rules).toHaveAttribute("open", "");
+  await expect(rules.getByText(/Percentages are rounded down/)).toBeVisible();
 
   // One card per target language, the unpublished one marked.
   const languages = page.locator('s-section[heading="Languages"]');
@@ -61,7 +72,7 @@ test("a number opens the exact items behind it, filtered and paged", async ({ pa
   const rows = page.locator("s-table-body s-table-row");
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("Product 2 jacket");
-  await expect(rows.first()).toContainText("Descriptions: Outdated");
+  await expect(rows.first()).toContainText("Outdated: Descriptions");
   await expect(rows.first().getByRole("link", { name: "Product 2 jacket" })).toHaveAttribute("href", "/app/products/2?lang=de");
 
   // Missing titles of products, paged 50 at a time; search by title.

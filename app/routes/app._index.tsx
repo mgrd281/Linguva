@@ -44,29 +44,35 @@ export default function Overview() {
                 <ProgressBar value={(done / data.checklist.length) * 100} label={t("overview.start.progressLabel")} />
               </s-box>
             </s-stack>
+            {/* Finished steps on one line; the open ones as cards with their action. */}
+            {done > 0 ? (
+              <s-stack direction="inline" gap="small" alignItems="center">
+                <s-text color="subdued">{t("overview.start.doneLabel")}</s-text>
+                {data.checklist
+                  .filter((step) => step.done)
+                  .map((step) => (
+                    <s-badge key={step.id} tone="success" icon="check">
+                      {msg(step.label)}
+                    </s-badge>
+                  ))}
+              </s-stack>
+            ) : null}
             <s-stack direction="block" gap="small">
-              {data.checklist.map((step) => (
-                <s-box key={step.id} padding="base" borderWidth="base" borderRadius="base" background={step === next ? "subdued" : "base"}>
-                  <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
-                    <s-stack direction="block" gap="small-300">
-                      <s-stack direction="inline" gap="small" alignItems="center">
-                        {step.done ? <s-badge tone="success">{t("common.state.done")}</s-badge> : <s-badge>{t("common.state.toDo")}</s-badge>}
+              {data.checklist
+                .filter((step) => !step.done)
+                .map((step) => (
+                  <s-box key={step.id} padding="base" borderWidth="base" borderRadius="base" background={step === next ? "subdued" : "base"}>
+                    <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
+                      <s-stack direction="block" gap="small-300">
                         <s-text type="strong">{msg(step.label)}</s-text>
+                        <s-text color="subdued">{msg(step.detail)}</s-text>
                       </s-stack>
-                      {!step.done ? <s-text color="subdued">{msg(step.detail)}</s-text> : null}
-                    </s-stack>
-                    {!step.done ? (
-                      <s-button
-                        href={step.href}
-                        variant={step === next ? "primary" : "secondary"}
-                        {...(step.external ? { target: "_top" } : {})}
-                      >
+                      <s-button href={step.href} variant={step === next ? "primary" : "secondary"} {...(step.external ? { target: "_top" } : {})}>
                         {msg(step.action)}
                       </s-button>
-                    ) : null}
-                  </s-stack>
-                </s-box>
-              ))}
+                    </s-stack>
+                  </s-box>
+                ))}
             </s-stack>
           </s-stack>
         </s-section>

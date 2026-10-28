@@ -6,7 +6,7 @@ import { bulkTargetOf, coverageAction, loadCoverageDashboard } from "../.server/
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { hasMessage, kindLabel, kindPlural } from "../i18n/labels";
-import { durationText, itemsHref, percentLabel, StateBar, StateLegend } from "../components/Coverage";
+import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar, StateLegend, StateSummary } from "../components/Coverage";
 import { ProgressBar } from "../components/ProgressBar";
 import { byFieldGroup, byType, headlineByLocale, storeWide, type Tally } from "../lib/coverage-view";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES, type FieldState } from "../lib/coverage-rules";
@@ -32,13 +32,13 @@ function errorMessage(i18n: I18n, code: string | null | undefined): string | nul
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
 
 /** What to do first: drafts to review, then failed fields, then the biggest gap that counts. */
-function nextStep(data: Data, i18n: I18n): { text: string; href: string } | null {
+function nextStep(data: Data, i18n: I18n): { text: string; href: string; kind: "review" | "failed" | "missing" } | null {
   const shown = data.targets.map((l) => l.locale);
   const name = (locale: string) => i18n.language(locale, data.names[locale]);
   const sum = (locale: string, states: FieldState[]) =>
     data.counts.filter((c) => c.locale === locale && states.includes(c.state)).reduce((n, c) => n + c.count, 0);
   const drafts = shown.map((l) => ({ l, n: sum(l, ["review", "draft"]) })).sort((a, b) => b.n - a.n)[0];
-  if (drafts && drafts.n > 0) return { text: i18n.t("coverage.next.review", { count: drafts.n, language: name(drafts.l) }), href: `/app/review?lang=${encodeURIComponent(drafts.l)}` };
+  if (drafts && drafts.n > 0) return { kind: "review", text: i18n.t("coverage.next.review", { count: drafts.n, language: name(drafts.l) }), href: `/app/review?lang=${encodeURIComponent(drafts.l)}` };
   let best: { locale: string; type: string; n: number; state: "failed" | "missing" } | null = null;
   for (const state of ["failed", "missing"] as const) {
     for (const c of data.counts) {
@@ -54,8 +54,8 @@ function nextStep(data: Data, i18n: I18n): { text: string; href: string } | null
   if (!best) return null;
   const vars = { count: best.n, type: kindLabel(i18n, best.type), language: name(best.locale) };
   return best.state === "failed"
-    ? { text: i18n.t("coverage.next.failed", vars), href: itemsHref({ lang: best.locale, type: best.type, state: "failed" }) }
-    : { text: i18n.t("coverage.next.missing", vars), href: itemsHref({ lang: best.locale, type: best.type }) };
+    ? { kind: "failed", text: i18n.t("coverage.next.failed", vars), href: itemsHref({ lang: best.locale, type: best.type, state: "failed" }) }
+    : { kind: "missing", text: i18n.t("coverage.next.missing", vars), href: itemsHref({ lang: best.locale, type: best.type }) };
 }
 
 export default function Coverage() {
@@ -101,7 +101,6 @@ export default function Coverage() {
     <s-page heading={t("coverage.page.heading")}>
       <s-section>
         <s-stack direction="block" gap="base">
-          <s-paragraph>{t("coverage.intro")}</s-paragraph>
           {actionError ? (
             <s-banner tone="critical" heading={t("coverage.startFailed.heading")}>
               <s-paragraph>{errorMessage(i18n, actionError.error) ?? t("coverage.startFailed.fallback")}</s-paragraph>
@@ -115,7 +114,13 @@ export default function Coverage() {
           <runner.Form method="post">
             <input type="hidden" name="intent" value="run" />
             <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-            <s-stack direction="inline" gap="base" alignItems="center">
+            <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
+              <s-stack direction="block" gap="small-300">
+                <s-text>{t("coverage.intro")}</s-text>
+                {data.report && !scanning && data.report.finishedAt ? (
+                  <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.report.finishedAt) })}</s-text>
+                ) : null}
+              </s-stack>
               <s-button
                 type="submit"
                 variant={scanned ? "secondary" : "primary"}
@@ -124,9 +129,6 @@ export default function Coverage() {
               >
                 {scanned ? t("coverage.scan.again") : t("coverage.scan.first")}
               </s-button>
-              {data.report && !scanning && data.report.finishedAt ? (
-                <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.report.finishedAt) })}</s-text>
-              ) : null}
             </s-stack>
           </runner.Form>
           {scanning && data.report ? (
@@ -142,7 +144,7 @@ export default function Coverage() {
               </s-text>
             </s-stack>
           ) : null}
-          {!scanned && !scanning ? <s-paragraph>{t("coverage.scan.never")}</s-paragraph> : <s-text color="subdued">{t("coverage.scan.live")}</s-text>}
+          {!scanned && !scanning ? <s-paragraph>{t("coverage.scan.never")}</s-paragraph> : null}
         </s-stack>
       </s-section>
 
@@ -198,13 +200,14 @@ export default function Coverage() {
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
             <s-section heading={t("coverage.store.heading")}>
               <s-stack direction="block" gap="small">
-                <s-heading>
-                  <span style={{ fontSize: 28, lineHeight: "36px" }}>{percentLabel(i18n, store.complete, store.total)}</span>
-                </s-heading>
-                <StateBar counts={store.counts} label={t("coverage.store.percentLabel")} i18n={i18n} height={12} />
+                <span style={{ fontSize: 32, lineHeight: "40px", fontWeight: 650, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>
+                  {percentLabel(i18n, store.complete, store.total)}
+                </span>
+                <StateBar counts={store.counts} label={t("coverage.store.percentLabel")} i18n={i18n} height={10} />
                 <s-text color="subdued">
                   {store.total ? t("coverage.store.fields", { complete: i18n.number(store.complete), total: i18n.number(store.total) }) : t("coverage.store.nothing")}
                 </s-text>
+                <StateSummary counts={store.counts} i18n={i18n} />
                 {published.length === 0 && data.targets.length > 0 ? (
                   <s-banner tone="info">
                     <s-paragraph>{t("coverage.store.noPublished")}</s-paragraph>
@@ -217,9 +220,11 @@ export default function Coverage() {
                 {step ? (
                   <>
                     <s-paragraph>{step.text}</s-paragraph>
-                    <s-button href={step.href} variant="primary">
-                      {t("coverage.next.open")}
-                    </s-button>
+                    <s-stack direction="inline">
+                      <s-button href={step.href} variant="primary">
+                        {t(`coverage.next.action.${step.kind}`)}
+                      </s-button>
+                    </s-stack>
                   </>
                 ) : (
                   <s-paragraph>{t("coverage.next.done")}</s-paragraph>
@@ -246,7 +251,7 @@ export default function Coverage() {
                         <s-heading>{name}</s-heading>
                         {l.published ? <s-badge tone="success">{t("coverage.languages.published")}</s-badge> : <s-badge tone="warning">{t("coverage.languages.unpublished")}</s-badge>}
                       </s-stack>
-                      <s-text type="strong">{percentLabel(i18n, tally.complete, tally.total)}</s-text>
+                      <span style={{ fontSize: 24, lineHeight: "32px", fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>{percentLabel(i18n, tally.complete, tally.total)}</span>
                       <StateBar counts={tally.counts} label={t("coverage.languages.progressLabel", { language: name })} i18n={i18n} />
                       <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) })}</s-text>
                       {!l.published ? <s-text color="subdued">{t("coverage.languages.unpublishedHelp")}</s-text> : null}
@@ -308,10 +313,7 @@ export default function Coverage() {
                     </s-table-cell>
                     <s-table-cell>
                       {tally.total ? (
-                        <s-stack direction="block" gap="small-300">
-                          <s-text>{percentLabel(i18n, tally.complete, tally.total)}</s-text>
-                          <StateBar counts={tally.counts} label={kindLabel(i18n, type)} i18n={i18n} />
-                        </s-stack>
+                        <CoverageMeter counts={tally.counts} complete={tally.complete} total={tally.total} label={kindLabel(i18n, type)} i18n={i18n} />
                       ) : (
                         <s-text color="subdued">{seg?.status === "SCANNED" ? t("coverage.types.empty") : "—"}</s-text>
                       )}
@@ -328,7 +330,7 @@ export default function Coverage() {
                             <input type="hidden" name="resourceType" value={type} />
                             <s-button
                               type="submit"
-                              variant="tertiary"
+                              variant="secondary"
                               disabled={!data.canTranslate || !data.jobsAvailable}
                               accessibilityLabel={`${t("coverage.types.translate")}: ${kindLabel(i18n, type)}, ${selectedName}`}
                             >
@@ -379,10 +381,7 @@ export default function Coverage() {
                       </s-stack>
                     </s-table-cell>
                     <s-table-cell>
-                      <s-stack direction="block" gap="small-300">
-                        <s-text>{percentLabel(i18n, tally.complete, tally.total)}</s-text>
-                        <StateBar counts={tally.counts} label={t(`coverage.group.${g}`)} i18n={i18n} />
-                      </s-stack>
+                      <CoverageMeter counts={tally.counts} complete={tally.complete} total={tally.total} label={t(`coverage.group.${g}`)} i18n={i18n} />
                     </s-table-cell>
                     <s-table-cell>{t("coverage.types.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) })}</s-table-cell>
                     <s-table-cell>
@@ -432,14 +431,20 @@ export default function Coverage() {
         </s-section>
       ) : null}
 
-      <s-section heading={t("coverage.rules.heading")}>
-        <s-unordered-list>
-          <s-list-item>{t("coverage.rules.fields")}</s-list-item>
-          <s-list-item>{t("coverage.rules.complete")}</s-list-item>
-          <s-list-item>{t("coverage.rules.percent")}</s-list-item>
-          <s-list-item>{t("coverage.rules.excluded")}</s-list-item>
-          <s-list-item>{t("coverage.rules.store")}</s-list-item>
-        </s-unordered-list>
+      <s-section>
+        <details>
+          <summary style={{ cursor: "pointer", fontWeight: 600, minHeight: 24 }}>{t("coverage.rules.heading")}</summary>
+          <s-box paddingBlockStart="small">
+            <s-unordered-list>
+              <s-list-item>{t("coverage.scan.live")}</s-list-item>
+              <s-list-item>{t("coverage.rules.fields")}</s-list-item>
+              <s-list-item>{t("coverage.rules.complete")}</s-list-item>
+              <s-list-item>{t("coverage.rules.percent")}</s-list-item>
+              <s-list-item>{t("coverage.rules.excluded")}</s-list-item>
+              <s-list-item>{t("coverage.rules.store")}</s-list-item>
+            </s-unordered-list>
+          </s-box>
+        </details>
       </s-section>
     </s-page>
   );

@@ -38,6 +38,7 @@ const DYNAMIC = [
   "coverage.error.",
   "coverage.state.",
   "coverage.stateHelp.",
+  "coverage.next.action.",
   "coverage.group.",
   "transfer.problem.",
   "transfer.import.",

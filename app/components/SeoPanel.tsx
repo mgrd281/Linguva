@@ -14,6 +14,7 @@ import {
 } from "../lib/seo";
 import { useI18n } from "../i18n/react";
 import { issueName } from "../i18n/labels";
+import { STATE_COLOURS, TRACK_COLOUR } from "./Coverage";
 
 export interface SeoPanelProps {
   /** Current value per field key (translation as typed, or the draft). */
@@ -33,9 +34,14 @@ export function SeoCounter({ fieldKey, value, source }: { fieldKey: string; valu
   if (!limits) return null;
   const width = seoWidth(value);
   const issues = checkSeoField(fieldKey, source, value);
+  const over = width > limits.max;
   return (
     <s-stack direction="inline" gap="small" alignItems="center">
-      <s-text tone={width > limits.max ? "critical" : "neutral"}>
+      {/* Length against the search result limit; the numbers say the same. */}
+      <span aria-hidden="true" style={{ display: "inline-block", width: 96, height: 6, borderRadius: 3, background: TRACK_COLOUR, overflow: "hidden", verticalAlign: "middle" }}>
+        <span style={{ display: "block", height: "100%", width: `${Math.min(100, (width / limits.max) * 100)}%`, background: over ? STATE_COLOURS.failed : STATE_COLOURS.complete }} />
+      </span>
+      <s-text tone={over ? "critical" : "neutral"}>
         {width} / {limits.max}
       </s-text>
       {issues.map((i) => (

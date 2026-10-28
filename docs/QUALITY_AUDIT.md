@@ -21,24 +21,24 @@ Rules:
 
 ## 2. Summary
 
-| Area | Before (9a89523) | Round 1 | Phase A | Phase B | Phase C | Phase G | Phase H | **Phase I** | Biggest gap now |
-|---|---|---|---|---|---|---|---|---|---|
-| Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | 7.5 | 7.5 | 8 | **8** | Not checked inside the real admin; app icon and feature image not designed (brief in BRAND_ASSETS.md) |
-| Usability for beginners | 5.5 | 8 | 8 | 8 | 8.5 | 9 | 9 | **9** | No test with real merchants; French and Spanish not yet read by native speakers |
-| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | 9 | 9 | 9 | **9** | No check on real devices or in the Shopify mobile app |
-| AI translation | 5 | 7 | 7 | 7 | 7 | 7 | 7 | **7** | No measured quality: the DeepL key isn't in this environment (harness ready: `pnpm test:deepl`) |
-| Content coverage | 3 | 5 | 5 | 6.5 | 6.5 | 6.5 | 6.5 | **7** | Nothing verified on Shopify; market-specific translations and third-party app content missing |
-| SEO | 7 | 7 | 7 | 7.5 | 7.5 | 7.5 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
-| Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | 7.5 | 7.5 | **7.5** | Real Shopify latency and scan duration not measured; no production monitoring |
-| Security | 6.5 | 8 | 8 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
-| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; characters per real product not measured |
-| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Development store connected (2026-10-28), app opens embedded (owner-reported); checks not yet run |
-| Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
-| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | 7.5 | **7.6** | |
+| Area | Before (9a89523) | Round 1 | Phase A | Phase B | Phase C | Phase G | Phase H | Phase I | **Phase J** | Biggest gap now |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | 7.5 | 7.5 | 8 | 8 | **8** | Not checked inside the real admin; competitor-based specification pending (UI_REVIEW.md §6); app icon and feature image not designed |
+| Usability for beginners | 5.5 | 8 | 8 | 8 | 8.5 | 9 | 9 | 9 | **9** | No test with real merchants; French and Spanish not yet read by native speakers |
+| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | 9 | 9 | 9 | 9 | **9** | No check on real devices or in the Shopify mobile app |
+| AI translation | 5 | 7 | 7 | 7 | 7 | 7 | 7 | 7 | **7** | No measured quality: the DeepL key isn't in this environment (harness ready: `pnpm test:deepl`) |
+| Content coverage | 3 | 5 | 5 | 6.5 | 6.5 | 6.5 | 6.5 | 7 | **7** | Read-only coverage verified on a small real store (9 fields, no products yet); market-specific translations and third-party app content missing |
+| SEO | 7 | 7 | 7 | 7.5 | 7.5 | 7.5 | 7.5 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
+| Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | 7.5 | 7.5 | 7.5 | **7.5** | First real measurement: 34 API pages in 16 s on an almost empty store; a real catalog not yet measured; no production monitoring |
+| Security | 6.5 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
+| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; characters per real product not measured |
+| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **7** | Read path verified on the dev store (gate, session, read contract, every type probed, scan = recount); writes, webhooks, App Bridge in the admin not yet |
+| Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
+| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | 7.5 | 7.6 | **7.6** | |
 
-Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d, phase F in §4f, phase G in §4g, phase H in §4h, phase I in §4i (phases D–F added evidence, not new scores). A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
+Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d, phase F in §4f, phase G in §4g, phase H in §4h, phase I in §4i, phase J in §4j (phases D–F added evidence, not new scores). A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
-**Honest overall verdict: 7.6/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
+**Honest overall verdict: 7.6/10.** Since 2026-10-28 the read path is Verified on Shopify on the development store (read-only live run passed); everything that writes, the admin integration and billing are still Tested Locally only. Reaching 9–10 needs what code can't supply: the remaining store checks, the owner's decisions and accounts (DeepL key, prices, hosting), real merchants and an external security review. Those are listed in §5.
 
 ## 3. Areas in detail
 
@@ -341,13 +341,25 @@ No score changes: the two criteria this phase works on (3.5 #6, #9) stay ◐ bec
 
 Content coverage moves from 6.5 to 7: every translatable type is now measured per item with tested rules, and CSV import adds a path for languages and content AI doesn't cover. It stays below 8 because nothing is verified on Shopify and market-specific translations are still missing. AI translation stays at 7: language support is now read from DeepL, but quality is still unmeasured.
 
-## 4j. Phase J: development store connected (2026-10-28)
+## 4j. Phase J: development store connected, first real results (2026-10-28)
 
-The development store `linguva-test-lab.myshopify.com` exists and Linguva opens in its admin (owner report). **No score changes yet**: a score moves only with logged results of the checks in DEV_STORE_VERIFICATION.md. Prepared in this phase: the verification runbook with exact commands, live checks that compare Linguva's coverage with an independent recount of the store's data and run CSV export/import against it, read-only live tests with the app's own session (no extra app needed), and `pnpm ops:coverage-check` for evidence after every manual step.
+The development store `linguva-test-lab.myshopify.com` exists and Linguva opens in its admin (owner report). A score moves only with logged results of the checks in DEV_STORE_VERIFICATION.md. Prepared in this phase: the verification runbook with exact commands, live checks that compare Linguva's coverage with an independent recount of the store's data and run CSV export/import against it, read-only live tests with the app's own session (no extra app needed), and `pnpm ops:coverage-check` for evidence after every manual step.
 
 Scores expected to change once the checks pass (not before): Shopify integration, content coverage, SEO and design (real admin), each by the evidence logged.
 
 **Defect found before the first store run (fixed, regression-tested).** The real Shopify library throws GraphQL errors instead of returning them, while the simulated store returned them. The coverage scan recognised a missing optional scope only in the returned form, so on a real store without, for example, the navigation scope, the first scan would have stopped at Menus and failed as a whole instead of marking the type "no access". Also, any type that kept failing ended the whole report. Fix: access denial is recognised in both forms in the coverage listing, custom field owners, title search and the automatic-translation check; a type that keeps failing is marked "scan didn't finish" and the other types are still scanned (only a revoked shop access stops the report). Evidence: the new tests failed on the old code and pass now (`coverage.test.ts`: "library throws", "keeps failing"; `auto-sweep.test.ts` with both error forms); the simulated store can now throw like the library (`throwsLikeLibrary`).
+
+**First real-store result (Verified on Shopify, read-only).** The read-only live run on linguva-test-lab with French unpublished passed: 2 files, 7 passed, 13 skipped, 0 failed, 31.65 s. Coverage scan 34 API pages in 16,003 ms; figures equal to an independent recount; dashboard summary 8 ms, items page 2 ms (local database). The store had 0 products, 1 collection (2 fields missing), 2 pages (5 fields: 2 complete, 3 missing), 1 blog (2 missing), 0 posts and 0 images, so products, images and the CSV import had nothing to check (DEV_STORE_VERIFICATION.md §0b).
+
+| Area | Score | Why |
+|---|---|---|
+| Shopify integration | 6.5 → **7** | The read path works against the real Admin API 2026-10: dev-store gate, the app's expiring offline session, read contract for collections, pages and blogs, every content type probed with editor references round-tripping. Writes, webhooks and App Bridge inside the admin still unverified |
+| Content coverage | 7 (unchanged) | Scan = recount on a real store, but only 9 fields and no products; moves with the fictional catalog run |
+| Performance | 7.5 (unchanged) | 16 s for 34 sequential API calls (about 0.47 s each) on an almost empty store is a first real number, not yet a catalog-size measurement |
+
+**After the run (Tested Locally):** a live check with nothing to check is reported as skipped with its reason, not as passed; the CSV live check exports every titled type and imports the first missing title; the live suites run in CI against a simulated store shaped like the dev store (`pnpm test:live:rehearsal`, both the measured shape and the fictional catalog); a fictional 8-product catalog for Shopify's own product import (`docs/dev-store/demo-catalog-products.csv`).
+
+**UI and UX (Tested Locally; UI_REVIEW.md):** prioritized review of 10 screens with before/after screenshots. Fixed: drafts made coverage bars look finished (now striped, percentage beside the bar), the original description's preview cut off list items (regression-tested), field states moved to the top of every editor field (missing fields now say so), compact coverage header, specific next-step actions, whole-store key, item rows grouped by state (−43 % height), finished onboarding steps on one line, export defaults to a published language, import summary, SEO length bars. Design stays at 8: the criterion needs the real admin, and the layout decisions that remain wait for the competitor-based specification.
 
 ## 5. Next steps, in order of effect
 
@@ -359,7 +371,7 @@ Scores expected to change once the checks pass (not before): Shopify integration
 
 **Need the owner (accounts, decisions, money):**
 
-1. Development store and `pnpm config:link`, then the live tests and DEV_STORE_TEST_PLAN. This affects every area.
+1. On the development store (connected; read-only run passed): import the fictional catalog, run the read-only live tests again, then the checklist of DEV_STORE_VERIFICATION.md §3 (editor, CSV import, review, webhooks, admin UI, phone). This affects every area.
 2. Free DeepL API key, then a measured quality reference set
 3. Prices and plans in the Partner Dashboard
 4. Branch protection on `main`

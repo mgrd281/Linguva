@@ -15,7 +15,9 @@ const EXPORT_TYPES = [...Object.keys(RESOURCE_KINDS), ...Object.keys(IMAGE_COVER
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
   const locales = await fetchAndSyncShopLocales(admin, shop.id);
-  return { targets: locales.locales.filter((l) => !l.primary).map((l) => ({ locale: l.locale, name: l.name })), types: EXPORT_TYPES };
+  // Published languages first: the default export is one customers see.
+  const targets = locales.locales.filter((l) => !l.primary).sort((a, b) => Number(b.published) - Number(a.published));
+  return { targets: targets.map((l) => ({ locale: l.locale, name: l.name })), types: EXPORT_TYPES };
 };
 
 type ActionResult = { kind: "imported"; result: ImportResult } | { kind: "error"; code: "noFile" | "tooLarge" | "tooMany" };
@@ -149,6 +151,9 @@ export default function Translations() {
               <s-banner tone={imported.drafts ? "success" : "warning"}>
                 <s-stack direction="block" gap="small">
                   <s-paragraph>{t("transfer.import.done", { count: imported.drafts })}</s-paragraph>
+                  <s-text color="subdued">
+                    {t("transfer.import.summary", { rows: i18n.number(imported.rows), skipped: i18n.number(Object.values(imported.skipped).reduce((n, c) => n + c, 0)) })}
+                  </s-text>
                   {imported.drafts ? <s-link href="/app/review">{t("transfer.import.openReview")}</s-link> : null}
                 </s-stack>
               </s-banner>

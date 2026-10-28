@@ -18,24 +18,25 @@ function errorMessage(i18n: I18n, code: string | null | undefined): string | nul
 }
 
 /** "Title: missing · SEO title: draft" from the item's "group:state" entries (incomplete ones, grouped). */
+/** One line per state: "Missing: Titles and names, Descriptions (2)", in the order of FIELD_STATES. */
 function fieldSummary(i18n: I18n, fields: readonly string[]) {
-  const byGroup = new Map<string, Map<FieldState, number>>();
+  const byState = new Map<FieldState, Map<string, number>>();
   for (const entry of fields) {
     const [group, state] = entry.split(":") as [string, string];
     if (!isFieldState(state) || state === "complete") continue;
-    const states = byGroup.get(group) ?? new Map<FieldState, number>();
-    states.set(state, (states.get(state) ?? 0) + 1);
-    byGroup.set(group, states);
+    const groups = byState.get(state) ?? new Map<string, number>();
+    groups.set(group, (groups.get(group) ?? 0) + 1);
+    byState.set(state, groups);
   }
-  return [...byGroup].flatMap(([group, states]) =>
-    [...states].map(([state, n]) => ({
-      state,
-      text: `${i18n.t("coverage.items.fieldState", {
-        field: hasMessage(`coverage.group.${group}`) ? i18n.t(`coverage.group.${group}` as "coverage.group.title") : group,
-        state: i18n.t(`coverage.state.${state}`),
-      })}${n > 1 ? ` (${i18n.number(n)})` : ""}`,
-    })),
-  );
+  return FIELD_STATES.filter((state) => byState.has(state)).map((state) => ({
+    state,
+    text: i18n.t("coverage.items.stateFields", {
+      state: i18n.t(`coverage.state.${state}`),
+      fields: [...byState.get(state)!]
+        .map(([group, n]) => `${hasMessage(`coverage.group.${group}`) ? i18n.t(`coverage.group.${group}` as "coverage.group.title") : group}${n > 1 ? ` (${i18n.number(n)})` : ""}`)
+        .join(", "),
+    }),
+  }));
 }
 
 export default function CoverageItems() {
@@ -151,7 +152,8 @@ export default function CoverageItems() {
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">{t("coverage.items.item")}</s-table-header>
-              <s-table-header>{t("coverage.items.type")}</s-table-header>
+              {/* The type column only when items of several types are listed. */}
+              {f.type ? null : <s-table-header>{t("coverage.items.type")}</s-table-header>}
               <s-table-header>{t("coverage.items.fields")}</s-table-header>
               <s-table-header>{t("coverage.items.checked")}</s-table-header>
             </s-table-header-row>
@@ -166,7 +168,7 @@ export default function CoverageItems() {
                         {item.lastAttemptFailed ? <s-text color="subdued">{t("coverage.items.lastAttempt")}</s-text> : null}
                       </s-stack>
                     </s-table-cell>
-                    <s-table-cell>{kindLabel(i18n, item.resourceType)}</s-table-cell>
+                    {f.type ? null : <s-table-cell>{kindLabel(i18n, item.resourceType)}</s-table-cell>}
                     <s-table-cell>
                       <s-stack direction="block" gap="small-300">
                         {fieldSummary(i18n, item.fields).map((field) => (
@@ -177,7 +179,9 @@ export default function CoverageItems() {
                         ))}
                       </s-stack>
                     </s-table-cell>
-                    <s-table-cell>{i18n.dateTime(item.syncedAt)}</s-table-cell>
+                    <s-table-cell>
+                      <s-text color="subdued">{i18n.dateTime(item.syncedAt)}</s-text>
+                    </s-table-cell>
                   </s-table-row>
                 );
               })}

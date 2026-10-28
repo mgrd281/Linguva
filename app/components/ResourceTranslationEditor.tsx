@@ -424,6 +424,26 @@ export function ResourceTranslationEditor() {
         <input type="hidden" name={`current:${field.key}`} value={field.currentDigest} />
         {draft !== undefined ? <input type="hidden" name={`origin:${field.key}`} value="AI" /> : null}
         <s-stack direction="block" gap="base">
+          {/* The field's state first, where the eye lands: one badge, plus notes. */}
+          <s-stack direction="inline" gap="small" alignItems="center">
+            {draft !== undefined ? (
+              <s-badge tone="info">
+                {ai?.provider === "memory" ? t("editor.badge.memoryMatch", { score: ai.scores?.[field.key] ?? "" }) : t("editor.badge.aiDraft")}
+              </s-badge>
+            ) : status?.status === "saved" ? (
+              <s-badge tone="success">{t("common.state.published")}</s-badge>
+            ) : field.outdated && field.translation ? (
+              <s-badge tone="warning">{t("common.translationStatus.outdated")}</s-badge>
+            ) : field.translation ? (
+              <s-badge tone="success">{t("common.translationStatus.translated")}</s-badge>
+            ) : (
+              <s-badge>{t("common.translationStatus.missing")}</s-badge>
+            )}
+            {warnings?.length ? (
+              <s-badge tone="warning">{t("editor.badge.review", { issues: warnings.map((code) => issueName(i18n, code)).join(", ") })}</s-badge>
+            ) : null}
+            {!field.machine ? <s-badge>{t("editor.badge.manualOnly")}</s-badge> : null}
+          </s-stack>
           <s-query-container>
             <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
               <s-stack direction="block" gap="small">
@@ -536,20 +556,6 @@ export function ResourceTranslationEditor() {
                   />
                 ) : null}
                 <s-stack direction="inline" gap="small">
-                  {field.outdated && draft === undefined ? <s-badge tone="warning">{t("common.translationStatus.outdated")}</s-badge> : null}
-                  {draft !== undefined ? (
-                    <s-badge tone="info">
-                      {ai?.provider === "memory"
-                        ? t("editor.badge.memoryMatch", { score: ai.scores?.[field.key] ?? "" })
-                        : t("editor.badge.aiDraft")}
-                    </s-badge>
-                  ) : null}
-                  {warnings?.length ? (
-                    <s-badge tone="warning">
-                      {t("editor.badge.review", { issues: warnings.map((code) => issueName(i18n, code)).join(", ") })}
-                    </s-badge>
-                  ) : null}
-                  {status?.status === "saved" ? <s-badge tone="success">{t("common.state.published")}</s-badge> : null}
                   {field.translation && !(removed?.status === "removed" && removed.key === field.key) ? (
                     <s-button
                       variant="tertiary"
@@ -566,7 +572,6 @@ export function ResourceTranslationEditor() {
                       {confirmRemove === field.key ? t("editor.remove.confirm") : t("editor.remove.button")}
                     </s-button>
                   ) : null}
-                  {!field.machine ? <s-badge>{t("editor.badge.manualOnly")}</s-badge> : null}
                 </s-stack>
               </s-stack>
             </s-grid>

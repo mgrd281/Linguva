@@ -2,6 +2,8 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "memory.delete.heading": "Delete this memory entry?",
+  "memory.delete.body": "It won't be reused for new translations. Published translations in your store don't change. This can't be undone.",
   "memory.intro":
     "Every translation you publish is remembered sentence by sentence. Identical text is reused automatically and isn't sent to AI again, so it costs nothing. Your memory is private to your store.",
   "memory.stats.entries": { one: "{count} entry", other: "{count} entries" },
@@ -18,6 +20,8 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "memory.delete.heading": "Diesen Speichereintrag löschen?",
+  "memory.delete.body": "Er wird für neue Übersetzungen nicht mehr verwendet. Veröffentlichte Übersetzungen in deinem Shop ändern sich nicht. Das kann nicht rückgängig gemacht werden.",
   "memory.intro":
     "Jede Übersetzung, die du veröffentlichst, wird Satz für Satz gespeichert. Identischer Text wird automatisch wiederverwendet und nicht erneut an die KI gesendet, das kostet also nichts. Dein Übersetzungsspeicher gehört nur deinem Shop.",
   "memory.stats.entries": { one: "{count} Eintrag", other: "{count} Einträge" },

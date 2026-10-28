@@ -2,6 +2,8 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "jobs.cancel.heading": "Cancel this job?",
+  "jobs.cancel.body": "Items not translated yet are skipped. Translations already made stay as they are. A cancelled job can't be resumed; start a new one instead.",
   "jobs.outcome.TRANSLATION_CHANGED": "Kept: someone changed the translation while it was being translated",
   "jobs.itemStatus.PENDING": "Waiting",
   "jobs.itemStatus.RUNNING": "Running",
@@ -76,13 +78,14 @@ export const en = {
   "jobs.detail.cancel": "Cancel job",
   "jobs.detail.resume": "Resume job",
   "jobs.detail.retryFailed": "Retry failed {kind}",
-  "jobs.detail.failed.heading": "{kind} that failed",
   "jobs.detail.failed.reason": "Reason",
   "jobs.detail.failed.attempts": "Attempts",
   "jobs.detail.failed.unknown": "Unknown",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "jobs.cancel.heading": "Diesen Auftrag abbrechen?",
+  "jobs.cancel.body": "Noch nicht übersetzte Einträge werden übersprungen. Bereits erstellte Übersetzungen bleiben erhalten. Ein abgebrochener Auftrag kann nicht fortgesetzt werden; starte stattdessen einen neuen.",
   "jobs.outcome.TRANSLATION_CHANGED": "Beibehalten: Jemand hat die Übersetzung währenddessen geändert",
   "jobs.itemStatus.PENDING": "Wartet",
   "jobs.itemStatus.RUNNING": "Läuft",
@@ -156,7 +159,6 @@ export const de: Translation<typeof en> = {
   "jobs.detail.cancel": "Auftrag abbrechen",
   "jobs.detail.resume": "Auftrag fortsetzen",
   "jobs.detail.retryFailed": "Fehlgeschlagene {kind} wiederholen",
-  "jobs.detail.failed.heading": "{kind} mit Fehlern",
   "jobs.detail.failed.reason": "Grund",
   "jobs.detail.failed.attempts": "Versuche",
   "jobs.detail.failed.unknown": "Unbekannt",

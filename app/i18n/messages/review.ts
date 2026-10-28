@@ -2,6 +2,8 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "review.reject.heading": "Reject the selected translations?",
+  "review.reject.body": "Rejected translations are not published, and bulk jobs won't translate the same original text again. This can't be undone.",
   "review.page.heading": "Review translations",
   "review.intro.empty": "Nothing to review. Bulk translations appear here before they are published.",
   "review.intro.waiting": {
@@ -13,10 +15,9 @@ export const en = {
   "review.saved.published": "Published: {count}",
   "review.saved.stale": "Original or translation changed in the meantime, not published: {count}",
   "review.saved.failed": "Failed: {count}",
-  "review.rejected.heading": "Drafts rejected",
   "review.rejected.body": {
-    one: "{count} draft(s) discarded. They won't be published.",
-    other: "{count} draft(s) discarded. They won't be published.",
+    one: "{count} draft discarded. It won't be published.",
+    other: "{count} drafts discarded. They won't be published.",
   },
 
   "review.filter.searchPlaceholder": "Title, original or translation",
@@ -52,6 +53,8 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "review.reject.heading": "Ausgewählte Übersetzungen ablehnen?",
+  "review.reject.body": "Abgelehnte Übersetzungen werden nicht veröffentlicht, und Massenübersetzungen übersetzen denselben Originaltext nicht erneut. Das kann nicht rückgängig gemacht werden.",
   "review.page.heading": "Übersetzungen prüfen",
   "review.intro.empty": "Nichts zu prüfen. Massenübersetzungen erscheinen hier, bevor sie veröffentlicht werden.",
   "review.intro.waiting": {
@@ -63,7 +66,6 @@ export const de: Translation<typeof en> = {
   "review.saved.published": "Veröffentlicht: {count}",
   "review.saved.stale": "Original oder Übersetzung inzwischen geändert, nicht veröffentlicht: {count}",
   "review.saved.failed": "Fehlgeschlagen: {count}",
-  "review.rejected.heading": "Entwürfe abgelehnt",
   "review.rejected.body": {
     one: "{count} Entwurf verworfen. Er wird nicht veröffentlicht.",
     other: "{count} Entwürfe verworfen. Sie werden nicht veröffentlicht.",

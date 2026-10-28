@@ -2,6 +2,8 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "glossary.delete.heading": "Delete this term?",
+  "glossary.delete.body": "New translations won't apply it any more. Published translations don't change. This can't be undone.",
   "glossary.exportCsv": "Export CSV",
 
   "glossary.add.heading": "Add a term",
@@ -36,7 +38,6 @@ export const en = {
   "glossary.import.submit": "Import",
   "glossary.import.rejected": "Import rejected",
   "glossary.import.line": "Line {line}: {message}",
-  "glossary.import.complete": "Import complete",
   "glossary.import.count": { one: "{count} term imported.", other: "{count} terms imported." },
   "glossary.import.failed": "Import failed",
 
@@ -62,6 +63,8 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "glossary.delete.heading": "Diesen Begriff löschen?",
+  "glossary.delete.body": "Neue Übersetzungen wenden ihn nicht mehr an. Veröffentlichte Übersetzungen ändern sich nicht. Das kann nicht rückgängig gemacht werden.",
   "glossary.exportCsv": "CSV exportieren",
 
   "glossary.add.heading": "Begriff hinzufügen",
@@ -96,7 +99,6 @@ export const de: Translation<typeof en> = {
   "glossary.import.submit": "Importieren",
   "glossary.import.rejected": "Import abgelehnt",
   "glossary.import.line": "Zeile {line}: {message}",
-  "glossary.import.complete": "Import abgeschlossen",
   "glossary.import.count": { one: "{count} Begriff importiert.", other: "{count} Begriffe importiert." },
   "glossary.import.failed": "Import fehlgeschlagen",
 

@@ -3,6 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import { useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { ZodError } from "zod";
@@ -20,7 +21,10 @@ import {
 } from "../.server/glossary/glossary";
 import type { I18n, MessageRef } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
+import { useResultToast } from "../components/app-bridge";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
+import { ALL, chosen } from "../lib/select-all";
 
 const MAX_IMPORT_BYTES = 1024 * 1024;
 
@@ -77,7 +81,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Result> =
           rule: String(form.get("rule")) as "DO_NOT_TRANSLATE",
           term: String(form.get("term") ?? ""),
           translation: String(form.get("translation") ?? "") || null,
-          targetLocale: String(form.get("targetLocale") ?? ""),
+          targetLocale: chosen(form.get("targetLocale")) ?? "",
           market: String(form.get("market") ?? ""),
           caseSensitive: form.get("caseSensitive") === "on",
         },
@@ -135,8 +139,13 @@ export default function GlossaryPage() {
   const addFetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const addResult = addFetcher.data;
   const importResult = importFetcher.data;
+  useResultToast(
+    importResult,
+    importResult?.kind === "imported" && !importResult.errors.length ? t("glossary.import.count", { count: importResult.count }) : null,
+  );
 
   return (
     <s-page heading={t("common.nav.glossary")}>
@@ -158,7 +167,7 @@ export default function GlossaryPage() {
                 <s-text-field name="term" label={t("glossary.field.term")} required />
                 <s-text-field name="translation" label={t("glossary.field.translation")} details={t("glossary.field.translationDetails")} />
                 <s-select name="targetLocale" label={t("common.language")}>
-                  <s-option value="">{t("common.allLanguages")}</s-option>
+                  <s-option value={ALL}>{t("common.allLanguages")}</s-option>
                   {data.languages.map((l) => (
                     <s-option key={l.locale} value={l.locale}>
                       {i18n.language(l.locale, l.name)}
@@ -217,7 +226,9 @@ export default function GlossaryPage() {
                     <s-button
                       variant="tertiary"
                       tone="critical"
-                      onClick={() => deleteFetcher.submit({ intent: "delete", termId: term.id }, { method: "post" })}
+                      commandFor="glossary-delete"
+                      command="--show"
+                      onClick={() => setPendingDelete(term.id)}
                     >
                       {t("common.action.delete")}
                     </s-button>
@@ -234,7 +245,7 @@ export default function GlossaryPage() {
           <input type="hidden" name="intent" value="import" />
           <s-stack direction="block" gap="base">
             <s-paragraph>{t("glossary.import.columns")}</s-paragraph>
-            <input type="file" name="file" accept=".csv,text/csv" aria-label={t("glossary.import.file")} />
+            <s-drop-zone name="file" accept=".csv,text/csv" label={t("glossary.import.file")} />
             <s-text-area name="csv" label={t("glossary.import.paste")} rows={4} />
             <s-checkbox name="replaceAll" label={t("glossary.import.replaceAll")} />
             <s-button type="submit" {...(importFetcher.state !== "idle" ? { loading: true } : {})}>
@@ -242,22 +253,16 @@ export default function GlossaryPage() {
             </s-button>
           </s-stack>
         </importFetcher.Form>
-        {importResult?.kind === "imported" ? (
-          importResult.errors.length ? (
-            <s-banner tone="critical" heading={t("glossary.import.rejected")}>
-              <s-unordered-list>
-                {importResult.errors.map((e) => (
-                  <s-list-item key={e.line}>
-                    {t("glossary.import.line", { line: e.line, message: problems(i18n, e.messages) })}
-                  </s-list-item>
-                ))}
-              </s-unordered-list>
-            </s-banner>
-          ) : (
-            <s-banner tone="success" heading={t("glossary.import.complete")}>
-              <s-paragraph>{t("glossary.import.count", { count: importResult.count })}</s-paragraph>
-            </s-banner>
-          )
+        {importResult?.kind === "imported" && importResult.errors.length ? (
+          <s-banner tone="critical" heading={t("glossary.import.rejected")}>
+            <s-unordered-list>
+              {importResult.errors.map((e) => (
+                <s-list-item key={e.line}>
+                  {t("glossary.import.line", { line: e.line, message: problems(i18n, e.messages) })}
+                </s-list-item>
+              ))}
+            </s-unordered-list>
+          </s-banner>
         ) : null}
         {importResult?.kind === "error" ? (
           <s-banner tone="critical" heading={t("glossary.import.failed")}>
@@ -265,6 +270,13 @@ export default function GlossaryPage() {
           </s-banner>
         ) : null}
       </s-section>
+      <ConfirmModal
+        id="glossary-delete"
+        heading={t("glossary.delete.heading")}
+        body={t("glossary.delete.body")}
+        confirmLabel={t("common.action.delete")}
+        onConfirm={() => pendingDelete && deleteFetcher.submit({ intent: "delete", termId: pendingDelete }, { method: "post" })}
+      />
     </s-page>
   );
 }

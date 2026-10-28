@@ -10,6 +10,7 @@ import { richTextPreviewOrNull } from "../lib/rich-text-preview";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { fieldName as fieldLabel, hasMessage, issueName } from "../i18n/labels";
+import { useResultToast } from "./app-bridge";
 import { HtmlPreview } from "./HtmlPreview";
 
 type EditorData = Awaited<ReturnType<typeof loadEditorData>>;
@@ -38,6 +39,15 @@ export function AttachedResourcesPanel({
   const aiError = aiFetcher.data?.kind === "error" ? aiFetcher.data : null;
   const saved = saveFetcher.data?.kind === "attached-saved" ? saveFetcher.data.outcomes : null;
   const saveStatus = new Map(saved?.map((o) => [o.ref, o]) ?? []);
+  // Success is confirmed with a toast; problems stay on the page.
+  useResultToast(
+    saveFetcher.data,
+    saved && saved.every((o) => o.status === "saved")
+      ? saved.length
+        ? t("editor.saved.toast", { count: saved.length })
+        : t("editor.saved.nothingHeading")
+      : null,
+  );
   const canAi = data.ai.available && data.ai.consent;
   // Images are named by the app; metafields by their definition (merchant data).
   const itemLabel = (item: { kind: string; label: string }) => (item.kind === "IMAGE" ? t("editor.attached.image") : item.label);
@@ -72,21 +82,10 @@ export function AttachedResourcesPanel({
             </s-paragraph>
           </s-banner>
         ) : null}
-        {saved ? (
-          <s-banner
-            tone={saved.every((o) => o.status === "saved") ? "success" : "warning"}
-            heading={
-              saved.length === 0
-                ? t("editor.saved.nothingHeading")
-                : saved.every((o) => o.status === "saved")
-                  ? t("editor.saved.heading")
-                  : t("editor.saved.partialHeading")
-            }
-          >
+        {saved && !saved.every((o) => o.status === "saved") ? (
+          <s-banner tone="warning" heading={t("editor.saved.partialHeading")}>
             <s-paragraph>
-              {saved.length === 0
-                ? t("editor.saved.nothingBody")
-                : t("editor.attached.savedCount", { saved: saved.filter((o) => o.status === "saved").length, total: saved.length })}
+              {t("editor.attached.savedCount", { saved: saved.filter((o) => o.status === "saved").length, total: saved.length })}
             </s-paragraph>
           </s-banner>
         ) : null}

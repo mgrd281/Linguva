@@ -6,7 +6,7 @@
 import { expect, test } from "@playwright/test";
 import { contentRef } from "../../app/lib/resource-kinds";
 import { UI_THEME_GID } from "./fixtures/shops";
-import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
+import { expectAccessible, expectNoHorizontalScroll, openApp, expectToast } from "./helpers";
 
 test("the content overview lists every content type with its status @responsive", async ({ page }) => {
   await openApp(page, "full", "/app/content");
@@ -32,7 +32,7 @@ test("a menu: list, AI draft, publish, read back", async ({ page }) => {
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[de] Main menu");
   await page.locator('s-text-field[name="value:title"] input').fill("Hauptmenü");
   await page.getByRole("button", { name: "Publish translations" }).click();
-  await expect(page.locator('s-banner[heading="Translations published"]')).toBeVisible();
+  await expectToast(page, /translations? published$/);
 
   await openApp(page, "full", "/app/content/menus?lang=de");
   await expect(page.getByText("Translate all into German")).toBeVisible();

@@ -3,6 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import { useState } from "react";
 import { Form, useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
@@ -14,7 +15,9 @@ import {
   memoryStats,
 } from "../.server/memory/translation-memory";
 import { markupToPlainText } from "../.server/translation/segment-markup";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
+import { ALL, chosen } from "../lib/select-all";
 
 function plain(markup: string): string {
   try {
@@ -28,7 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
   const url = new URL(request.url);
   const search = url.searchParams.get("q") ?? "";
-  const targetLocale = url.searchParams.get("lang") ?? "";
+  const targetLocale = chosen(url.searchParams.get("lang")) ?? "";
   const [entries, stats, locales] = await Promise.all([
     listMemory(shop.id, { search, targetLocale: targetLocale || undefined, take: 100 }),
     memoryStats(shop.id),
@@ -62,6 +65,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Memory() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const { t, number, language } = useI18n();
   const totalEntries = data.stats.reduce((s, r) => s + r.entries, 0);
   const totalUses = data.stats.reduce((s, r) => s + r.uses, 0);
@@ -85,8 +89,8 @@ export default function Memory() {
                 placeholder={t("memory.search.placeholder")}
                 value={data.search}
               />
-              <s-select name="lang" label={t("common.language")} value={data.targetLocale}>
-                <s-option value="">{t("common.allLanguages")}</s-option>
+              <s-select name="lang" label={t("common.language")} value={data.targetLocale || ALL}>
+                <s-option value={ALL}>{t("common.allLanguages")}</s-option>
                 {data.languages.map((l) => (
                   <s-option key={l.locale} value={l.locale}>
                     {language(l.locale, l.name)}
@@ -141,7 +145,9 @@ export default function Memory() {
                       <s-button
                         variant="tertiary"
                         tone="critical"
-                        onClick={() => fetcher.submit({ intent: "delete", entryId: e.id }, { method: "post" })}
+                        commandFor="memory-delete"
+                        command="--show"
+                        onClick={() => setPendingDelete(e.id)}
                       >
                         {t("common.action.delete")}
                       </s-button>
@@ -153,6 +159,13 @@ export default function Memory() {
           </s-table>
         )}
       </s-section>
+      <ConfirmModal
+        id="memory-delete"
+        heading={t("memory.delete.heading")}
+        body={t("memory.delete.body")}
+        confirmLabel={t("common.action.delete")}
+        onConfirm={() => pendingDelete && fetcher.submit({ intent: "delete", entryId: pendingDelete }, { method: "post" })}
+      />
     </s-page>
   );
 }

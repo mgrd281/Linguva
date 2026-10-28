@@ -2,10 +2,11 @@
  * Translation editor UI shared by the product and collection pages. The
  * route supplies the loader and action (see .server/translation/resource-editor).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, useBlocker, useFetcher, useLoaderData } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
+import { useResultToast, useSaveBar } from "./app-bridge";
 import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
 import { HtmlPreview } from "./HtmlPreview";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
@@ -38,6 +39,8 @@ function saveErrorMessage(i18n: I18n, outcome: { message?: string; code?: string
   if (outcome.code && hasMessage(saveKey)) return i18n.t(saveKey, { detail: outcome.message ?? "" });
   return outcome.message ?? i18n.t("editor.field.notSaved");
 }
+
+const EDITOR_SAVE_BAR = "linguva-editor-save-bar";
 
 export function ResourceTranslationEditor() {
   const data = useLoaderData<EditorLoader>();
@@ -74,7 +77,11 @@ export function ResourceTranslationEditor() {
   // The latest of AI translation or memory suggestions fills the form.
   const aiResult = aiFetcher.data?.kind === "ai" ? aiFetcher.data : null;
   const memoryResult = memoryFetcher.data?.kind === "ai" ? memoryFetcher.data : null;
-  const ai = filledFrom === "memory" ? memoryResult : aiResult;
+  // "Discard" in the save bar drops the drafts shown and what was typed.
+  const [discarded, setDiscarded] = useState<unknown>(null);
+  const [resetCount, setResetCount] = useState(0);
+  const filled = filledFrom === "memory" ? memoryResult : aiResult;
+  const ai = filled && filled !== discarded ? filled : null;
   const restored = restoreFetcher.data?.kind === "restored" ? restoreFetcher.data.status : null;
   // Errors of the action that ran last (AI translation or memory suggestions).
   const lastData = filledFrom === "memory" ? memoryFetcher.data : aiFetcher.data;
@@ -130,6 +137,24 @@ export function ResourceTranslationEditor() {
     focusStay();
     return () => cancelAnimationFrame(frame);
   }, [blocker.state]);
+  // The admin's save bar while there is something to publish (Publish / Discard).
+  const saveFormRef = useRef<HTMLFormElement>(null);
+  useSaveBar(EDITOR_SAVE_BAR, unpublished);
+  const discard = () => {
+    setDiscarded(filled);
+    setTyped({ base: null, values: {} });
+    setResetCount((n) => n + 1);
+  };
+  // Success is confirmed with a toast; problems stay on the page as banners.
+  const savedAll = saveFetcher.data?.kind === "saved" && saveFetcher.data.outcomes.every((o) => o.status === "saved");
+  useResultToast(
+    saveFetcher.data,
+    savedAll && saveFetcher.data?.kind === "saved"
+      ? saveFetcher.data.outcomes.length
+        ? t("editor.saved.toast", { count: saveFetcher.data.outcomes.length })
+        : t("editor.saved.nothingHeading")
+      : null,
+  );
   useEffect(() => {
     if (!unpublished) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -215,18 +240,10 @@ export function ResourceTranslationEditor() {
         </s-banner>
       ) : null}
 
-      {saved ? (
-        saved.every((o) => o.status === "saved") ? (
-          <s-banner tone="success" heading={saved.length ? t("editor.saved.heading") : t("editor.saved.nothingHeading")}>
-            <s-paragraph>
-              {saved.length ? t("editor.saved.body", { count: saved.length }) : t("editor.saved.nothingBody")}
-            </s-paragraph>
-          </s-banner>
-        ) : (
-          <s-banner tone="warning" heading={t("editor.saved.partialHeading")}>
-            <s-paragraph>{t("editor.saved.partialBody")}</s-paragraph>
-          </s-banner>
-        )
+      {saved && !saved.every((o) => o.status === "saved") ? (
+        <s-banner tone="warning" heading={t("editor.saved.partialHeading")}>
+          <s-paragraph>{t("editor.saved.partialBody")}</s-paragraph>
+        </s-banner>
       ) : null}
 
       {data.caution === "legal" ? (
@@ -336,7 +353,14 @@ export function ResourceTranslationEditor() {
         </s-section>
       ) : null}
 
-      <saveFetcher.Form method="post" onInput={onFormInput} onChange={onFormInput}>
+      <ui-save-bar id={EDITOR_SAVE_BAR}>
+        <button variant="primary" onClick={() => saveFormRef.current?.requestSubmit()} {...(saving ? { loading: "" } : {})}>
+          {t("editor.publish")}
+        </button>
+        <button onClick={discard}>{t("editor.discard")}</button>
+      </ui-save-bar>
+
+      <saveFetcher.Form ref={saveFormRef} method="post" onInput={onFormInput} onChange={onFormInput}>
         <input type="hidden" name="intent" value="save" />
         {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
         {data.fields.filter((f) => !data.seoPreview || !isSeoKey(f.key)).map((field) => renderField(field))}
@@ -423,7 +447,7 @@ export function ResourceTranslationEditor() {
                 <div lang={data.target.locale} {...textDirection(field)}>
                   {multiline ? (
                     <s-text-area
-                      key={`${field.key}:${draft ?? "base"}`}
+                      key={`${field.key}:${draft ?? "base"}:${resetCount}`}
                       name={`value:${field.key}`}
                       label={targetName}
                       value={value}
@@ -433,7 +457,7 @@ export function ResourceTranslationEditor() {
                     />
                   ) : (
                     <s-text-field
-                      key={`${field.key}:${draft ?? "base"}`}
+                      key={`${field.key}:${draft ?? "base"}:${resetCount}`}
                       name={`value:${field.key}`}
                       label={targetName}
                       value={field.key === "handle" ? currentValue("handle") : value}

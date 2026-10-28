@@ -3,7 +3,7 @@
  * store description for the AI) is saved and shown again after a reload.
  */
 import { expect, test } from "@playwright/test";
-import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
+import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
 
 test("the translation style is saved per language @responsive", async ({ page }) => {
   await openApp(page, "full", "/app/settings");
@@ -20,7 +20,7 @@ test("the translation style is saved per language @responsive", async ({ page })
   await section.getByRole("combobox", { name: "French", exact: true }).selectOption("more");
   await section.getByRole("textbox", { name: "About your store" }).fill("Outdoor clothing for families, friendly and simple.");
   await section.getByRole("button", { name: "Save translation style" }).click();
-  await expect(section.getByText("Saved. New AI translations use this style.")).toBeVisible();
+  await expectToast(page, "Saved. New AI translations use this style.");
 
   await page.reload();
   await expect(section.getByRole("combobox", { name: "German", exact: true })).toHaveValue("less");
@@ -54,7 +54,7 @@ test("automatic translation is off by default and turned on per language @respon
   await section.getByRole("checkbox", { name: "German", exact: true }).check();
   await section.getByRole("checkbox", { name: "French", exact: true }).check();
   await section.getByRole("button", { name: "Turn on automatic translation" }).click();
-  await expect(section.locator('s-banner[heading="Saved"]')).toBeVisible();
+  await expectToast(page, /translated about a minute later/);
   await page.reload();
   await expect(section.getByText("French, German")).toBeVisible();
   await expect(section.getByRole("checkbox", { name: "German", exact: true })).toBeChecked();

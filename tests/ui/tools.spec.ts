@@ -22,7 +22,9 @@ test("glossary: a term for one language, chosen by name @responsive", async ({ p
   await expect(row).toHaveCount(1);
   // Shown by name, not by code.
   await expect(row.getByText("German", { exact: true })).toBeVisible();
+  // Deleting asks first.
   await row.getByRole("button", { name: "Delete" }).click();
+  await page.locator("s-modal#glossary-delete").getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.locator("s-table-row", { hasText: term })).toHaveCount(0);
 });
 

@@ -11,6 +11,7 @@ import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, isBulkResourceType, jobOut
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
 import { editorPathFor, numericId, type TranslatableKind } from "../lib/resource-kinds";
 import { jobProgress } from "../lib/job-display";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
 import { itemOutcome, jobErrorMessage, jobStatus, kindLabel, kindPlural } from "../i18n/labels";
 import type { I18n } from "../i18n/i18n";
@@ -201,12 +202,18 @@ export default function JobDetail() {
 
       <s-stack direction="inline" gap="base">
         {active ? (
-          <fetcher.Form method="post">
-            <input type="hidden" name="intent" value="cancel" />
-            <s-button type="submit" tone="critical" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
+          <>
+            <s-button tone="critical" commandFor="job-cancel" command="--show" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
               {t("jobs.detail.cancel")}
             </s-button>
-          </fetcher.Form>
+            <ConfirmModal
+              id="job-cancel"
+              heading={t("jobs.cancel.heading")}
+              body={t("jobs.cancel.body")}
+              confirmLabel={t("jobs.detail.cancel")}
+              onConfirm={() => fetcher.submit({ intent: "cancel" }, { method: "post" })}
+            />
+          </>
         ) : null}
         {job.status !== "CANCELLED" && (job.failed > 0 || job.status === "FAILED") ? (
           <fetcher.Form method="post">

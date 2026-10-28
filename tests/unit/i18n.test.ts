@@ -27,10 +27,10 @@ describe("interface language", () => {
   });
 
   it("fills placeholders, formats numbers for the language and picks plural forms", () => {
-    expect(translate("en", "common.items", { count: 1 })).toBe("1 item");
-    expect(translate("en", "common.items", { count: 1200 })).toBe("1,200 items");
-    expect(translate("de", "common.items", { count: 1 })).toBe("1 Eintrag");
-    expect(translate("de", "common.items", { count: 1200 })).toBe("1.200 Einträge");
+    expect(translate("en", "jobs.detail.timing.minutes", { count: 1 })).toBe("1 minute");
+    expect(translate("en", "jobs.detail.timing.minutes", { count: 1200 })).toBe("1,200 minutes");
+    expect(translate("de", "jobs.detail.timing.minutes", { count: 1 })).toBe("1 Minute");
+    expect(translate("de", "jobs.detail.timing.minutes", { count: 1200 })).toBe("1.200 Minuten");
     expect(formatNumber("de", 1234567)).toBe("1.234.567");
   });
 

@@ -4,7 +4,7 @@
  * merchant needs it (the "Leave?" question).
  */
 import { expect, test, type Page } from "@playwright/test";
-import { openApp } from "./helpers";
+import { openApp, expectToast } from "./helpers";
 
 /** The focused element, through shadow roots: its host's tag and name, and whether focus is shown. */
 async function focused(page: Page) {
@@ -64,7 +64,7 @@ test("translate, edit and publish a product with the keyboard only", async ({ pa
 
   await tabTo(page, (f) => f.tag === "s-button" && f.text === "Publish translations", 80);
   await page.keyboard.press("Enter");
-  await expect(page.locator('s-banner[heading="Translations published"]')).toBeVisible();
+  await expectToast(page, /translations? published$/);
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Jacke Nummer 6");
 });
 

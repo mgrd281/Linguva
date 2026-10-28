@@ -20,15 +20,18 @@ import { editorPathFor, RESOURCE_KINDS } from "../lib/resource-kinds";
 import { sanitizeHtml } from "../.server/lib/sanitize-html";
 import { HtmlPreview } from "../components/HtmlPreview";
 import { richTextPreviewOrNull } from "../lib/rich-text-preview";
+import { useResultToast } from "../components/app-bridge";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
 import { fieldName, issueName, kindLabel } from "../i18n/labels";
+import { ALL, chosen } from "../lib/select-all";
 
 const looksLikeHtml = (text: string) => /<\/?[a-z][a-z0-9]*[\s>/]/i.test(text);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { shop } = await requireShop(request);
   const url = new URL(request.url);
-  const q = (name: string) => url.searchParams.get(name) || null;
+  const q = (name: string) => chosen(url.searchParams.get(name));
   const filter = {
     locale: q("lang"),
     jobId: q("job"),
@@ -100,6 +103,15 @@ export default function Review() {
   const fetcher = useFetcher<typeof action>();
   const busy = fetcher.state !== "idle";
   const result = fetcher.data;
+  // Clean results are confirmed with a toast; partial ones stay on the page.
+  useResultToast(
+    result,
+    result?.kind === "approved" && !result.stale && !result.failed
+      ? t("review.saved.published", { count: result.published })
+      : result?.kind === "rejected"
+        ? t("review.rejected.body", { count: result.count })
+        : null,
+  );
   const formRef = useRef<HTMLFormElement>(null);
   const filtered = Boolean(
     data.filter.search || data.filter.locale || data.filter.group || data.filter.resourceType || data.filter.flagged,
@@ -141,8 +153,8 @@ export default function Review() {
         </s-paragraph>
       </s-section>
 
-      {result?.kind === "approved" ? (
-        <s-banner tone={result.stale || result.failed ? "warning" : "success"} heading={t("review.saved.heading")}>
+      {result?.kind === "approved" && (result.stale || result.failed) ? (
+        <s-banner tone="warning" heading={t("review.saved.heading")}>
           <s-paragraph>
             {[
               t("review.saved.published", { count: result.published }),
@@ -152,11 +164,6 @@ export default function Review() {
               .filter(Boolean)
               .join(" · ")}
           </s-paragraph>
-        </s-banner>
-      ) : null}
-      {result?.kind === "rejected" ? (
-        <s-banner tone="info" heading={t("review.rejected.heading")}>
-          <s-paragraph>{t("review.rejected.body", { count: result.count })}</s-paragraph>
         </s-banner>
       ) : null}
 
@@ -173,22 +180,22 @@ export default function Review() {
                     placeholder={t("review.filter.searchPlaceholder")}
                     value={data.filter.search ?? ""}
                   />
-                  <s-select name="lang" label={t("common.language")} value={data.filter.locale ?? ""}>
-                    <s-option value="">{t("common.allLanguages")}</s-option>
+                  <s-select name="lang" label={t("common.language")} value={data.filter.locale ?? ALL}>
+                    <s-option value={ALL}>{t("common.allLanguages")}</s-option>
                     {data.locales.map((l) => (
                       <s-option key={l} value={l}>
                         {data.names[l] ?? l}
                       </s-option>
                     ))}
                   </s-select>
-                  <s-select name="group" label={t("review.filter.fields")} value={data.filter.group ?? ""}>
-                    <s-option value="">{t("review.filter.allFields")}</s-option>
+                  <s-select name="group" label={t("review.filter.fields")} value={data.filter.group ?? ALL}>
+                    <s-option value={ALL}>{t("review.filter.allFields")}</s-option>
                     <s-option value="content">{t("review.filter.group.content")}</s-option>
                     <s-option value="seo">{t("review.filter.group.seo")}</s-option>
                     <s-option value="handle">{t("review.filter.group.handle")}</s-option>
                   </s-select>
-                  <s-select name="type" label={t("review.filter.type")} value={data.filter.resourceType ?? ""}>
-                    <s-option value="">{t("review.filter.allContent")}</s-option>
+                  <s-select name="type" label={t("review.filter.type")} value={data.filter.resourceType ?? ALL}>
+                    <s-option value={ALL}>{t("review.filter.allContent")}</s-option>
                     {Object.keys(RESOURCE_KINDS).map((kind) => (
                       <s-option key={kind} value={kind}>
                         {kindLabel(i18n, kind)}
@@ -220,7 +227,7 @@ export default function Review() {
               <s-button variant="primary" onClick={() => submit("approve")} {...(busy ? { loading: true } : {})}>
                 {t("review.actions.approve")}
               </s-button>
-              <s-button tone="critical" onClick={() => submit("reject")} {...(busy ? { loading: true } : {})}>
+              <s-button tone="critical" commandFor="review-reject" command="--show" {...(busy ? { loading: true } : {})}>
                 {t("review.actions.reject")}
               </s-button>
               <s-text color="subdued">{t("review.actions.onPage", { count: data.drafts.length })}</s-text>
@@ -282,10 +289,17 @@ export default function Review() {
             <s-button variant="primary" onClick={() => submit("approve")} {...(busy ? { loading: true } : {})}>
               {t("review.actions.approve")}
             </s-button>
-            <s-button tone="critical" onClick={() => submit("reject")} {...(busy ? { loading: true } : {})}>
+            <s-button tone="critical" commandFor="review-reject" command="--show" {...(busy ? { loading: true } : {})}>
               {t("review.actions.reject")}
             </s-button>
           </s-stack>
+          <ConfirmModal
+            id="review-reject"
+            heading={t("review.reject.heading")}
+            body={t("review.reject.body")}
+            confirmLabel={t("review.actions.reject")}
+            onConfirm={() => submit("reject")}
+          />
         </fetcher.Form>
       ) : null}
 

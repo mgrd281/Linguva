@@ -25,6 +25,7 @@ import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { getQueues } from "../.server/queue/client";
 import { requireShop } from "../.server/shopify/require-shop";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
+import { useResultToast } from "../components/app-bridge";
 import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -132,6 +133,16 @@ export default function Settings() {
   const styleFetcher = useFetcher<typeof action>();
   const autoFetcher = useFetcher<typeof action>();
   const autoError = autoFetcher.data && "error" in autoFetcher.data ? autoFetcher.data.error : null;
+  // Saved settings are confirmed with a toast; problems stay on the page.
+  useResultToast(styleFetcher.data, styleFetcher.data && "saved" in styleFetcher.data ? t("settings.style.saved") : null);
+  useResultToast(
+    autoFetcher.data,
+    autoFetcher.data && "autoEnabled" in autoFetcher.data
+      ? autoFetcher.data.autoEnabled
+        ? t("settings.auto.savedOn")
+        : t("settings.auto.savedOff")
+      : null,
+  );
   const busy = fetcher.state !== "idle";
   const percent = data.limit ? Math.min(100, Math.round((data.used / data.limit) * 100)) : 0;
 
@@ -204,9 +215,6 @@ export default function Settings() {
               <s-button type="submit" {...(styleFetcher.state !== "idle" ? { loading: true } : {})}>
                 {t("settings.style.save")}
               </s-button>
-              {styleFetcher.data && "saved" in styleFetcher.data && styleFetcher.state === "idle" ? (
-                <s-text tone="success">{t("settings.style.saved")}</s-text>
-              ) : null}
             </s-stack>
           </s-stack>
         </styleFetcher.Form>
@@ -329,12 +337,6 @@ export default function Settings() {
             <s-banner tone="info" heading={t("settings.auto.planHeading")}>
               <s-paragraph>
                 <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
-              </s-paragraph>
-            </s-banner>
-          ) : autoFetcher.data && "autoEnabled" in autoFetcher.data ? (
-            <s-banner tone="success" heading={t("common.state.saved")}>
-              <s-paragraph>
-                {autoFetcher.data.autoEnabled ? t("settings.auto.savedOn") : t("settings.auto.savedOff")}
               </s-paragraph>
             </s-banner>
           ) : null}

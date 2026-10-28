@@ -9,11 +9,12 @@ import { jobProgress } from "../lib/job-display";
 import { RESOURCE_KINDS } from "../lib/resource-kinds";
 import { useI18n } from "../i18n/react";
 import { jobStatus, kindLabel } from "../i18n/labels";
+import { ALL, chosen } from "../lib/select-all";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
   const url = new URL(request.url);
-  const q = (name: string) => url.searchParams.get(name) || null;
+  const q = (name: string) => chosen(url.searchParams.get(name));
   const filter = { status: q("status"), locale: q("lang"), resourceType: q("type") };
   const page = await listJobsPage(shop.id, { ...filter, cursor: q("after"), take: 25 });
   const locales = (await fetchAndSyncShopLocales(admin, shop.id)).locales.filter((l) => !l.primary);
@@ -63,23 +64,23 @@ export default function Jobs() {
         <Form method="get">
           <s-query-container>
             <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 640px) 1fr 1fr 1fr auto, 1fr" gap="base" alignItems="end">
-              <s-select name="status" label={t("common.status")} value={filter.status ?? ""}>
-                <s-option value="">{t("common.state.all")}</s-option>
+              <s-select name="status" label={t("common.status")} value={filter.status ?? ALL}>
+                <s-option value={ALL}>{t("common.state.all")}</s-option>
                 <s-option value="active">{t("jobs.filter.running")}</s-option>
                 <s-option value="completed">{jobStatus(i18n, "COMPLETED").label}</s-option>
                 <s-option value="failed">{jobStatus(i18n, "FAILED").label}</s-option>
                 <s-option value="cancelled">{jobStatus(i18n, "CANCELLED").label}</s-option>
               </s-select>
-              <s-select name="lang" label={t("common.language")} value={filter.locale ?? ""}>
-                <s-option value="">{t("common.allLanguages")}</s-option>
+              <s-select name="lang" label={t("common.language")} value={filter.locale ?? ALL}>
+                <s-option value={ALL}>{t("common.allLanguages")}</s-option>
                 {locales.map((l) => (
                   <s-option key={l.locale} value={l.locale}>
                     {i18n.language(l.locale, l.name)}
                   </s-option>
                 ))}
               </s-select>
-              <s-select name="type" label={t("common.contentType")} value={filter.resourceType ?? ""}>
-                <s-option value="">{t("common.state.all")}</s-option>
+              <s-select name="type" label={t("common.contentType")} value={filter.resourceType ?? ALL}>
+                <s-option value={ALL}>{t("common.state.all")}</s-option>
                 {Object.keys(RESOURCE_KINDS).map((kind) => (
                   <s-option key={kind} value={kind}>
                     {kindLabel(i18n, kind)}

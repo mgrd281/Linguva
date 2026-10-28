@@ -48,9 +48,11 @@ function appBridgeStub(token: string, shopDomain: string) {
     };
     window.__toasts = [];
     window.__loading = [];
+    window.__saveBar = [];
     // In the admin, App Bridge renders the navigation outside the app frame.
     const style = document.createElement("style");
-    style.textContent = "s-app-nav { display: none !important; }";
+    // App Bridge also renders the save bar outside the frame; its buttons aren't part of the page.
+    style.textContent = "s-app-nav, ui-save-bar { display: none !important; }";
     document.head.appendChild(style);
     window.shopify = {
       config: { apiKey: ${JSON.stringify(UI_ENV.apiKey)}, shop: ${JSON.stringify(shopDomain)} },
@@ -58,7 +60,11 @@ function appBridgeStub(token: string, shopDomain: string) {
       idToken: async () => token,
       toast: { show: (message) => { window.__toasts.push(message); return "t"; }, hide() {} },
       loading: (on) => { window.__loading.push(on); },
-      saveBar: { show: async () => {}, hide: async () => {}, toggle: async () => {} },
+      saveBar: {
+        show: async (id) => { window.__saveBar.push("show:" + id); },
+        hide: async (id) => { window.__saveBar.push("hide:" + id); },
+        toggle: async () => {},
+      },
       modal: { show: async () => {}, hide: async () => {}, toggle: async () => {} },
     };
   })();`;
@@ -142,4 +148,22 @@ export async function expectAccessibleTables(page: Page) {
 export async function expectNoHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+}
+
+/** The last toast App Bridge showed matches `message`. */
+export async function expectToast(page: Page, message: string | RegExp) {
+  await expect
+    .poll(() => page.evaluate(() => ((window as unknown as { __toasts: string[] }).__toasts.at(-1) ?? "")))
+    .toMatch(message);
+}
+
+/** Whether the admin's save bar with this id is shown (last show/hide call). */
+export async function saveBarShown(page: Page, id: string) {
+  const calls = await page.evaluate(() => (window as unknown as { __saveBar: string[] }).__saveBar);
+  return calls.filter((c) => c.endsWith(`:${id}`)).at(-1)?.startsWith("show") ?? false;
+}
+
+/** Clicks a button of a save bar (App Bridge would render it in the admin). */
+export async function clickSaveBarButton(page: Page, id: string, index: number) {
+  await page.locator(`ui-save-bar#${id} button`).nth(index).evaluate((b) => (b as HTMLButtonElement).click());
 }

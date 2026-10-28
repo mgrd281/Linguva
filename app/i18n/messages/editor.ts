@@ -43,10 +43,7 @@ export const en = {
   "editor.aiError.PROVIDER_AUTH": "The translation service rejected our credentials. Please contact support.",
   "editor.aiError.PROVIDER_INVALID": "The translation service doesn't support this language pair.",
 
-  "editor.saved.heading": "Translations published",
   "editor.saved.nothingHeading": "Nothing to save",
-  "editor.saved.body": { one: "{count} field saved to Shopify and verified.", other: "{count} fields saved to Shopify and verified." },
-  "editor.saved.nothingBody": "No fields were changed.",
   "editor.saved.partialHeading": "Some fields weren't saved",
   "editor.saved.partialBody": "Fields marked below need attention. If the source text changed in Shopify, reload this page and translate again.",
 
@@ -88,6 +85,8 @@ export const en = {
   "editor.seo.noDescription": "No SEO description in this language: search engines may use the description text.",
   "editor.seo.exampleAddress": "Example address; the real one depends on your domains and markets.",
   "editor.publish": "Publish translations",
+  "editor.discard": "Discard",
+  "editor.saved.toast": { one: "{count} translation published", other: "{count} translations published" },
 
   "editor.field.original": "{language} (original)",
   "editor.field.originalFrame": "{field}, {language} original",
@@ -197,10 +196,7 @@ export const de: Translation<typeof en> = {
   "editor.aiError.PROVIDER_AUTH": "Der Übersetzungsdienst hat unsere Zugangsdaten abgelehnt. Bitte wende dich an den Support.",
   "editor.aiError.PROVIDER_INVALID": "Der Übersetzungsdienst unterstützt dieses Sprachpaar nicht.",
 
-  "editor.saved.heading": "Übersetzungen veröffentlicht",
   "editor.saved.nothingHeading": "Nichts zu speichern",
-  "editor.saved.body": { one: "{count} Feld in Shopify gespeichert und geprüft.", other: "{count} Felder in Shopify gespeichert und geprüft." },
-  "editor.saved.nothingBody": "Es wurden keine Felder geändert.",
   "editor.saved.partialHeading": "Einige Felder wurden nicht gespeichert",
   "editor.saved.partialBody":
     "Die unten markierten Felder brauchen deine Aufmerksamkeit. Wenn sich der Originaltext in Shopify geändert hat, lade diese Seite neu und übersetze erneut.",
@@ -244,6 +240,8 @@ export const de: Translation<typeof en> = {
   "editor.seo.noDescription": "Keine SEO-Beschreibung in dieser Sprache: Suchmaschinen verwenden eventuell den Beschreibungstext.",
   "editor.seo.exampleAddress": "Beispieladresse; die tatsächliche hängt von deinen Domains und Märkten ab.",
   "editor.publish": "Übersetzungen veröffentlichen",
+  "editor.discard": "Verwerfen",
+  "editor.saved.toast": { one: "{count} Übersetzung veröffentlicht", other: "{count} Übersetzungen veröffentlicht" },
 
   "editor.field.original": "{language} (Original)",
   "editor.field.originalFrame": "{field}, Original ({language})",

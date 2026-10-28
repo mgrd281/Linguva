@@ -4,7 +4,7 @@
  * Partner API are simulated; no charges can be created.
  */
 import { expect, test } from "@playwright/test";
-import { expectAccessible, openApp } from "./helpers";
+import { expectAccessible, openApp, expectToast } from "./helpers";
 
 test("translate with AI, edit and publish; the published value is read back from Shopify", async ({ page }) => {
   await openApp(page, "full", "/app/products/5?lang=de");
@@ -15,7 +15,7 @@ test("translate with AI, edit and publish; the published value is read back from
   await expect(title).toHaveValue("[de] Product 5 jacket");
   await title.fill("Warme Jacke Nummer 5");
   await page.getByRole("button", { name: "Publish translations" }).click();
-  await expect(page.locator('s-banner[heading="Translations published"]')).toBeVisible();
+  await expectToast(page, /translations? published$/);
 
   await openApp(page, "full", "/app/products/5?lang=de");
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Warme Jacke Nummer 5");
@@ -31,9 +31,9 @@ test("image alt text is translated and published separately", async ({ page }) =
   await page.getByRole("button", { name: "Translate missing alt text and fields with AI" }).click();
   await expect(page.locator('s-text-field[name$=":alt"] input')).toHaveValue("[de] Red wool jacket, front view");
   await page.getByRole("button", { name: "Publish alt text and fields" }).click();
-  await expect(page.locator('s-banner[heading="Translations published"]')).toBeVisible();
-  // Alt text and the custom field, both saved.
-  await expect(page.getByText("2 of 2 saved to Shopify.")).toBeVisible();
+  // Alt text and the custom field, both saved: confirmed by a toast, no warning on the page.
+  await expectToast(page, "2 translations published");
+  await expect(page.locator('s-banner[heading="Some fields weren\'t saved"]')).toHaveCount(0);
 });
 
 test.describe("plan page", () => {

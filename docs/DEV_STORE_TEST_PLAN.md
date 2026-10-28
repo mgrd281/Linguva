@@ -4,6 +4,9 @@ Purpose: move features from **Tested Locally** to **Verified on Shopify** (FEATU
 
 ## 0. Preparation
 
+Store: `linguva-test-lab.myshopify.com` (connected 2026-10-28). Exact commands, the test catalog recipe and the evidence tools: DEV_STORE_VERIFICATION.md.
+
+
 | # | Item |
 |---|---|
 | P1 | Development store (`plan.partnerDevelopment = true`) with German and Arabic enabled as additional languages, German published, Arabic unpublished at first |
@@ -140,6 +143,20 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **P4** Publish a Linguva translation → if Shopify sends `products/update` for it, the check ends "up to date" and the AI usage doesn't change. Record whether the webhook arrives at all (see SHOPIFY_API_MATRIX §2).
 - **P5** Turn automatic translation off → saving a product queues nothing (no new job).
 
+### U. Polaris and App Bridge inside the real admin
+- **U1** Admin navigation lists every Linguva page; the current one is highlighted.
+- **U2** Editor: Shopify's save bar appears on change; Discard restores; leaving with changes asks first.
+- **U3** Toasts after save, approve, import; confirmation modals (reject, replace protected translations).
+- **U4** Admin loading bar on page changes; no white flash or layout jump while Coverage refreshes during a scan or job.
+- **U5** Browser console on Overview, Coverage, Editor, Review: no errors and no Content-Security-Policy violations (note any message).
+- **U6** Admin user language German: Linguva's interface is German.
+
+### V. Mobile, accessibility, visual quality
+- **V1** Shopify mobile app: Overview, Coverage, Editor, Review usable, no sideways scrolling, tap targets comfortable.
+- **V2** Desktop browser at 375 px: same pages.
+- **V3** Keyboard only through Coverage and the editor: focus visible, every action reachable.
+- **V4** Screenshots of the main pages, desktop and phone, for the design review (store name and email hidden).
+
 ### S. Security spot checks
 - **S1** Change an id in a form request (another product's image or metafield GID) with the browser's dev tools → nothing is written to the other resource.
 - **S2** Two dev stores (if available) → no data of one is visible in the other (memory, glossary, jobs, review, coverage).
@@ -165,4 +182,5 @@ The first beta can start when:
 
 | Date | Store | Case | Result | Notes |
 |---|---|---|---|---|
-| — | — | — | Not run yet | No development store connected |
+| 2026-10-28 | linguva-test-lab.myshopify.com | Setup: CLI link, PostgreSQL, Redis, migrations, preflight | Reported by the owner | Not a test case; prerequisite |
+| 2026-10-28 | linguva-test-lab.myshopify.com | A1 (part): app installs and opens embedded in the admin | Reported by the owner | Reload, new tab and re-install not yet checked (DEV_STORE_VERIFICATION.md §3.1) |

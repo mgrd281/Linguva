@@ -8,7 +8,13 @@ export type LiveCredentials =
   /** An Admin API token (for example from an existing admin-created custom app). */
   | { kind: "token"; token: string }
   /** A Dev Dashboard app in the same organization (client credentials grant). */
-  | { kind: "client"; clientId: string; clientSecret: string };
+  | { kind: "client"; clientId: string; clientSecret: string }
+  /**
+   * The Linguva app's own offline session for this store, read from the
+   * local development database named in .env and decrypted with its key.
+   * Read-only: the app has no write_products scope for fixtures.
+   */
+  | { kind: "appSession" };
 
 export interface LiveSettings {
   shop: string;
@@ -36,14 +42,19 @@ export function readLiveSettings(env: NodeJS.ProcessEnv = process.env): LiveSett
   const token = env.LIVE_SHOPIFY_ADMIN_TOKEN?.trim();
   const clientId = env.LIVE_SHOPIFY_CLIENT_ID?.trim();
   const clientSecret = env.LIVE_SHOPIFY_CLIENT_SECRET?.trim();
-  if (!shop && !token && !clientId && !clientSecret) return null;
+  const appSession = env.LIVE_USE_APP_SESSION === "yes";
+  if (!shop && !token && !clientId && !clientSecret && !appSession) return null;
   let credentials: LiveCredentials;
-  if (token && !clientId && !clientSecret) credentials = { kind: "token", token };
-  else if (!token && clientId && clientSecret) credentials = { kind: "client", clientId, clientSecret };
+  if (appSession && !token && !clientId && !clientSecret) credentials = { kind: "appSession" };
+  else if (!appSession && token && !clientId && !clientSecret) credentials = { kind: "token", token };
+  else if (!appSession && !token && clientId && clientSecret) credentials = { kind: "client", clientId, clientSecret };
   else {
     throw new LiveTestRefused(
-      "set LIVE_SHOPIFY_SHOP and either LIVE_SHOPIFY_ADMIN_TOKEN or both LIVE_SHOPIFY_CLIENT_ID and LIVE_SHOPIFY_CLIENT_SECRET",
+      "set LIVE_SHOPIFY_SHOP and exactly one of: LIVE_USE_APP_SESSION=yes, LIVE_SHOPIFY_ADMIN_TOKEN, or LIVE_SHOPIFY_CLIENT_ID with LIVE_SHOPIFY_CLIENT_SECRET",
     );
+  }
+  if (appSession && env.LIVE_ALLOW_WRITES === "yes") {
+    throw new LiveTestRefused("LIVE_ALLOW_WRITES needs the live-test app (write_products for fixtures); the app's own session is read-only");
   }
   if (!shop) throw new LiveTestRefused("set LIVE_SHOPIFY_SHOP");
   if (!DOMAIN.test(shop)) throw new LiveTestRefused("LIVE_SHOPIFY_SHOP must be a *.myshopify.com domain");

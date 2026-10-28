@@ -1,10 +1,10 @@
 # Development store setup and live verification
 
-Status: **No development store is connected yet.** Nothing in this repository has run against a real Shopify store. All Shopify behaviour so far is tested against in-memory fakes (`tests/support/fake-admin.ts`, `tests/support/fake-store.ts`). Their assumptions were checked against the downloaded Admin API 2026-10 schema, but not against a live store.
+Status (2026-10-28): **A development store is connected**: `linguva-test-lab.myshopify.com` in the organization "Mein Shop". The owner reports that Shopify CLI, PostgreSQL, Redis, migrations and `pnpm preflight` work and that Linguva opens as an embedded app in the admin. No other check has been run on the store yet; until a check is run and logged, its behaviour stays an assumption encoded in the fakes (`tests/support/fake-store.ts`), checked against the Admin API 2026-10 schema. The step-by-step verification for phase J is in DEV_STORE_VERIFICATION.md.
 
 Installing the app itself with Shopify CLI is described step by step in SHOPIFY_CLI_SETUP.md. This document lists what the owner has to provide, how to run the guarded live contract tests, and the manual checks in the embedded admin.
 
-## 1. What is missing (blocked on the owner)
+## 1. What the owner provides (items 1, 2, 6, 7 done as of 2026-10-28)
 
 | # | Needed | Why | Who |
 |---|---|---|---|
@@ -34,6 +34,8 @@ Secrets are only ever set as local environment variables. They never go into the
 - The mock translation provider is used, so there are no AI costs and no text is sent to a provider.
 
 ### Credentials
+
+For **read-only** live checks no extra app is needed: `LIVE_USE_APP_SESSION=yes` uses the Linguva app's own offline session from the local development database (decrypted in memory, never printed; refused together with `LIVE_ALLOW_WRITES`). See DEV_STORE_VERIFICATION.md §4.1. For fixture writes:
 
 Shopify no longer allows creating new custom apps in the Shopify admin. Use a Dev Dashboard app in the **same organization** as the dev store (client credentials grant, token valid for 24 hours):
 
@@ -98,4 +100,4 @@ Run `pnpm dev` (Shopify CLI tunnel) with the dev store and `TRANSLATION_PROVIDER
 
 | Date | Store | Check | Result | Notes |
 |---|---|---|---|---|
-| — | — | — | Not run yet | No dev store connected |
+| 2026-10-28 | linguva-test-lab | CLI link, preflight, embedded app opens | Reported by the owner | First open only; the checks in DEV_STORE_VERIFICATION.md are next |

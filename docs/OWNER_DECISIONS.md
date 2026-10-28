@@ -2,17 +2,11 @@
 
 Everything that can be built without accounts, money or legal decisions is done or planned in the repository. The items below need the owner. They are ordered by what they unblock. Prices marked "estimate" are assumptions to confirm; nothing here has been bought or connected.
 
-## 1. Development store (unblocks: every "Verified on Shopify" status, every 10/10)
+## 1. Development store: done (2026-10-28)
 
-**What:** a free Shopify development store in your Partner organization, with test data only (never KARINEX or SOFTWAREFACH, no real customers).
+`linguva-test-lab.myshopify.com` in the organization "Mein Shop" is connected; Shopify CLI, PostgreSQL, Redis, migrations and preflight work, and Linguva opens embedded in the admin (your report).
 
-**Steps (about 30 minutes):**
-1. Partner Dashboard → Stores → Add store → Development store. Name it, for example, `linguva-dev`.
-2. In the store: Settings → Languages → add German and French (and Arabic to test right-to-left); add a few products with Shopify's sample data.
-3. On your machine, in the repository: `pnpm install`, then `shopify app config link` (choose the Linguva app), then `pnpm dev` (SHOPIFY_CLI_SETUP.md).
-4. For the automated live checks: a separate Dev Dashboard app "Linguva live tests" with the scopes in DEV_STORE_SETUP.md §2; put its client ID and secret only in local environment variables.
-
-**Cost:** free. **Then I can:** run DEV_STORE_TEST_PLAN.md and the live tests, check App Bridge with the script policy, regenerate the App Store screenshots inside the real admin.
+**Next action (about 2 hours over one or two sessions):** follow DEV_STORE_VERIFICATION.md: update the branch and migrate (§1.1), confirm the mock provider (§1.2), create the small fictional test catalog (§2), run the read-only live check (§4.1, one command, no extra app), then the checklist (§3), and send back the results log, the live test summary and screenshots (§6). Optional later: the "Linguva live tests" app for fixture writes (§4.2) and a second dev store for the isolation check (S2).
 
 ## 2. DeepL API key (unblocks: measured translation quality and real cost per product)
 

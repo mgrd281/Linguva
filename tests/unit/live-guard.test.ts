@@ -26,9 +26,9 @@ describe("live test guard", () => {
   });
 
   it("refuses incomplete settings, non-myshopify domains and denied stores", () => {
-    expect(() => readLiveSettings({ LIVE_SHOPIFY_SHOP: base.LIVE_SHOPIFY_SHOP })).toThrow(/either/);
-    expect(() => readLiveSettings({ ...base, LIVE_SHOPIFY_CLIENT_ID: "id" })).toThrow(/either/);
-    expect(() => readLiveSettings({ LIVE_SHOPIFY_SHOP: base.LIVE_SHOPIFY_SHOP, LIVE_SHOPIFY_CLIENT_ID: "id" })).toThrow(/either/);
+    expect(() => readLiveSettings({ LIVE_SHOPIFY_SHOP: base.LIVE_SHOPIFY_SHOP })).toThrow(/exactly one/);
+    expect(() => readLiveSettings({ ...base, LIVE_SHOPIFY_CLIENT_ID: "id" })).toThrow(/exactly one/);
+    expect(() => readLiveSettings({ LIVE_SHOPIFY_SHOP: base.LIVE_SHOPIFY_SHOP, LIVE_SHOPIFY_CLIENT_ID: "id" })).toThrow(/exactly one/);
     expect(() => readLiveSettings({ LIVE_SHOPIFY_ADMIN_TOKEN: "t" })).toThrow(/LIVE_SHOPIFY_SHOP/);
     for (const shop of ["example.com", "evil.myshopify.com.attacker.io", "https://x.myshopify.com", "a/b.myshopify.com"]) {
       expect(() => readLiveSettings({ ...base, LIVE_SHOPIFY_SHOP: shop })).toThrow(/myshopify/);
@@ -51,5 +51,13 @@ describe("live test guard", () => {
     expect(() =>
       assertDevelopmentStore(settings, { myshopifyDomain: "real-shop.myshopify.com", partnerDevelopment: true }),
     ).toThrow(/belongs to/);
+  });
+
+  it("can use the app's own session for read-only checks, never with writes or mixed with other credentials", () => {
+    const shop = { LIVE_SHOPIFY_SHOP: "linguva-test-lab.myshopify.com" };
+    expect(readLiveSettings({ ...shop, LIVE_USE_APP_SESSION: "yes" })).toMatchObject({ credentials: { kind: "appSession" }, allowWrites: false });
+    expect(() => readLiveSettings({ ...shop, LIVE_USE_APP_SESSION: "yes", LIVE_ALLOW_WRITES: "yes" })).toThrow(/read-only/);
+    expect(() => readLiveSettings({ ...shop, LIVE_USE_APP_SESSION: "yes", LIVE_SHOPIFY_ADMIN_TOKEN: "x" })).toThrow(/exactly one/);
+    expect(() => readLiveSettings({ LIVE_SHOPIFY_SHOP: "karinex-de.myshopify.com", LIVE_USE_APP_SESSION: "yes" })).toThrow(/deny list/);
   });
 });

@@ -7,6 +7,7 @@
  */
 import { createHash } from "node:crypto";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import { GraphqlQueryError } from "@shopify/shopify-api";
 
 interface Field {
   key: string;
@@ -73,6 +74,13 @@ export class FakeShopifyStore {
   readonly updatedAt = new Map<string, Date>();
   /** Resource types the app has no access scope for (ACCESS_DENIED). */
   readonly deniedTypes = new Set<string>();
+  /**
+   * Throw GraphQL errors like the real Shopify library (GraphqlQueryError)
+   * instead of returning them in the body.
+   */
+  throwsLikeLibrary = false;
+  /** Resource types whose listing always fails with a GraphQL error (not access). */
+  readonly brokenTypes = new Set<string>();
   /** Throw this error for the next N calls (any operation). */
   failNext: { count: number; error: () => Error } | null = null;
 
@@ -195,7 +203,17 @@ export class FakeShopifyStore {
     }
     const vars = options?.variables ?? {};
 
+    if (name === "LinguvaTranslatableResources" && this.brokenTypes.has(String(vars.resourceType))) {
+      throw new GraphqlQueryError({ message: "Internal error. Looks like something went wrong on our end.", response: {} as never, body: { errors: [{ message: "Internal error" }] } });
+    }
     if ((name === "LinguvaTranslatableResources" || name === "LinguvaProbeTranslatable") && this.deniedTypes.has(String(vars.resourceType))) {
+      if (this.throwsLikeLibrary) {
+        throw new GraphqlQueryError({
+          message: "Access denied for translatableResources field.",
+          response: {} as never,
+          body: { errors: [{ message: "Access denied for translatableResources field.", extensions: { code: "ACCESS_DENIED" } }] },
+        });
+      }
       return Response.json({
         errors: [{ message: "Access denied for translatableResources field.", extensions: { code: "ACCESS_DENIED" } }],
       });
@@ -205,6 +223,9 @@ export class FakeShopifyStore {
       // Newest first by updatedAt (blogs: filtered by updated_at:>'…' instead).
       const resourceType = { Products: "PRODUCT", Collections: "COLLECTION", Pages: "PAGE", Articles: "ARTICLE", Blogs: "BLOG" }[recent[1]!]!;
       if (this.deniedTypes.has(resourceType)) {
+        if (this.throwsLikeLibrary) {
+          throw new GraphqlQueryError({ message: "Access denied", response: {} as never, body: { errors: [{ message: "Access denied", extensions: { code: "ACCESS_DENIED" } }] } });
+        }
         return Response.json({ errors: [{ message: "Access denied", extensions: { code: "ACCESS_DENIED" } }] });
       }
       const changedAt = (gid: string) => this.updatedAt.get(gid) ?? new Date("2026-01-01T00:00:00Z");

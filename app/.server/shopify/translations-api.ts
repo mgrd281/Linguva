@@ -164,15 +164,20 @@ export async function listTranslatableResources(
   admin: Admin,
   options: { resourceType: TranslatableKind | "MEDIA_IMAGE" | "COLLECTION_IMAGE" | "ARTICLE_IMAGE"; locale: string; first?: number; after?: string | null },
 ) {
-  const response = await admin.graphql(LIST_QUERY, {
-    variables: {
-      // ResourceKind values are TranslatableResourceType enum names.
-      resourceType: options.resourceType as TranslatableResourceType,
-      first: options.first ?? 25,
-      after: options.after ?? null,
-      locale: options.locale,
-    },
-  });
+  const response = await admin
+    .graphql(LIST_QUERY, {
+      variables: {
+        // ResourceKind values are TranslatableResourceType enum names.
+        resourceType: options.resourceType as TranslatableResourceType,
+        first: options.first ?? 25,
+        after: options.after ?? null,
+        locale: options.locale,
+      },
+    })
+    .catch((error: unknown) => {
+      // The Shopify library throws on GraphQL errors (a missing optional scope among them).
+      throw isAccessDenied(error) ? new AccessDeniedError(String(options.resourceType)) : error;
+    });
   const body = await response.json();
   const errors = (body as { errors?: unknown }).errors;
   if (errors && isAccessDenied(errors)) throw new AccessDeniedError(String(options.resourceType));

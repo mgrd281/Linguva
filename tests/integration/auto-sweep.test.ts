@@ -121,8 +121,9 @@ describe("periodic check for automatic translation", () => {
     expect(again.added).toEqual([]);
   });
 
-  it("skips a type the store hasn't granted access to, and keeps its position after a failure", async () => {
+  it.each([false, true])("skips a type the store hasn't granted access to (library throws: %s), and keeps its position after a failure", async (throwsLikeLibrary) => {
     const { shop, store } = await shopWithStore("sweep-errors.myshopify.com");
+    store.throwsLikeLibrary = throwsLikeLibrary;
     const start = (await sweptAt(shop.id))!;
     store.touch("gid://shopify/Page/1", new Date(start.getTime() + minutes(5)));
     store.touch("gid://shopify/Article/1", new Date(start.getTime() + minutes(5)));

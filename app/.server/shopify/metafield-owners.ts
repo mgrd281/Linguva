@@ -116,7 +116,12 @@ export async function listOwnerMetafields(
   options: { owner: MetafieldOwnerType; locale: string; after?: string | null; first?: number },
 ): Promise<{ resources: OwnedMetafield[]; owners: number; pageInfo: { hasNextPage: boolean; endCursor: string | null } }> {
   const { query, field } = QUERIES[options.owner];
-  const response = await admin.graphql(query, { variables: { first: options.first ?? OWNERS_PER_PAGE, after: options.after ?? null } });
+  const response = await admin
+    .graphql(query, { variables: { first: options.first ?? OWNERS_PER_PAGE, after: options.after ?? null } })
+    .catch((error: unknown) => {
+      // The Shopify library throws on GraphQL errors (a missing scope among them).
+      throw isAccessDenied(error) ? new AccessDeniedError(`${options.owner}_METAFIELD`) : error;
+    });
   const body = (await response.json()) as {
     data?: Record<string, { nodes: Array<{ id: string; metafields?: { nodes: Array<{ id: string; translatable: boolean }> } | null }>; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null>;
     errors?: unknown;

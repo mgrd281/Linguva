@@ -58,7 +58,7 @@ Complaint themes come from the newest reviews of each app (§1.6, §2.6). Counts
 
 | # | Gap | Why it matters | Effort | Needs |
 |---|---|---|---|---|
-| 1 | Verified on a real store (all of the above) | Without it nothing can be claimed in the listing | Days | Development store (owner) |
+| 1 | Verified on a real store (all of the above) | Without it nothing can be claimed in the listing | Days | Store connected 2026-10-28; checks in DEV_STORE_VERIFICATION.md |
 | 2 | Real DeepL quality and cost measured | Quality is the product | Days | Free DeepL API key (owner) |
 | 3 | ~~Import/export of translations (CSV)~~ Done in phase I (CSV; XLIFF later) | Agencies and translators; Transcy has none, Langify per section only | — | Live check on the dev store |
 | 4 | Second engine for languages DeepL lacks (and optional LLM) | DeepL covers about 30 languages; both competitors fall back to Google or LLMs | 1–2 weeks | Provider account and data processing terms (owner) |

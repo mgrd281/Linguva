@@ -3,7 +3,12 @@
  * `admin.graphql` so the production code paths run unchanged. It talks only
  * to the configured shop and never logs the token.
  */
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { parseEnv } from "node:util";
+import { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import { TokenCipher } from "../../app/.server/lib/crypto";
 import type { LiveSettings } from "./guard";
 
 export const LIVE_API_VERSION = "2026-10";
@@ -27,15 +32,38 @@ async function requestToken(shop: string, clientId: string, clientSecret: string
   return body.access_token;
 }
 
+/**
+ * The Linguva app's offline token for the shop, from the local development
+ * database in .env (DATABASE_URL, TOKEN_ENCRYPTION_KEYS). Read from the
+ * file, not the environment, because live tests run with the test
+ * database's environment. Kept in memory only.
+ */
+export async function appSessionToken(shop: string, file = join(process.cwd(), ".env")): Promise<string> {
+  if (!existsSync(file)) throw new Error("LIVE_USE_APP_SESSION: no .env in the project folder");
+  const env = parseEnv(readFileSync(file, "utf8")) as Record<string, string | undefined>;
+  if (!env.DATABASE_URL || !env.TOKEN_ENCRYPTION_KEYS) throw new Error("LIVE_USE_APP_SESSION: .env needs DATABASE_URL and TOKEN_ENCRYPTION_KEYS");
+  const db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  try {
+    const session = await db.session.findFirst({ where: { shop, isOnline: false }, orderBy: { expires: "desc" } });
+    if (!session?.accessToken) throw new Error(`LIVE_USE_APP_SESSION: no offline session for ${shop}. Open Linguva on the store once with \`pnpm dev\` running.`);
+    return TokenCipher.fromKeyring(env.TOKEN_ENCRYPTION_KEYS).decrypt(session.accessToken);
+  } finally {
+    await db.$disconnect();
+  }
+}
+
 export function createLiveAdmin(settings: LiveSettings): LiveAdmin & { calls: string[] } {
   const endpoint = `https://${settings.shop}/admin/api/${LIVE_API_VERSION}/graphql.json`;
   const calls: string[] = [];
   let token: Promise<string> | null = null;
+  const credentials = settings.credentials;
   const accessToken = () =>
     (token ??=
-      settings.credentials.kind === "token"
-        ? Promise.resolve(settings.credentials.token)
-        : requestToken(settings.shop, settings.credentials.clientId, settings.credentials.clientSecret));
+      credentials.kind === "token"
+        ? Promise.resolve(credentials.token)
+        : credentials.kind === "appSession"
+          ? appSessionToken(settings.shop)
+          : requestToken(settings.shop, credentials.clientId, credentials.clientSecret));
 
   const graphql = async (query: string, options?: { variables?: Record<string, unknown> }) => {
     const name = /(query|mutation)\s+(\w+)/.exec(query)?.[2] ?? "anonymous";

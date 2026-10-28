@@ -1,6 +1,6 @@
 # Feature status
 
-Single source of truth for what Linguva can do. Status as of 2026-10-27, branch `claude/gallant-pasteur-8opy75` (draft PR, not merged, not deployed).
+Single source of truth for what Linguva can do. Status as of 2026-10-28, branch `claude/gallant-pasteur-8opy75` (draft PR, not merged, not deployed).
 
 Three states, never mixed:
 
@@ -8,12 +8,12 @@ Three states, never mixed:
 - **Tested Locally**: automated tests pass locally and in GitHub CI, against real PostgreSQL (with row-level security) and Redis, but against **simulated** Shopify, Partner and DeepL APIs. "Server" means only the server logic is tested. "Server + UI" means the page is also tested in a real browser with Playwright (docs/UI_TESTING.md): the production build, real authentication and Polaris, a simulated Shopify.
 - **Verified on Shopify**: confirmed on a real Shopify development store, by the live contract tests (`pnpm test:live`) or the manual checks in DEV_STORE_TEST_PLAN.md, with the result logged there.
 
-**No feature is Verified on Shopify yet.** No development store has been connected. Every Shopify behaviour is so far an assumption encoded in the fakes, checked only against the Admin API 2026-10 schema.
+**No feature is Verified on Shopify yet.** Since 2026-10-28 a development store is connected (`linguva-test-lab.myshopify.com`, organization "Mein Shop"). The owner reports that the app installs and opens embedded in the admin; that is recorded as owner-reported, not as a completed test case. The phase J checks (DEV_STORE_VERIFICATION.md) move features to "Verified on Shopify" one by one, each with its logged evidence. Until then, Shopify behaviour is an assumption encoded in the fakes, checked against the Admin API 2026-10 schema.
 
 | Area | Feature | Implemented | Tested Locally | Verified on Shopify | Test plan |
 |---|---|---|---|---|---|
-| Foundation | Install, token exchange, encrypted sessions (AES-256-GCM, key rotation) | Yes | Server + UI (install through token exchange, forged tokens refused) | No | A1–A3 |
-| Foundation | Shopify CLI setup: complete app configuration, .env loading in development, `pnpm preflight` | Yes | Unit (configuration, checks); dev server start checked | No (needs `shopify app config link`) | P5, A1 |
+| Foundation | Install, token exchange, encrypted sessions (AES-256-GCM, key rotation) | Yes | Server + UI (install through token exchange, forged tokens refused) | Partly, owner-reported: installs and opens embedded (2026-10-28); reload, re-install not yet checked | A1–A3 |
+| Foundation | Shopify CLI setup: complete app configuration, .env loading in development, `pnpm preflight` | Yes | Unit (configuration, checks); dev server start checked | Owner-reported working on linguva-test-lab (2026-10-28) | P5, A1 |
 | Foundation | Tenant isolation (RLS fail-closed, runtime role without BYPASSRLS, posture check at start) | Yes | Yes (security suite) | No (database only, no Shopify part) | — |
 | Foundation | Webhooks (HMAC, duplicates, retries), uninstall, compliance topics | Yes | Yes | No | A4, N1–N3 |
 | Languages | Languages page from `shopLocales`, 20-language limit, RTL notice | Yes | Server + UI | No | B1–B2 |
@@ -31,7 +31,10 @@ Three states, never mixed:
 | Editor | Outdated detection and "still correct" confirmation | Yes | Server | No | C4 |
 | SEO | SEO title/description checks, search result preview, "SEO fields only" (editor and bulk) | Yes | Server | No | D1–D3 |
 | SEO | URL handle suggestion, format check, confirmation before changing a published handle | Yes | Server | No | D4 |
-| SEO | Coverage report per language and type, SEO findings, duplicate SEO titles, "translate gaps" | Yes | Server (incl. BullMQ worker) | No | K1–K3 |
+| Coverage | Live coverage dashboard (phase I): every type, image alt text, custom fields per owner; six field states; drafts never complete; excluded types and URLs shown, not counted; published languages only in the whole-store figure; updated after saves, removals, drafts, job items and product/collection webhooks; drill-down with filters, title search, paging, bulk actions; reliable remaining time; SEO findings (docs/COVERAGE_RULES.md) | Yes | Unit (rules), integration (scan, sync, consistency), security (no store text, isolation), performance (150,000 items), UI (desktop, phone, accessibility) | No (live recount check ready: DEV_STORE_VERIFICATION.md §4.1) | K1–K11 |
+| Import/export | Translation CSV per type and language; imports become drafts on Review; rows checked against the shop's own data; formula-safe | Yes | Integration + UI | No (live check ready, §4.1) | K2.1–K2.4 |
+| AI | AI language support per language read from DeepL (`/v2/languages`, cached) on the Languages page | Yes | Unit (stubbed DeepL) | No (no DeepL key) | K3.1 |
+| Verification tools | `pnpm test:live` with the app's own session (read-only), coverage recount and CSV live checks; `pnpm ops:coverage-check` (read-only evidence: figures, scan state, consistency, webhook deliveries) | Yes | Unit (guard), integration (session decryption), run against local data | Ready for the dev store | §4 |
 | Bulk | Bulk jobs (queues, retries, throttling, cancel, resume, stalled-item sweeper) | Yes | Server (real Redis and BullMQ); UI for the Jobs list | No | E1–E6 |
 | Bulk | Drafts by default; automatic publishing only after explicit confirmation; flagged results always to Review | Yes | Yes (security suite, mutation-checked) | No | E2–E3 |
 | Bulk | Translations made by people or outside Linguva are kept unless replacing is explicitly allowed | Yes | Server | No | E4 |

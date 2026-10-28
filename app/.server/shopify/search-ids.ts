@@ -96,7 +96,9 @@ export async function searchIds(admin: Admin, type: SearchableType, text: string
   const query = titleQuery(text.slice(0, 100));
   if (!query) return [];
   const { query: document, field } = SEARCH[type];
-  const response = await admin.graphql(document, { variables: { query } });
+  const response = await admin.graphql(document, { variables: { query } }).catch((error: unknown) => {
+    throw isAccessDenied(error) ? new AccessDeniedError(type) : error;
+  });
   const body = (await response.json()) as { data?: Record<string, { nodes: Array<{ id: string }> } | null>; errors?: unknown };
   if (body.errors && isAccessDenied(body.errors)) throw new AccessDeniedError(type);
   return (body.data?.[field]?.nodes ?? []).map((n) => n.id);

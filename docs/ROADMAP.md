@@ -125,7 +125,7 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 
 | ID | Issue | Severity | Plan |
 |---|---|---|---|
-| O1 | No dev store connected; nothing verified live | High | Owner provides store and credentials (DEV_STORE_SETUP §1), then `pnpm test:live` |
+| O1 | Dev store connected 2026-10-28 (linguva-test-lab); checks not yet run | High | Owner runs DEV_STORE_VERIFICATION.md (`pnpm test:live` with `LIVE_USE_APP_SESSION=yes`, then the manual checklist) |
 | O2 | ~~Fuzzy memory search slow at scale~~ | Fixed | Under RLS no index could serve the trigram operator (not LEAKPROOF), so every search scanned the shop's whole memory (446 ms at 100k). Now a hardened SECURITY DEFINER function uses a shop + trigram GIN index: median 37 ms, p95 49 ms, recall 10/10 at 100,000 entries (performance test in CI) |
 | O3 | ~~No per-user rate limit on interactive AI endpoints~~ | Fixed | Request limits per user and shop, daily and platform caps (SECURITY_MODEL §5a) |
 | O4 | Images and metafields are in the editor only (not in bulk jobs or the coverage report); market-specific translations are missing. (Metaobjects, menus, theme content and all other content types are done.) | Medium | Images and metafields in bulk: next; markets after live verification |

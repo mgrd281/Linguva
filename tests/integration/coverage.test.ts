@@ -135,6 +135,18 @@ describe("coverage scan", () => {
     expect(await typeCounts(shop.id, "de", "LINK")).toMatchObject({ missing: 1 });
   });
 
+  it("treats a missing optional scope as 'no access' also when Shopify's library throws it", async () => {
+    const { shop, store, deps } = await setup(2, 0);
+    // The real library throws GraphQL errors instead of returning them.
+    store.throwsLikeLibrary = true;
+    store.deniedTypes.add("MENU");
+    const report = await runAll(deps, shop.id, ["de"]);
+    expect(await reportRow(shop.id, report.id)).toMatchObject({ status: "COMPLETED" });
+    const summary = await loadCoverageSummary(shop.id, app);
+    expect(summary.segments.find((s) => s.resourceType === "MENU")).toMatchObject({ status: "DENIED" });
+    expect(await typeCounts(shop.id, "de", "PRODUCT")).toMatchObject({ missing: 6 });
+  });
+
   it("removes resources deleted in Shopify at the next scan", async () => {
     const { shop, store, deps } = await setup(3, 0);
     await runAll(deps, shop.id, ["de"]);
@@ -311,6 +323,23 @@ describe("coverage scan in the worker (BullMQ + Redis)", () => {
     await queues.close();
     await deletePrefix(redis, prefix);
   });
+
+  it("marks a type that keeps failing and still scans every other type", async () => {
+    const { shop, store } = await setup(3, 2);
+    store.brokenTypes.add("PAGE");
+    const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: null, monthlyLimit: 0, keyPrefix: prefix };
+    workers = createWorkers(deps, queues, { connection: redis, prefix, concurrency: 2 });
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "broken" }, app);
+    await enqueueCoveragePage(queues, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null });
+    await waitFor(async () => (await reportRow(shop.id, report.id)).status !== "QUEUED" && (await reportRow(shop.id, report.id)).status !== "RUNNING", 30_000);
+    expect(await reportRow(shop.id, report.id)).toMatchObject({ status: "COMPLETED" });
+    const summary = await loadCoverageSummary(shop.id, app);
+    expect(summary.segments.find((s) => s.resourceType === "PAGE")).toMatchObject({ status: "FAILED", errorCode: "SHOPIFY_QUERY_ERROR" });
+    // Types after the broken one were still scanned.
+    expect(summary.segments.find((s) => s.resourceType === "ARTICLE")).toMatchObject({ status: "SCANNED" });
+    // 2 collections × title, description, URL, SEO title.
+    expect(await typeCounts(shop.id, "de", "COLLECTION")).toMatchObject({ missing: 8 });
+  }, 40_000);
 
   it("scans every page and completes, retrying a transient Shopify failure", async () => {
     const { shop, store } = await setup(9, 5);

@@ -312,3 +312,47 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
   }
   return { refreshed };
 }
+
+/**
+ * Gives up on the segment a page belongs to (its type keeps earlier items,
+ * marked "scan didn't finish") and returns the first page of the next
+ * segment, or null when the report is finished or the position moved on.
+ * Used when one type keeps failing after every retry, so the other types
+ * are still scanned.
+ */
+export async function skipCoverageSegment(
+  client: PrismaClient,
+  payload: CoveragePagePayload,
+  errorCode: string,
+): Promise<CoveragePagePayload | null> {
+  return withTenant(
+    payload.shopId,
+    async (tx) => {
+      const report = await tx.coverageReport.findFirst({ where: { id: payload.reportId, shopId: payload.shopId } });
+      if (!report) return null;
+      const segment = segmentOf(report, payload.segmentIndex);
+      const nextIndex = payload.segmentIndex + 1;
+      const finished = nextIndex >= report.segments.length;
+      const moved = await tx.coverageReport.updateMany({
+        where: { id: report.id, shopId: payload.shopId, status: { in: ACTIVE }, segmentIndex: payload.segmentIndex, cursor: payload.cursor },
+        data: {
+          status: finished ? "COMPLETED" : "RUNNING",
+          segmentIndex: nextIndex,
+          cursor: null,
+          ...(finished ? { finishedAt: new Date() } : {}),
+        },
+      });
+      if (moved.count === 0) return null;
+      if (segment) {
+        const key = { shopId_locale_resourceType: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } };
+        await tx.coverageSegment.upsert({
+          where: key,
+          create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "FAILED", reportId: report.id, errorCode },
+          update: { status: "FAILED", reportId: report.id, errorCode },
+        });
+      }
+      return finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: null };
+    },
+    client,
+  );
+}

@@ -86,7 +86,10 @@ export async function changedSince(
   for (;;) {
     const variables: Record<string, unknown> = { first: PAGE_SIZE, after };
     if (type === "BLOG") variables.query = `updated_at:>'${since.toISOString()}'`;
-    const response = await admin.graphql(document, { variables });
+    const response = await admin.graphql(document, { variables }).catch((error: unknown) => {
+      // The Shopify library throws on GraphQL errors (a missing scope among them).
+      throw isAccessDenied(error) ? new AccessDeniedError(type) : error;
+    });
     const body = (await response.json()) as { data?: Record<string, Connection | undefined>; errors?: unknown };
     if (body.errors && isAccessDenied(body.errors)) throw new AccessDeniedError(type);
     const connection = body.data?.[field];

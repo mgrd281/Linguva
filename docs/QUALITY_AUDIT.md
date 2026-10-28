@@ -32,7 +32,7 @@ Rules:
 | Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | 7.5 | 7.5 | **7.5** | Real Shopify latency and scan duration not measured; no production monitoring |
 | Security | 6.5 | 8 | 8 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
 | Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; characters per real product not measured |
-| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
+| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Development store connected (2026-10-28), app opens embedded (owner-reported); checks not yet run |
 | Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
 | **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | 7.5 | **7.6** | |
 
@@ -340,6 +340,14 @@ No score changes: the two criteria this phase works on (3.5 #6, #9) stay ◐ bec
 | Launch documents: screencast script and test instructions, listing audit, icon and feature image brief, storefront selector strategy, second-engine plan, measured characters per demo product | Launch | SUBMISSION_DEMO.md, APP_STORE_LISTING.md, BRAND_ASSETS.md, STOREFRONT_LANGUAGE_SELECTOR.md, AI_ENGINES.md, COST_MODEL.md §2a |
 
 Content coverage moves from 6.5 to 7: every translatable type is now measured per item with tested rules, and CSV import adds a path for languages and content AI doesn't cover. It stays below 8 because nothing is verified on Shopify and market-specific translations are still missing. AI translation stays at 7: language support is now read from DeepL, but quality is still unmeasured.
+
+## 4j. Phase J: development store connected (2026-10-28)
+
+The development store `linguva-test-lab.myshopify.com` exists and Linguva opens in its admin (owner report). **No score changes yet**: a score moves only with logged results of the checks in DEV_STORE_VERIFICATION.md. Prepared in this phase: the verification runbook with exact commands, live checks that compare Linguva's coverage with an independent recount of the store's data and run CSV export/import against it, read-only live tests with the app's own session (no extra app needed), and `pnpm ops:coverage-check` for evidence after every manual step.
+
+Scores expected to change once the checks pass (not before): Shopify integration, content coverage, SEO and design (real admin), each by the evidence logged.
+
+**Defect found before the first store run (fixed, regression-tested).** The real Shopify library throws GraphQL errors instead of returning them, while the simulated store returned them. The coverage scan recognised a missing optional scope only in the returned form, so on a real store without, for example, the navigation scope, the first scan would have stopped at Menus and failed as a whole instead of marking the type "no access". Also, any type that kept failing ended the whole report. Fix: access denial is recognised in both forms in the coverage listing, custom field owners, title search and the automatic-translation check; a type that keeps failing is marked "scan didn't finish" and the other types are still scanned (only a revoked shop access stops the report). Evidence: the new tests failed on the old code and pass now (`coverage.test.ts`: "library throws", "keeps failing"; `auto-sweep.test.ts` with both error forms); the simulated store can now throw like the library (`throwsLikeLibrary`).
 
 ## 5. Next steps, in order of effect
 

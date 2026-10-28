@@ -28,6 +28,7 @@ import {
   failCoverageReport,
   refreshCoverageResource,
   runCoveragePage,
+  skipCoverageSegment,
   type CoveragePagePayload,
   type CoverageRefreshPayload,
 } from "../coverage/coverage";
@@ -323,9 +324,17 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
       if (decision.kind === "rate-limited") return delay(job, token, decision.waitMs);
       if (decision.kind === "retryable" && !isFinalAttempt(job)) throw error;
       const code = decision.kind === "retryable" ? "SCAN_FAILED" : decision.code;
-      await failCoverageReport(payload.shopId, payload.reportId, code, deps.prisma);
-      log.error({ code }, "coverage report failed");
-      throw new UnrecoverableError(code);
+      if (decision.kind === "job-stop") {
+        // The shop's access (or the app) is gone: nothing else can be read either.
+        await failCoverageReport(payload.shopId, payload.reportId, code, deps.prisma);
+        log.error({ code }, "coverage report failed");
+        throw new UnrecoverableError(code);
+      }
+      // One type keeps failing: mark it, scan the others.
+      const next = await skipCoverageSegment(deps.prisma, payload, code);
+      log.warn({ code, segmentIndex: payload.segmentIndex }, "coverage segment skipped after retries");
+      if (next) await enqueueCoveragePage(queues, next);
+      return { skipped: true };
     }
   };
 }

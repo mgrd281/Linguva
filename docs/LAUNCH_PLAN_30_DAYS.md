@@ -10,7 +10,7 @@ Launch starts only when all of these are true. Owner items are detailed in OWNER
 
 | # | Gate | Who | Status |
 |---|---|---|---|
-| G1 | Core flows Verified on Shopify on a development store (DEV_STORE_TEST_PLAN.md: install, editor, bulk, Review, automatic translation, billing in test mode, uninstall) | Development, after the owner provides the store | Open |
+| G1 | Core flows Verified on Shopify on a development store (DEV_STORE_TEST_PLAN.md: install, editor, bulk, Review, automatic translation, billing in test mode, uninstall) | Development and owner; store connected 2026-10-28 (linguva-test-lab) | In progress: checks in DEV_STORE_VERIFICATION.md |
 | G2 | DeepL quality checked on a reference set in DE/FR/ES | Development, after the owner provides a key | Open |
 | G3 | Prices and trial configured in the Partner Dashboard | Owner | Open |
 | G4 | Hosting with backups, monitoring and error alerts; the app's posture check passing in production | Owner (decision, account) + development | Open |

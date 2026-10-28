@@ -10,7 +10,7 @@ Review date: 2026-10-27, branch `claude/gallant-pasteur-8opy75` (draft PR, not m
 
 | # | Blocker | Why it blocks | Next step |
 |---|---|---|---|
-| B1 | No development store connected; nothing verified on Shopify | Every Shopify behaviour is an assumption encoded in fakes | Owner: SHOPIFY_CLI_SETUP.md §1–5, then `pnpm test:live` and DEV_STORE_TEST_PLAN.md A–N |
+| B1 | Development store connected (linguva-test-lab, 2026-10-28), but nothing verified on it yet | Every Shopify behaviour is an assumption encoded in fakes until a check is logged | Owner: DEV_STORE_VERIFICATION.md (commands and checklist), results in DEV_STORE_TEST_PLAN.md §3 |
 | B2 | App not linked (`client_id` empty) | `shopify app dev` can't run | Owner: `pnpm config:link` (creates the development app) |
 | B3 | Plans not created in the Partner Dashboard; no Partner API client | Billing can't be verified (L1–L10); prices and limits are proposals | Owner: decide prices (BILLING_DESIGN §2), create plans `free/starter/pro/business`, Partner API client |
 | B4 | AI provider not verified (no DeepL key) | Translation quality, real character counts and costs unknown | Owner: approve a DeepL API Free key first (no cost), then a budget |

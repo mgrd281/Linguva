@@ -50,7 +50,7 @@ test("translation memory: search with a language chosen by name @responsive", as
 
 test("coverage report and Markets pages explain what they do @responsive", async ({ page }) => {
   await openApp(page, "full", "/app/coverage");
-  await expect(page.getByRole("button", { name: "Run coverage report" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rescan store" })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 

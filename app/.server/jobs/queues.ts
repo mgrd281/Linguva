@@ -26,8 +26,10 @@ import { AUTO_GID, createAutoItems, type AutoTranslatePayload } from "./auto-tra
 import { SWEPT_TYPES } from "../shopify/recent-changes";
 import {
   failCoverageReport,
+  refreshCoverageResource,
   runCoveragePage,
   type CoveragePagePayload,
+  type CoverageRefreshPayload,
 } from "../coverage/coverage";
 
 export const QUEUE_NAMES = {
@@ -61,6 +63,9 @@ const coveragePayloadSchema = z
     cursor: z.string().max(1000).nullable(),
   })
   .strict();
+const refreshPayloadSchema = z
+  .object({ shopId: uuid, resourceGid: z.string().regex(/^gid:\/\/shopify\/(Product|Collection)\/\d{1,20}$/) })
+  .strict();
 const autoPayloadSchema = z
   .object({
     shopId: uuid,
@@ -76,7 +81,7 @@ const AUTO_BUSY_WAIT_MS = 5 * 60 * 1000;
 export interface Queues {
   discovery: Queue<DiscoveryPayload>;
   items: Queue<ItemPayload>;
-  coverage: Queue<CoveragePagePayload>;
+  coverage: Queue<CoveragePagePayload | CoverageRefreshPayload>;
   auto: Queue<AutoTranslatePayload>;
   itemJobOptions: JobsOptions;
   discoveryJobOptions: JobsOptions;
@@ -90,7 +95,7 @@ export function createQueues(
 ): Queues {
   const discovery = new Queue<DiscoveryPayload>(QUEUE_NAMES.discovery, { connection, prefix });
   const items = new Queue<ItemPayload>(QUEUE_NAMES.items, { connection, prefix });
-  const coverage = new Queue<CoveragePagePayload>(QUEUE_NAMES.coverage, { connection, prefix });
+  const coverage = new Queue<CoveragePagePayload | CoverageRefreshPayload>(QUEUE_NAMES.coverage, { connection, prefix });
   const auto = new Queue<AutoTranslatePayload>(QUEUE_NAMES.auto, { connection, prefix });
   return {
     discovery,
@@ -187,6 +192,21 @@ export async function enqueueCoveragePage(queues: Queues, payload: CoveragePageP
   });
 }
 
+/** How long a refresh waits, so several saves in a row are read once. */
+export const COVERAGE_REFRESH_DELAY_MS = 30_000;
+
+/** Queues a coverage refresh of one product or collection (after its webhook). */
+export async function enqueueCoverageRefresh(queue: Pick<Queues["coverage"], "add">, payload: CoverageRefreshPayload) {
+  await queue.add("coverage-refresh", payload, {
+    jobId: `covref_${payload.shopId}_${payload.resourceGid.replace(/\D/g, "")}_${payload.resourceGid.includes("/Product/") ? "p" : "c"}`,
+    delay: COVERAGE_REFRESH_DELAY_MS,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000, jitter: 0.5 },
+    removeOnComplete: true,
+    removeOnFail: { age: 86_400 },
+  });
+}
+
 async function delay(job: Job, token: string | undefined, waitMs: number): Promise<never> {
   await job.moveToDelayed(Date.now() + waitMs, token);
   throw new DelayedError();
@@ -278,7 +298,18 @@ export function createDiscoveryProcessor(deps: JobDependencies, queues: Queues) 
 }
 
 export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
-  return async (job: Job<CoveragePagePayload>, token?: string) => {
+  return async (job: Job<CoveragePagePayload | CoverageRefreshPayload>, token?: string) => {
+    if (job.name === "coverage-refresh") {
+      const refresh = refreshPayloadSchema.safeParse(job.data);
+      if (!refresh.success) throw new UnrecoverableError("INVALID_PAYLOAD");
+      try {
+        return await refreshCoverageResource(deps, refresh.data);
+      } catch (error) {
+        const decision = classifyError(error);
+        if (decision.kind === "rate-limited") return delay(job, token, decision.waitMs);
+        throw error;
+      }
+    }
     const parsed = coveragePayloadSchema.safeParse(job.data);
     if (!parsed.success) throw new UnrecoverableError("INVALID_PAYLOAD");
     const payload = parsed.data;
@@ -322,7 +353,7 @@ export function createAutoProcessor(deps: JobDependencies, queues: Queues) {
 export interface WorkerSet {
   discovery: Worker<DiscoveryPayload>;
   items: Worker<ItemPayload>;
-  coverage: Worker<CoveragePagePayload>;
+  coverage: Worker<CoveragePagePayload | CoverageRefreshPayload>;
   auto: Worker<AutoTranslatePayload>;
   close(): Promise<void>;
 }
@@ -342,7 +373,7 @@ export function createWorkers(
     prefix: options.prefix,
     concurrency: options.concurrency,
   });
-  const coverage = new Worker<CoveragePagePayload>(QUEUE_NAMES.coverage, createCoverageProcessor(deps, queues), {
+  const coverage = new Worker<CoveragePagePayload | CoverageRefreshPayload>(QUEUE_NAMES.coverage, createCoverageProcessor(deps, queues), {
     connection: options.connection,
     prefix: options.prefix,
     // Pages of one report run one after another; this only spreads shops.

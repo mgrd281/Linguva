@@ -1,13 +1,14 @@
 /**
  * Seeds the test database for the UI tests: migrations, a clean database,
  * the test shops, AI consent, a completed review-mode bulk job (drafts for
- * the Review page) and owner complimentary access. Shopify itself is
+ * the Review page), coverage scans and owner complimentary access. Shopify itself is
  * simulated in the server process (tests/ui/server/preload.ts).
  */
 import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { grantComplimentaryAccess } from "../../app/.server/billing/complimentary";
 import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
+import { createCoverageReport, runCoveragePage, type CoverageDeps, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
 import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { upsertTerms } from "../../app/.server/glossary/glossary";
@@ -70,6 +71,16 @@ export default async function globalSetup() {
     );
     const fieldsPage = await runDiscoveryPage(fieldsDeps, { shopId: ids.customFields!, jobId: fieldsJob.id });
     for (const itemId of fieldsPage.itemIds) await processItem(fieldsDeps, { shopId: ids.customFields!, itemId }, 1);
+
+    // A finished coverage scan (after the drafts above, so they show as drafts).
+    for (const key of ["full", "demo"] as const) {
+      const shopStore = UI_SHOPS[key].build();
+      const coverageDeps: CoverageDeps = { prisma: app, adminFor: async () => shopStore.asAdmin(), keyPrefix: "lv:ui-test" };
+      const locales = UI_SHOPS[key].locales.filter((l) => !l.primary).map((l) => l.locale);
+      const { report } = await createCoverageReport({ shopId: ids[key]!, locales, requestedBy: null, idempotencyKey: `ui-coverage-${key}` }, app);
+      let next: CoveragePagePayload | null = { shopId: ids[key]!, reportId: report.id, segmentIndex: 0, cursor: null };
+      while (next) next = await runCoveragePage(coverageDeps, next);
+    }
 
     await grantComplimentaryAccess(owner, {
       shopifyShopGid: UI_SHOPS.owner.gid,

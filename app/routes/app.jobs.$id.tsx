@@ -5,6 +5,7 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
+import { reliableEta } from "../lib/eta";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, isBulkResourceType, jobOutcomes, listProblemItems } from "../.server/jobs/bulk-jobs";
@@ -29,12 +30,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   if (!job) throw new Response("Not found", { status: 404 });
   const [problems, outcomes] = await Promise.all([listProblemItems(shop.id, job.id), jobOutcomes(shop.id, job.id)]);
   const progress = jobProgress(job);
-  // Remaining time from the pace so far (server clock, so the page and the estimate agree).
+  // Remaining time from the pace so far, only once it can be trusted (server clock).
   const now = Date.now();
   const elapsedMs = job.startedAt ? (job.finishedAt ?? new Date(now)).getTime() - job.startedAt.getTime() : null;
   const remainingMs =
-    ACTIVE.has(job.status) && job.discoveryDone && elapsedMs && progress.done > 0 && progress.total > progress.done
-      ? Math.round((elapsedMs / progress.done) * (progress.total - progress.done))
+    ACTIVE.has(job.status) && job.discoveryDone
+      ? reliableEta({ done: progress.done, total: progress.total, startedAt: job.startedAt, now: new Date(now) })
       : null;
   return {
     job: {

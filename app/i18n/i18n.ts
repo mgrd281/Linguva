@@ -26,7 +26,7 @@ export interface MessageRef {
   vars?: MessageVars;
 }
 
-const INTL_LOCALE: Record<AppLocale, string> = { en: "en-US", de: "de-DE", fr: "fr-FR", es: "es-ES" };
+export const INTL_LOCALE: Record<AppLocale, string> = { en: "en-US", de: "de-DE", fr: "fr-FR", es: "es-ES" };
 
 function supported(tag: string | null | undefined): AppLocale | null {
   const primary = tag?.trim().toLowerCase().split(/[-_]/)[0];

@@ -4,6 +4,7 @@ import { prisma as defaultClient } from "../lib/db";
 import { getTranslatableResource, removeTranslations } from "../shopify/translations-api";
 import { externalDigest, saveResourceTranslations, type SaveOutcome } from "./product-translation-service";
 import { getRevision, latestRevisions, revisionKey } from "./revisions";
+import { noteCoverageWrite } from "../coverage/items";
 import { withTenant } from "../tenancy/with-tenant";
 
 type Admin = Pick<AdminApiContext, "graphql">;
@@ -108,6 +109,7 @@ export async function removeTranslation(
 
   const result = await removeTranslations(input.admin, input.resourceGid, input.locale, [input.key]);
   if (result.userErrors.length) return { status: "failed", message: result.userErrors[0]!.message };
+  await noteCoverageWrite({ shopId: input.shopId, locale: input.locale, resource: resource!, removed: [input.key] }, client);
   await client.auditLog.createMany({
     data: [
       {

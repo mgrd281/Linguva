@@ -94,7 +94,7 @@ test.describe("loading states", () => {
       await held;
       await route.continue();
     });
-    await page.getByRole("link", { name: "Open coverage report" }).click();
+    await page.getByRole("link", { name: "See coverage details" }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(true);
     release();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(false);

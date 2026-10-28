@@ -137,7 +137,7 @@ describe("a database user without grants (linguva_probe)", () => {
         return callFuzzy(tx as unknown as PrismaClient);
       }),
     ).rejects.toThrow(/permission denied/);
-    for (const table of ["Shop", "Session", "AuditLog", "TranslationDraft", "UsageLedger", "CoverageStat"]) {
+    for (const table of ["Shop", "Session", "AuditLog", "TranslationDraft", "UsageLedger", "CoverageItem", "CoverageCount"]) {
       await expect(probe.$queryRawUnsafe(`SELECT 1 FROM "${table}" LIMIT 1`)).rejects.toThrow(/permission denied/);
     }
   });

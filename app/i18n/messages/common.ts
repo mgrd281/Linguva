@@ -182,6 +182,10 @@ export const en = {
   "common.kind.MEDIA_IMAGE.label": "Product images (alt text)",
   "common.kind.COLLECTION_IMAGE.label": "Collection images (alt text)",
   "common.kind.ARTICLE_IMAGE.label": "Blog post images (alt text)",
+  "common.kind.PRODUCT_METAFIELD.label": "Product custom fields",
+  "common.kind.COLLECTION_METAFIELD.label": "Collection custom fields",
+  "common.kind.PAGE_METAFIELD.label": "Page custom fields",
+  "common.kind.ARTICLE_METAFIELD.label": "Blog post custom fields",
 
   "common.group.Store": "Store",
   "common.group.Navigation": "Navigation",
@@ -373,6 +377,10 @@ export const de: Translation<typeof en> = {
   "common.kind.MEDIA_IMAGE.label": "Produktbilder (Alt-Text)",
   "common.kind.COLLECTION_IMAGE.label": "Kollektionsbilder (Alt-Text)",
   "common.kind.ARTICLE_IMAGE.label": "Blogbeitragsbilder (Alt-Text)",
+  "common.kind.PRODUCT_METAFIELD.label": "Benutzerdefinierte Felder von Produkten",
+  "common.kind.COLLECTION_METAFIELD.label": "Benutzerdefinierte Felder von Kollektionen",
+  "common.kind.PAGE_METAFIELD.label": "Benutzerdefinierte Felder von Seiten",
+  "common.kind.ARTICLE_METAFIELD.label": "Benutzerdefinierte Felder von Blogbeiträgen",
 
   "common.group.Store": "Shop",
   "common.group.Navigation": "Navigation",
@@ -564,6 +572,10 @@ export const fr: Translation<typeof en> = {
   "common.kind.MEDIA_IMAGE.label": "Images de produits (texte alternatif)",
   "common.kind.COLLECTION_IMAGE.label": "Images de collections (texte alternatif)",
   "common.kind.ARTICLE_IMAGE.label": "Images d'articles de blog (texte alternatif)",
+  "common.kind.PRODUCT_METAFIELD.label": "Champs personnalisés des produits",
+  "common.kind.COLLECTION_METAFIELD.label": "Champs personnalisés des collections",
+  "common.kind.PAGE_METAFIELD.label": "Champs personnalisés des pages",
+  "common.kind.ARTICLE_METAFIELD.label": "Champs personnalisés des articles de blog",
 
   "common.group.Store": "Boutique",
   "common.group.Navigation": "Navigation",
@@ -755,6 +767,10 @@ export const es: Translation<typeof en> = {
   "common.kind.MEDIA_IMAGE.label": "Imágenes de productos (texto alternativo)",
   "common.kind.COLLECTION_IMAGE.label": "Imágenes de colecciones (texto alternativo)",
   "common.kind.ARTICLE_IMAGE.label": "Imágenes de entradas de blog (texto alternativo)",
+  "common.kind.PRODUCT_METAFIELD.label": "Campos personalizados de productos",
+  "common.kind.COLLECTION_METAFIELD.label": "Campos personalizados de colecciones",
+  "common.kind.PAGE_METAFIELD.label": "Campos personalizados de páginas",
+  "common.kind.ARTICLE_METAFIELD.label": "Campos personalizados de entradas de blog",
 
   "common.group.Store": "Tienda",
   "common.group.Navigation": "Navegación",

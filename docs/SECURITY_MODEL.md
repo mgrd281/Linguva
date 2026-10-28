@@ -188,6 +188,16 @@ Development-only tools (not shipped, not run on user input) also have advisories
 | `TranslationDraft` RLS enabled but not forced | Only the owner (migration) role is unfiltered; the runtime role stays under RLS for every operation (tested). Second and last entry of `NOT_FORCED_TABLES` |
 | Partial trigram index on pending drafts | No data change; makes the search a few milliseconds instead of a scan |
 
+## 5m. Database change review: live translation coverage (migration 20261031090000)
+
+| Change | Review |
+|---|---|
+| `CoverageItem`, `CoverageCount`, `CoverageSegment`: new tenant tables | RLS enabled **and forced**, `tenant_isolation` policy on `app.shop_id` (USING and WITH CHECK), granted to `linguva_app` only; no definer function, no `NO FORCE`. Isolation tested in `tests/security/coverage-security.test.ts` (no rows without a tenant, no write for another shop, forged queue payloads find nothing) |
+| What is stored | Shopify field keys (`title`, `body_html`, theme and metafield keys), states, counts, GIDs and a 32-hex sha256 prefix of the normalised translated SEO title (duplicate check). **No merchant text**: the test scans every coverage row of a shop with translated titles, SEO titles, a custom field and an image and finds none of their words. Titles shown on the coverage page are read live from Shopify for the visible page only |
+| `CoverageStat`, `CoverageGap`, `CoverageTitleHash` dropped | Replaced by the tables above; they held only counts, ids and hashes |
+| Index `TranslationJobItem(shopId, resourceGid)` | No data change; finds the latest attempt per resource for "failed" |
+| Writers | The scan worker, the webhook refresh (resource GID from the verified webhook, checked against `Product`/`Collection`), and the app after its own writes; all through `withTenant`, serialised per shop and language by an advisory lock so count changes never interleave |
+
 **Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 
 ## 6. Admin control center

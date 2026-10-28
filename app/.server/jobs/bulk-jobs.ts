@@ -4,6 +4,7 @@ import type {
   TranslationJobItemStatus,
 } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
+import { refreshCoverageOverlays } from "../coverage/items";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 
 export const ACTIVE_JOB_STATUSES = ["PENDING", "DISCOVERING", "RUNNING"] as const;
@@ -305,11 +306,11 @@ export async function finishItem(
   result: ItemResult,
   client: PrismaClient = defaultClient,
 ) {
-  return withTenant(
+  const finished = await withTenant(
     shopId,
     async (tx) => {
       const item = await tx.translationJobItem.findFirst({ where: { id: itemId, shopId } });
-      if (!item) return false;
+      if (!item) return null;
       const updated = await tx.translationJobItem.updateMany({
         where: { id: itemId, shopId, status: { notIn: TERMINAL_ITEM_STATUSES } },
         data: {
@@ -321,7 +322,7 @@ export async function finishItem(
           finishedAt: new Date(),
         },
       });
-      if (updated.count === 0) return false;
+      if (updated.count === 0) return null;
 
       const counter =
         result.status === "SUCCEEDED"
@@ -340,10 +341,14 @@ export async function finishItem(
         },
       });
       await maybeComplete(tx, job);
-      return true;
+      return { resourceGid: item.resourceGid, locale: job.targetLocale };
     },
     client,
   );
+  if (!finished) return false;
+  // Coverage shows the attempt (failed, or drafts made) right away.
+  await refreshCoverageOverlays(shopId, [finished], client);
+  return true;
 }
 
 /** Stops a job because of a condition that affects all its items. */

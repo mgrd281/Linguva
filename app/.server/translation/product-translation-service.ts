@@ -13,6 +13,7 @@ import {
   registerTranslations,
   type TranslatableResourceData,
 } from "../shopify/translations-api";
+import { noteCoverageWrite } from "../coverage/items";
 import { withTenant } from "../tenancy/with-tenant";
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { latestRevisions, revisionKey } from "./revisions";
@@ -325,6 +326,11 @@ export async function saveResourceTranslations(
         data: { status: "STALE" },
       });
     },
+    client,
+  );
+
+  await noteCoverageWrite(
+    { shopId: input.shopId, locale: input.locale, resource, written: saved.map((e) => ({ key: e.key, value: e.value })) },
     client,
   );
 

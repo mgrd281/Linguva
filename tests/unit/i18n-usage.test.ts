@@ -36,6 +36,9 @@ const DYNAMIC = [
   "editor.saveError.",
   "editor.valueType.",
   "coverage.error.",
+  "coverage.state.",
+  "coverage.stateHelp.",
+  "coverage.group.",
   "glossary.rule.",
   "markets.market.status.",
 ];

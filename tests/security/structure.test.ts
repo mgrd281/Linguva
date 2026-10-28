@@ -57,7 +57,7 @@ describe("every way to write to a store is known and reviewed", () => {
 
 describe("every page and webhook authenticates", () => {
   // Helpers that authenticate first (requireShop) and are used by thin route files.
-  const DELEGATES = /\b(requireShop|webhookAction|authenticate\.\w+|loadResourceList|runResourceListAction|resolveEditorContext)\(/;
+  const DELEGATES = /\b(requireShop|webhookAction|authenticate\.\w+|loadResourceList|runResourceListAction|resolveEditorContext|loadCoverageDashboard|loadCoverageItemsPage|coverageAction)\(/;
   const routes = APP.filter((f) => /^app\/routes\/(app\.|webhooks\.)/.test(f.path) && /export const (loader|action)\b/.test(f.text));
 
   it.each(routes.map((r) => [r.path, r] as const))("%s", (_path, route) => {

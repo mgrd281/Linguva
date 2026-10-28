@@ -142,6 +142,15 @@ function toData(node: Node): TranslatableResourceData {
   };
 }
 
+/** Translatable content of the given resources (in calls of up to 100 ids). */
+export async function translatableByIds(admin: Admin, ids: readonly string[], locale: string): Promise<Map<string, TranslatableResourceData>> {
+  const all = new Map<string, TranslatableResourceData>();
+  for (let i = 0; i < ids.length; i += 100) {
+    for (const [id, data] of await byIds(admin, ids.slice(i, i + 100), locale)) all.set(id, data);
+  }
+  return all;
+}
+
 async function byIds(admin: Admin, ids: string[], locale: string): Promise<Map<string, TranslatableResourceData>> {
   if (!ids.length) return new Map();
   const response = await admin.graphql(BY_IDS, { variables: { ids, locale } });

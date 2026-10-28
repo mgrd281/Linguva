@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
 import type { SegmentPair } from "../memory/alignment";
+import { refreshCoverageOverlays } from "../coverage/items";
 import { withTenant } from "../tenancy/with-tenant";
 import { ResourceNotFoundError, saveResourceTranslations } from "../translation/product-translation-service";
 import { RESOURCE_KINDS } from "../../lib/resource-kinds";
@@ -72,6 +73,7 @@ export async function saveDrafts(
     },
     client,
   );
+  await refreshCoverageOverlays(shopId, drafts, client);
   return drafts.length;
 }
 
@@ -261,16 +263,23 @@ export async function rejectDrafts(
 ) {
   const ids = draftIds.filter((id) => UUID.test(id)).slice(0, MAX_DRAFTS_PER_ACTION);
   if (ids.length === 0) return 0;
-  const result = await withTenant(
+  const rejected = await withTenant(
     shopId,
-    (tx) =>
-      tx.translationDraft.updateMany({
+    async (tx) => {
+      const pending = await tx.translationDraft.findMany({
+        where: { shopId, id: { in: ids }, status: "PENDING" },
+        select: { resourceGid: true, locale: true },
+      });
+      const result = await tx.translationDraft.updateMany({
         where: { shopId, id: { in: ids }, status: "PENDING" },
         data: { status: "REJECTED", reviewedAt: new Date(), reviewedBy: actorId },
-      }),
+      });
+      return { count: result.count, pending };
+    },
     client,
   );
-  return result.count;
+  await refreshCoverageOverlays(shopId, rejected.pending, client);
+  return rejected.count;
 }
 
 export interface ApprovalResult {
@@ -365,5 +374,6 @@ export async function approveDrafts(
       client,
     );
   }
+  await refreshCoverageOverlays(input.shopId, drafts, client);
   return result;
 }

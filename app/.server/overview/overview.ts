@@ -10,7 +10,8 @@ import { getConfig } from "../lib/config";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { countPendingDrafts } from "../review/drafts";
-import { loadCoverage } from "../coverage/coverage";
+import { loadCoverageSummary } from "../coverage/summary";
+import { headlineByLocale } from "../../lib/coverage-view";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage } from "../usage/usage-ledger";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
@@ -44,7 +45,7 @@ export async function loadOverview(
     countPendingDrafts(shop.id, client),
     withTenant(shop.id, (tx) => tx.translationRevision.count({ where: { shopId: shop.id, origin: { in: ["AI", "MANUAL"] } } }), client),
     withTenant(shop.id, (tx) => tx.translationJob.count({ where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } } }), client),
-    loadCoverage(shop.id, client),
+    loadCoverageSummary(shop.id, client),
     getMonthlyUsage(shop.id, undefined, client),
     getDailyUsage(shop.id, client),
   ]);
@@ -99,19 +100,15 @@ export async function loadOverview(
     },
   ];
 
-  // Share of translated texts per language, from the latest finished coverage report.
-  const finished = coverage?.report.status === "COMPLETED" ? coverage : null;
-  const progress = targets.map((l) => {
-    const rows = finished?.rows.filter((r) => r.locale === l.locale) ?? [];
-    const withSource = rows.reduce((n, r) => n + r.groups.content.withSource + r.groups.seo.withSource, 0);
-    const translated = rows.reduce((n, r) => n + r.groups.content.translated + r.groups.seo.translated, 0);
-    return {
-      locale: l.locale,
-      name: l.name,
-      published: l.published,
-      percent: finished && withSource ? Math.round((translated / withSource) * 100) : null,
-    };
-  });
+  // Share of complete fields per language (live coverage, published drafts only).
+  const scanned = coverage.segments.some((seg) => seg.status === "SCANNED");
+  const headline = headlineByLocale(coverage.counts);
+  const progress = targets.map((l) => ({
+    locale: l.locale,
+    name: l.name,
+    published: l.published,
+    percent: scanned ? (headline.get(l.locale)?.percent ?? null) : null,
+  }));
 
   const limits = aiLimitsFor(getConfig(), billing);
   return {
@@ -123,7 +120,7 @@ export async function loadOverview(
     publishedCount: locales.publishedCount,
     checklist,
     progress,
-    coverageCheckedAt: finished?.report.finishedAt?.toISOString() ?? null,
+    coverageCheckedAt: coverage.report?.status === "COMPLETED" ? coverage.report.finishedAt : null,
     pendingDrafts,
     activeJobs,
     usage: { used, limit: limits.limit, usedToday, dailyLimit: limits.dailyLimit, level: usageLevel(used, limits.limit) },

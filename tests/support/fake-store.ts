@@ -225,6 +225,37 @@ export class FakeShopifyStore {
         },
       });
     }
+    const search = /^LinguvaSearch(Products|Collections|Pages|Articles|Blogs)$/.exec(name);
+    if (search) {
+      // "title:jack* AND title:red*": every word starts a word of the title.
+      const type = { Products: "Product", Collections: "Collection", Pages: "Page", Articles: "Article", Blogs: "Blog" }[search[1]!]!;
+      const prefixes = [...String(vars.query).matchAll(/title:([^*\s]+)\*/g)].map((m) => m[1]!.toLowerCase());
+      const ids = [...this.products.keys()].filter((gid) => {
+        if (!gid.startsWith(`gid://shopify/${type}/`)) return false;
+        const words = (this.products.get(gid)!.find((f) => f.key === "title")?.value ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u);
+        return prefixes.every((p) => words.some((w) => w.startsWith(p)));
+      });
+      return Response.json({ data: { [search[1]!.toLowerCase()]: { nodes: ids.slice(0, 100).map((id) => ({ id })) } } });
+    }
+    const owners = /^LinguvaMetafieldOwners(Products|Collections|Pages|Articles)$/.exec(name);
+    if (owners) {
+      const type = { Products: "Product", Collections: "Collection", Pages: "Page", Articles: "Article" }[owners[1]!]!;
+      const all = [...this.products.keys()].filter((gid) => gid.startsWith(`gid://shopify/${type}/`));
+      const start = vars.after ? Number(vars.after) : 0;
+      const slice = all.slice(start, start + Number(vars.first));
+      const end = start + slice.length;
+      return Response.json({
+        data: {
+          [owners[1]!.toLowerCase()]: {
+            nodes: slice.map((id) => ({
+              id,
+              metafields: { nodes: (this.metafields.get(id) ?? []).slice(0, 50).map((m) => ({ id: m.id, translatable: m.translatable })) },
+            })),
+            pageInfo: { hasNextPage: end < all.length, endCursor: slice.length ? String(end) : null },
+          },
+        },
+      });
+    }
     if (name === "LinguvaProbeTranslatable") {
       const prefix = `gid://shopify/${gidTypeOf(String(vars.resourceType))}/`;
       const first = [...this.products.keys()].find((gid) => gid.startsWith(prefix));

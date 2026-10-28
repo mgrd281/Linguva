@@ -1,37 +1,47 @@
 /**
- * Translation coverage report: scans products and collections page by page
- * for each target language and stores aggregates (counts per field key, SEO
- * findings, duplicate SEO titles as hashes, resources with gaps as ids).
- * It never writes to Shopify, never calls a translation provider and never
- * stores merchant text.
+ * Translation coverage scan: reads every translatable resource type (and
+ * custom fields per owner type) page by page for each target language and
+ * keeps the live coverage items (items.ts) and the scan state per language
+ * and type (CoverageSegment). It never writes to Shopify, never calls a
+ * translation provider and never stores merchant text: only keys, states,
+ * counts, ids and a hash of the translated SEO title.
  */
-import { createHash } from "node:crypto";
 import type { CoverageReport, PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
-import { listTranslatableResources, type TranslatableResourceData } from "../shopify/translations-api";
+import { AccessDeniedError, getTranslatableResource, listTranslatableResources, type TranslatableResourceData } from "../shopify/translations-api";
+import { listOwnerMetafields, METAFIELD_OWNER_TYPES, type MetafieldOwnerType } from "../shopify/metafield-owners";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import { shopKey } from "../queue/redis";
 import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
-import { checkSeoField, SEO_TITLE_KEY } from "../../lib/seo";
-import { IMAGE_COVERAGE_TYPES, isImageCoverageType, type ImageCoverageType, type ResourceKind } from "../../lib/resource-kinds";
+import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, kindOfGid, RESOURCE_KINDS, type TranslatableKind } from "../../lib/resource-kinds";
+import { dropCoverageItemsTx, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
 
-export const COVERAGE_RESOURCE_TYPES: readonly ResourceKind[] = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"];
+/** Custom fields of each owner type ("PRODUCT_METAFIELD", …). */
+export const METAFIELD_COVERAGE_TYPES = METAFIELD_OWNER_TYPES.map((owner) => `${owner}_METAFIELD` as const);
+export type MetafieldCoverageType = (typeof METAFIELD_COVERAGE_TYPES)[number];
+
 /**
- * Image alt text, listed by Shopify per image type (one request per 50
- * images). Custom fields can't be listed this way: Shopify only exposes
- * their translations through their owner, so they aren't in the report.
+ * Every type the scan reads, in this order: the catalog and online store
+ * first (what merchants check first), then image alt text, custom fields,
+ * and the other Shopify translatable resource types (Admin API 2026-10;
+ * the deprecated METAFIELD listing is replaced by the per-owner custom
+ * fields).
  */
-export const COVERAGE_IMAGE_TYPES = Object.keys(IMAGE_COVERAGE_TYPES) as ImageCoverageType[];
-type CoverageImageType = ImageCoverageType;
-const isCoverageImageType = isImageCoverageType;
+export const COVERAGE_TYPES: readonly string[] = [
+  ...Object.keys(RESOURCE_KINDS),
+  ...Object.keys(IMAGE_COVERAGE_TYPES),
+  ...METAFIELD_COVERAGE_TYPES,
+  ...Object.keys(CONTENT_TYPES),
+];
 export const COVERAGE_PAGE_SIZE = 50;
-/** Resources with gaps kept per language (the worst ones). */
-export const GAP_LIMIT_PER_LOCALE = 200;
 const PAGE_COST = 60;
 const ACTIVE: CoverageReport["status"][] = ["QUEUED", "RUNNING"];
 /** A report with no progress for this long is treated as lost (for example Redis was down). */
 export const STALE_REPORT_MS = 30 * 60 * 1000;
+
+const ownerOf = (type: string): MetafieldOwnerType | null =>
+  type.endsWith("_METAFIELD") ? (type.slice(0, -"_METAFIELD".length) as MetafieldOwnerType) : null;
 
 export interface CoverageDeps {
   prisma: PrismaClient;
@@ -51,7 +61,7 @@ export interface CoveragePagePayload {
 export function segmentOf(report: Pick<CoverageReport, "segments">, index: number) {
   const value = report.segments[index];
   if (!value) return null;
-  const [resourceType, locale] = value.split("|") as [ResourceKind | CoverageImageType, string];
+  const [resourceType, locale] = value.split("|") as [string, string];
   return { resourceType, locale };
 }
 
@@ -88,7 +98,7 @@ export async function createCoverageReport(
           shopId: input.shopId,
           requestedBy: input.requestedBy,
           idempotencyKey: input.idempotencyKey,
-          segments: [...COVERAGE_RESOURCE_TYPES, ...COVERAGE_IMAGE_TYPES].flatMap((type) => locales.map((l) => `${type}|${l}`)),
+          segments: COVERAGE_TYPES.flatMap((type) => locales.map((l) => `${type}|${l}`)),
         },
       });
       // Keep the latest few reports; older ones are only history.
@@ -105,85 +115,10 @@ export async function createCoverageReport(
   );
 }
 
-interface KeyCounts {
-  withSource: number;
-  translated: number;
-  outdated: number;
-  seoIssues: number;
-}
-
-/** Aggregates one page of resources for one language. Pure, for testing. */
-export function aggregatePage(resources: readonly TranslatableResourceData[]) {
-  const keys = new Map<string, KeyCounts>();
-  const gaps: Array<{ resourceGid: string; missing: number; outdated: number }> = [];
-  const titleHashes = new Map<string, number>();
-
-  for (const resource of resources) {
-    const translations = new Map(resource.translations.map((t) => [t.key, t]));
-    let missing = 0;
-    let outdated = 0;
-    for (const field of resource.content) {
-      if (!field.value || !field.value.trim()) continue;
-      const counts = keys.get(field.key) ?? { withSource: 0, translated: 0, outdated: 0, seoIssues: 0 };
-      counts.withSource++;
-      const t = translations.get(field.key);
-      const value = t?.value?.trim() ? t.value : null;
-      if (value && !t!.outdated) counts.translated++;
-      else if (value) {
-        counts.outdated++;
-        outdated++;
-      } else missing++;
-      if (value && checkSeoField(field.key, field.value, value).length) counts.seoIssues++;
-      if (value && field.key === SEO_TITLE_KEY) {
-        const hash = createHash("sha256").update(value.trim().toLowerCase().replace(/\s+/g, " ")).digest("hex").slice(0, 32);
-        titleHashes.set(hash, (titleHashes.get(hash) ?? 0) + 1);
-      }
-      keys.set(field.key, counts);
-    }
-    if (missing || outdated) gaps.push({ resourceGid: resource.resourceId, missing, outdated });
-  }
-  return { keys, gaps, titleHashes, resources: resources.length };
-}
-
 async function throttle(deps: CoverageDeps, shopId: string) {
   if (!deps.shopifyLimiter) return;
   const wait = await deps.shopifyLimiter.take(shopKey(deps.keyPrefix, shopId, "rl", "shopify"), PAGE_COST);
   if (wait > 0) throw new RateLimitedError(wait);
-}
-
-async function save(tx: TenantTx, report: CoverageReport, locale: string, resourceType: string, page: ReturnType<typeof aggregatePage>) {
-  const base = { shopId: report.shopId, reportId: report.id, locale, resourceType };
-  const rows = [...page.keys.entries(), ["*", { withSource: page.resources, translated: 0, outdated: 0, seoIssues: 0 }] as const];
-  for (const [key, c] of rows) {
-    await tx.coverageStat.upsert({
-      where: { reportId_locale_resourceType_key: { reportId: report.id, locale, resourceType, key } },
-      create: { ...base, key, ...c },
-      update: {
-        withSource: { increment: c.withSource },
-        translated: { increment: c.translated },
-        outdated: { increment: c.outdated },
-        seoIssues: { increment: c.seoIssues },
-      },
-    });
-  }
-  for (const [hash, count] of page.titleHashes) {
-    await tx.coverageTitleHash.upsert({
-      where: { reportId_locale_hash: { reportId: report.id, locale, hash } },
-      create: { shopId: report.shopId, reportId: report.id, locale, hash, count },
-      update: { count: { increment: count } },
-    });
-  }
-  if (page.gaps.length) {
-    await tx.coverageGap.createMany({ data: page.gaps.map((g) => ({ ...base, ...g })), skipDuplicates: true });
-    // Keep only the worst resources per language.
-    await tx.$executeRaw`
-      DELETE FROM "CoverageGap" WHERE "id" IN (
-        SELECT "id" FROM "CoverageGap"
-        WHERE "reportId" = ${report.id}::uuid AND "locale" = ${locale}
-        ORDER BY "missing" + "outdated" DESC, "id"
-        OFFSET ${GAP_LIMIT_PER_LOCALE}
-      )`;
-  }
 }
 
 /**
@@ -209,20 +144,20 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
 
   await throttle(deps, payload.shopId);
   const admin = await deps.adminFor(shop.shopDomain);
-  const page = await listTranslatableResources(admin, {
-    resourceType: segment.resourceType,
-    locale: segment.locale,
-    after: payload.cursor,
-    first: deps.pageSize ?? COVERAGE_PAGE_SIZE,
-  });
-  const aggregate = aggregatePage(page.resources);
-  // An image's gap can't be opened on its own (it's edited on its product's
-  // page), so images count in the totals but not in the list of gaps.
-  if (isCoverageImageType(segment.resourceType)) aggregate.gaps = [];
+  // Items found by this page are "seen" at the time it was read; a save
+  // made after the read stays newer than what the page found.
+  const readAt = new Date();
+  let page: { changes: CoverageChange[]; scanned: number; hasNextPage: boolean; endCursor: string | null } | "denied";
+  try {
+    page = await readPage(admin, segment.resourceType, segment.locale, payload.cursor, deps.pageSize ?? COVERAGE_PAGE_SIZE, readAt);
+  } catch (error) {
+    if (!(error instanceof AccessDeniedError)) throw error;
+    page = "denied";
+  }
 
-  const more = page.pageInfo.hasNextPage && page.pageInfo.endCursor;
+  const more = page !== "denied" && page.hasNextPage && page.endCursor;
   const nextIndex = more ? payload.segmentIndex : payload.segmentIndex + 1;
-  const nextCursor = more ? page.pageInfo.endCursor : null;
+  const nextCursor = more ? (page as { endCursor: string }).endCursor : null;
   const finished = nextIndex >= report.segments.length;
 
   return withTenant(
@@ -243,102 +178,137 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
           segmentIndex: nextIndex,
           cursor: nextCursor,
           pagesScanned: { increment: 1 },
-          resourcesScanned: { increment: aggregate.resources },
+          resourcesScanned: { increment: page === "denied" ? 0 : page.scanned },
           startedAt: report.startedAt ?? new Date(),
           ...(finished ? { finishedAt: new Date() } : {}),
         },
       });
       if (advanced.count === 0) return null;
-      await save(tx, report, segment.locale, segment.resourceType, aggregate);
+      const key = { shopId_locale_resourceType: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } };
+      if (page === "denied") {
+        // Without the scope nothing of the type can be read or translated:
+        // earlier results are removed rather than shown as current.
+        await tx.coverageItem.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
+        await tx.coverageCount.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
+        await tx.coverageSegment.upsert({
+          where: key,
+          create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "DENIED", reportId: report.id, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
+          update: { status: "DENIED", reportId: report.id, startedAt: null, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
+        });
+      } else {
+        if (payload.cursor === null) {
+          await tx.coverageSegment.upsert({
+            where: key,
+            create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "SCANNING", reportId: report.id, startedAt: readAt },
+            update: { status: "SCANNING", reportId: report.id, startedAt: readAt, errorCode: null },
+          });
+        }
+        await syncCoverageTx(tx, payload.shopId, segment.locale, page.changes, { create: true, seen: true });
+        if (!more) await finishSegment(tx, payload.shopId, segment.locale, segment.resourceType, readAt);
+      }
       return finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: nextCursor };
     },
     deps.prisma,
   );
 }
 
+async function readPage(admin: Admin, resourceType: string, locale: string, cursor: string | null, pageSize: number, readAt: Date) {
+  const owner = ownerOf(resourceType);
+  const toChange = (r: TranslatableResourceData, parentGid: string | null): CoverageChange => ({
+    resourceGid: r.resourceId,
+    resourceType,
+    parentGid,
+    observed: { data: r, at: readAt },
+  });
+  if (owner) {
+    const result = await listOwnerMetafields(admin, { owner, locale, after: cursor });
+    return {
+      changes: result.resources.map((r) => toChange(r, r.ownerGid)),
+      scanned: result.resources.length,
+      hasNextPage: result.pageInfo.hasNextPage,
+      endCursor: result.pageInfo.endCursor,
+    };
+  }
+  const result = await listTranslatableResources(admin, { resourceType: resourceType as TranslatableKind, locale, after: cursor, first: pageSize });
+  return {
+    changes: result.resources.map((r) => toChange(r, null)),
+    scanned: result.resources.length,
+    hasNextPage: result.pageInfo.hasNextPage,
+    endCursor: result.pageInfo.endCursor,
+  };
+}
+
+/** Removes what the scan of a segment didn't find, rebuilds its counts and marks it scanned. */
+async function finishSegment(tx: TenantTx, shopId: string, locale: string, resourceType: string, now: Date) {
+  const segment = await tx.coverageSegment.findUnique({ where: { shopId_locale_resourceType: { shopId, locale, resourceType } } });
+  await finishSegmentTx(tx, shopId, locale, resourceType, segment?.startedAt ?? now);
+  await tx.coverageSegment.update({
+    where: { shopId_locale_resourceType: { shopId, locale, resourceType } },
+    data: { status: "SCANNED", scannedAt: now, errorCode: null },
+  });
+}
+
 export async function failCoverageReport(shopId: string, reportId: string, errorCode: string, client: PrismaClient = defaultClient) {
   await withTenant(
     shopId,
-    (tx) =>
-      tx.coverageReport.updateMany({
+    async (tx) => {
+      await tx.coverageReport.updateMany({
         where: { id: reportId, shopId, status: { in: ACTIVE } },
         data: { status: "FAILED", errorCode, finishedAt: new Date() },
-      }),
-    client,
-  );
-}
-
-export interface CoverageSummaryRow {
-  locale: string;
-  resourceType: string;
-  resources: number;
-  groups: Record<"content" | "seo" | "handle", { withSource: number; translated: number; outdated: number; missing: number }>;
-  seoIssues: number;
-  seoTitlesMissingInSource: number;
-}
-
-const groupOf = (key: string): "content" | "seo" | "handle" =>
-  key === "meta_title" || key === "meta_description" ? "seo" : key === "handle" ? "handle" : "content";
-
-/** The latest report of a shop with its summary per language and resource type. */
-export async function loadCoverage(shopId: string, client: PrismaClient = defaultClient) {
-  return withTenant(
-    shopId,
-    async (tx) => {
-      const report = await tx.coverageReport.findFirst({ where: { shopId }, orderBy: { createdAt: "desc" } });
-      if (!report) return null;
-      const [stats, dupes, gaps] = await Promise.all([
-        tx.coverageStat.findMany({ where: { shopId, reportId: report.id } }),
-        tx.coverageTitleHash.groupBy({
-          by: ["locale"],
-          where: { shopId, reportId: report.id, count: { gt: 1 } },
-          _sum: { count: true },
-        }),
-        tx.coverageGap.findMany({
-          where: { shopId, reportId: report.id },
-          orderBy: [{ missing: "desc" }, { outdated: "desc" }],
-          take: 500,
-        }),
-      ]);
-      const rows = new Map<string, CoverageSummaryRow>();
-      const empty = () => ({ withSource: 0, translated: 0, outdated: 0, missing: 0 });
-      for (const s of stats) {
-        const id = `${s.locale}|${s.resourceType}`;
-        const row = rows.get(id) ?? {
-          locale: s.locale,
-          resourceType: s.resourceType,
-          resources: 0,
-          groups: { content: empty(), seo: empty(), handle: empty() },
-          seoIssues: 0,
-          seoTitlesMissingInSource: 0,
-        };
-        if (s.key === "*") row.resources = s.withSource;
-        else {
-          const g = row.groups[groupOf(s.key)];
-          g.withSource += s.withSource;
-          g.translated += s.translated;
-          g.outdated += s.outdated;
-          g.missing += s.withSource - s.translated - s.outdated;
-          row.seoIssues += s.seoIssues;
-        }
-        rows.set(id, row);
-      }
-      for (const row of rows.values()) {
-        const titleStat = stats.find(
-          (s) => s.locale === row.locale && s.resourceType === row.resourceType && s.key === SEO_TITLE_KEY,
-        );
-        // Images have no SEO title of their own.
-        row.seoTitlesMissingInSource = isCoverageImageType(row.resourceType) ? 0 : Math.max(0, row.resources - (titleStat?.withSource ?? 0));
-      }
-      // Duplicate SEO titles are counted per language (products and collections together).
-      const dupesByLocale = new Map(dupes.map((d) => [d.locale, d._sum.count ?? 0]));
-      return {
-        report,
-        rows: [...rows.values()].sort((a, b) => a.locale.localeCompare(b.locale) || a.resourceType.localeCompare(b.resourceType)),
-        duplicateSeoTitles: Object.fromEntries(dupesByLocale),
-        gaps,
-      };
+      });
+      // The segment being read keeps its earlier items, marked as not fully scanned.
+      await tx.coverageSegment.updateMany({ where: { shopId, reportId, status: "SCANNING" }, data: { status: "FAILED", errorCode } });
     },
     client,
   );
+}
+
+
+export interface CoverageRefreshPayload {
+  shopId: string;
+  resourceGid: string;
+}
+
+/**
+ * Reads one resource again in every language whose type was scanned (after
+ * a products/collections webhook: the original may have changed, which
+ * makes translations outdated). A resource Shopify no longer returns is
+ * removed from coverage.
+ */
+export async function refreshCoverageResource(deps: CoverageDeps, payload: CoverageRefreshPayload) {
+  const resourceType = kindOfGid(payload.resourceGid);
+  if (!resourceType) return { refreshed: 0 };
+  const shop = await deps.prisma.shop.findUnique({ where: { id: payload.shopId } });
+  if (!shop || shop.status !== "ACTIVE") return { refreshed: 0 };
+  const segments = await withTenant(
+    payload.shopId,
+    (tx) => tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: "SCANNED" } }),
+    deps.prisma,
+  );
+  if (!segments.length) return { refreshed: 0 };
+  const admin = await deps.adminFor(shop.shopDomain);
+  let refreshed = 0;
+  for (const segment of segments) {
+    await throttle(deps, payload.shopId);
+    const at = new Date();
+    const data = await getTranslatableResource(admin, payload.resourceGid, segment.locale);
+    await withTenant(
+      payload.shopId,
+      async (tx) => {
+        if (data) {
+          refreshed += await syncCoverageTx(
+            tx,
+            payload.shopId,
+            segment.locale,
+            [{ resourceGid: payload.resourceGid, resourceType, observed: { data, at } }],
+            { create: true, seen: true },
+          );
+        } else {
+          await dropCoverageItemsTx(tx, payload.shopId, segment.locale, [payload.resourceGid]);
+        }
+      },
+      deps.prisma,
+    );
+  }
+  return { refreshed };
 }

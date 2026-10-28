@@ -223,13 +223,34 @@ With the image built from this branch, local PostgreSQL 16 and Redis, staging va
 
 Not verifiable here: Railway itself (build service, private network, domains, health check behaviour), the staging Shopify app, real webhooks from Shopify.
 
-## 8. KARINEX production (prepared, not started; every step **Approval**)
+## 8. KARINEX production (started 2026-10-28 with the owner's approval of each step)
+
+Plan as prepared:
 
 1. Owner decisions first (OWNER_DECISIONS.md): DeepL key and its cost, plans/billing or complimentary access for the own store, backups, monitoring, privacy texts.
 2. Railway environment `production` (fresh, its own Postgres and Redis, roles via §5.2 with new passwords, its own `TOKEN_ENCRYPTION_KEYS`).
-3. Shopify: a production app "Linguva" with **custom distribution** to the KARINEX store first (App Store later); config from `deploy/shopify/shopify.app.production.toml`, deployed with `--config production`.
+3. Shopify: a production app with **custom distribution** to the KARINEX store first (App Store later); config from `deploy/shopify/shopify.app.production.toml`, deployed with `--config production`.
 4. Variables as §5.3 but: `LINGUVA_STAGE=production`, `TRANSLATION_PROVIDER=deepl` with `DEEPL_API_KEY` (only after approval), `ALLOWED_SHOPS=<KARINEX's *.myshopify.com domain>` for the start, and `LINGUVA_PRODUCTION_APPROVED=yes` set by the owner when releasing.
 5. A database backup before the first install; then install on KARINEX, review-first settings (no automatic publishing).
+
+### 8a. What runs now (owner's screenshots and terminal output, 2026-10-28)
+
+| Part | State |
+|---|---|
+| Railway environment `production` | `web` (Dockerfile build, pre-deploy `node scripts/migrate.mjs`, health check `/healthz`, restart on failure, automatic deploys off), `Postgres-B0jH`, `Redis-0ZIz`; public address `web-production-73603.up.railway.app`. Deployed commit `969ad79` |
+| Database | Roles from §5.2 with new passwords, run from the owner's terminal; migrations applied by the pre-deploy step |
+| Variables | `LINGUVA_STAGE=production`, `ALLOWED_SHOPS=45dv93-bk.myshopify.com` (KARINEX's Shopify domain; its admin address doesn't contain the name, so the staging guard lists it too), the app's client ID and secret, the 7 required scopes, a new `TOKEN_ENCRYPTION_KEYS`, database and Redis over Railway's private network, `LINGUVA_PRODUCTION_APPROVED=yes`. **No DeepL key**: AI translation is off, manual translation only |
+| Smoke check | `pnpm ops:smoke` against the production address: all 6 checks passed |
+| Shopify app | "Linguva KARINEX" in the karinex organization (versions `linguva-karinex-1`, `-2`), installed on KARINEX; opens embedded in the admin |
+
+Not there yet, each one needs the owner's approval:
+
+- **No `worker` service** in production: "Measure now" (coverage), bulk jobs and automatic translation wait in the queue until one exists (same settings as the staging worker, §6a). It adds Railway usage.
+- **New code**: production runs `969ad79`. Later commits of this branch (for example the redesigned Overview with countries) reach KARINEX only after a deploy of the `web` service in the production environment.
+- **Countries on the Overview** need the optional permission `read_markets`: the button "Show countries" asks for it in KARINEX (read-only, Linguva never changes markets).
+- **KARINEX's languages are already published.** Anything published from Linguva is visible to customers immediately; drafts stay invisible until published.
+
+Clean-up still open (owner): Postgres-B0jH's public TCP proxy (only needed while creating the roles), the file with the production passwords on the owner's computer, and the client secret of "Linguva KARINEX" that was pasted into a chat (owner decided to keep it for now).
 
 ## 9. Changes that need your approval
 
@@ -240,5 +261,7 @@ Not verifiable here: Railway itself (build service, private network, domains, he
 | 3 | Create the "Linguva Staging" app and `shopify app deploy --config staging` (§5.5) | New Shopify app in your organization | Free |
 | 4 | Install Linguva Staging on linguva-test-lab | Store change (dev store only) | Free |
 | 5 | Everything in §8 (production, KARINEX) | Production, real store, paid AI | DeepL and Railway production usage |
+| 6 | A `worker` service in production (§8a) | Running service | Railway usage (one more small service) |
+| 7 | Deploying newer commits to production (§8a) | Changes what KARINEX's staff see | None beyond the running service |
 
 What I changed in the repository (this branch, nothing deployed): the Dockerfile, `.dockerignore`, the staging guards, `/healthz`, `pnpm ops:smoke`, `scripts/db/hosted-roles.sql`, `scripts/ci/image-check.sh` and its CI step, the two Shopify app templates in `deploy/shopify/`, and this document.

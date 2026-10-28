@@ -28,6 +28,22 @@ export const en = {
   "markets.market.primaryDomain": "Uses your primary domain.",
   "markets.market.address": "Address",
   "markets.market.default": "default",
+
+  "markets.countries.heading": "Countries and their languages",
+  "markets.countries.intro": "Every country in your active markets: the languages customers there read, whether your store offers them there, and how much is translated.",
+  "markets.countries.country": "Country",
+  "markets.countries.languages": "Their languages",
+  "markets.countries.translated": "Translated",
+  "markets.countries.market": "Market",
+  "markets.countries.state.missing": "Not in their language",
+  "markets.countries.state.low": "Mostly untranslated",
+  "markets.countries.state.partial": "Partly",
+  "markets.countries.state.ok": "In their language",
+  "markets.countries.reason.not-added": "{language} (not added)",
+  "markets.countries.reason.unpublished": "{language} (hidden)",
+  "markets.countries.reason.not-in-market": "{language} (not in this market)",
+  "markets.countries.none": "None of your active markets lists countries.",
+  "markets.countries.error": "Countries couldn't be read just now. Reload the page in a moment.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -57,6 +73,22 @@ export const de: Translation<typeof en> = {
   "markets.market.primaryDomain": "Verwendet deine Hauptdomain.",
   "markets.market.address": "Adresse",
   "markets.market.default": "Standard",
+
+  "markets.countries.heading": "Länder und ihre Sprachen",
+  "markets.countries.intro": "Jedes Land deiner aktiven Märkte: die Sprachen, die Kunden dort lesen, ob dein Shop sie dort anbietet und wie viel übersetzt ist.",
+  "markets.countries.country": "Land",
+  "markets.countries.languages": "Ihre Sprachen",
+  "markets.countries.translated": "Übersetzt",
+  "markets.countries.market": "Markt",
+  "markets.countries.state.missing": "Nicht in ihrer Sprache",
+  "markets.countries.state.low": "Kaum übersetzt",
+  "markets.countries.state.partial": "Teilweise",
+  "markets.countries.state.ok": "In ihrer Sprache",
+  "markets.countries.reason.not-added": "{language} (nicht hinzugefügt)",
+  "markets.countries.reason.unpublished": "{language} (ausgeblendet)",
+  "markets.countries.reason.not-in-market": "{language} (nicht in diesem Markt)",
+  "markets.countries.none": "Keiner deiner aktiven Märkte enthält Länder.",
+  "markets.countries.error": "Die Länder konnten gerade nicht gelesen werden. Lade die Seite gleich neu.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -86,6 +118,22 @@ export const fr: Translation<typeof en> = {
   "markets.market.primaryDomain": "Utilise votre domaine principal.",
   "markets.market.address": "Adresse",
   "markets.market.default": "par défaut",
+
+  "markets.countries.heading": "Pays et leurs langues",
+  "markets.countries.intro": "Chaque pays de vos marchés actifs : les langues que les clients y lisent, si votre boutique les y propose et quelle part est traduite.",
+  "markets.countries.country": "Pays",
+  "markets.countries.languages": "Leurs langues",
+  "markets.countries.translated": "Traduit",
+  "markets.countries.market": "Marché",
+  "markets.countries.state.missing": "Pas dans leur langue",
+  "markets.countries.state.low": "Peu traduit",
+  "markets.countries.state.partial": "En partie",
+  "markets.countries.state.ok": "Dans leur langue",
+  "markets.countries.reason.not-added": "{language} (non ajoutée)",
+  "markets.countries.reason.unpublished": "{language} (masquée)",
+  "markets.countries.reason.not-in-market": "{language} (absente de ce marché)",
+  "markets.countries.none": "Aucun de vos marchés actifs ne contient de pays.",
+  "markets.countries.error": "Impossible de lire les pays pour le moment. Rechargez la page dans un instant.",
 };
 
 export const es: Translation<typeof en> = {
@@ -115,4 +163,20 @@ export const es: Translation<typeof en> = {
   "markets.market.primaryDomain": "Usa tu dominio principal.",
   "markets.market.address": "Dirección",
   "markets.market.default": "predeterminado",
+
+  "markets.countries.heading": "Países y sus idiomas",
+  "markets.countries.intro": "Cada país de tus mercados activos: los idiomas que leen allí los clientes, si tu tienda los ofrece allí y cuánto está traducido.",
+  "markets.countries.country": "País",
+  "markets.countries.languages": "Sus idiomas",
+  "markets.countries.translated": "Traducido",
+  "markets.countries.market": "Mercado",
+  "markets.countries.state.missing": "No en su idioma",
+  "markets.countries.state.low": "Poco traducido",
+  "markets.countries.state.partial": "En parte",
+  "markets.countries.state.ok": "En su idioma",
+  "markets.countries.reason.not-added": "{language} (no añadido)",
+  "markets.countries.reason.unpublished": "{language} (oculto)",
+  "markets.countries.reason.not-in-market": "{language} (no está en este mercado)",
+  "markets.countries.none": "Ninguno de tus mercados activos incluye países.",
+  "markets.countries.error": "No se pudieron leer los países en este momento. Vuelve a cargar la página en un momento.",
 };

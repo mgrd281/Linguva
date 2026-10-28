@@ -15,6 +15,17 @@ export interface UiLocale {
   published: boolean;
 }
 
+/** A market as the simulated Shopify returns it (Markets page and Overview countries). */
+export interface UiMarket {
+  id: string;
+  name: string;
+  status: "ACTIVE" | "DRAFT";
+  /** ISO country codes. */
+  countries: string[];
+  /** Languages of its own web presence (default first); none: the shop's primary domain. */
+  webPresence?: string[];
+}
+
 export interface UiShop {
   domain: string;
   gid: string;
@@ -28,6 +39,8 @@ export interface UiShop {
   slowTranslationsMs?: number;
   /** Optional access scopes the merchant granted. */
   grantedOptionalScopes?: string[];
+  /** Markets (needs read_markets in grantedOptionalScopes). */
+  markets?: UiMarket[];
   build(): FakeShopifyStore;
 }
 
@@ -130,7 +143,23 @@ export const UI_SHOPS = {
       { locale: "es", name: "Spanish", primary: false, published: false },
     ],
     plan: "pro",
+    grantedOptionalScopes: ["read_markets"],
+    // Sells across Europe and North America; Spanish isn't published yet.
+    markets: [
+      { id: "gid://shopify/Market/1", name: "Europe", status: "ACTIVE", countries: ["DE", "AT", "CH", "FR", "BE", "NL", "IT", "ES", "PL", "CZ", "HU", "SE"] },
+      { id: "gid://shopify/Market/2", name: "North America", status: "ACTIVE", countries: ["US", "CA"], webPresence: ["en", "fr"] },
+      { id: "gid://shopify/Market/3", name: "Japan", status: "DRAFT", countries: ["JP"] },
+    ],
     build: buildDemoStore,
+  },
+  measure: {
+    // Never scanned: the Overview offers to measure coverage.
+    domain: "ui-measure.myshopify.com",
+    gid: "gid://shopify/Shop/91011",
+    name: "Measure Store",
+    locales: [en, de],
+    plan: "pro",
+    build: () => new FakeShopifyStore(3),
   },
   customFields: {
     // A German job with custom fields: a list of links waits on Review.

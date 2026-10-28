@@ -11,15 +11,18 @@ type Admin = Pick<AdminApiContext, "graphql">;
 
 export const MARKETS_SCOPE = "read_markets";
 
+// Requested cost stays well under Shopify's 1,000 points per query:
+// 2 + 10 markets × (1 + 2 + 5 web presences × 5) = 282. (50 × 10 was 2,652
+// and would be refused before running.)
 const MARKETS_QUERY = `#graphql
   query LinguvaMarkets($after: String) {
-    markets(first: 50, after: $after) {
+    markets(first: 10, after: $after) {
       nodes {
         id
         name
         handle
         status
-        webPresences(first: 10) {
+        webPresences(first: 5) {
           nodes {
             id
             subfolderSuffix
@@ -90,7 +93,7 @@ const isAccessDenied = (text: string) => /access denied|read_markets|ACCESS_DENI
 export async function fetchMarkets(admin: Admin): Promise<MarketInfo[]> {
   const markets: MarketInfo[] = [];
   let after: string | null = null;
-  for (let page = 0; page < 5; page++) {
+  for (let page = 0; page < 25; page++) {
     let body: { data?: { markets?: { nodes: RawMarket[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } } } & GraphqlErrorBody;
     try {
       const response = await admin.graphql(MARKETS_QUERY, { variables: { after } });
@@ -195,4 +198,66 @@ export function analyzeMarkets(
     }
   }
   return findings;
+}
+
+// One market's countries (a market defined by states or provinces lists
+// their countries). Cost: 1 + 1 + 1 + (2 + 250) = 255.
+const MARKET_REGIONS_QUERY = `#graphql
+  query LinguvaMarketRegions($id: ID!, $after: String) {
+    market(id: $id) {
+      conditions {
+        regionsCondition {
+          regions(first: 250, after: $after) {
+            nodes {
+              ... on MarketRegionCountry {
+                code
+                name
+              }
+              ... on MarketRegionSubdivision {
+                country {
+                  code
+                  name
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+type RawRegion = { code?: string; name?: string; country?: { code: string; name: string } };
+
+/** The countries a market sells to (empty for markets not defined by regions). */
+export async function fetchMarketCountries(admin: Admin, marketId: string): Promise<Array<{ code: string; name: string }>> {
+  const countries = new Map<string, string>();
+  let after: string | null = null;
+  for (let page = 0; page < 4; page++) {
+    let body: {
+      data?: { market?: { conditions?: { regionsCondition?: { regions: { nodes: RawRegion[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } } | null } | null } | null };
+    } & GraphqlErrorBody;
+    try {
+      const response = await admin.graphql(MARKET_REGIONS_QUERY, { variables: { id: marketId, after } });
+      body = (await response.json()) as typeof body;
+    } catch (error) {
+      if (isAccessDenied(JSON.stringify(error, Object.getOwnPropertyNames(error ?? {})))) throw new MarketsAccessError();
+      throw error;
+    }
+    if (body.errors && isAccessDenied(JSON.stringify(body.errors))) throw new MarketsAccessError();
+    if (body.errors) throw new Error("Market regions query failed");
+    const regions = body.data?.market?.conditions?.regionsCondition?.regions;
+    if (!regions) break;
+    for (const region of regions.nodes) {
+      const country = region.country ?? (region.code && region.name ? { code: region.code, name: region.name } : null);
+      if (country && !countries.has(country.code)) countries.set(country.code, country.name);
+    }
+    if (!regions.pageInfo.hasNextPage) break;
+    after = regions.pageInfo.endCursor ?? null;
+  }
+  return [...countries].map(([code, name]) => ({ code, name }));
 }

@@ -61,6 +61,19 @@ describe("getting started", () => {
   });
 });
 
+describe("without an AI provider", () => {
+  it("leaves out the AI steps and asks for a manual first translation", async () => {
+    const store = new FakeShopifyStore(1);
+    const { shop } = await upsertInstalledShop({ shopDomain: "manual.myshopify.com", name: "Manual store" }, app);
+    const overview = await loadOverview(store.asAdmin(), shop, app, { aiAvailable: false });
+    expect(overview.checklist.map((s) => s.id)).toEqual(["language", "first-translation", "publish-language"]);
+    expect(overview.checklist.find((s) => s.id === "first-translation")?.detail).toEqual({ key: "overview.checklist.firstTranslation.detailManual" });
+    expect(overview.aiAvailable).toBe(false);
+    // No markets loader given: no countries section.
+    expect(overview.countries).toBeNull();
+  });
+});
+
 describe("AI usage level", () => {
   it("warns from 80 % and stops at the allowance", () => {
     expect(usageLevel(0, 1000)).toBe("ok");

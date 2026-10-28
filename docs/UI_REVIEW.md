@@ -53,6 +53,18 @@ Scope agreed with the owner: improve the existing interface with sound product-d
 
 Heights are CSS pixels of full-page screenshots with the same data.
 
+## 3a. Overview redesign (owner request, 2026-10-28, Tested Locally)
+
+The owner asked to see the translated share of every language, which of the countries the store sells to can't read it in their language, and a more modern Overview.
+
+| Change | Why |
+|---|---|
+| Four headline figures, two with a meter: languages on the storefront, average translated share, countries in their language, waiting for review | The state of the store at a glance; the review count moved here from the sidebar |
+| One row per language: name, storefront state, the share in large figures, the field bar, "N of M fields", Translate | In the old table the percentage was **cut off on phones** (the bar's fixed width pushed it out of view). The rows keep one layout at every width; `overview.spec.ts` checks the share on a phone |
+| Countries: one bar by status (without their language, mostly untranslated, partly, in their language) with its key; the languages to add first, each with the countries it reaches and the Shopify setting to change; offered languages that are mostly untranslated | Answers "which countries can't read my store?" and what to do next |
+| "Measure now" on the Overview, with progress while it runs | The shares need a measurement; no detour through the coverage page |
+| Markets page: the same bar, and every country with its languages and why one is missing ("Czech (not added)") | The full list behind the Overview's top five |
+
 ## 4. Tests for the changes
 
 | Change | Test |
@@ -69,7 +81,8 @@ Heights are CSS pixels of full-page screenshots with the same data.
 
 - Polaris web components and App Bridge only; no CSS framework or icon set added. Custom drawing only where Polaris has no component (segmented coverage bars, length bars), with the same information as text for screen readers.
 - One colour source for coverage and progress: `STATE_COLOURS` and `TRACK_COLOUR` in `app/components/Coverage.tsx` (the progress bar and SEO length bar use them).
-- Numbers that are compared down a column use tabular figures.
+- Numbers that are compared down a column use tabular figures; a large standalone figure (the Overview's headline numbers) keeps proportional ones.
+- Country statuses use their own status colours (`app/components/CountryStatus.tsx`), always next to their label; the bar itself is hidden from screen readers because its key says the same.
 - Every page: one primary action at most per section; navigation as links, actions as buttons.
 
 ## 6. What still stands between this and a genuine Premium 10/10

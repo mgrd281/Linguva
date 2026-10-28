@@ -1,6 +1,6 @@
 # Feature status
 
-Single source of truth for what Linguva can do. Status as of 2026-10-28 (after the first read-only store run), branch `claude/gallant-pasteur-8opy75` (draft PR, not merged, not deployed).
+Single source of truth for what Linguva can do. Status as of 2026-10-28 (after the first read-only store run), branch `claude/gallant-pasteur-8opy75` (draft PR, not merged). Builds of this branch run on Railway: staging for the test store, and since 2026-10-28 production for KARINEX only (RAILWAY_STAGING.md §6a, §8); changes made after the deployed commit reach KARINEX only when the owner deploys them.
 
 Three states, never mixed:
 
@@ -20,8 +20,9 @@ Three states, never mixed:
 | CSV import (drafts) | **Not verified**: not exercised (no products); the live check now also uses collections and pages |
 | Publishing, removing, restoring, digest refusal, outdated detection, protection of outside translations | **Untested** on Shopify (fixture-write run not done) |
 | Bulk jobs, review approval, automatic translation, webhooks, worker on real events | **Untested** on Shopify |
-| Markets | **Untested** (`read_markets` not granted) |
+| Markets, countries without their language | **Untested** (`read_markets` granted on neither store yet) |
 | Interface inside the admin (Polaris, App Bridge, save bar, mobile app) | Owner-reported: opens embedded; the checklist (U, V) not yet done |
+| Production app "Linguva KARINEX" on the KARINEX store (no AI provider, no worker) | Owner-reported, 2026-10-28: installed, opens embedded; production smoke check passed (RAILWAY_STAGING.md §8). Nothing translated or published there yet |
 | Billing | **Untested** |
 
 Everything else is an assumption encoded in the fakes, checked against the Admin API 2026-10 schema, until its check is logged in DEV_STORE_TEST_PLAN.md §3.
@@ -37,7 +38,7 @@ Everything else is an assumption encoded in the fakes, checked against the Admin
 | Editor | AI drafts (never published without the merchant), consent, error messages | Yes | Server + UI (loading state, drafts not published) | No | C2, C7 |
 | UX | Clear error pages (Shopify outage, not found) with Try again; admin loading bar; empty states; accessibility (axe WCAG 2.1 AA) and phone layout of the main pages | Yes | UI | No | — |
 | Content | All 30 translatable content types (menus, links, theme content, policies, filters, metaobjects, product options, subscription plans, shipping and payment methods, notification templates, packing slip, store listing): overview with permissions, list, editor (search and pages for theme texts), bulk for safe types | Yes | Server + UI (overview, menu flow, theme paging, permission prompt) | **Partly, read-only**: probe of every type and editor references of real GIDs (2026-10-28); editing not yet done | C1–C6 |
-| UX | Overview with a "Get started" checklist, progress per language, attention items, usage warnings from 80 %; 12 navigation entries | Yes | Server + UI | No | — |
+| UX | Overview: headline figures (languages on the storefront, average translated share, countries in their language, waiting for review), "Get started" checklist (without AI: only the manual steps), translated share and field bar per language (phone included), start and follow the coverage measurement, countries without their language, usage warnings from 80 %; 12 navigation entries | Yes | Server + UI (`overview.spec.ts`: figures, shares, countries, measuring; accessibility, phone width) | No | — |
 | Editor | Right-to-left input with the language set; question before leaving with unpublished changes | Yes | UI (desktop and phone) | No (admin navigation and reloads inside the admin frame) | C1 |
 | AI | Translation style: form of address per language, store description as context; wrong-script warning | Yes | Server + UI (Settings); DeepL request shape stubbed | No (no key) | C7 |
 | Editor | Rendered HTML preview (server sanitiser + sandboxed frames), original and translation side by side, in the editor and on Review | Yes | Security (35 XSS vectors) + UI (desktop and phone) | No | C1 |
@@ -68,6 +69,7 @@ Everything else is an assumption encoded in the fakes, checked against the Admin
 | Automation | Automatic translation of new and changed products and collections (webhooks `products/*`, `collections/*`; off by default, per language in Settings): one check about a minute after the last save, same rules as bulk jobs (drafts, protected translations kept, allowance, plan, consent), shown as "Automatic" jobs | Yes | Server (real PostgreSQL, Redis, BullMQ) + UI (Settings) | No (webhook delivery not tested on a store) | P1–P5 |
 | Automation | Pages, blog posts and blogs (no webhook topics exist) and missed product/collection webhooks: the worker checks every 30 minutes for content changed since the last check (sorted by `UPDATED_AT`; blogs by the `updated_at` filter) and queues the same check a webhook queues (same queue job id, so no double work). Starts when automatic translation is turned on (`autoSweptAt`), keeps its position after a failure, skips types without access, at most 500 changes per type and run (more: logged, left to "Translate all") | Yes | Server (`auto-sweep.test.ts`: types, start position, failure, missing scope, two stores, cap, worker payloads) | No | P1–P5 |
 | Markets | Read-only Markets page (optional scope `read_markets`): languages and addresses per market, checks | Yes | Server | No (live read test prepared) | J1–J4 |
+| Markets | Countries without their language: every country of the active markets (regions read 250 per page), the languages its customers read (CLDR's likely language, plus a reviewed list for multilingual countries such as Switzerland, Belgium and Canada), whether the store offers them there and why not (not added, hidden, not in that market), and how much is translated. On the Overview (summary, languages to add first with the Shopify setting to change) and as a table on the Markets page. Assumption to check on a real store: a market without its own domain or subfolder offers the shop's published languages on the primary domain | Yes | Unit (`country-coverage.test.ts`, `markets.test.ts`: pages, subdivisions, cache, errors) + UI (simulated markets) | No | J1–J4 |
 | Billing | Owner complimentary access: shop GID in server configuration AND an operator grant (owner database role), metered AI usage, internal cost estimate, audit | Yes | Server (incl. security tests) + UI (Plan page) | No | L10 |
 | Billing | Shopify App Pricing: plan entitlements, Partner API subscription check (6 h cache, never locks out a paying shop on API errors), plan selection redirect, welcome link, gating in editor, bulk, settings, glossary, worker | Yes | Server (simulated Partner API) + UI (Plan page states) | No | L1–L9 |
 | Cost | Monthly, daily and platform-wide character caps, request size cap, request rate limits per staff member and shop | Yes | Yes (concurrency with real PostgreSQL and Redis) | No | M1–M3 |

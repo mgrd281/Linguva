@@ -44,6 +44,11 @@ function regionFlag(region: string): string {
   return String.fromCodePoint(...[...region].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
+/** A country's flag from its ISO code ("CZ" → 🇨🇿), decorative only. */
+export function countryFlag(country: string): string {
+  return regionFlag(country.toUpperCase());
+}
+
 export function localeFlag(locale: string): string {
   const [language, region] = locale.split("-");
   if (region && /^[A-Za-z]{2}$/.test(region)) return regionFlag(region.toUpperCase());

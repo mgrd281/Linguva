@@ -110,7 +110,8 @@ export function translate(locale: AppLocale, key: MessageKey, vars?: MessageVars
  * Intl, falling back to Shopify's name.
  */
 export function languageName(locale: AppLocale, code: string, shopifyName?: string | null): string {
-  if (locale !== "en") {
+  // English keeps Shopify's name; a language the shop doesn't have yet is named by Intl too.
+  if (locale !== "en" || !shopifyName) {
     try {
       const name = new Intl.DisplayNames([INTL_LOCALE[locale]], { type: "language", fallback: "none" }).of(code);
       // German capitalises language names; French and Spanish write them in lower case.
@@ -120,6 +121,22 @@ export function languageName(locale: AppLocale, code: string, shopifyName?: stri
     }
   }
   return shopifyName || code;
+}
+
+/** A country's name in the interface language ("Tschechien"), falling back to Shopify's name. */
+export function countryName(locale: AppLocale, code: string, shopifyName?: string | null): string {
+  try {
+    const name = new Intl.DisplayNames([INTL_LOCALE[locale]], { type: "region", fallback: "none" }).of(code.toUpperCase());
+    if (name) return name;
+  } catch {
+    // Not a valid region code: use Shopify's name.
+  }
+  return shopifyName || code;
+}
+
+/** "42 %" / "42%" for a whole percentage, formatted for the interface language. */
+export function formatPercent(locale: AppLocale, value: number): string {
+  return new Intl.NumberFormat(INTL_LOCALE[locale], { style: "percent", maximumFractionDigits: 0 }).format(value / 100);
 }
 
 export type Translate = (key: MessageKey, vars?: MessageVars) => string;
@@ -136,6 +153,8 @@ export function translator(locale: AppLocale) {
     dateTime: (value: string | Date) => formatDateTime(locale, value),
     month: (period: string) => formatMonth(locale, period),
     language: (code: string, shopifyName?: string | null) => languageName(locale, code, shopifyName),
+    country: (code: string, shopifyName?: string | null) => countryName(locale, code, shopifyName),
+    percent: (value: number) => formatPercent(locale, value),
   };
 }
 

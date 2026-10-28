@@ -5,7 +5,13 @@ import { shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { analyzeMarkets, fetchMarkets, MARKETS_SCOPE, MarketsAccessError, type MarketFinding } from "../.server/markets/markets";
+import { loadMarketCountries } from "../.server/markets/countries";
+import { loadCoverageSummary } from "../.server/coverage/summary";
 import { requireShop } from "../.server/shopify/require-shop";
+import { CountryStatusBar } from "../components/CountryStatus";
+import { analyzeCountries, countByStatus, type CountryStatus } from "../lib/country-coverage";
+import { headlineByLocale } from "../lib/coverage-view";
+import { countryFlag } from "../lib/flags";
 import type { I18n } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
@@ -15,18 +21,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const granted = (await scopes.query()).granted.includes(MARKETS_SCOPE);
   if (!granted) return { access: false as const };
   try {
-    const [markets, locales, billing] = await Promise.all([
+    const [markets, locales, billing, countries, coverage] = await Promise.all([
       fetchMarkets(admin),
       fetchAndSyncShopLocales(admin, shop.id),
       shopBilling(admin, shop),
+      loadMarketCountries(shop.id, admin, async () => true),
+      loadCoverageSummary(shop.id),
     ]);
     const targets = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
     const planLocales = billing.configured ? allowedTargetLocales(billing.entitlements, targets) : null;
+    const scanned = coverage.segments.some((seg) => seg.status === "SCANNED");
+    const headline = headlineByLocale(coverage.counts);
     return {
       access: true as const,
       markets,
       names: Object.fromEntries(locales.locales.map((l) => [l.locale, l.name])),
       findings: analyzeMarkets(markets, locales.locales, planLocales),
+      countries:
+        countries.access && "markets" in countries
+          ? analyzeCountries(
+              countries.markets,
+              {
+                primary: locales.primary?.locale ?? null,
+                published: locales.locales.filter((l) => !l.primary && l.published).map((l) => l.locale),
+                enabled: targets,
+              },
+              new Map(targets.map((l) => [l, scanned ? (headline.get(l)?.percent ?? null) : null])),
+            )
+          : null,
     };
   } catch (error) {
     // The merchant revoked the scope since it was granted.
@@ -55,6 +77,13 @@ function findingText(f: MarketFinding, name: (locale: string) => string, t: I18n
   }
 }
 
+const STATE_TONE: Record<CountryStatus, "critical" | "warning" | "caution" | "success"> = {
+  missing: "critical",
+  low: "warning",
+  partial: "caution",
+  ok: "success",
+};
+
 /** Shopify's market status ("draft"), in the language when known. */
 function statusLabel(status: string, t: I18n["t"]) {
   const key = `markets.market.status.${status}`;
@@ -64,7 +93,8 @@ function statusLabel(status: string, t: I18n["t"]) {
 export default function Markets() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const { t, language } = useI18n();
+  const i18n = useI18n();
+  const { t, language } = i18n;
 
   if (!data.access) {
     return (
@@ -86,6 +116,55 @@ export default function Markets() {
   const name = (locale: string) => data.names[locale] ?? locale;
   return (
     <s-page heading={t("common.nav.markets")}>
+      <s-section heading={t("markets.countries.heading")}>
+        <s-stack direction="block" gap="base">
+          <s-text color="subdued">{t("markets.countries.intro")}</s-text>
+          {!data.countries ? (
+            <s-banner tone="warning">{t("markets.countries.error")}</s-banner>
+          ) : !data.countries.length ? (
+            <s-paragraph>{t("markets.countries.none")}</s-paragraph>
+          ) : (
+            <>
+              <CountryStatusBar counts={countByStatus(data.countries)} i18n={i18n} />
+              <s-table>
+                <s-table-header-row>
+                  <s-table-header listSlot="primary">{t("markets.countries.country")}</s-table-header>
+                  <s-table-header listSlot="secondary">{t("common.status")}</s-table-header>
+                  <s-table-header>{t("markets.countries.languages")}</s-table-header>
+                  <s-table-header>{t("markets.countries.translated")}</s-table-header>
+                  <s-table-header>{t("markets.countries.market")}</s-table-header>
+                </s-table-header-row>
+                <s-table-body>
+                  {data.countries.map((c) => (
+                    <s-table-row key={c.code}>
+                      <s-table-cell>
+                        <span aria-hidden="true" style={{ marginInlineEnd: 6 }}>
+                          {countryFlag(c.code)}
+                        </span>
+                        {i18n.country(c.code, c.name)}
+                      </s-table-cell>
+                      <s-table-cell>
+                        <s-badge tone={STATE_TONE[c.status]}>{t(`markets.countries.state.${c.status}`)}</s-badge>
+                      </s-table-cell>
+                      <s-table-cell>
+                        {c.languages
+                          .map((l) =>
+                            l.available
+                              ? language(l.locale, data.names[l.locale])
+                              : t(`markets.countries.reason.${l.reason ?? "not-added"}`, { language: language(l.locale, data.names[l.locale]) }),
+                          )
+                          .join(", ")}
+                      </s-table-cell>
+                      <s-table-cell>{c.percent === null ? "—" : i18n.percent(c.percent)}</s-table-cell>
+                      <s-table-cell>{c.markets.join(", ")}</s-table-cell>
+                    </s-table-row>
+                  ))}
+                </s-table-body>
+              </s-table>
+            </>
+          )}
+        </s-stack>
+      </s-section>
       <s-section heading={t("markets.checks.heading")}>
         {data.findings.length ? (
           <s-stack direction="block" gap="small">

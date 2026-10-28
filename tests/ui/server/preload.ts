@@ -55,6 +55,39 @@ async function adminGraphql(shop: UiShop, body: { query: string; variables?: Rec
       },
     });
   }
+  if (name === "LinguvaMarkets" || name === "LinguvaMarketRegions") {
+    if (!shop.grantedOptionalScopes?.includes("read_markets")) {
+      return json({ errors: [{ message: "Access denied for markets field. Required access: `read_markets` access scope.", extensions: { code: "ACCESS_DENIED" } }] });
+    }
+    const markets = shop.markets ?? [];
+    if (name === "LinguvaMarketRegions") {
+      const market = markets.find((m) => m.id === body.variables?.id);
+      const nodes = (market?.countries ?? []).map((code) => ({ code, name: code }));
+      return json({ data: { market: market ? { conditions: { regionsCondition: { regions: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } } : null } });
+    }
+    const locale = (code: string) => {
+      const l = shop.locales.find((x) => x.locale === code);
+      return { locale: code, name: l?.name ?? code, published: l?.published ?? false };
+    };
+    return json({
+      data: {
+        markets: {
+          nodes: markets.map((m) => ({
+            id: m.id,
+            name: m.name,
+            handle: m.name.toLowerCase().replace(/\s+/g, "-"),
+            status: m.status,
+            webPresences: {
+              nodes: m.webPresence
+                ? [{ id: `${m.id}/wp`, subfolderSuffix: m.name.slice(0, 2).toLowerCase(), domain: null, defaultLocale: locale(m.webPresence[0]!), alternateLocales: m.webPresence.slice(1).map(locale), rootUrls: [] }]
+                : [],
+            },
+          })),
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      },
+    });
+  }
   if (shop.failing && /^LinguvaTranslatable/.test(name)) return json({ errors: "Service unavailable" }, 503);
   if (shop.slowTranslationsMs && /^LinguvaTranslatable/.test(name)) await delay(shop.slowTranslationsMs, signal);
   try {

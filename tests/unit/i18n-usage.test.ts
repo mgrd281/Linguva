@@ -45,6 +45,9 @@ const DYNAMIC = [
   "languages.ai.",
   "glossary.rule.",
   "markets.market.status.",
+  "markets.countries.state.",
+  "markets.countries.reason.",
+  "overview.countries.status.",
 ];
 
 describe("interface texts", () => {

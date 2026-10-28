@@ -65,7 +65,21 @@ Right now the service in the environment "production" deploys every push to `cla
 2. Under the GitHub source: click **Disable** for automatic deploys (or disconnect the repository).
 3. Optional: delete that service; production is set up fresh in §8.
 
-Tell me when this is done: I hold back the next push until then.
+Tell me when this is done: I hold back the next push until then. (Owner chose on 2026-10-28 to convert this environment into staging instead: §4a.)
+
+## 4a. Converting the existing environment into staging (owner's choice, 2026-10-28)
+
+The service that already runs in the environment named "production" (unexposed, deployed from this branch with the older image) becomes staging instead of being rebuilt. In this order:
+
+1. **Service → Settings: Disable automatic deploys**, turn on **Wait for CI**. From here on, a push only builds when you click **Deploy Latest Commit**. Tell me, and I push the guarded version.
+2. **Rename the environment to `staging`** (Project Settings → Environments). The app checks that `LINGUVA_STAGE` equals the environment's name. If renaming isn't offered: **+ New Environment → Duplicate Environment** named `staging`, then delete the old one.
+3. **Variables of the service:** add `LINGUVA_STAGE=staging`, `ALLOWED_SHOPS=linguva-test-lab.myshopify.com`, `TRANSLATION_PROVIDER=mock`; remove `DEEPL_API_KEY` if present. Compare the rest with §5.3.
+4. **Database roles:** `DATABASE_URL` must use `linguva_app` and `MIGRATION_DATABASE_URL` `linguva_owner` (§5.2). With Railway's `postgres` admin user as the runtime role, the app refuses to serve (posture check: superuser).
+5. **Settings (§5.4):** pre-deploy command `node scripts/migrate.mjs` (the new image no longer migrates at start), health check `/healthz`, restart on failure, **Generate Domain**. Rename the service `web`.
+6. Add **Redis** and the **worker** service (§5.1 steps 2 and 4, §5.3, §5.4) if they aren't there yet.
+7. **Deploy Latest Commit** on `web`, then on `worker`; validate as §6.
+
+Production for KARINEX is created later as a new, separate environment (§8).
 
 ## 5. Staging setup (owner, about 45 minutes; **Approval**: running services cost Railway usage)
 

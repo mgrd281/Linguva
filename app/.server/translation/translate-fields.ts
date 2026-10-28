@@ -9,6 +9,7 @@ import {
 import type { ProtectOptions } from "./protect";
 import { markupToPlainText, SegmentStructureError } from "./segment-markup";
 import { markupToRichText, richTextToMarkup, richTextToPreviewHtml, RichTextError } from "./rich-text";
+import { formalityMismatch } from "./formality-check";
 import { checkSeoField, plainText } from "../../lib/seo";
 import {
   hasBlockingIssue,
@@ -258,6 +259,9 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
         if (isWrongScript(input.targetLocale, readableText(field.type, value))) {
           issues.push({ code: "WRONG_SCRIPT", severity: "warning" });
         }
+        // The merchant's chosen form of address ("Sie" or "du"); memory reuse can bring the other one.
+        const mismatch = input.formality ? formalityMismatch(input.targetLocale, input.formality, readableText(field.type, value)) : null;
+        if (mismatch) issues.push({ code: "FORMALITY_MISMATCH", severity: "warning", detail: mismatch });
         if (!hasBlockingIssue(issues)) {
           outcomes.push({
             key: field.key,

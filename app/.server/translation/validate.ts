@@ -14,7 +14,8 @@ export type IssueCode =
   | "PREFERRED_TERM_MISSING"
   | "LENGTH_RATIO"
   | "UNTRANSLATED"
-  | "WRONG_SCRIPT";
+  | "WRONG_SCRIPT"
+  | "FORMALITY_MISMATCH";
 
 export interface ValidationIssue {
   code: IssueCode;

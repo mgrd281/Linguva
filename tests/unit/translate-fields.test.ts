@@ -71,6 +71,21 @@ describe("translateFields", () => {
     expect(outcomes[0]).toMatchObject({ status: "rejected", reason: "VALIDATION_FAILED" });
   });
 
+  it("warns when the result uses another form of address than the merchant chose", async () => {
+    const informal = provider(() => "Bestelle deine Jacke heute.");
+    const field = { key: "title", value: "Order your jacket today.", type: "SINGLE_LINE_TEXT_FIELD" };
+    const formal = await translateFields({ provider: informal, fields: [field], sourceLocale: "en", targetLocale: "de", formality: "more" });
+    expect(formal.outcomes[0]).toMatchObject({
+      status: "translated",
+      issues: [{ code: "FORMALITY_MISMATCH", severity: "warning", detail: "deine" }],
+    });
+    // Without a chosen form, or with the informal one, nothing is flagged.
+    for (const formality of [undefined, "less"] as const) {
+      const { outcomes } = await translateFields({ provider: informal, fields: [field], sourceLocale: "en", targetLocale: "de", ...(formality ? { formality } : {}) });
+      expect(outcomes[0]).toMatchObject({ status: "translated", issues: [] });
+    }
+  });
+
   it("does not call the provider when nothing is translatable", async () => {
     const p = provider((s) => s);
     const { outcomes } = await translateFields({

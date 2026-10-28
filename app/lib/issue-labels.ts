@@ -7,6 +7,7 @@ const LABELS: Record<string, string> = {
   LENGTH_RATIO: "Unusual length",
   UNTRANSLATED: "Looks untranslated",
   WRONG_SCRIPT: "Not in the language's script",
+  FORMALITY_MISMATCH: "Other form of address than chosen",
   SEO_TOO_LONG: "Too long for search results",
   SEO_TOO_SHORT: "Short for search results",
   SEO_SAME_AS_SOURCE: "Same as the original",

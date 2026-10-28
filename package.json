@@ -35,6 +35,7 @@
     "test:security": "vitest run --project security",
     "test:performance": "vitest run --project performance",
     "test:live": "vitest run --config vitest.live.config.ts",
+    "test:live:rehearsal": "LIVE_REHEARSAL=dev-store vitest run --config vitest.live-rehearsal.config.ts && LIVE_REHEARSAL=demo-catalog vitest run --config vitest.live-rehearsal.config.ts",
     "test:deepl": "vitest run --config vitest.quality.config.ts",
     "check:ignored": "node scripts/check-ignored.mjs",
     "build:ui-preload": "esbuild tests/ui/server/preload.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=build/ui-test/preload.js",

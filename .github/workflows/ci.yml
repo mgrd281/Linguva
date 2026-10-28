@@ -90,6 +90,9 @@ jobs:
       - name: Integration tests (PostgreSQL with RLS, Redis, BullMQ)
         run: pnpm test:integration
 
+      - name: Live test rehearsal (the dev-store suites against a simulated store; no network)
+        run: pnpm test:live:rehearsal
+
       - name: Security tests (tenant isolation, payloads, XSS)
         run: pnpm test:security
 

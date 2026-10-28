@@ -101,17 +101,22 @@ live("read contract (no writes)", () => {
     }
   });
 
-  it("exposes image alt text as translatable content of product, collection and blog post images", async () => {
+  it("exposes image alt text as translatable content of product, collection and blog post images", async (context) => {
     // Verifies MEDIA_IMAGE via product media and the nested COLLECTION_IMAGE /
     // ARTICLE_IMAGE resources on whatever images the dev store already has.
+    let images = 0;
     for (const resourceType of ["PRODUCT", "COLLECTION", "ARTICLE"] as const) {
       const page = await listTranslatableResources(admin, { resourceType, locale, first: 5 });
       for (const r of page.resources) {
         for (const image of await listImageResources(admin, r.resourceId, locale)) {
           expect(image.content.map((c) => c.key)).toEqual(["alt"]);
+          images++;
         }
       }
     }
+    // A pass without any image would prove nothing: report it as skipped.
+    if (images === 0) context.skip("no product, collection or blog post image on the store yet (seed the fictional catalog, DEV_STORE_VERIFICATION.md §5)");
+    console.info(`[live] image alt text checked on ${images} images`);
   });
 
   it("probes every content type and lists real resources with GIDs the editor accepts", async () => {
@@ -132,7 +137,7 @@ live("read contract (no writes)", () => {
     try {
       markets = await fetchMarkets(admin);
     } catch (error) {
-      if (error instanceof MarketsAccessError) context.skip();
+      if (error instanceof MarketsAccessError) context.skip("the test app has no read_markets access (optional scope); grant it on the Markets page to run this check");
       throw error;
     }
     for (const m of markets) {

@@ -20,7 +20,50 @@ Rules for every session:
 | Linguva opens as an embedded app in the Shopify admin | Seen by the owner | Owner report, 2026-10-28 (A1 partly: install and first open; details in §3) |
 | Commit `0904246`, all 21 migrations applied, preflight passes, worker starts with the mock provider (launched by Shopify CLI) | Working | Owner report, 2026-10-28 |
 | First live test runs (`LIVE_TARGET_LOCALE=de`, then `fr`) | **Not run**: stopped with `LiveTestRefused` because the store had no additional language; all 20 tests skipped. Nothing verified | Owner report, 2026-10-28. Since then: the setup check names the problem and the fix once, instead of skipping every suite (§4) |
-| Everything else | Not yet performed on the store | — |
+| French added as an additional, **unpublished** language; English primary | Done | Owner report, 2026-10-28 |
+| Read-only live run (`pnpm test:live`, app session, French) | **Passed**: 2 files, 7 passed, 13 skipped, 0 failed, 31.65 s | Owner report, 2026-10-28; details in §0b |
+| Everything else (writing, publishing, bulk, automation, UI in the admin) | Not yet performed on the store | — |
+
+## 0b. Verified on the store: read-only live run, 2026-10-28
+
+The owner's run against linguva-test-lab with French unpublished. Exact figures as reported:
+
+| Measurement | Result |
+|---|---|
+| Test files | 2 passed |
+| Tests | 7 passed, 13 skipped, 0 failed |
+| Duration | 31.65 s |
+| Coverage scan | 34 Shopify API pages in 16,003 ms |
+| Linguva's coverage figures against the independent recount of Shopify's data | Equal for every recounted type |
+| Dashboard summary query (local database) | 8 ms |
+| Items page query (local database) | 2 ms |
+| Products | 0 |
+| Collections | 1, 2 fields, both missing |
+| Pages | 2, 5 fields: 2 complete, 3 missing |
+| Blogs | 1, 2 fields, both missing |
+| Blog posts | 0 |
+| Product images | 0 |
+| CSV import | Not exercised: no product title to import (the store has no products) |
+
+**What this verifies on Shopify (read-only):**
+
+- The dev-store gate and the read-only guard work against the real store; an unpublished additional language is accepted as the target.
+- The app's own expiring offline session reads the Admin API 2026-10.
+- `translatableResources` for collections, pages and blogs: GID types, 64-character digests, field keys as Linguva expects.
+- The content-type probe across all translatable types completes and every GID it lists round-trips through the editor's URL reference.
+- The coverage scan over every type completes without a failed or unfinished type, and its complete/outdated/missing counts equal an independent recount for products, collections, pages, blog posts, blogs and product images (on this small store: 9 fields with an original, 2 of them translated).
+- Kept counts equal counts rebuilt from the stored items.
+- The product CSV export runs against the real API (0 rows, equal to the recount).
+
+**Observation:** 2 page fields already had a French translation right after French was added; Linguva didn't write them (it has never published on this store). Whoever wrote them (Shopify, a theme or another app), Linguva counts them as complete and treats them as translations made outside Linguva, which bulk translation keeps unless replacing is explicitly allowed. Please note in the log which pages they are, if you look.
+
+**What it does not verify:** anything with products, blog posts or images (the store has none, so those checks had nothing to check), the CSV import, any write to Shopify (publishing, removing, restoring, digest refusal, outdated detection after a change, protection of translations made outside Linguva), bulk jobs, automatic translation and webhooks, Markets (most likely the one read-only test that skipped itself: the app has no `read_markets` access), the interface inside the admin, and the scan time on a real catalog.
+
+**Changes after this run** (so the next run says plainly what it couldn't check):
+
+- A check with nothing to check now reports **skipped with the reason** instead of passing: the image alt text check on a store without images. On the unchanged store the same run now shows 6 passed, 14 skipped.
+- The CSV check exports **every type with titles** (products, collections, pages, blog posts, blogs), compares each with the recount, and imports the first missing title it finds as a draft. On the unchanged store that is the collection title. The draft is rejected again at the end, so the next run starts clean.
+- The live suites run in CI against a simulated store shaped like this one (§4.4), so a mistake in a live test shows up before a store run. The rehearsal reproduces the figures above exactly.
 
 ## 0a. Fixed before the first store run
 
@@ -71,14 +114,17 @@ PostgreSQL and Redis must be running (`pnpm db:up` with Docker, or your local se
 
 In the store admin (Settings → Languages): add **French** and leave it **unpublished** (customers don't see it; Shopify still stores its translations, so every check works with it). French is the working language of these checks; where a step below says "French", use whichever additional language you added. Optional later: a second language published (for example German) to check that only published languages count in the whole-store figure, and Arabic for right-to-left.
 
-Create by hand (or keep Shopify's generated test data and add what's missing):
+**Products, in one step:** Products → Import → choose [`docs/dev-store/demo-catalog-products.csv`](dev-store/demo-catalog-products.csv) → Upload and preview → Import products. It adds 8 fictional outdoor products (title, HTML description, URL handle, SEO title and SEO description each), tagged `linguva-demo` (filter Products by that tag to find or delete them all). The columns follow Shopify's current product CSV template, where only Title is required; this file has not been imported on a real store yet, so if Shopify's preview reports a problem, send the message and create the products by hand. The same catalog is used by the live test rehearsal and the App Store screenshots.
+
+Then add by hand:
 
 | What | How many | Details to include |
 |---|---|---|
-| Products | 6 | Title, HTML description with a list and a link, SEO title and meta description on 3 of them; 1 product with 2 images with alt text; 1 product with a single-line and a multi-line text metafield (Settings → Custom data → Products: define them, translatable by default) |
-| Collections | 2 | Description, SEO title on one, image with alt text on one |
-| Pages | 2 | Body text |
-| Blog with posts | 1 blog, 2 posts | Excerpt (summary) on one post, featured image with alt text |
+| Product images | 2 products | Merino Wool Sweater and Waterproof Hiking Jacket: one image each (any photo of your own) with alt text |
+| Product metafields | 1 product | Settings → Custom data → Products: a single-line and a multi-line text field (translatable by default); fill both on the Merino Wool Sweater |
+| Collections | 1 more | "Winter essentials" with a description, SEO title and an image with alt text; add 3 demo products (the existing "Home page" collection stays as it is) |
+| Pages | keep the 2 | Already there |
+| Blog posts | 2, in the existing blog | Excerpt (summary) on one post, featured image with alt text |
 | Menu | Main menu | Default items are fine (needs the optional navigation scope when Linguva asks) |
 | One "human" translation | 1 field | With Shopify's free **Translate & Adapt** app: translate one product title into French by hand (for the overwrite-protection checks) |
 
@@ -177,7 +223,9 @@ pnpm test:live
 
 Add `LIVE_TARGET_LOCALE=fr` to pick the language explicitly.
 
-What it does, read-only on Shopify: the API contract checks; a full coverage scan compared with an independent recount (products, collections, pages, blog posts, blogs, product images); kept counts versus counts rebuilt from items; timings; an export of all product fields compared with the recount; an import of one filled row into a draft in the test database (Shopify unchanged). Tests needing a scope the app wasn't granted are reported as such. Copy the printed summary ("Coverage scan of …") into the log.
+What it does, read-only on Shopify: the API contract checks; a full coverage scan compared with an independent recount (products, collections, pages, blog posts, blogs, product images); kept counts versus counts rebuilt from items; timings; a CSV export of every type with titles compared with the recount; an import of the first missing title into a draft in the test database (Shopify unchanged; the draft is rejected again at the end). A check that needs a scope the app wasn't granted, or content the store doesn't have yet (images), is reported as **skipped with its reason** (`--reporter=verbose` shows it), never as passed. Copy the printed summary ("Coverage scan of …", "CSV export …", "CSV import …") into the log.
+
+Expected on the store as of 2026-10-28 (no products): 6 passed, 14 skipped. After the catalog of §2: 7 passed (image alt text checked), 13 skipped (12 fixture-write tests, Markets).
 
 ### 4.2 With fixture writes (optional; needs the "Linguva live tests" app, DEV_STORE_SETUP.md §2)
 
@@ -202,6 +250,14 @@ pnpm ops:coverage-check --shop linguva-test-lab.myshopify.com --webhooks   # + d
 ```
 
 Read-only; prints counts and statuses, never store text. Exit code 1 if the kept counts differ from the items (that would be a defect: please send the output).
+
+### 4.4 Rehearsal (no store; runs in CI)
+
+```bash
+pnpm test:live:rehearsal
+```
+
+The same live suites, client and guards, with `fetch` answered by a simulated store in two shapes: linguva-test-lab as measured on 2026-10-28, and the same plus the catalog of §2. Any request to another host fails, so nothing leaves the machine. It checks the live tests themselves, not Shopify: a rehearsal pass is never evidence for "Verified on Shopify".
 
 ## 5. Comparing with Langify and Transcy (optional, evidence only)
 

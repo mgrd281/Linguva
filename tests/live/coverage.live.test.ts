@@ -22,7 +22,8 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { exportTranslations, importTranslations } from "../../app/.server/translation/csv-transfer";
 import { parseCsv, toCsv } from "../../app/.server/glossary/csv";
-import { approveDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
+import { approveDrafts, rejectDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
+import { translatableByIds } from "../../app/.server/shopify/attached-resources";
 import { byType } from "../../app/lib/coverage-view";
 import { createLiveAdmin } from "./admin-client";
 import { createFixtureProduct, deleteFixture, shopFacts } from "./fixtures";
@@ -41,6 +42,8 @@ let shopId: string;
 
 /** Types counted independently below (the catalog and the online store). */
 const RECOUNT_TYPES = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG", "MEDIA_IMAGE"] as const;
+/** Types the CSV check exports (the ones with titles). */
+const CSV_TYPES = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"] as const;
 
 /**
  * Independent count from Shopify's own data, without Linguva's coverage
@@ -153,21 +156,37 @@ live("coverage on the real store (read-only)", () => {
     expect(itemsMs).toBeLessThan(500);
   });
 
-  it("exports products as CSV that matches the recount, and imports filled rows as drafts only", async () => {
-    const expected = await recount("PRODUCT");
-    const exported = await exportTranslations(admin, { resourceType: "PRODUCT", locale, onlyGaps: false });
-    expect(exported.rows).toBe(expected.total);
-    const table = parseCsv(exported.csv);
-    const gap = table.slice(1).find((r) => r[7] === "missing" && r[2] === "title");
-    if (!gap) return console.info("CSV import skipped: no product title is missing in this language.");
+  it("exports CSV that matches the recount for every type, and imports a filled row as a draft only", async (context) => {
+    // Every type is exported; the import uses the first missing title on the
+    // store, so a store without products still checks the round trip.
+    const exports = new Map<(typeof CSV_TYPES)[number], string[][]>();
+    const lines: string[] = [];
+    for (const type of CSV_TYPES) {
+      const expected = await recount(type);
+      const exported = await exportTranslations(admin, { resourceType: type, locale, onlyGaps: false });
+      expect(exported.rows, type).toBe(expected.total);
+      exports.set(type, parseCsv(exported.csv));
+      lines.push(`${type} ${exported.rows}`);
+    }
+    console.info(`CSV export fields per type (equal to the recount): ${lines.join(", ")}.`);
+    if ([...exports.values()].every((t) => t.length <= 1)) return context.skip("CSV: the store has no translatable fields in these types yet (seed the fictional catalog, DEV_STORE_VERIFICATION.md §5).");
+
+    const found = [...exports].map(([type, table]) => ({ type, table, gap: table.slice(1).find((r) => r[7] === "missing" && r[2] === "title") })).find((x) => x.gap);
+    if (!found) return context.skip("CSV import: no title is missing in this language, so there is nothing to import as a draft.");
+    const { type, table, gap } = found as { type: (typeof CSV_TYPES)[number]; table: string[][]; gap: string[] };
     gap[6] = `Linguva live CSV ${runId}`;
     const result = await importTranslations({ admin, shopId, csv: toCsv([table[0]!, gap]), targetLocales: [locale] }, prisma);
-    expect(result.drafts).toBe(1);
-    // Nothing was written to Shopify: the field is still missing there.
-    const after = await listTranslatableResources(admin, { resourceType: "PRODUCT", locale, first: 50 });
-    const resource = after.resources.find((r) => r.resourceId === gap[0]);
-    if (resource) expect(resource.translations.find((t) => t.key === "title")?.value ?? null).not.toBe(gap[6]);
-    console.info(`CSV: ${exported.rows} product fields exported; 1 row imported as a draft, Shopify unchanged.`);
+    expect(result).toMatchObject({ drafts: 1, problems: [] });
+    // Nothing was written to Shopify: the title is still untranslated there.
+    const resource = (await translatableByIds(admin, [gap[0]!], locale)).get(gap[0]!);
+    expect(resource, "imported resource still readable").toBeDefined();
+    expect(resource!.translations.find((t) => t.key === "title")?.value ?? null).not.toBe(gap[6]);
+    // The draft waits on Review (local database only); remove it again.
+    const draft = (await searchPendingDrafts(shopId, {}, prisma)).drafts.find((d) => d.resourceGid === gap[0] && d.key === "title");
+    expect(draft?.provider).toBe("csv");
+    // Rejected again so the next run starts without drafts (coverage overlays follow).
+    expect(await rejectDrafts(shopId, [draft!.id], "live", prisma)).toBe(1);
+    console.info(`CSV import: 1 ${type} title imported as a draft, Shopify unchanged; the local draft was rejected again.`);
   }, 300_000);
 });
 

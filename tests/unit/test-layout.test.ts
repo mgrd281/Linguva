@@ -27,6 +27,7 @@ describe("test layout", () => {
       (f) =>
         !CI_SUITES.some((s) => f.startsWith(s) && f.endsWith(".test.ts")) &&
         !UI_SUITE.test(f) &&
+        // Live tests need the dev store; CI runs them against a simulated store (pnpm test:live:rehearsal).
         !(f.startsWith("tests/live/") && f.endsWith(".live.test.ts")) &&
         // Needs a local DeepL key (pnpm test:deepl), never in CI.
         !(f.startsWith("tests/quality/") && f.endsWith(".quality.test.ts")),

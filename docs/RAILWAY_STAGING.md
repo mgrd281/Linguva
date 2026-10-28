@@ -246,7 +246,7 @@ Plan as prepared:
 Not there yet, each one needs the owner's approval:
 
 - **No `worker` service** in production: "Measure now" (coverage), bulk jobs and automatic translation wait in the queue until one exists (same settings as the staging worker, §6a). It adds Railway usage.
-- **New code**: production runs `969ad79`. Later commits of this branch (for example the redesigned Overview with countries) reach KARINEX only after a deploy of the `web` service in the production environment.
+- **New code**: production runs `969ad79` until the next deploy. Railway deploys the connected branch `claude/gallant-pasteur-8opy75` itself once GitHub CI is green (auto deploy plus "Wait for CI"; found on 2026-10-28, switched off while the owner decided, switched on again by the owner the same night). Every commit of this branch that passes CI therefore reaches KARINEX; the owner can stop it with "Disable" under web, Settings, Source.
 - **Countries on the Overview** need the optional permission `read_markets`: the button "Show countries" asks for it in KARINEX (read-only, Linguva never changes markets).
 - **KARINEX's languages are already published.** Anything published from Linguva is visible to customers immediately; drafts stay invisible until published.
 

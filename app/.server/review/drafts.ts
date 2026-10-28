@@ -146,6 +146,8 @@ export interface DraftPageFilter {
 }
 
 const SEO_KEYS_LIST = ["meta_title", "meta_description"];
+/** Matches the indexed search hands over; more fall back to scanning. */
+const SEARCH_MATCHES = 5000;
 const GID_PREFIX: Record<string, string> = Object.fromEntries(
   Object.entries(RESOURCE_KINDS).map(([kind, meta]) => [kind, `gid://shopify/${meta.gidType}/`]),
 );
@@ -155,7 +157,7 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
   const take = Math.min(Math.max(filter.take ?? 50, 1), MAX_DRAFTS_PER_ACTION);
   const search = filter.search?.trim().slice(0, 100);
   const pattern = search ? escapeLike(search) : null;
-  const where: Prisma.TranslationDraftWhereInput = {
+  const base: Prisma.TranslationDraftWhereInput = {
     shopId,
     status: "PENDING",
     ...(filter.locale ? { locale: filter.locale } : {}),
@@ -181,20 +183,29 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
         }
       : {}),
     ...(filter.flagged ? { NOT: [{ issues: { equals: Prisma.DbNull } }, { issues: { equals: [] } }] } : {}),
-    ...(pattern
-      ? {
-          OR: [
-            { resourceTitle: { contains: pattern, mode: "insensitive" } },
-            { sourceValue: { contains: pattern, mode: "insensitive" } },
-            { value: { contains: pattern, mode: "insensitive" } },
-          ],
-        }
-      : {}),
   };
+  const scan: Prisma.TranslationDraftWhereInput = pattern
+    ? {
+        OR: [
+          { resourceTitle: { contains: pattern, mode: "insensitive" } },
+          { sourceValue: { contains: pattern, mode: "insensitive" } },
+          { value: { contains: pattern, mode: "insensitive" } },
+        ],
+      }
+    : {};
   const cursor = filter.cursor && UUID.test(filter.cursor) ? filter.cursor : null;
   const [rows, total, jobTypes] = await withTenant(
     shopId,
     async (tx) => {
+      // Three characters or more: the indexed search (SECURITY_MODEL §5l)
+      // finds the matching drafts. Text so common that it matches more than
+      // SEARCH_MATCHES drafts is scanned instead, as shorter text is.
+      let text = scan;
+      if (search && [...search].length >= 3) {
+        const ids = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM linguva_draft_search(${search}, ${SEARCH_MATCHES + 1}::int)`;
+        if (ids.length <= SEARCH_MATCHES) text = { id: { in: ids.map((r) => r.id) } };
+      }
+      const where = { ...base, ...text };
       const [found, count] = await Promise.all([
         tx.translationDraft.findMany({
           where,

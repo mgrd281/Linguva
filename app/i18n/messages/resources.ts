@@ -113,3 +113,118 @@ export const de: Translation<typeof en> = {
   "resources.paging.first": "Erste Seite",
   "resources.paging.next": "Nächste Seite",
 };
+
+export const fr: Translation<typeof en> = {
+  "resources.denied.heading": "Autoriser Linguva à lire vos {plural}",
+  "resources.denied.needsScope": "Pour traduire vos {plural}, Linguva a besoin de l'autorisation de les lire. Linguva ne modifie jamais les originaux.",
+  "resources.denied.unavailable": "Shopify ne permet pas encore aux applications de lire les {plural} de cette boutique.",
+  "resources.denied.allow": "Autoriser l'accès",
+  "resources.denied.back": "Retour à tout le contenu",
+
+  "resources.noLanguages.heading": "Aucune langue vers laquelle traduire",
+  "resources.noLanguages.body": "Ajoutez une langue dans l'interface administrateur Shopify, sous Paramètres → Langues, pour commencer à traduire vos {plural}.",
+  "resources.noLanguages.open": "Ouvrir les paramètres de langue",
+
+  "resources.consent.heading": "Autoriser le traitement par IA pour la traduction groupée",
+  "resources.consent.before": "La traduction groupée utilise l'IA. Autorisez-la d'abord dans ",
+  "resources.consent.after": ".",
+
+  "resources.bulkError.heading": "Impossible de lancer la traduction groupée",
+  "resources.bulkError.JOBS_UNAVAILABLE": "Le traitement en arrière-plan n'est pas encore configuré pour cette application.",
+  "resources.bulkError.plan": "Votre forfait n'inclut pas cette fonctionnalité. Consultez la page Forfait pour le modifier.",
+  "resources.bulkError.generic": "Veuillez actualiser la page et réessayer.",
+
+  "resources.plan.bulkHeading": "La traduction groupée est incluse dans les forfaits payants",
+  "resources.plan.localeHeading": "Votre forfait n'inclut pas cette langue : {language}",
+  "resources.plan.body": "Vous pouvez toujours traduire vos {plural} individuellement dans l'éditeur.",
+
+  "resources.caution.legalHeading": "Textes juridiques",
+  "resources.caution.legalBody":
+    "Faites vérifier chaque traduction par une personne qualifiée avant de la publier. Ces textes sont traduits individuellement, avec révision.",
+  "resources.caution.liquidHeading": "Modèles avec code Liquid",
+  "resources.caution.liquidBody": "Seul le texte visible est traduit ; le code Liquid reste inchangé. Ces modèles sont traduits individuellement, avec révision.",
+
+  "resources.translateInto": "Traduire en :",
+
+  "resources.bulk.heading": "Traduire l'ensemble des {plural}",
+  "resources.bulk.intro":
+    "Complète les champs manquants et obsolètes avec l'IA, à l'aide de votre glossaire et de votre mémoire de traduction. Les traductions à jour ne sont jamais modifiées ; les traductions obsolètes rédigées ou approuvées par une personne sont conservées, sauf si vous autorisez leur remplacement.",
+  "resources.bulk.autoPublish":
+    "La publication automatique est activée : les résultats qui passent les contrôles qualité sont mis en ligne immédiatement ; les résultats avec des avertissements restent en attente dans Révision.",
+  "resources.bulk.review": "Les résultats restent en attente dans Révision jusqu'à ce que vous les approuviez.",
+  "resources.bulk.scopeLabel": "Champs à traduire",
+  "resources.bulk.scopeAll": "Tous les champs",
+  "resources.bulk.scopeSeo": "Uniquement le référencement (titre et description SEO)",
+  "resources.bulk.overwrite": "Remplacer aussi les traductions obsolètes rédigées ou approuvées par une personne",
+  "resources.bulk.attached": "Traduire aussi le texte alternatif des images et les champs personnalisés",
+  "resources.bulk.attachedDetails":
+    "Vérifie chaque élément de type « {singular} », la tâche prend donc plus de temps. Ne s'applique pas à « Uniquement le référencement ».",
+  "resources.bulk.submit": "Tout traduire : {language}",
+
+  "resources.empty.heading": "La liste des {plural} est encore vide",
+  "resources.empty.body": "{label} : les éléments que vous créez dans Shopify s'affichent ici, prêts à être traduits ({language}).",
+  "resources.empty.yourLanguages": "vos langues",
+
+  "resources.table.translatedFields": "Champs traduits",
+  "resources.status.partial": "Partiel",
+  "resources.paging.first": "Première page",
+  "resources.paging.next": "Page suivante",
+};
+
+export const es: Translation<typeof en> = {
+  "resources.denied.heading": "Permitir que Linguva lea tus {plural}",
+  "resources.denied.needsScope": "Para traducir tus {plural}, Linguva necesita permiso de lectura. Nunca modifica los originales.",
+  "resources.denied.unavailable": "Shopify todavía no permite que las aplicaciones lean {plural} en esta tienda.",
+  "resources.denied.allow": "Permitir acceso",
+  "resources.denied.back": "Volver a todo el contenido",
+
+  "resources.noLanguages.heading": "No hay idiomas a los que traducir",
+  "resources.noLanguages.body": "Agrega un idioma en Configuración → Idiomas del panel de control de Shopify para empezar a traducir tus {plural}.",
+  "resources.noLanguages.open": "Abrir la configuración de idiomas",
+
+  "resources.consent.heading": "Permitir el procesamiento con IA para la traducción masiva",
+  "resources.consent.before": "La traducción masiva usa IA. Primero, permítela en ",
+  "resources.consent.after": ".",
+
+  "resources.bulkError.heading": "No se pudo iniciar la traducción masiva",
+  "resources.bulkError.JOBS_UNAVAILABLE": "El procesamiento en segundo plano aún no está configurado para esta aplicación.",
+  "resources.bulkError.plan": "Tu plan no incluye esta función. Ve a Plan para cambiarlo.",
+  "resources.bulkError.generic": "Vuelve a cargar la página e inténtalo de nuevo.",
+
+  "resources.plan.bulkHeading": "La traducción masiva está incluida en los planes de pago",
+  "resources.plan.localeHeading": "Tu plan no incluye este idioma: {language}",
+  "resources.plan.body": "Aún puedes traducir tus {plural} de forma individual en el editor.",
+
+  "resources.caution.legalHeading": "Textos legales",
+  "resources.caution.legalBody":
+    "Haz que una persona calificada revise cada traducción antes de publicarla. Estos textos se traducen de forma individual y con revisión.",
+  "resources.caution.liquidHeading": "Plantillas con código Liquid",
+  "resources.caution.liquidBody":
+    "Solo se traduce el texto visible; el código Liquid se mantiene tal cual. Estas plantillas se traducen de forma individual y con revisión.",
+
+  "resources.translateInto": "Traducir a:",
+
+  "resources.bulk.heading": "Traducción masiva de {plural}",
+  "resources.bulk.intro":
+    "Completa con IA los campos que faltan y los desactualizados, usando tu glosario y tu memoria de traducción. Las traducciones al día nunca se modifican; las desactualizadas que una persona escribió o aprobó se conservan, a menos que permitas reemplazarlas.",
+  "resources.bulk.autoPublish":
+    "La publicación automática está activada: los resultados que superan los controles de calidad se publican de inmediato; los resultados con advertencias esperan en Revisión.",
+  "resources.bulk.review": "Los resultados esperan en Revisión hasta que los apruebes.",
+  "resources.bulk.scopeLabel": "Qué traducir",
+  "resources.bulk.scopeAll": "Todos los campos",
+  "resources.bulk.scopeSeo": "Solo listados en buscadores (título y descripción SEO)",
+  "resources.bulk.overwrite": "Reemplazar también las traducciones desactualizadas que una persona escribió o aprobó",
+  "resources.bulk.attached": "Traducir también el texto alternativo de las imágenes y los campos personalizados",
+  "resources.bulk.attachedDetails":
+    'Revisa cada elemento de tipo "{singular}", por lo que la tarea tarda más. No se aplica a "Solo listados en buscadores".',
+  "resources.bulk.submit": "Traducir todo: {language}",
+
+  "resources.empty.heading": "Todavía no hay {plural}",
+  "resources.empty.body": "{label}: los elementos que agregues en Shopify aparecen aquí, listos para traducir ({language}).",
+  "resources.empty.yourLanguages": "tus idiomas",
+
+  "resources.table.translatedFields": "Campos traducidos",
+  "resources.status.partial": "Parcial",
+  "resources.paging.first": "Primera página",
+  "resources.paging.next": "Página siguiente",
+};

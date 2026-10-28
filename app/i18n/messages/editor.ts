@@ -324,3 +324,341 @@ export const de: Translation<typeof en> = {
 
   "editor.preview.empty": "Die Vorschau erscheint hier, sobald es eine Übersetzung gibt.",
 };
+
+export const fr: Translation<typeof en> = {
+  "editor.saveError.UNKNOWN_FIELD": "Champ inconnu",
+  "editor.saveError.EMPTY_TRANSLATION": "La traduction est vide",
+  "editor.saveError.STRUCTURE_CHANGED":
+    "Cette valeur n'a plus la structure de l'original (mise en forme, éléments de liste ou adresses de lien). Traduisez-la à nouveau.",
+  "editor.saveError.SHOPIFY_REJECTED": "Shopify a refusé la traduction : {detail}",
+  "editor.saveError.NOT_CONFIRMED": "Shopify n'a pas confirmé la traduction",
+  "editor.leave.heading": "Quitter sans publier ?",
+  "editor.leave.body": "Vos modifications de cette traduction ne sont pas encore publiées. Elles seront perdues si vous quittez la page.",
+  "editor.leave.stay": "Rester sur cette page",
+  "editor.leave.leave": "Quitter sans publier",
+
+  "editor.consent.heading": "Autoriser la traduction par IA",
+  "editor.consent.body":
+    "Pour traduire avec l'IA, le texte que vous choisissez pour cet élément ({singular}) est envoyé à notre prestataire de traduction (DeepL SE, Allemagne) pour être traité. Aucune donnée client n'est envoyée. Vous pouvez réviser chaque résultat avant sa publication.",
+  "editor.consent.allow": "Autoriser le traitement par IA",
+
+  "editor.reloadAndRetry": "Veuillez recharger la page et réessayer.",
+  "editor.removed.heading": "Traduction supprimée",
+  "editor.removed.failedHeading": "Impossible de supprimer la traduction",
+  "editor.removed.body": "Les clients voient désormais le texte original pour ce champ. La version supprimée est conservée dans l'historique.",
+  "editor.restored.heading": "Version restaurée",
+  "editor.restored.failedHeading": "Impossible de restaurer cette version",
+  "editor.restored.body": "La traduction précédente est de nouveau publiée.",
+  "editor.restored.sourceChanged": "Le texte original a changé depuis cette version, Shopify ne l'acceptera donc pas.",
+
+  "editor.aiError.heading": "Échec de la traduction par IA",
+  "editor.aiError.memoryHeading": "Échec des suggestions de la mémoire",
+  "editor.aiError.generic": "Une erreur s'est produite.",
+  "editor.aiError.retryAfter": "Réessayez dans {seconds} s.",
+  "editor.aiError.AI_NOT_CONFIGURED": "La traduction par IA n'est pas encore configurée pour cette application.",
+  "editor.aiError.CONSENT_REQUIRED": "Autorisez le traitement par IA ci-dessous avant de traduire avec l'IA.",
+  "editor.aiError.QUOTA_EXCEEDED": "Le quota d'IA de ce mois-ci est épuisé.",
+  "editor.aiError.DAILY_LIMIT": "Le quota d'IA d'aujourd'hui est épuisé. Il est réinitialisé à minuit UTC.",
+  "editor.aiError.PLATFORM_LIMIT":
+    "La traduction par IA est suspendue pour aujourd'hui en raison d'une forte demande. Veuillez réessayer demain.",
+  "editor.aiError.REQUEST_TOO_LARGE":
+    "Il y a trop de texte pour une seule requête. Traduisez moins de champs à la fois ou utilisez la traduction groupée.",
+  "editor.aiError.PLAN_LANGUAGE":
+    "Votre forfait n'inclut pas la traduction par IA vers cette langue. Changez de forfait sous « Forfait » ou traduisez manuellement.",
+  "editor.aiError.RATE_LIMITED_USER": "Vous traduisez très rapidement. Veuillez patienter un instant, puis réessayer.",
+  "editor.aiError.RATE_LIMITED_SHOP":
+    "Votre équipe envoie actuellement de nombreuses requêtes d'IA. Veuillez patienter un instant, puis réessayer.",
+  "editor.aiError.PROVIDER_RETRYABLE": "Le service de traduction est surchargé. Veuillez réessayer dans un instant.",
+  "editor.aiError.PROVIDER_QUOTA": "Le quota du service de traduction est épuisé. Veuillez contacter l'assistance.",
+  "editor.aiError.PROVIDER_AUTH": "Le service de traduction a refusé nos identifiants. Veuillez contacter l'assistance.",
+  "editor.aiError.PROVIDER_INVALID": "Le service de traduction ne prend pas en charge cette paire de langues.",
+
+  "editor.saved.nothingHeading": "Rien à enregistrer",
+  "editor.saved.partialHeading": "Certains champs n'ont pas été enregistrés",
+  "editor.saved.partialBody":
+    "Les champs signalés ci-dessous nécessitent votre attention. Si le texte original a changé dans Shopify, rechargez cette page et traduisez à nouveau.",
+
+  "editor.caution.legalHeading": "Texte juridique",
+  "editor.caution.legalBody":
+    "Les politiques sont des documents juridiques. Faites vérifier chaque traduction par une personne qualifiée avant de la publier. Les résultats de l'IA sont des brouillons et ne sont jamais publiés automatiquement.",
+  "editor.caution.liquidHeading": "Modèle avec du code Liquid",
+  "editor.caution.liquidBody":
+    "Seul le texte visible est traduit ; les balises et les variables Liquid sont conservées exactement comme dans l'original. Envoyez-vous une notification de test après la publication.",
+  "editor.rtl.heading": "Langue de droite à gauche",
+  "editor.rtl.body": "Vérifiez la mise en page de votre boutique en ligne après la publication.",
+
+  "editor.toolbar.translateAi": "Traduire avec l'IA",
+  "editor.toolbar.translateSeo": "Traduire uniquement les champs SEO",
+  "editor.toolbar.fillMemory": "Remplir depuis la mémoire",
+  "editor.toolbar.leftThisMonth": "Il reste {remaining} caractères d'IA sur {limit} ce mois-ci",
+  "editor.toolbar.leftToday": "Il reste {remaining} caractères d'IA aujourd'hui ({monthRemaining} sur {limit} ce mois-ci)",
+  "editor.toolbar.notConfigured": "La traduction par IA n'est pas configurée",
+  "editor.fill.memory":
+    "Des traductions similaires issues de votre mémoire ont été insérées ci-dessous. Vérifiez-les attentivement, puis publiez-les.",
+  "editor.fill.memoryNone": "Aucune traduction similaire trouvée dans votre mémoire.",
+  "editor.fill.ai": "Les brouillons IA ont été insérés ci-dessous. Révisez-les, puis publiez-les.",
+  "editor.fill.aiWithMemory": {
+    one: "Les brouillons IA ont été insérés ci-dessous ({count} segment réutilisé gratuitement depuis la mémoire). Révisez-les, puis publiez-les.",
+    other: "Les brouillons IA ont été insérés ci-dessous ({count} segments réutilisés gratuitement depuis la mémoire). Révisez-les, puis publiez-les.",
+  },
+
+  "editor.paging.texts": { one: "{count} texte", other: "{count} textes" },
+  "editor.paging.findLabel": "Rechercher un texte",
+  "editor.paging.findPlaceholder": "Clé, original ou traduction",
+  "editor.paging.noMatch": "Aucun texte ne correspond à votre recherche.",
+  "editor.paging.showing": "Affichage : {from}–{to} sur {total}. Publiez chaque page avant de passer à la suivante.",
+  "editor.paging.showingMatching": "Affichage : {from}–{to} sur {total} résultats. Publiez chaque page avant de passer à la suivante.",
+
+  "editor.seo.heading": "Aperçu du référencement",
+  "editor.seo.intro": "Voici comment cet élément ({singular}) pourrait apparaître dans les résultats de recherche ({language}).",
+  "editor.seo.noFields":
+    "Cet élément ({singular}) n'a pas de titre ni de description SEO propres. Ajoutez-les dans Shopify pour contrôler les résultats de recherche dans chaque langue.",
+  "editor.seo.noTitle": "Aucun titre SEO : Shopify utilise le titre traduit.",
+  "editor.seo.noDescription": "Aucune description SEO dans cette langue : les moteurs de recherche peuvent utiliser le texte de la description.",
+  "editor.seo.exampleAddress": "Adresse d'exemple ; l'adresse réelle dépend de vos domaines et de vos marchés.",
+  "editor.publish": "Publier les traductions",
+  "editor.discard": "Ignorer",
+  "editor.saved.toast": { one: "{count} traduction publiée", other: "{count} traductions publiées" },
+
+  "editor.field.original": "{language} (original)",
+  "editor.field.originalFrame": "{field}, original ({language})",
+  "editor.field.previewFrame": "{field}, aperçu ({language})",
+  "editor.field.showPreview": "Afficher l'aperçu",
+  "editor.field.showHtml": "Afficher le HTML",
+  "editor.field.htmlDetails": "HTML. La mise en forme doit correspondre à l'original.",
+  "editor.field.handleDetails": "Si vous modifiez l'identifiant (handle) d'URL, l'adresse de la page change dans cette langue.",
+  "editor.field.conflict": "Le texte original a changé dans Shopify. Rechargez la page et traduisez à nouveau.",
+  "editor.field.translationChanged":
+    "Une autre personne a enregistré une traduction pour ce champ depuis que vous avez ouvert la page. Rien n'a été écrasé ; votre texte est toujours là. Rechargez la page pour voir la sienne.",
+  "editor.field.notSaved": "Non enregistré.",
+  "editor.field.discarded": "Le résultat de l'IA a été rejeté.",
+  "editor.field.stillCorrect": "L'original a changé, mais cette traduction est toujours correcte",
+  "editor.rejection.VALIDATION_FAILED": "Le résultat de l'IA modifiait des nombres ou utilisait des termes interdits ; il a donc été rejeté.",
+  "editor.rejection.MISSING_CODE": "Le résultat de l'IA avait perdu une partie de la mise en forme ; il a donc été rejeté.",
+
+  "editor.handle.suggest": "Suggérer à partir du titre traduit",
+  "editor.handle.confirm": "Modifier l'adresse publiée. Les liens vers …/{handle} ({language}) ne fonctionneront plus.",
+  "editor.handle.problem.EMPTY": "Saisissez un identifiant (handle) d'URL.",
+  "editor.handle.problem.TOO_LONG": "Utilisez {max} caractères au maximum.",
+  "editor.handle.problem.UPPERCASE": "Utilisez uniquement des lettres minuscules.",
+  "editor.handle.problem.INVALID_CHARACTERS":
+    "Utilisez uniquement des lettres, des chiffres et des traits d'union simples (pas d'espaces ni d'autres caractères).",
+  "editor.handle.problem.CONFIRM":
+    "Confirmez la modification de l'URL ci-dessous : les liens vers l'ancienne adresse dans cette langue ne fonctionneront plus.",
+
+  "editor.badge.memoryMatch": "Mémoire : correspondance de {score} %",
+  "editor.badge.aiDraft": "Brouillon IA",
+  "editor.badge.review": "À réviser : {issues}",
+  "editor.badge.manualOnly": "Manuel uniquement",
+  "editor.remove.button": "Supprimer la traduction",
+  "editor.remove.confirm": "Cliquez à nouveau pour supprimer la traduction",
+
+  "editor.history.show": "Afficher l'historique ({count})",
+  "editor.history.hide": "Masquer l'historique",
+  "editor.history.restore": "Restaurer cette version",
+  "editor.history.origin.external": "Avant Linguva",
+  "editor.history.origin.aiApproved": "IA, approuvée",
+  "editor.history.origin.ai": "IA",
+  "editor.history.origin.manual": "Manuelle",
+
+  "editor.attached.heading": "Images et champs personnalisés",
+  "editor.attached.unavailable":
+    "Impossible de charger les textes alternatifs des images et les champs personnalisés. Rechargez la page pour réessayer.",
+  "editor.attached.intro":
+    "Le texte alternatif décrit les images pour les lecteurs d'écran et la recherche d'images. Les champs personnalisés sont des métachamps que Shopify signale comme traduisibles.",
+  "editor.attached.noAlt": { one: "{count} image n'a pas de texte alternatif", other: "{count} images n'ont pas de texte alternatif" },
+  "editor.attached.noAltBody": "Ajoutez d'abord un texte alternatif dans Shopify ; vous pourrez ensuite le traduire ici.",
+  "editor.attached.unsupported": {
+    one: "{count} champ personnalisé contenant du texte enrichi, des listes, des liens ou des fichiers ne peut pas encore être modifié ici.",
+    other: "{count} champs personnalisés contenant du texte enrichi, des listes, des liens ou des fichiers ne peuvent pas encore être modifiés ici.",
+  },
+  "editor.attached.stoppedDrafts": "Les brouillons créés avant le problème ont été insérés ci-dessous.",
+  "editor.attached.savedCount": "Enregistrés dans Shopify : {saved} sur {total}.",
+  "editor.attached.translateAi": "Traduire avec l'IA les textes alternatifs et les champs manquants",
+  "editor.attached.image": "Image",
+  "editor.attached.publish": "Publier les textes alternatifs et les champs",
+  "editor.valueType.single_line_text_field": "Texte",
+  "editor.valueType.multi_line_text_field": "Texte long",
+  "editor.valueType.rich_text_field": "Texte enrichi",
+  "editor.valueType.url": "Lien",
+  "editor.valueType.list.single_line_text_field": "Liste de textes",
+  "editor.valueType.list.multi_line_text_field": "Liste de textes longs",
+  "editor.valueType.link": "Lien avec texte",
+  "editor.valueType.list.link": "Liste de liens",
+  "editor.structured.richTextNote":
+    "Le texte enrichi conserve sa mise en forme. Traduisez-le ici avec l'IA ou modifiez la formulation dans l'éditeur de Shopify.",
+  "editor.structured.note": "Traduisez chaque élément. Le nombre d'éléments et les adresses des liens restent identiques à l'original.",
+  "editor.structured.item": "{language}, élément {n}",
+  "editor.structured.linksTo": "Renvoie vers {url}",
+  "editor.structured.itemRequired": "Traduisez aussi cet élément ou laissez tous les éléments vides.",
+  "editor.structured.notTranslated": "Pas encore traduit",
+
+  "editor.preview.empty": "L'aperçu s'affiche ici dès qu'une traduction existe.",
+};
+
+export const es: Translation<typeof en> = {
+  "editor.saveError.UNKNOWN_FIELD": "Campo desconocido",
+  "editor.saveError.EMPTY_TRANSLATION": "La traducción está vacía",
+  "editor.saveError.STRUCTURE_CHANGED":
+    "Este valor ya no tiene la estructura del original (formato, elementos de lista o direcciones de enlace). Vuelve a traducirlo.",
+  "editor.saveError.SHOPIFY_REJECTED": "Shopify rechazó la traducción: {detail}",
+  "editor.saveError.NOT_CONFIRMED": "Shopify no confirmó la traducción",
+  "editor.leave.heading": "¿Salir sin publicar?",
+  "editor.leave.body": "Tus cambios en esta traducción aún no están publicados. Se perderán si sales de la página.",
+  "editor.leave.stay": "Quedarse en esta página",
+  "editor.leave.leave": "Salir sin publicar",
+
+  "editor.consent.heading": "Permitir la traducción con IA",
+  "editor.consent.body":
+    "Para traducir con IA, el texto que elijas de este elemento ({singular}) se envía a nuestro proveedor de traducción (DeepL SE, Alemania) para su procesamiento. No se envían datos de clientes. Puedes revisar cada resultado antes de que se publique.",
+  "editor.consent.allow": "Permitir el procesamiento con IA",
+
+  "editor.reloadAndRetry": "Recarga la página e inténtalo de nuevo.",
+  "editor.removed.heading": "Traducción eliminada",
+  "editor.removed.failedHeading": "No se pudo eliminar la traducción",
+  "editor.removed.body": "Ahora los clientes ven el texto original en este campo. La versión eliminada se conserva en el historial.",
+  "editor.restored.heading": "Versión restaurada",
+  "editor.restored.failedHeading": "No se pudo restaurar esta versión",
+  "editor.restored.body": "La traducción anterior vuelve a estar publicada.",
+  "editor.restored.sourceChanged": "El texto original cambió desde esa versión, así que Shopify no la aceptará.",
+
+  "editor.aiError.heading": "Error en la traducción con IA",
+  "editor.aiError.memoryHeading": "Error en las sugerencias de la memoria",
+  "editor.aiError.generic": "Algo salió mal.",
+  "editor.aiError.retryAfter": "Inténtalo de nuevo en {seconds} s.",
+  "editor.aiError.AI_NOT_CONFIGURED": "La traducción con IA aún no está configurada para esta aplicación.",
+  "editor.aiError.CONSENT_REQUIRED": "Antes de traducir con IA, permite el procesamiento con IA más abajo.",
+  "editor.aiError.QUOTA_EXCEEDED": "Se agotó la cuota de IA de este mes.",
+  "editor.aiError.DAILY_LIMIT": "Se agotó la cuota de IA de hoy. Se restablece a medianoche UTC.",
+  "editor.aiError.PLATFORM_LIMIT": "La traducción con IA está en pausa por hoy debido a la alta demanda. Vuelve a intentarlo mañana.",
+  "editor.aiError.REQUEST_TOO_LARGE":
+    "Hay demasiado texto para una sola solicitud. Traduce menos campos a la vez o usa la traducción masiva.",
+  "editor.aiError.PLAN_LANGUAGE":
+    "Tu plan no incluye la traducción con IA a este idioma. Cambia tu plan en “Plan” o traduce manualmente.",
+  "editor.aiError.RATE_LIMITED_USER": "Estás traduciendo muy rápido. Espera un momento y vuelve a intentarlo.",
+  "editor.aiError.RATE_LIMITED_SHOP": "Tu equipo está enviando muchas solicitudes de IA ahora mismo. Espera un momento y vuelve a intentarlo.",
+  "editor.aiError.PROVIDER_RETRYABLE": "El servicio de traducción está ocupado. Vuelve a intentarlo en un momento.",
+  "editor.aiError.PROVIDER_QUOTA": "Se agotó la cuota del servicio de traducción. Ponte en contacto con el soporte.",
+  "editor.aiError.PROVIDER_AUTH": "El servicio de traducción rechazó nuestras credenciales. Ponte en contacto con el soporte.",
+  "editor.aiError.PROVIDER_INVALID": "El servicio de traducción no admite este par de idiomas.",
+
+  "editor.saved.nothingHeading": "No hay nada que guardar",
+  "editor.saved.partialHeading": "Algunos campos no se guardaron",
+  "editor.saved.partialBody":
+    "Los campos marcados abajo requieren tu atención. Si el texto original cambió en Shopify, recarga esta página y vuelve a traducir.",
+
+  "editor.caution.legalHeading": "Texto legal",
+  "editor.caution.legalBody":
+    "Las políticas son documentos legales. Haz que una persona experta revise cada traducción antes de publicarla. Los resultados de la IA son borradores y nunca se publican automáticamente.",
+  "editor.caution.liquidHeading": "Plantilla con código Liquid",
+  "editor.caution.liquidBody":
+    "Solo se traduce el texto visible; las etiquetas y variables de Liquid se mantienen exactamente como en el original. Envíate una notificación de prueba después de publicar.",
+  "editor.rtl.heading": "Idioma de derecha a izquierda",
+  "editor.rtl.body": "Comprueba el diseño de tu tienda online después de publicar.",
+
+  "editor.toolbar.translateAi": "Traducir con IA",
+  "editor.toolbar.translateSeo": "Traducir solo los campos SEO",
+  "editor.toolbar.fillMemory": "Rellenar desde la memoria",
+  "editor.toolbar.leftThisMonth": "Quedan {remaining} de {limit} caracteres de IA este mes",
+  "editor.toolbar.leftToday": "Quedan {remaining} caracteres de IA hoy ({monthRemaining} de {limit} este mes)",
+  "editor.toolbar.notConfigured": "La traducción con IA no está configurada",
+  "editor.fill.memory": "Abajo se rellenaron traducciones similares de tu memoria. Revísalas con atención y luego publícalas.",
+  "editor.fill.memoryNone": "No se encontraron traducciones similares en tu memoria.",
+  "editor.fill.ai": "Abajo se rellenaron los borradores de IA. Revísalos y luego publícalos.",
+  "editor.fill.aiWithMemory": {
+    one: "Abajo se rellenaron los borradores de IA ({count} segmento reutilizado gratis de la memoria). Revísalos y luego publícalos.",
+    other: "Abajo se rellenaron los borradores de IA ({count} segmentos reutilizados gratis de la memoria). Revísalos y luego publícalos.",
+  },
+
+  "editor.paging.texts": { one: "{count} texto", other: "{count} textos" },
+  "editor.paging.findLabel": "Buscar un texto",
+  "editor.paging.findPlaceholder": "Clave, original o traducción",
+  "editor.paging.noMatch": "Ningún texto coincide con tu búsqueda.",
+  "editor.paging.showing": "Mostrando {from}–{to} de {total}. Publica cada página antes de pasar a la siguiente.",
+  "editor.paging.showingMatching": "Mostrando {from}–{to} de {total} resultados. Publica cada página antes de pasar a la siguiente.",
+
+  "editor.seo.heading": "Listado en buscadores",
+  "editor.seo.intro": "Así podría aparecer este elemento ({singular}) en los resultados de búsqueda ({language}).",
+  "editor.seo.noFields":
+    "Este elemento ({singular}) no tiene título ni descripción SEO propios. Agrégalos en Shopify para controlar los resultados de búsqueda en cada idioma.",
+  "editor.seo.noTitle": "Sin título SEO: Shopify usa el título traducido.",
+  "editor.seo.noDescription": "Sin descripción SEO en este idioma: los buscadores pueden usar el texto de la descripción.",
+  "editor.seo.exampleAddress": "Dirección de ejemplo; la real depende de tus dominios y mercados.",
+  "editor.publish": "Publicar traducciones",
+  "editor.discard": "Descartar",
+  "editor.saved.toast": { one: "{count} traducción publicada", other: "{count} traducciones publicadas" },
+
+  "editor.field.original": "{language} (original)",
+  "editor.field.originalFrame": "{field}, original ({language})",
+  "editor.field.previewFrame": "{field}, vista previa ({language})",
+  "editor.field.showPreview": "Mostrar vista previa",
+  "editor.field.showHtml": "Mostrar HTML",
+  "editor.field.htmlDetails": "HTML. El formato debe coincidir con el original.",
+  "editor.field.handleDetails": "Si cambias el identificador (handle) de la URL, también cambia la dirección de la página en este idioma.",
+  "editor.field.conflict": "El texto original cambió en Shopify. Recarga la página y vuelve a traducir.",
+  "editor.field.translationChanged":
+    "Otra persona guardó una traducción para este campo desde que abriste la página. No se sobrescribió nada; tu texto sigue aquí. Recarga la página para ver la suya.",
+  "editor.field.notSaved": "No se guardó.",
+  "editor.field.discarded": "Se descartó el resultado de la IA.",
+  "editor.field.stillCorrect": "El original cambió, pero esta traducción sigue siendo correcta",
+  "editor.rejection.VALIDATION_FAILED": "El resultado de la IA cambiaba números o usaba términos prohibidos, así que se descartó.",
+  "editor.rejection.MISSING_CODE": "El resultado de la IA perdió parte del formato, así que se descartó.",
+
+  "editor.handle.suggest": "Sugerir a partir del título traducido",
+  "editor.handle.confirm": "Cambiar la dirección publicada. Los enlaces a …/{handle} ({language}) dejarán de funcionar.",
+  "editor.handle.problem.EMPTY": "Ingresa un identificador (handle) de URL.",
+  "editor.handle.problem.TOO_LONG": "Usa como máximo {max} caracteres.",
+  "editor.handle.problem.UPPERCASE": "Usa solo letras minúsculas.",
+  "editor.handle.problem.INVALID_CHARACTERS": "Usa solo letras, números y guiones simples (sin espacios ni otros caracteres).",
+  "editor.handle.problem.CONFIRM":
+    "Confirma abajo el cambio de URL: los enlaces a la dirección anterior en este idioma dejarán de funcionar.",
+
+  "editor.badge.memoryMatch": "Memoria: coincidencia del {score} %",
+  "editor.badge.aiDraft": "Borrador de IA",
+  "editor.badge.review": "Revisar: {issues}",
+  "editor.badge.manualOnly": "Solo manual",
+  "editor.remove.button": "Eliminar traducción",
+  "editor.remove.confirm": "Haz clic de nuevo para eliminar la traducción",
+
+  "editor.history.show": "Mostrar historial ({count})",
+  "editor.history.hide": "Ocultar historial",
+  "editor.history.restore": "Restaurar esta versión",
+  "editor.history.origin.external": "Antes de Linguva",
+  "editor.history.origin.aiApproved": "IA, aprobada",
+  "editor.history.origin.ai": "IA",
+  "editor.history.origin.manual": "Manual",
+
+  "editor.attached.heading": "Imágenes y campos personalizados",
+  "editor.attached.unavailable":
+    "No se pudieron cargar el texto alternativo de las imágenes ni los campos personalizados. Recarga la página para volver a intentarlo.",
+  "editor.attached.intro":
+    "El texto alternativo describe las imágenes para los lectores de pantalla y la búsqueda de imágenes. Los campos personalizados son metacampos que Shopify marca como traducibles.",
+  "editor.attached.noAlt": { one: "{count} imagen no tiene texto alternativo", other: "{count} imágenes no tienen texto alternativo" },
+  "editor.attached.noAltBody": "Primero agrega el texto alternativo en Shopify; después podrás traducirlo aquí.",
+  "editor.attached.unsupported": {
+    one: "{count} campo personalizado con texto enriquecido, listas, enlaces o archivos aún no se puede editar aquí.",
+    other: "{count} campos personalizados con texto enriquecido, listas, enlaces o archivos aún no se pueden editar aquí.",
+  },
+  "editor.attached.stoppedDrafts": "Abajo se rellenaron los borradores creados antes del problema.",
+  "editor.attached.savedCount": "Guardados en Shopify: {saved} de {total}.",
+  "editor.attached.translateAi": "Traducir con IA el texto alternativo y los campos que faltan",
+  "editor.attached.image": "Imagen",
+  "editor.attached.publish": "Publicar texto alternativo y campos",
+  "editor.valueType.single_line_text_field": "Texto",
+  "editor.valueType.multi_line_text_field": "Texto largo",
+  "editor.valueType.rich_text_field": "Texto enriquecido",
+  "editor.valueType.url": "Enlace",
+  "editor.valueType.list.single_line_text_field": "Lista de textos",
+  "editor.valueType.list.multi_line_text_field": "Lista de textos largos",
+  "editor.valueType.link": "Enlace con texto",
+  "editor.valueType.list.link": "Lista de enlaces",
+  "editor.structured.richTextNote":
+    "El texto enriquecido conserva su formato. Tradúcelo aquí con IA o cambia la redacción en el editor de Shopify.",
+  "editor.structured.note": "Traduce cada elemento. El número de elementos y las direcciones de los enlaces se mantienen como en el original.",
+  "editor.structured.item": "{language}, elemento {n}",
+  "editor.structured.linksTo": "Enlaza a {url}",
+  "editor.structured.itemRequired": "Traduce también este elemento o deja todos los elementos vacíos.",
+  "editor.structured.notTranslated": "Aún sin traducir",
+
+  "editor.preview.empty": "La vista previa aparecerá aquí cuando haya una traducción.",
+};

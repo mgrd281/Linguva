@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { PassThrough } from "stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
@@ -44,7 +45,9 @@ export default async function handleRequest(
   reactRouterContext: EntryContext
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
-  addSecurityHeaders(request, responseHeaders, { document: true });
+  // React Router's inline scripts carry this nonce; the policy allows no other inline script.
+  const nonce = import.meta.env.DEV ? undefined : randomBytes(16).toString("base64");
+  addSecurityHeaders(request, responseHeaders, { document: true, scriptNonce: nonce });
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"
@@ -55,8 +58,10 @@ export default async function handleRequest(
       <ServerRouter
         context={reactRouterContext}
         url={request.url}
+        nonce={nonce}
       />,
       {
+        nonce,
         [callbackName]: () => {
           const body = new PassThrough();
           const stream = createReadableStreamFromReadable(body);

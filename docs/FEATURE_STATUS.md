@@ -53,7 +53,7 @@ Three states, never mixed:
 | Cost | Monthly, daily and platform-wide character caps, request size cap, request rate limits per staff member and shop | Yes | Yes (concurrency with real PostgreSQL and Redis) | No | M1–M3 |
 | AI | DeepL provider (batching, retries, error classes, `/v2/usage`) | Yes | Stubbed HTTP only | No (no key) | C7 |
 | AI | Mock provider for tests (refused in production) | Yes | Yes | — | — |
-| Interface | German and English interface from the admin user's language (Shopify's `locale`), localised numbers, dates and language names | Yes | Unit + UI (10 German pages) | No (Shopify's `locale` parameter not seen live) | A1 |
+| Interface | German, French, Spanish and English interface from the admin user's language (Shopify's `locale`), localised numbers, dates and language names. French and Spanish (phase G) still need a native speaker's review (I18N_REVIEW.md) | Yes | Unit + UI (10 pages per language) | No (Shopify's `locale` parameter not seen live) | A1 |
 | Jobs | Job report: results by reason, timing, remaining time, support reference, CSV download | Yes | Integration + UI | No | E1–E6 |
 | Jobs | Fair share between shops in the queue | Yes | Performance test (20 shops; large and small shops) | No | — |
 | AI | Check for the chosen form of address (de, fr, es, it, nl) | Yes | Unit + pipeline | No (no DeepL key) | C7 |
@@ -64,8 +64,7 @@ Three states, never mixed:
 
 | Feature | Notes |
 |---|---|
-| App interface in languages other than German and English | Catalogue structure in place |
-| Review text search through an index | Linear scan under RLS (PERFORMANCE.md §1) |
+| App interface in more languages (Italian, Dutch, Japanese, …) | Catalogue structure in place; French and Spanish exist |
 | JSON and file metafields | JSON has no reliable text to translate; files are references |
 | Custom fields in the coverage report | Shopify lists metafields only through their owner (the `METAFIELD` resource type is deprecated), so a scan would need one request per resource |
 | Market-specific translations (`marketId`), changing markets or web presences | Markets page is read-only |

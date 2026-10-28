@@ -25,6 +25,18 @@ describe("security headers", () => {
     );
   });
 
+  it("allows scripts only from the app, Shopify's CDN and inline scripts with the page's nonce", () => {
+    const headers = new Headers();
+    addSecurityHeaders(req("https://app.example/app?shop=a.myshopify.com"), headers, { document: true, production: true, scriptNonce: "bm9uY2U=" });
+    expect(headers.get("Content-Security-Policy")).toBe(
+      "frame-ancestors https://admin.shopify.com https://*.myshopify.com; base-uri 'self'; object-src 'none'; script-src 'self' 'nonce-bm9uY2U=' https://cdn.shopify.com;",
+    );
+    // No nonce (the Vite dev server): no script policy.
+    const dev = new Headers();
+    addSecurityHeaders(req("https://app.example/app"), dev, { document: true, production: false });
+    expect(dev.get("Content-Security-Policy")).not.toContain("script-src");
+  });
+
   it("sets HSTS only in production over HTTPS", () => {
     const behindProxy = new Headers();
     addSecurityHeaders(req("http://internal:3000/app", { "x-forwarded-proto": "https" }), behindProxy, { document: true, production: true });

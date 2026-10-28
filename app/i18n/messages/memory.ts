@@ -36,3 +36,39 @@ export const de: Translation<typeof en> = {
   "memory.status.machine": "Maschinell",
   "memory.action.approve": "Freigeben",
 };
+
+export const fr: Translation<typeof en> = {
+  "memory.delete.heading": "Supprimer cette entrée de la mémoire ?",
+  "memory.delete.body": "Elle ne sera plus réutilisée pour les nouvelles traductions. Les traductions publiées dans votre boutique ne changent pas. Cette action est irréversible.",
+  "memory.intro":
+    "Chaque traduction que vous publiez est mémorisée phrase par phrase. Un texte identique est réutilisé automatiquement sans être renvoyé à l'IA : il ne coûte donc rien. Votre mémoire est réservée à votre boutique.",
+  "memory.stats.entries": { one: "{count} entrée", other: "{count} entrées" },
+  "memory.stats.reused": { one: "{count} réutilisation", other: "{count} réutilisations" },
+  "memory.search.placeholder": "Original ou traduction",
+  "memory.empty": "Aucune entrée pour l'instant. Publiez des traductions pour constituer votre mémoire.",
+  "memory.column.source": "Original",
+  "memory.column.translation": "Traduction",
+  "memory.column.uses": "Utilisations",
+  "memory.column.actions": "Actions",
+  "memory.status.approved": "Approuvée",
+  "memory.status.machine": "Automatique",
+  "memory.action.approve": "Approuver",
+};
+
+export const es: Translation<typeof en> = {
+  "memory.delete.heading": "¿Eliminar esta entrada de la memoria?",
+  "memory.delete.body": "Ya no se reutilizará en nuevas traducciones. Las traducciones publicadas en tu tienda no cambian. Esta acción no se puede deshacer.",
+  "memory.intro":
+    "Cada traducción que publicas se guarda frase por frase. El texto idéntico se reutiliza automáticamente y no se vuelve a enviar a la IA, así que no cuesta nada. Tu memoria es exclusiva de tu tienda.",
+  "memory.stats.entries": { one: "{count} entrada", other: "{count} entradas" },
+  "memory.stats.reused": { one: "{count} reutilización", other: "{count} reutilizaciones" },
+  "memory.search.placeholder": "Original o traducción",
+  "memory.empty": "Aún no hay entradas. Publica traducciones para crear tu memoria.",
+  "memory.column.source": "Original",
+  "memory.column.translation": "Traducción",
+  "memory.column.uses": "Usos",
+  "memory.column.actions": "Acciones",
+  "memory.status.approved": "Aprobada",
+  "memory.status.machine": "Automática",
+  "memory.action.approve": "Aprobar",
+};

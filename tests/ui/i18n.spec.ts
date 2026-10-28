@@ -1,8 +1,8 @@
 /**
  * The interface in the admin user's language: Shopify's `locale`
- * parameter (German here), the browser's language for pages without it,
- * English otherwise. German pages keep the accessibility and phone layout
- * checks, and show no English interface text.
+ * parameter (German, French, Spanish here), the browser's language for
+ * pages without it, English otherwise. German pages keep the accessibility
+ * and phone layout checks; all show no English interface text.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
@@ -43,6 +43,28 @@ for (const { path, heading, merchantText } of GERMAN_PAGES as Array<{ path: stri
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
   });
+}
+
+// French and Spanish (texts still to be reviewed by native speakers, docs/I18N_REVIEW.md):
+// the same pages, no English interface text, accessible names that match.
+for (const { locale, nav } of [
+  { locale: "fr", nav: "Paramètres" },
+  { locale: "es", nav: "Configuración" },
+]) {
+  for (const { path, merchantText } of GERMAN_PAGES as Array<{ path: string; merchantText?: boolean }>) {
+    test(`${path} is in ${locale} for a ${locale} admin user`, async ({ page }) => {
+      await openApp(page, "full", path, { locale });
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      await expect(page.locator("s-app-nav s-link", { hasText: nav })).toHaveCount(1);
+      const text = merchantText
+        ? await page.locator("s-page s-button, s-page s-badge, s-page s-section").evaluateAll((els) =>
+            els.map((el) => (el.tagName === "S-SECTION" ? (el.getAttribute("heading") ?? "") : (el as HTMLElement).innerText)).join("\n"),
+          )
+        : await interfaceText(page);
+      expect(text.match(ENGLISH)?.[0] ?? null, text.slice(0, 2000)).toBeNull();
+      await expectAccessible(page);
+    });
+  }
 }
 
 test("navigation, product list and editor are German; merchant content stays as it is", async ({ page }) => {

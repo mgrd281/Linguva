@@ -78,4 +78,40 @@ const de: Record<MessageKey, Message> = {
   ...settings.de,
 };
 
-export const MESSAGES: Record<"en" | "de", Record<MessageKey, Message>> = { en, de };
+const fr: Record<MessageKey, Message> = {
+  ...common.fr,
+  ...content.fr,
+  ...coverage.fr,
+  ...editor.fr,
+  ...glossary.fr,
+  ...jobs.fr,
+  ...landing.fr,
+  ...languages.fr,
+  ...markets.fr,
+  ...memory.fr,
+  ...overview.fr,
+  ...plan.fr,
+  ...resources.fr,
+  ...review.fr,
+  ...settings.fr,
+};
+
+const es: Record<MessageKey, Message> = {
+  ...common.es,
+  ...content.es,
+  ...coverage.es,
+  ...editor.es,
+  ...glossary.es,
+  ...jobs.es,
+  ...landing.es,
+  ...languages.es,
+  ...markets.es,
+  ...memory.es,
+  ...overview.es,
+  ...plan.es,
+  ...resources.es,
+  ...review.es,
+  ...settings.es,
+};
+
+export const MESSAGES: Record<"en" | "de" | "fr" | "es", Record<MessageKey, Message>> = { en, de, fr, es };

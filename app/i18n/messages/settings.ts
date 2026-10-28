@@ -145,3 +145,154 @@ export const de: Translation<typeof en> = {
   "settings.usage.notCounted":
     "Text aus deinem Übersetzungsspeicher, wiederholte Sätze und Text, der nur aus Glossar-Begriffen besteht, werden nicht an die KI gesendet und zählen nicht zu diesem Limit.",
 };
+
+export const fr: Translation<typeof en> = {
+  "settings.ai.heading": "Traduction par IA",
+  "settings.ai.body":
+    "Lorsque vous traduisez avec l'IA, le texte produit que vous sélectionnez est envoyé à DeepL SE (Allemagne) pour traitement. Linguva n'envoie aucune donnée client. Chaque résultat de l'IA reste un brouillon tant que vous ne l'avez pas publié.",
+  "settings.ai.since": "depuis le {date}",
+  "settings.ai.notAllowed": "Non autorisé",
+  "settings.ai.withdraw": "Retirer l'autorisation",
+  "settings.ai.allow": "Autoriser le traitement par IA",
+  "settings.ai.notConfigured.heading": "Fournisseur d'IA non configuré",
+  "settings.ai.notConfigured.body":
+    "L'opérateur de l'application n'a pas encore configuré de fournisseur de traduction. La traduction manuelle reste possible sans fournisseur.",
+
+  "settings.style.heading": "Style de traduction",
+  "settings.style.body":
+    "Choisissez comment l'IA s'adresse à vos clients dans chaque langue. S'applique aux langues qui ont une forme formelle et une forme informelle (par exemple « Sie » / « du » en allemand, « vous » / « tu » en français).",
+  "settings.style.formal": "Formel",
+  "settings.style.informal": "Informel",
+  "settings.style.noLanguages": "Ajoutez d'abord une langue dans Shopify.",
+  "settings.style.storeContext.label": "À propos de votre boutique",
+  "settings.style.storeContext.details":
+    "Ce que vous vendez et votre façon de vous exprimer, par exemple « Vêtements outdoor pour toute la famille, ton amical et simple. » Aide l'IA à choisir les bons mots. {max} caractères maximum ; non traduit.",
+  "settings.style.save": "Enregistrer le style de traduction",
+  "settings.style.saved": "Enregistré. Les nouvelles traductions par IA utilisent ce style.",
+
+  "settings.publish.heading": "Publication des traductions groupées",
+  "settings.publish.autoBadge": "Publication automatique",
+  "settings.publish.autoBody": "Les traductions groupées qui passent les contrôles qualité sont mises en ligne sans révision.",
+  "settings.publish.autoBodySince":
+    "Les traductions groupées qui passent les contrôles qualité sont mises en ligne sans révision (activée le {date}).",
+  "settings.publish.reviewBadge": "Révision préalable",
+  "settings.publish.reviewBody": "Les traductions groupées restent en attente dans Révision jusqu'à ce que vous les approuviez.",
+  "settings.publish.switchBack": "Revenir à la révision préalable",
+  "settings.publish.confirm":
+    "Je comprends que des traductions automatiques seront publiées sur ma boutique en ligne sans que je les aie révisées.",
+  "settings.publish.enable": "Activer la publication automatique",
+  "settings.publish.planHeading": "La publication automatique est incluse dans les forfaits Pro et Business",
+  "settings.publish.confirmHeading": "Veuillez confirmer",
+  "settings.publish.confirmBody": "Cochez la case de confirmation pour activer la publication automatique.",
+
+  "settings.auto.heading": "Traduction automatique",
+  "settings.auto.bodyAutoPublish":
+    "Traduit les produits et collections nouveaux ou modifiés environ une minute après leur enregistrement. Seuls les textes manquants ou obsolètes sont traduits, les traductions que vous avez rédigées ou approuvées sont conservées, et les résultats suivent le paramètre de publication ci-dessus (actuellement : publiés automatiquement). Cette fonctionnalité utilise votre quota d'IA. Les pages, articles de blog et blogs sont traduits dans un délai d'environ une demi-heure.",
+  "settings.auto.bodyReview":
+    "Traduit les produits et collections nouveaux ou modifiés environ une minute après leur enregistrement. Seuls les textes manquants ou obsolètes sont traduits, les traductions que vous avez rédigées ou approuvées sont conservées, et les résultats suivent le paramètre de publication ci-dessus (actuellement : en attente dans Révision). Cette fonctionnalité utilise votre quota d'IA. Les pages, articles de blog et blogs sont traduits dans un délai d'environ une demi-heure.",
+  "settings.auto.offBody": "Les modifications sont traduites lorsque vous lancez une traduction.",
+  "settings.auto.unavailable.heading": "Non disponible sur cette installation",
+  "settings.auto.unavailable.body":
+    "La traduction automatique nécessite que la traduction par IA et les tâches en arrière-plan soient configurées.",
+  "settings.auto.planHeading": "La traduction automatique est incluse dans les forfaits avec traduction groupée",
+  "settings.auto.noLanguages": "Ajoutez d'abord une langue.",
+  "settings.auto.languages": "Langues à traduire automatiquement",
+  "settings.auto.saveLanguages": "Enregistrer les langues",
+  "settings.auto.turnOn": "Activer la traduction automatique",
+  "settings.auto.turnOff": "Désactiver",
+  "settings.auto.consent.heading": "Autorisez d'abord la traduction par IA",
+  "settings.auto.consent.body":
+    "La traduction automatique envoie des textes au service d'IA. Donnez votre autorisation dans la section ci-dessus.",
+  "settings.auto.noLanguage.heading": "Choisissez au moins une langue",
+  "settings.auto.noLanguage.body": "Cochez les langues dans lesquelles les contenus nouveaux ou modifiés doivent être traduits.",
+  "settings.auto.savedOn":
+    "Les produits et collections que vous enregistrez à partir de maintenant sont traduits environ une minute plus tard ; les pages, articles de blog et blogs dans un délai d'environ une demi-heure.",
+  "settings.auto.savedOff": "La traduction automatique est désactivée.",
+
+  "settings.memory.body":
+    "Les traductions approuvées sont toujours réutilisées pour un texte identique. Vous pouvez aussi réutiliser les traductions automatiques non révisées : la formulation reste cohérente et vous ne payez pas deux fois la même phrase.",
+  "settings.memory.approvedOnly": "Réutiliser uniquement les traductions approuvées",
+  "settings.memory.alsoMachine": "Réutiliser aussi les traductions automatiques",
+
+  "settings.usage.heading": "Utilisation de l'IA en {month}",
+  "settings.usage.progress": "Caractères d'IA utilisés ce mois-ci",
+  "settings.usage.month": "{used} sur {limit} caractères d'IA utilisés ({percent} %).",
+  "settings.usage.today":
+    "Aujourd'hui : {used} sur {limit} caractères (la limite quotidienne protège contre les coûts imprévus et est réinitialisée à minuit UTC).",
+  "settings.usage.notCounted":
+    "Le texte réutilisé depuis votre mémoire de traduction, les phrases répétées et le texte composé uniquement de termes du glossaire ne sont pas envoyés à l'IA et ne comptent pas dans cette limite.",
+};
+
+export const es: Translation<typeof en> = {
+  "settings.ai.heading": "Traducción con IA",
+  "settings.ai.body":
+    "Cuando traduces con IA, el texto de producto que seleccionas se envía a DeepL SE (Alemania) para su procesamiento. Linguva no envía datos de clientes. Cada resultado de IA es un borrador hasta que lo publiques.",
+  "settings.ai.since": "desde el {date}",
+  "settings.ai.notAllowed": "No permitido",
+  "settings.ai.withdraw": "Retirar el permiso",
+  "settings.ai.allow": "Permitir el procesamiento con IA",
+  "settings.ai.notConfigured.heading": "Proveedor de IA no configurado",
+  "settings.ai.notConfigured.body":
+    "El operador de la aplicación aún no ha configurado un proveedor de traducción. La traducción manual funciona sin él.",
+
+  "settings.style.heading": "Estilo de traducción",
+  "settings.style.body":
+    'Elige cómo se dirige la IA a tus clientes en cada idioma. Se aplica a los idiomas que tienen formas formales e informales (por ejemplo, "Sie" / "du" en alemán, "vous" / "tu" en francés).',
+  "settings.style.formal": "Formal",
+  "settings.style.informal": "Informal",
+  "settings.style.noLanguages": "Primero agrega un idioma en Shopify.",
+  "settings.style.storeContext.label": "Acerca de tu tienda",
+  "settings.style.storeContext.details":
+    'Lo que vendes y cómo te expresas, por ejemplo, "Ropa outdoor para toda la familia, con un tono cercano y sencillo". Ayuda a la IA a elegir las palabras adecuadas. Hasta {max} caracteres; no se traduce.',
+  "settings.style.save": "Guardar el estilo de traducción",
+  "settings.style.saved": "Guardado. Las nuevas traducciones con IA usan este estilo.",
+
+  "settings.publish.heading": "Publicación de traducciones masivas",
+  "settings.publish.autoBadge": "Publicación automática",
+  "settings.publish.autoBody": "Las traducciones masivas que superan los controles de calidad se publican sin revisión.",
+  "settings.publish.autoBodySince": "Las traducciones masivas que superan los controles de calidad se publican sin revisión (activada el {date}).",
+  "settings.publish.reviewBadge": "Revisión previa",
+  "settings.publish.reviewBody": "Las traducciones masivas esperan en Revisión hasta que las apruebes.",
+  "settings.publish.switchBack": "Volver a la revisión previa",
+  "settings.publish.confirm": "Entiendo que las traducciones automáticas se publicarán en mi tienda online sin mi revisión.",
+  "settings.publish.enable": "Activar la publicación automática",
+  "settings.publish.planHeading": "La publicación automática está incluida en los planes Pro y Business",
+  "settings.publish.confirmHeading": "Se requiere confirmación",
+  "settings.publish.confirmBody": "Marca la casilla de confirmación para activar la publicación automática.",
+
+  "settings.auto.heading": "Traducción automática",
+  "settings.auto.bodyAutoPublish":
+    "Traduce los productos y colecciones nuevos o modificados aproximadamente un minuto después de que los guardes. Solo se traducen los textos que faltan o están desactualizados, se conservan las traducciones que escribiste o aprobaste, y los resultados siguen la configuración de publicación de arriba (actualmente: se publican automáticamente). Usa tu cuota de IA. Las páginas, entradas de blog y blogs se traducen en aproximadamente media hora.",
+  "settings.auto.bodyReview":
+    "Traduce los productos y colecciones nuevos o modificados aproximadamente un minuto después de que los guardes. Solo se traducen los textos que faltan o están desactualizados, se conservan las traducciones que escribiste o aprobaste, y los resultados siguen la configuración de publicación de arriba (actualmente: esperan en Revisión). Usa tu cuota de IA. Las páginas, entradas de blog y blogs se traducen en aproximadamente media hora.",
+  "settings.auto.offBody": "Los cambios se traducen cuando inicias una traducción.",
+  "settings.auto.unavailable.heading": "No disponible en esta instalación",
+  "settings.auto.unavailable.body":
+    "La traducción automática requiere que la traducción con IA y las tareas en segundo plano estén configuradas.",
+  "settings.auto.planHeading": "La traducción automática está incluida en los planes con traducción masiva",
+  "settings.auto.noLanguages": "Primero agrega un idioma.",
+  "settings.auto.languages": "Idiomas para traducir automáticamente",
+  "settings.auto.saveLanguages": "Guardar idiomas",
+  "settings.auto.turnOn": "Activar la traducción automática",
+  "settings.auto.turnOff": "Desactivar",
+  "settings.auto.consent.heading": "Primero permite la traducción con IA",
+  "settings.auto.consent.body": "La traducción automática envía textos al servicio de IA. Permítelo en la sección de arriba.",
+  "settings.auto.noLanguage.heading": "Elige al menos un idioma",
+  "settings.auto.noLanguage.body": "Marca los idiomas a los que se debe traducir el contenido nuevo o modificado.",
+  "settings.auto.savedOn":
+    "Los productos y colecciones que guardes a partir de ahora se traducen aproximadamente un minuto después; las páginas, entradas de blog y blogs, en aproximadamente media hora.",
+  "settings.auto.savedOff": "La traducción automática está desactivada.",
+
+  "settings.memory.body":
+    "Las traducciones aprobadas siempre se reutilizan para textos idénticos. También puedes reutilizar traducciones automáticas sin revisar, lo que mantiene la coherencia de la redacción y evita pagar dos veces por la misma frase.",
+  "settings.memory.approvedOnly": "Reutilizar solo las traducciones aprobadas",
+  "settings.memory.alsoMachine": "Reutilizar también las traducciones automáticas",
+
+  "settings.usage.heading": "Uso de IA en {month}",
+  "settings.usage.progress": "Caracteres de IA usados este mes",
+  "settings.usage.month": "{used} de {limit} caracteres de IA usados ({percent} %).",
+  "settings.usage.today":
+    "Hoy: {used} de {limit} caracteres (el límite diario te protege de gastos inesperados y se restablece a medianoche UTC).",
+  "settings.usage.notCounted":
+    "El texto reutilizado de tu memoria de traducción, las frases repetidas y el texto formado solo por términos del glosario no se envían a la IA y no cuentan para este límite.",
+};

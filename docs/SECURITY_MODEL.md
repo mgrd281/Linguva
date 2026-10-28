@@ -51,7 +51,7 @@ Status: **Phase 0 — proposal and threat model.** Controls listed here aren't i
 
 PostgreSQL evaluates a query's own conditions after the RLS policy unless they are LEAKPROOF. Trigram (`%`) and `ILIKE` operators aren't, so under RLS no index can serve them. For translation memory this made fuzzy search scan all of a shop's entries.
 
-`linguva_memory_fuzzy()` (migration `20261027180000_memory_fuzzy_function`) is the one, deliberate exception:
+`linguva_memory_fuzzy()` (migration `20261027180000_memory_fuzzy_function`) is a deliberate exception, and `linguva_draft_search()` (§5l) follows the same pattern:
 
 - `SECURITY DEFINER`, owned by the (non-superuser) migration role, `search_path = pg_catalog, pg_temp` with every `public` object schema-qualified; `EXECUTE` revoked from PUBLIC and granted only to `linguva_app`. Full review, threat tests, residual risks and alternatives: [SECURITY_REVIEW_MEMORY_FUZZY.md](SECURITY_REVIEW_MEMORY_FUZZY.md).
 - It takes **no shop argument**. The tenant comes from `current_setting('app.shop_id')`, the same transaction setting the RLS policy uses, so a caller can't choose another shop. Without a tenant it returns nothing.
@@ -118,12 +118,13 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 |---|---|---|
 | Content-Security-Policy | Shopify's `frame-ancestors` for the store's admin, plus `base-uri 'self'; object-src 'none'` | Clickjacking, base-tag and plugin injection |
 | (no shop in the request) | `frame-ancestors https://admin.shopify.com https://*.myshopify.com` | Before, such pages had no framing protection at all |
+| Content-Security-Policy `script-src` (phase G) | `'self' 'nonce-…' https://cdn.shopify.com`, a new nonce per page; React Router's inline scripts carry it. Not on the Vite dev server (its refresh script is inline) | An injected inline script or event handler doesn't run (tested); scripts only from the app and Shopify's CDN (App Bridge, Polaris) |
 | X-Content-Type-Options | `nosniff` | MIME sniffing |
 | Referrer-Policy | `strict-origin-when-cross-origin` | No full app URLs (with `shop`, `host`) sent to other sites |
 | Permissions-Policy | camera, microphone, geolocation, payment, usb off | Not needed by the app |
 | Strict-Transport-Security | `max-age=31536000`, production over HTTPS only | Never on local http |
 
-Not set on purpose: `X-Frame-Options` (the admin must embed the app), `Cross-Origin-Opener-Policy` (App Bridge), `script-src` (App Bridge and Polaris come from Shopify's CDN; only after a test on a development store). Tests: `tests/unit/security-headers.test.ts`; the production build is checked in `tests/ui/install.spec.ts`.
+Not set on purpose: `X-Frame-Options` (the admin must embed the app), `Cross-Origin-Opener-Policy` (App Bridge). Tests: `tests/unit/security-headers.test.ts`; the production build is checked in `tests/ui/install.spec.ts`, and `tests/ui/csp.spec.ts` runs the main flows under the script policy (Polaris from Shopify's CDN, previews, dialogs, toasts) with no violation and shows that an injected inline script is blocked. App Bridge is simulated there: the real one must be checked inside the admin on the development store (DEV_STORE_TEST_PLAN); if it needs another source, the policy is widened for that source only.
 
 ## 5f. Dependencies
 
@@ -178,6 +179,14 @@ Development-only tools (not shipped, not run on user input) also have advisories
 | `ShopSettings.autoSweptAt TIMESTAMPTZ NULL` | A time, no merchant content. Written by `setAutoTranslate` (now when turned on, NULL when turned off) and by the worker's sweep after a complete check of the shop. Read only by the sweep to ask Shopify for resources changed since then. |
 | Row-level security | Unchanged: `ShopSettings` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy; the sweep reads and writes it per shop through `withTenant`. No new grants, functions or roles. |
 | Cross-tenant risk | None added: the sweep lists active shops (the `Shop` table, as the stalled-item sweeper does), then works inside each shop's tenant context with that shop's own Admin API session; resource ids from Shopify are queued with the shop's id, never another's. |
+
+## 5l. Database change review: indexed Review search (migration 20261030110000)
+
+| Change | Review |
+|---|---|
+| `linguva_draft_search(text, integer)`: second `SECURITY DEFINER` function | Same pattern and hardening as §5c: no shop argument, tenant from `app.shop_id`, fixed `search_path`, schema-qualified, executable only by `linguva_app`, returns ids of PENDING drafts only (contents are read through RLS afterwards). Reviewed hash in `DEFINER_FUNCTIONS`. Full review: [SECURITY_REVIEW_MEMORY_FUZZY.md §10](SECURITY_REVIEW_MEMORY_FUZZY.md) |
+| `TranslationDraft` RLS enabled but not forced | Only the owner (migration) role is unfiltered; the runtime role stays under RLS for every operation (tested). Second and last entry of `NOT_FORCED_TABLES` |
+| Partial trigram index on pending drafts | No data change; makes the search a few milliseconds instead of a scan |
 
 **Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 

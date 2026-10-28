@@ -108,6 +108,8 @@ describe(`Review with ${DRAFTS.toLocaleString()} pending drafts`, () => {
     const deep = await measure(() => searchPendingDrafts(shopA, { cursor }, app));
     const byLocale = await measure(() => searchPendingDrafts(shopA, { locale: "fr", flagged: true }, app));
     const search = await measure(() => searchPendingDrafts(shopA, { search: "number 4711" }, app));
+    // Two characters can't use the trigram index: the RLS scan, as before.
+    const shortSearch = await measure(() => searchPendingDrafts(shopA, { search: "47" }, app));
     const count = await measure(() => countPendingDrafts(shopA, app));
 
     const found = await searchPendingDrafts(shopA, { search: "number 4711" }, app);
@@ -117,14 +119,15 @@ describe(`Review with ${DRAFTS.toLocaleString()} pending drafts`, () => {
     report("review: first page", open);
     report("review: later page (cursor)", deep);
     report("review: language + warnings filter", byLocale);
-    report("review: text search", search);
+    report("review: text search (indexed)", search);
+    report("review: text search, 2 characters (scan)", shortSearch);
     report("review: pending count", count);
     // Generous limits for shared CI runners; the measured values are reported above.
-    for (const t of [open, deep, byLocale, count]) expect(t.median).toBeLessThan(300);
-    // Text search scans the shop's pending drafts: under row-level security
-    // Postgres can't use a trigram index for ILIKE (not leakproof). Linear
-    // in the number of pending drafts; see docs/PERFORMANCE.md.
-    expect(search.median).toBeLessThan(1_000);
+    // Text search of three characters or more goes through the reviewed
+    // definer function and its trigram index (SECURITY_MODEL §5l).
+    for (const t of [open, deep, byLocale, count, search]) expect(t.median).toBeLessThan(300);
+    // Shorter text scans the shop's pending drafts (ILIKE isn't leakproof under RLS).
+    expect(shortSearch.median).toBeLessThan(1_000);
   }, 120_000);
 });
 

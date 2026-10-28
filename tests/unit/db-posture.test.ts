@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { DEFINER_FUNCTIONS } from "../../app/.server/lib/db-posture";
 
-const reviewed = DEFINER_FUNCTIONS.linguva_memory_fuzzy!.sha256;
-
 /** A client whose catalog says the runtime role is a superuser. */
 const privileged = {
   $queryRaw: vi.fn(async (strings: TemplateStringsArray) => {
@@ -13,7 +11,15 @@ const privileged = {
     }
     if (sql.includes("has_schema_privilege")) return [{ create: false }];
     if (sql.includes("prosecdef")) {
-      return [{ name: "linguva_memory_fuzzy", config: ["search_path=pg_catalog, pg_temp"], owner_super: false, owner_bypass: false, public_exec: false, sha256: reviewed }];
+      // The reviewed definer functions, unchanged.
+      return Object.entries(DEFINER_FUNCTIONS).map(([name, reviewed]) => ({
+        name,
+        config: [reviewed.searchPath],
+        owner_super: false,
+        owner_bypass: false,
+        public_exec: false,
+        sha256: reviewed.sha256,
+      }));
     }
     return [];
   }),

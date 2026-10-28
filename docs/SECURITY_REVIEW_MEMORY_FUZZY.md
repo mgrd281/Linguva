@@ -1,4 +1,4 @@
-# Security review: `linguva_memory_fuzzy()` and `TranslationMemory` without FORCE RLS
+# Security review: `linguva_memory_fuzzy()`, `linguva_draft_search()` and their tables without FORCE RLS
 
 Date: 2026-10-28. Scope: migrations `20261027180000_memory_fuzzy_function` and `20261028090000_security_hardening`, `app/.server/memory/translation-memory.ts`, database roles and grants.
 
@@ -103,3 +103,30 @@ Revisit if: the function needs a second caller, managed PostgreSQL offers leakpr
 
 - **CI** runs the security suite (including this review's tests), the performance suite (100,000 entries) and the posture check against PostgreSQL 16 with the three roles created by `scripts/db/init-roles.sql`, on a clean checkout.
 - **Locally,** `pnpm check:ignored` fails if a source file is hidden by `.gitignore`. That is the class of mistake that once left `app/.server/coverage` out of the repository.
+
+## 10. Second function: `linguva_draft_search()` and `TranslationDraft` without FORCE RLS
+
+Reviewed 2026-10-28 (migration `20261030110000_draft_search_function`, SECURITY_MODEL §5l). Same pattern as §1–§4, so only the differences are recorded here.
+
+**Why.** Review's text search read all of a shop's pending drafts (`ILIKE` isn't LEAKPROOF, so no index under RLS): 207 ms at 50,000 drafts, about 2 s at 500,000. With a trigram index (`shopId`, then title, original and translation of PENDING drafts) and the function, a search takes a few milliseconds (PERFORMANCE.md §1).
+
+**The function as reviewed.** `linguva_draft_search(p_text text, p_limit integer) RETURNS TABLE (id uuid)`, `STABLE`, `SECURITY DEFINER`, `search_path = pg_catalog, pg_temp`, every `public` object schema-qualified, `EXECUTE` only for `linguva_app`. It returns **ids only**; the app then reads the drafts through RLS (`withTenant`), so even a flaw in the function could not return another shop's content, only ids, and those ids are filtered again by RLS when the drafts are read.
+
+**Threats checked (tests in `tests/security/draft-search.test.ts`):**
+
+| Threat | Result |
+|---|---|
+| Another tenant's rows | No shop argument; the tenant comes from `app.shop_id` like the policy. For every state of the setting (unset, empty, own shop, other shop, unknown id) the ids equal a direct RLS-filtered query |
+| Malformed `app.shop_id` (text, SQL fragment) | The `uuid` cast raises an error: fails closed |
+| Pooled connections | No tenant in a fresh transaction: nothing returned (tested five times in a row on the same pool) |
+| `pg_temp` objects (temp table, `lower`, `replace`) | Ignored: `pg_temp` is last and never searched for functions; tables are schema-qualified |
+| Injection through the text | The text is a parameter and an escaped `LIKE` pattern (`\`, `%`, `_` literal); quotes, statements and wildcards return nothing or the literal match |
+| Work bounds | Text of 3–100 characters, otherwise nothing; at most 5,001 ids. 100,000 characters return at once |
+| Rejected or published drafts | Only `PENDING` drafts are searched |
+| Owner role | The function's owner is the non-superuser migration role without BYPASSRLS (checked by the posture check) |
+
+**Effect of removing FORCE on `TranslationDraft`.** Only the owner role (migrations, never used by the app) now reads drafts unfiltered; that role can already change the schema, so this adds no capability. The runtime role stays fully under RLS for every operation: nothing without a tenant, its own rows with one, writes for another shop refused by the policy's check, and no DELETE right at all (tested). The posture check lists `TranslationDraft` as the second intentionally not-forced table; any third one fails it.
+
+**Remaining risks.** As in §6: the setting `app.shop_id` is the trust boundary (only `withTenant()` sets it, from the verified session); a future edit of the function must be reviewed again (hash check). Searching for very common text (more than 5,000 matches) falls back to the RLS scan, which is correct but slower.
+
+**Hash.** `0d1a3754ba38150ebcaf9ef5e84bde2e2d1f087763df92cf5e0a989fd9411d89` in `DEFINER_FUNCTIONS`.

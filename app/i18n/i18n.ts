@@ -1,9 +1,11 @@
 /**
- * The app interface in the merchant's language (English and German).
+ * The app interface in the merchant's language (English, German, French
+ * and Spanish; the French and Spanish texts still need a native speaker's
+ * review, docs/I18N_REVIEW.md).
  *
  * Shopify passes the admin user's language as the `locale` parameter of
  * the page request; public pages use the browser's Accept-Language. Texts
- * live in typed catalogues (app/i18n/messages): every German catalogue has
+ * live in typed catalogues (app/i18n/messages): every catalogue has
  * exactly the English keys, checked by TypeScript and a unit test.
  *
  * Numbers and dates are formatted for the language and, for dates, in UTC,
@@ -11,7 +13,7 @@
  */
 import { MESSAGES, type MessageKey, type Message } from "./messages";
 
-export const APP_LOCALES = ["en", "de"] as const;
+export const APP_LOCALES = ["en", "de", "fr", "es"] as const;
 export type AppLocale = (typeof APP_LOCALES)[number];
 export type { MessageKey };
 
@@ -24,7 +26,7 @@ export interface MessageRef {
   vars?: MessageVars;
 }
 
-const INTL_LOCALE: Record<AppLocale, string> = { en: "en-US", de: "de-DE" };
+const INTL_LOCALE: Record<AppLocale, string> = { en: "en-US", de: "de-DE", fr: "fr-FR", es: "es-ES" };
 
 function supported(tag: string | null | undefined): AppLocale | null {
   const primary = tag?.trim().toLowerCase().split(/[-_]/)[0];
@@ -111,7 +113,8 @@ export function languageName(locale: AppLocale, code: string, shopifyName?: stri
   if (locale !== "en") {
     try {
       const name = new Intl.DisplayNames([INTL_LOCALE[locale]], { type: "language", fallback: "none" }).of(code);
-      if (name) return name.charAt(0).toLocaleUpperCase(INTL_LOCALE[locale]) + name.slice(1);
+      // German capitalises language names; French and Spanish write them in lower case.
+      if (name) return locale === "de" ? name.charAt(0).toLocaleUpperCase(INTL_LOCALE[locale]) + name.slice(1) : name;
     } catch {
       // Not a valid language code: use Shopify's name.
     }

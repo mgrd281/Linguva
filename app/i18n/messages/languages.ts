@@ -36,3 +36,39 @@ export const de: Translation<typeof en> = {
   "languages.usage.source":
     "Shopify legt fest, welche Sprachen aktiviert und veröffentlicht sind. Diese Liste wird bei jedem Öffnen aus deinem Shop gelesen.",
 };
+
+export const fr: Translation<typeof en> = {
+  "languages.manage": "Gérer dans Shopify",
+  "languages.limit.heading": "Limite de langues atteinte",
+  "languages.limit.body": "Shopify autorise jusqu'à {max} langues par boutique. Supprimez une langue avant d'en ajouter une autre.",
+  "languages.rtl.heading": "Langue de droite à gauche activée",
+  "languages.rtl.body": "Vérifiez que votre thème prend en charge les mises en page de droite à gauche avant de publier ces langues.",
+  "languages.table.code": "Code de langue",
+  "languages.table.role": "Rôle",
+  "languages.table.storefront": "Boutique en ligne",
+  "languages.role.primary": "Principale",
+  "languages.role.additional": "Supplémentaire",
+  "languages.unpublished": "Non publiée",
+  "languages.usage.heading": "Utilisation",
+  "languages.usage.count": "Langues activées : {enabled} sur {max} (publiées : {published}).",
+  "languages.usage.source":
+    "Shopify détermine quelles langues sont activées et publiées. Cette liste est lue depuis votre boutique chaque fois que vous l'ouvrez.",
+};
+
+export const es: Translation<typeof en> = {
+  "languages.manage": "Administrar en Shopify",
+  "languages.limit.heading": "Límite de idiomas alcanzado",
+  "languages.limit.body": "Shopify permite hasta {max} idiomas por tienda. Elimina un idioma antes de agregar otro.",
+  "languages.rtl.heading": "Idioma de derecha a izquierda activado",
+  "languages.rtl.body": "Comprueba que tu tema admita diseños de derecha a izquierda antes de publicar estos idiomas.",
+  "languages.table.code": "Código",
+  "languages.table.role": "Rol",
+  "languages.table.storefront": "Tienda online",
+  "languages.role.primary": "Principal",
+  "languages.role.additional": "Adicional",
+  "languages.unpublished": "No publicado",
+  "languages.usage.heading": "Uso",
+  "languages.usage.count": "Idiomas activados: {enabled} de {max} (publicados: {published}).",
+  "languages.usage.source":
+    "Shopify determina qué idiomas están activados y publicados. Esta lista se lee de tu tienda cada vez que la abres.",
+};

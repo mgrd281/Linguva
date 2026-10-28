@@ -69,3 +69,73 @@ export const de: Translation<typeof en> = {
   "plan.plans.yes": "Ja",
   "plan.plans.no": "Nein",
 };
+
+export const fr: Translation<typeof en> = {
+  "plan.complimentary.heading": "Accès offert",
+  "plan.complimentary.body":
+    "Cette boutique dispose de toutes les fonctionnalités sans abonnement. L'utilisation de l'IA est tout de même comptabilisée, et le quota mensuel ci-dessous protège contre les coûts imprévus.",
+  "plan.unconfigured.heading": "La facturation n'est pas encore configurée",
+  "plan.unconfigured.body": "Toutes les fonctionnalités sont disponibles pendant la préparation des forfaits.",
+  "plan.welcome.heading": "Merci d'avoir choisi un forfait",
+  "plan.welcome.body": "Votre forfait est actif. Vous pouvez commencer à traduire dès maintenant.",
+  "plan.stale.heading": "Nous n'avons pas pu confirmer votre forfait auprès de Shopify pour le moment",
+  "plan.stale.body": "Cela ne bloque rien. Nous vérifierons de nouveau automatiquement.",
+
+  "plan.current.heading": "Forfait actuel",
+  "plan.current.headingWithPlan": "Forfait actuel : {plan}",
+  "plan.current.none": "aucun",
+  "plan.current.trial": "Essai gratuit jusqu'au {date}.",
+  "plan.current.ends": "Votre forfait prend fin le {date}. Vos traductions restent dans votre boutique.",
+  "plan.current.pending": "Passage au forfait {plan} au prochain cycle de facturation.",
+  "plan.current.usage": "Caractères IA ce mois-ci : {month} sur {limit} · aujourd'hui : {today}",
+  "plan.current.features":
+    "Langues : jusqu'à {languages} · Traduction groupée : {bulk} · Glossaire : {glossary} · Publication automatique : {autoPublish}",
+  "plan.current.yes": "oui",
+  "plan.current.no": "non",
+  "plan.current.cost": "Coût IA estimé ce mois-ci (interne) : {cost} $ à {rate} $ par million de caractères.",
+  "plan.current.memory": "La réutilisation de la mémoire de traduction n'est jamais décomptée de vos caractères.",
+  "plan.current.choose": "Choisir un forfait",
+  "plan.current.checkAgain": "Vérifier à nouveau",
+
+  "plan.plans.heading": "Forfaits",
+  "plan.plans.name": "Forfait",
+  "plan.plans.characters": "Caractères IA / mois",
+  "plan.plans.bulk": "Traduction groupée",
+  "plan.plans.yes": "Oui",
+  "plan.plans.no": "Non",
+};
+
+export const es: Translation<typeof en> = {
+  "plan.complimentary.heading": "Acceso gratuito",
+  "plan.complimentary.body":
+    "Esta tienda tiene todas las funciones sin suscripción. El uso de IA se sigue contabilizando, y la cuota mensual de abajo protege contra costos inesperados.",
+  "plan.unconfigured.heading": "La facturación aún no está configurada",
+  "plan.unconfigured.body": "Todas las funciones están disponibles mientras se preparan los planes.",
+  "plan.welcome.heading": "Gracias por elegir un plan",
+  "plan.welcome.body": "Tu plan está activo. Ya puedes empezar a traducir.",
+  "plan.stale.heading": "No pudimos confirmar tu plan con Shopify en este momento",
+  "plan.stale.body": "Esto no bloquea nada. Volveremos a comprobarlo automáticamente.",
+
+  "plan.current.heading": "Plan actual",
+  "plan.current.headingWithPlan": "Plan actual: {plan}",
+  "plan.current.none": "ninguno",
+  "plan.current.trial": "Prueba gratuita hasta el {date}.",
+  "plan.current.ends": "Tu plan termina el {date}. Tus traducciones se quedan en tu tienda.",
+  "plan.current.pending": "Cambia al plan {plan} en el próximo ciclo de facturación.",
+  "plan.current.usage": "Caracteres de IA este mes: {month} de {limit} · hoy: {today}",
+  "plan.current.features":
+    "Idiomas: hasta {languages} · Traducción masiva: {bulk} · Glosario: {glossary} · Publicación automática: {autoPublish}",
+  "plan.current.yes": "sí",
+  "plan.current.no": "no",
+  "plan.current.cost": "Costo estimado de IA este mes (interno): ${cost} a ${rate} por millón de caracteres.",
+  "plan.current.memory": "La reutilización de la memoria de traducción nunca cuenta para tus caracteres.",
+  "plan.current.choose": "Elegir un plan",
+  "plan.current.checkAgain": "Volver a comprobar",
+
+  "plan.plans.heading": "Planes",
+  "plan.plans.name": "Plan",
+  "plan.plans.characters": "Caracteres de IA / mes",
+  "plan.plans.bulk": "Traducción masiva",
+  "plan.plans.yes": "Sí",
+  "plan.plans.no": "No",
+};

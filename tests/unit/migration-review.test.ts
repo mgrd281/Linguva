@@ -22,8 +22,11 @@ const BASELINE = "20261029120000_translation_style";
 
 // Statements that can weaken isolation or privileges, and the migrations reviewed for them.
 const SENSITIVE: Array<{ pattern: RegExp; allowed: string[] }> = [
-  { pattern: /SECURITY\s+DEFINER/i, allowed: ["20261027180000_memory_fuzzy_function", "20261028090000_security_hardening"] },
-  { pattern: /NO\s+FORCE\s+ROW\s+LEVEL\s+SECURITY/i, allowed: ["20261027180000_memory_fuzzy_function"] },
+  {
+    pattern: /SECURITY\s+DEFINER/i,
+    allowed: ["20261027180000_memory_fuzzy_function", "20261028090000_security_hardening", "20261030110000_draft_search_function"],
+  },
+  { pattern: /NO\s+FORCE\s+ROW\s+LEVEL\s+SECURITY/i, allowed: ["20261027180000_memory_fuzzy_function", "20261030110000_draft_search_function"] },
   { pattern: /DISABLE\s+ROW\s+LEVEL\s+SECURITY/i, allowed: [] },
   { pattern: /\bBYPASSRLS\b/i, allowed: [] },
   { pattern: /\bTO\s+PUBLIC\b/i, allowed: [] },

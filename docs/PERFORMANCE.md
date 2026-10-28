@@ -14,16 +14,17 @@ The tests run in CI with generous limits for shared runners and print the measur
 | Review: later page (keyset cursor) | 25–33 ms | 300 ms |
 | Review: language and "with warnings" filter | 15 ms | 300 ms |
 | Review: pending count | 17 ms | 300 ms |
-| Review: text search | 207–214 ms | 1,000 ms |
+| Review: text search, 3+ characters (indexed, since phase G; was 207–214 ms) | 12.5 ms | 300 ms |
+| Review: text search, 1–2 characters (scan) | 102 ms | 1,000 ms |
 | Jobs: first page, filtered page, next page | 4 ms | 300 ms |
 
 `tests/performance/fuzzy-memory.perf.test.ts`: fuzzy translation memory search at 100,000 entries, median 33–37 ms.
 
-### Known limit: Review text search
+### Review text search (indexed since phase G)
 
-The text search scans the shop's pending drafts: about 4 ms per 1,000 drafts, so about 2 s at 500,000. A trigram index does not help. The test with an index showed that Postgres can't use it under row-level security, because `ILIKE` is not leakproof. The tenant check has to run first, so every row of the shop is read.
+Under row-level security PostgreSQL can't use an index for `ILIKE` (not leakproof): the tenant check runs first, so every pending draft of the shop was read (about 4 ms per 1,000 drafts, 207 ms at 50,000, about 2 s at 500,000).
 
-The translation memory solved the same problem with a reviewed `SECURITY DEFINER` function (SECURITY_MODEL.md §5c). The plan for Review is the same pattern, with its own security review and definition hash: a function that sets the tenant from `app.shop_id` itself and uses the index. It isn't built yet, because a new definer function needs that review. The other filters (language, job, warnings, resource type) don't depend on it.
+Since phase G, text of three characters or more goes through `linguva_draft_search()`, a reviewed `SECURITY DEFINER` function with a partial trigram index on pending drafts (same pattern as the memory search; SECURITY_MODEL.md §5l, review in SECURITY_REVIEW_MEMORY_FUZZY.md §10): 12.5 ms at 50,000 drafts. Shorter text, and text so common that it matches more than 5,000 drafts, still scans (correct, slower).
 
 ## 2. Bulk jobs with a large catalog
 
@@ -67,6 +68,5 @@ All content checks the 30 content types in batches of 6, so in a real store its 
 
 | Item | Why |
 |---|---|
-| Review text search through a reviewed definer function | Linear scan, see §1 |
 | Measure on a development store with 1,000+ products | Real Shopify latency and throttling (E1–E6) |
 | Server timing per loader in production logs | Find slow Shopify calls in real stores |

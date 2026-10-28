@@ -74,6 +74,8 @@
 - Phase 0 documentation set.
 - Lists and links in metafields and metaobject fields: translated item by item with AI or by hand, shown as lists (never as JSON); the number of items and the link addresses always stay those of the original.
 - Automatic translation also covers pages, blog posts and blogs, and catches missed product and collection webhooks: the worker checks every 30 minutes for content changed since its last check (migration 20261030100000).
+- French and Spanish interface (about 800 texts each), chosen from the admin user's language; still to be reviewed by native speakers (docs/I18N_REVIEW.md).
+- Review text search through a reviewed definer function and a trigram index: 207 → 12.5 ms at 50,000 drafts (migration 20261030110000).
 
 ### Security
 - HTTP security headers on every page and data response (nosniff, Referrer-Policy, Permissions-Policy, `base-uri` and `object-src` in the CSP, HSTS in production over HTTPS). Pages requested without a shop parameter had no framing protection; they can now only be framed by the Shopify admin.
@@ -85,6 +87,7 @@
 - Images and metafields can only be written for the resource being edited: the server lists them from Shopify and reads form values only under those names.
 - CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
 - Rich text, lists and links are checked against the original's structure and link addresses on every write path (editor, Review approval, bulk publishing), not only in the editor's form handling.
+- Script policy (`script-src`): only the app's files, Shopify's CDN and React Router's inline scripts with a per-page nonce; injected inline scripts don't run.
 
 ### Fixed
 - Approving an older draft, or a job publishing automatically a moment after someone translated the same field, could replace that person's newer translation. Drafts, automatic publishing and the editor (two people editing the same field) now check that the translation they replace is still in place (migration 20261029200000).

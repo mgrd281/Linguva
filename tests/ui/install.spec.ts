@@ -68,8 +68,11 @@ test("pages and data responses carry the security headers, and the admin may sti
   const shop = UI_SHOPS.full;
   const response = await openApp(page, "full", "/app");
   const headers = response!.headers();
-  expect(headers["content-security-policy"]).toBe(
-    `frame-ancestors https://${shop.domain} https://admin.shopify.com https://*.spin.dev https://admin.myshopify.io https://admin.shop.dev; base-uri 'self'; object-src 'none';`,
+  expect(headers["content-security-policy"]).toMatch(
+    new RegExp(
+      `^frame-ancestors https://${shop.domain} https://admin\\.shopify\\.com https://\\*\\.spin\\.dev https://admin\\.myshopify\\.io https://admin\\.shop\\.dev; ` +
+        `base-uri 'self'; object-src 'none'; script-src 'self' 'nonce-[A-Za-z0-9+/]{22}==' https://cdn\\.shopify\\.com;$`,
+    ),
   );
   expect(headers).toMatchObject({ "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin" });
   expect(headers["x-frame-options"]).toBeUndefined();

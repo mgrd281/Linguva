@@ -252,10 +252,10 @@ describe("TranslationMemory without FORCE RLS", () => {
     expect(await withTenant(b.id, (tx) => tx.translationMemory.count({ where: { targetText: "x" } }), app)).toBe(0);
   });
 
-  it("is the only tenant table without FORCE", async () => {
+  it("is, with TranslationDraft (§5l), the only tenant table without FORCE", async () => {
     const rows = await ownerDb.$queryRaw<Array<{ relname: string }>>`
       SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity AND NOT c.relforcerowsecurity`;
-    expect(rows.map((r) => r.relname)).toEqual(["TranslationMemory"]);
+    expect(rows.map((r) => r.relname).sort()).toEqual(["TranslationDraft", "TranslationMemory"]);
   });
 });

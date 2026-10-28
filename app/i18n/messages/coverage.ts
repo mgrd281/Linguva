@@ -92,3 +92,95 @@ export const de: Translation<typeof en> = {
   "coverage.gaps.missing": "Fehlende Felder",
   "coverage.gaps.outdated": "Veraltete Felder",
 };
+
+export const fr: Translation<typeof en> = {
+  "coverage.page.heading": "Couverture de traduction",
+  "coverage.intro":
+    "Le rapport vérifie chaque produit et chaque collection dans chacune de vos langues : ce qui est traduit, manquant ou obsolète, et l'aspect du référencement. Il se contente de lire les données de Shopify et n'utilise pas l'IA.",
+  "coverage.startFailed.heading": "Impossible de lancer le rapport",
+  "coverage.startFailed.fallback": "Veuillez actualiser la page et réessayer.",
+  "coverage.lastFailed.heading": "Le dernier rapport ne s'est pas terminé",
+  "coverage.lastFailed.fallback": "Générez à nouveau le rapport.",
+  "coverage.error.JOBS_UNAVAILABLE": "Le traitement en arrière-plan n'est pas encore configuré pour cette application.",
+  "coverage.error.NO_LANGUAGES": "Ajoutez d'abord une langue dans Paramètres → Langues.",
+  "coverage.error.STALLED": "Le dernier rapport n'avançait plus. Générez-le à nouveau.",
+  "coverage.error.PLAN_BULK": "La traduction groupée est incluse dans les forfaits payants. Consultez la page Forfait pour changer de forfait.",
+  "coverage.error.PLAN_LANGUAGE": "Votre forfait n'inclut pas cette langue. Consultez la page Forfait pour changer de forfait.",
+  "coverage.error.SCAN_FAILED": "Shopify n'a pas répondu de manière fiable. Générez à nouveau le rapport plus tard.",
+
+  "coverage.run.first": "Générer le rapport de couverture",
+  "coverage.run.again": "Générer à nouveau le rapport",
+  "coverage.run.scanning": "Analyse en cours : {scanning} ({done} sur {total} parties, {items} éléments pour l'instant)",
+  "coverage.run.last": "Dernier rapport : {date}",
+
+  "coverage.byLanguage.heading": "Par langue",
+  "coverage.byLanguage.items": "Éléments",
+  "coverage.byLanguage.missing": "Manquants",
+  "coverage.byLanguage.seo": "Référencement",
+  "coverage.byLanguage.fix": "Corriger",
+  "coverage.byLanguage.fields": "{percent} % ({count} champs)",
+  "coverage.byLanguage.seoTranslated": "{percent} % traduit",
+  "coverage.byLanguage.seoToCheck": "{count} à vérifier",
+  "coverage.byLanguage.seoNone": "Non défini",
+  "coverage.byLanguage.translateGaps": "Combler les lacunes",
+  "coverage.byLanguage.seoOnly": "SEO uniquement",
+
+  "coverage.seo.heading": "Référencement",
+  "coverage.seo.items": "éléments",
+  "coverage.seo.noSourceTitle":
+    "{language} : {count} {kind} n'ont pas de titre SEO dans la langue d'origine, les moteurs de recherche voient donc le titre normal.",
+  "coverage.seo.duplicates":
+    "{language} : {count} éléments ont le même titre SEO qu'un autre élément. Des titres uniques aident les moteurs de recherche à distinguer les pages.",
+  "coverage.seo.unpublished": "{language} : langue non publiée. Les clients et les moteurs de recherche ne voient pas encore ces traductions.",
+
+  "coverage.gaps.heading": "Éléments présentant le plus de lacunes",
+  "coverage.gaps.item": "Élément",
+  "coverage.gaps.missing": "Champs manquants",
+  "coverage.gaps.outdated": "Champs obsolètes",
+};
+
+export const es: Translation<typeof en> = {
+  "coverage.page.heading": "Cobertura de traducción",
+  "coverage.intro":
+    "El informe revisa cada producto y colección en cada uno de tus idiomas: qué está traducido, qué falta o está desactualizado y cómo se ven los listados en buscadores. Solo lee datos de Shopify y no usa IA.",
+  "coverage.startFailed.heading": "No se pudo iniciar el informe",
+  "coverage.startFailed.fallback": "Vuelve a cargar la página e inténtalo de nuevo.",
+  "coverage.lastFailed.heading": "El último informe no terminó",
+  "coverage.lastFailed.fallback": "Vuelve a generar el informe.",
+  "coverage.error.JOBS_UNAVAILABLE": "El procesamiento en segundo plano aún no está configurado para esta aplicación.",
+  "coverage.error.NO_LANGUAGES": "Primero agrega un idioma en Configuración → Idiomas.",
+  "coverage.error.STALLED": "El último informe dejó de avanzar. Vuelve a generarlo.",
+  "coverage.error.PLAN_BULK": "La traducción masiva está incluida en los planes de pago. Ve a Plan para cambiar de plan.",
+  "coverage.error.PLAN_LANGUAGE": "Tu plan no incluye este idioma. Ve a Plan para cambiar de plan.",
+  "coverage.error.SCAN_FAILED": "Shopify no respondió de forma fiable. Vuelve a generar el informe más tarde.",
+
+  "coverage.run.first": "Generar informe de cobertura",
+  "coverage.run.again": "Volver a generar el informe",
+  "coverage.run.scanning": "Analizando {scanning} ({done} de {total} partes, {items} elementos hasta ahora)",
+  "coverage.run.last": "Último informe: {date}",
+
+  "coverage.byLanguage.heading": "Por idioma",
+  "coverage.byLanguage.items": "Elementos",
+  "coverage.byLanguage.missing": "Faltantes",
+  "coverage.byLanguage.seo": "Listados SEO",
+  "coverage.byLanguage.fix": "Corregir",
+  "coverage.byLanguage.fields": "{percent} % ({count} campos)",
+  "coverage.byLanguage.seoTranslated": "{percent} % traducido",
+  "coverage.byLanguage.seoToCheck": "{count} por revisar",
+  "coverage.byLanguage.seoNone": "Sin definir",
+  "coverage.byLanguage.translateGaps": "Traducir lo pendiente",
+  "coverage.byLanguage.seoOnly": "Solo SEO",
+
+  "coverage.seo.heading": "Listados en buscadores",
+  "coverage.seo.items": "elementos",
+  "coverage.seo.noSourceTitle":
+    "{language}: {count} {kind} no tienen título SEO en el idioma original, así que los buscadores ven el título normal.",
+  "coverage.seo.duplicates":
+    "{language}: {count} elementos comparten el título SEO con otro elemento. Los títulos únicos ayudan a los buscadores a distinguir las páginas.",
+  "coverage.seo.unpublished": "{language}: idioma no publicado. Los clientes y los buscadores aún no ven estas traducciones.",
+
+  "coverage.gaps.heading": "Elementos con más campos pendientes",
+  "coverage.gaps.item": "Elemento",
+  "coverage.gaps.missing": "Campos faltantes",
+  "coverage.gaps.outdated": "Campos desactualizados",
+};

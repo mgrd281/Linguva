@@ -116,3 +116,119 @@ export const de: Translation<typeof en> = {
   "overview.store.languages": "{enabled} von {max} Sprachen aktiviert, {published} veröffentlicht.",
   "overview.store.installed": "Installiert am {date}",
 };
+
+export const fr: Translation<typeof en> = {
+  "overview.banner.exhausted.heading": "Le quota d'IA de ce mois-ci est épuisé",
+  "overview.banner.exhausted.body": "La traduction par IA est suspendue jusqu'au mois prochain. La traduction manuelle et la mémoire de traduction continuent de fonctionner.",
+  "overview.banner.high.heading": "Vous avez utilisé {percent} % du quota d'IA de ce mois-ci",
+  "overview.banner.high.body": "Les tâches de traduction groupée volumineuses peuvent s'interrompre une fois le quota épuisé.",
+
+  "overview.start.heading": "Premiers pas",
+  "overview.start.progress": "Étapes terminées : {done} sur {total}",
+  "overview.start.progressLabel": "Progression de la configuration",
+
+  "overview.checklist.languageSettings": "Ouvrir les paramètres de langue",
+  "overview.checklist.language.label": "Ajouter une langue",
+  "overview.checklist.language.detail": "Choisissez les langues dans lesquelles vous vendez, dans les paramètres de langue de Shopify.",
+  "overview.checklist.consent.label": "Autoriser la traduction par IA",
+  "overview.checklist.consent.detail": "Vous révisez les brouillons IA avant toute publication.",
+  "overview.checklist.consent.action": "Ouvrir les paramètres",
+  "overview.checklist.firstTranslation.label": "Publier votre première traduction",
+  "overview.checklist.firstTranslation.detail": "Ouvrez un produit, traduisez-le avec l'IA, vérifiez le résultat et publiez-le.",
+  "overview.checklist.firstTranslation.action": "Traduire les produits",
+  "overview.checklist.review.label": "Réviser les traductions groupées",
+  "overview.checklist.review.labelCount": { one: "Réviser {count} traduction", other: "Réviser {count} traductions" },
+  "overview.checklist.review.detail": "Les traductions groupées attendent votre approbation avant d'être visibles par les clients.",
+  "overview.checklist.review.action": "Ouvrir la page Révision",
+  "overview.checklist.publishLanguage.label": "Rendre une langue visible pour les clients",
+  "overview.checklist.publishLanguage.detail": "Publiez la langue dans Shopify lorsque ses traductions sont prêtes.",
+
+  "overview.languages.heading": "Vos langues",
+  "overview.languages.onlyPrimary":
+    "Votre boutique n'a que sa langue principale ({primary}). Ajoutez les langues dans lesquelles vous vendez dans Shopify, sous Paramètres → Langues, puis revenez ici.",
+  "overview.languages.unknown": "inconnue",
+  "overview.languages.storefront": "Sur votre boutique en ligne",
+  "overview.languages.action": "Action",
+  "overview.languages.hidden": "Masquée",
+  "overview.languages.notMeasured": "Pas encore mesuré",
+  "overview.languages.progressLabel": "Progression de la traduction : {language}",
+  "overview.languages.translate": "Traduire",
+  "overview.languages.translateLabel": "Traduire : {language}",
+  "overview.languages.measured": "Dernière mesure : {date}.",
+  "overview.languages.runCoverage": "Générez le rapport de couverture pour savoir où en est chaque langue.",
+  "overview.languages.updateCoverage": "Mettre à jour le rapport de couverture",
+  "overview.languages.openCoverage": "Ouvrir le rapport de couverture",
+
+  "overview.translate.heading": "Que voulez-vous traduire ?",
+  "overview.translate.content": "Pages, menus, thème et plus encore",
+
+  "overview.attention.heading": "Requiert votre attention",
+  "overview.attention.drafts": { one: "{count} traduction à réviser", other: "{count} traductions à réviser" },
+  "overview.attention.noDrafts": "Aucune traduction en attente de révision.",
+  "overview.attention.jobs": { one: "{count} tâche de traduction en cours", other: "{count} tâches de traduction en cours" },
+
+  "overview.usage.heading": "Utilisation de l'IA ce mois-ci",
+  "overview.usage.characters": "{used} sur {limit} caractères",
+  "overview.usage.memoryFree": "Le texte réutilisé depuis votre mémoire de traduction est gratuit.",
+
+  "overview.store.languages": "Langues activées : {enabled} sur {max}. Publiées : {published}.",
+  "overview.store.installed": "Date d'installation : {date}",
+};
+
+export const es: Translation<typeof en> = {
+  "overview.banner.exhausted.heading": "La cuota de IA de este mes está agotada",
+  "overview.banner.exhausted.body": "La traducción con IA queda en pausa hasta el próximo mes. La traducción manual y la memoria de traducción siguen funcionando.",
+  "overview.banner.high.heading": "Has usado el {percent} % de la cuota de IA de este mes",
+  "overview.banner.high.body": "Las tareas de traducción masiva grandes pueden detenerse cuando se agote la cuota.",
+
+  "overview.start.heading": "Primeros pasos",
+  "overview.start.progress": "{done} de {total} pasos completados",
+  "overview.start.progressLabel": "Progreso de la configuración",
+
+  "overview.checklist.languageSettings": "Abrir la configuración de idiomas",
+  "overview.checklist.language.label": "Agregar un idioma",
+  "overview.checklist.language.detail": "Elige los idiomas en los que vendes en la configuración de idiomas de Shopify.",
+  "overview.checklist.consent.label": "Permitir la traducción con IA",
+  "overview.checklist.consent.detail": "Revisas los borradores de IA antes de que se publique nada.",
+  "overview.checklist.consent.action": "Abrir la configuración",
+  "overview.checklist.firstTranslation.label": "Publicar tu primera traducción",
+  "overview.checklist.firstTranslation.detail": "Abre un producto, tradúcelo con IA, revisa el resultado y publícalo.",
+  "overview.checklist.firstTranslation.action": "Traducir productos",
+  "overview.checklist.review.label": "Revisar las traducciones masivas",
+  "overview.checklist.review.labelCount": { one: "Revisar {count} traducción", other: "Revisar {count} traducciones" },
+  "overview.checklist.review.detail": "Las traducciones masivas esperan tu aprobación antes de que los clientes las vean.",
+  "overview.checklist.review.action": "Abrir Revisión",
+  "overview.checklist.publishLanguage.label": "Mostrar un idioma a los clientes",
+  "overview.checklist.publishLanguage.detail": "Publica el idioma en Shopify cuando sus traducciones estén listas.",
+
+  "overview.languages.heading": "Tus idiomas",
+  "overview.languages.onlyPrimary":
+    "Tu tienda solo tiene su idioma principal ({primary}). Agrega los idiomas en los que vendes en Configuración → Idiomas de Shopify y luego vuelve aquí.",
+  "overview.languages.unknown": "desconocido",
+  "overview.languages.storefront": "En tu tienda online",
+  "overview.languages.action": "Acción",
+  "overview.languages.hidden": "Oculto",
+  "overview.languages.notMeasured": "Aún sin medir",
+  "overview.languages.progressLabel": "Progreso de la traducción: {language}",
+  "overview.languages.translate": "Traducir",
+  "overview.languages.translateLabel": "Traducir: {language}",
+  "overview.languages.measured": "Última medición: {date}.",
+  "overview.languages.runCoverage": "Genera el informe de cobertura para ver el avance de cada idioma.",
+  "overview.languages.updateCoverage": "Actualizar el informe de cobertura",
+  "overview.languages.openCoverage": "Abrir el informe de cobertura",
+
+  "overview.translate.heading": "¿Qué quieres traducir?",
+  "overview.translate.content": "Páginas, menús, tema y más",
+
+  "overview.attention.heading": "Requiere tu atención",
+  "overview.attention.drafts": { one: "{count} traducción por revisar", other: "{count} traducciones por revisar" },
+  "overview.attention.noDrafts": "No hay nada pendiente de revisión.",
+  "overview.attention.jobs": { one: "{count} tarea de traducción en curso", other: "{count} tareas de traducción en curso" },
+
+  "overview.usage.heading": "Uso de IA este mes",
+  "overview.usage.characters": "{used} de {limit} caracteres",
+  "overview.usage.memoryFree": "El texto reutilizado de tu memoria de traducción es gratis.",
+
+  "overview.store.languages": "Idiomas activados: {enabled} de {max}. Publicados: {published}.",
+  "overview.store.installed": "Fecha de instalación: {date}",
+};

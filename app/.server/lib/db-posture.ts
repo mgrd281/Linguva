@@ -6,8 +6,8 @@
  */
 import type { PrismaClient } from "@prisma/client";
 
-/** Tenant tables that intentionally don't force RLS on their owner (see SECURITY_MODEL §5c). */
-export const NOT_FORCED_TABLES = ["TranslationMemory"] as const;
+/** Tenant tables that intentionally don't force RLS on their owner (see SECURITY_MODEL §5c, §5l). */
+export const NOT_FORCED_TABLES = ["TranslationMemory", "TranslationDraft"] as const;
 /** Tables without RLS by design: global records, or no tenant data. */
 export const GLOBAL_TABLES = ["Shop", "Session", "WebhookEvent", "PrivacyRequest", "AuditLog", "PlatformUsageDay", "_prisma_migrations"] as const;
 /** Tables the runtime role may only read: entitlements granted by the operator. */
@@ -25,6 +25,12 @@ export const DEFINER_FUNCTIONS: Record<string, { searchPath: string; sha256: str
     searchPath: "search_path=pg_catalog, pg_temp",
     // Reviewed 2026-10-28, migration 20261028090000_security_hardening.
     sha256: "55e38bfad0045f64601731c59b9885020e4eb4f9a496a5d3dd3c5b017941f364",
+  },
+  linguva_draft_search: {
+    searchPath: "search_path=pg_catalog, pg_temp",
+    // Reviewed 2026-10-28, migration 20261030110000_draft_search_function
+    // (SECURITY_REVIEW_MEMORY_FUZZY.md, "Second function").
+    sha256: "0d1a3754ba38150ebcaf9ef5e84bde2e2d1f087763df92cf5e0a989fd9411d89",
   },
 };
 

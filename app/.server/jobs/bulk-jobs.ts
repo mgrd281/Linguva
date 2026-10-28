@@ -191,6 +191,10 @@ export async function listJobsPage(shopId: string, filter: JobPageFilter = {}, c
   return { jobs: rows.slice(0, take), nextCursor: rows.length > take ? rows[take - 1]!.id : null };
 }
 
+/** Item outcomes that need the merchant's attention although the item didn't fail. */
+export const ATTENTION_CODES = ["PARTIAL", "ALL_FIELDS_REJECTED", "SOURCE_CHANGED"] as const;
+
+/** Failed items and items that need attention, newest first (at most 50). */
 export async function listProblemItems(
   shopId: string,
   jobId: string,
@@ -200,9 +204,54 @@ export async function listProblemItems(
     shopId,
     (tx) =>
       tx.translationJobItem.findMany({
-        where: { shopId, jobId, status: { in: ["FAILED", "DEAD"] } },
+        where: {
+          shopId,
+          jobId,
+          OR: [{ status: { in: ["FAILED", "DEAD"] } }, { errorCode: { in: [...ATTENTION_CODES] } }],
+        },
         orderBy: { updatedAt: "desc" },
         take: 50,
+      }),
+    client,
+  );
+}
+
+/** How the job's items ended, by status and reason (for the job report). */
+export async function jobOutcomes(shopId: string, jobId: string, client: PrismaClient = defaultClient) {
+  const groups = await withTenant(
+    shopId,
+    (tx) =>
+      tx.translationJobItem.groupBy({
+        by: ["status", "errorCode"],
+        where: { shopId, jobId },
+        _count: { _all: true },
+      }),
+    client,
+  );
+  return groups
+    .map((g) => ({ status: g.status, code: g.errorCode, count: g._count._all }))
+    .sort((a, b) => b.count - a.count || a.status.localeCompare(b.status));
+}
+
+/** Every item of a job with its outcome, for the downloadable report (at most 50,000). */
+export async function listJobReportItems(shopId: string, jobId: string, client: PrismaClient = defaultClient) {
+  return withTenant(
+    shopId,
+    (tx) =>
+      tx.translationJobItem.findMany({
+        where: { shopId, jobId },
+        orderBy: { createdAt: "asc" },
+        take: 50_000,
+        select: {
+          id: true,
+          resourceGid: true,
+          status: true,
+          errorCode: true,
+          attempts: true,
+          fieldsTranslated: true,
+          fieldsRejected: true,
+          finishedAt: true,
+        },
       }),
     client,
   );

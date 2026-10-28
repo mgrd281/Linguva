@@ -7,12 +7,13 @@ import type {
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, isBulkResourceType, listProblemItems } from "../.server/jobs/bulk-jobs";
+import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, isBulkResourceType, jobOutcomes, listProblemItems } from "../.server/jobs/bulk-jobs";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
 import { editorPathFor, numericId, type TranslatableKind } from "../lib/resource-kinds";
 import { jobProgress } from "../lib/job-display";
 import { useI18n } from "../i18n/react";
-import { itemErrorMessage, jobErrorMessage, jobStatus, kindLabel, kindPlural } from "../i18n/labels";
+import { itemOutcome, jobErrorMessage, jobStatus, kindLabel, kindPlural } from "../i18n/labels";
+import type { I18n } from "../i18n/i18n";
 
 /** The content type named on the page (named in the interface language). */
 function pageKind(resourceType: string): TranslatableKind {
@@ -25,7 +26,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { shop } = await requireShop(request);
   const job = await getJobForShop(shop.id, params.id ?? "");
   if (!job) throw new Response("Not found", { status: 404 });
-  const problems = await listProblemItems(shop.id, job.id);
+  const [problems, outcomes] = await Promise.all([listProblemItems(shop.id, job.id), jobOutcomes(shop.id, job.id)]);
+  const progress = jobProgress(job);
+  // Remaining time from the pace so far (server clock, so the page and the estimate agree).
+  const now = Date.now();
+  const elapsedMs = job.startedAt ? (job.finishedAt ?? new Date(now)).getTime() - job.startedAt.getTime() : null;
+  const remainingMs =
+    ACTIVE.has(job.status) && job.discoveryDone && elapsedMs && progress.done > 0 && progress.total > progress.done
+      ? Math.round((elapsedMs / progress.done) * (progress.total - progress.done))
+      : null;
   return {
     job: {
       id: job.id,
@@ -44,8 +53,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       skipped: job.skippedItems,
       failed: job.failedItems,
       discoveryDone: job.discoveryDone,
-      progress: jobProgress(job),
+      progress,
+      startedAt: (job.startedAt ?? job.createdAt).toISOString(),
+      finishedAt: job.finishedAt?.toISOString() ?? null,
+      elapsedMs: job.finishedAt ? elapsedMs : null,
+      remainingMs,
     },
+    outcomes,
     problems: problems.map((p) => ({
       id: p.id,
       href: editorPathFor(p.resourceGid, job.targetLocale, job.resourceType),
@@ -53,6 +67,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       status: p.status,
       errorCode: p.errorCode,
       attempts: p.attempts,
+      // Short item reference; the worker logs carry the full item id.
+      reference: p.id.slice(0, 8),
     })),
   };
 };
@@ -74,8 +90,26 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   return { ok: false };
 };
 
+/** "3 minutes", "less than a minute". */
+function duration(i18n: I18n, ms: number) {
+  const minutes = Math.round(ms / 60_000);
+  return minutes < 1 ? i18n.t("jobs.detail.timing.underMinute") : i18n.t("jobs.detail.timing.minutes", { count: minutes });
+}
+
+// fetch() inside the embedded app carries the session token (App Bridge), a plain link wouldn't.
+async function downloadReport(jobId: string, locale: string) {
+  const response = await fetch(`/app/jobs/${jobId}/report?ui=${encodeURIComponent(locale)}`);
+  if (!response.ok) return;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `linguva-job-${jobId.slice(0, 8)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function JobDetail() {
-  const { job, problems } = useLoaderData<typeof loader>();
+  const { job, problems, outcomes } = useLoaderData<typeof loader>();
   const i18n = useI18n();
   const { t } = i18n;
   const kind = { label: kindLabel(i18n, job.kind), plural: kindPlural(i18n, job.kind) };
@@ -94,7 +128,7 @@ export default function JobDetail() {
   }, [active, revalidator]);
 
   return (
-    <s-page heading={t("jobs.detail.heading", { locale: job.targetLocale })}>
+    <s-page heading={t("jobs.detail.heading", { locale: i18n.language(job.targetLocale) })}>
       <s-link slot="breadcrumb-actions" href="/app/jobs">
         {t("jobs.detail.breadcrumb")}
       </s-link>
@@ -136,6 +170,16 @@ export default function JobDetail() {
               t("jobs.detail.counts.failed", { count: job.failed }),
             ].join(" · ")}
           </s-paragraph>
+          <s-paragraph>
+            {[
+              t("jobs.detail.timing.started", { time: i18n.dateTime(job.startedAt) }),
+              job.finishedAt ? t("jobs.detail.timing.finished", { time: i18n.dateTime(job.finishedAt) }) : null,
+              job.elapsedMs !== null ? t("jobs.detail.timing.duration", { duration: duration(i18n, job.elapsedMs) }) : null,
+              job.remainingMs !== null ? t("jobs.detail.timing.remaining", { duration: duration(i18n, job.remainingMs) }) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </s-paragraph>
           {job.fieldScope === "SEO" ? <s-paragraph>{t("jobs.detail.scopeSeo")}</s-paragraph> : null}
           {job.automatic ? <s-paragraph>{t("jobs.detail.automatic", { kind: kind.plural })}</s-paragraph> : null}
           <s-paragraph>
@@ -174,13 +218,43 @@ export default function JobDetail() {
         ) : null}
       </s-stack>
 
+      <s-section heading={t("jobs.detail.outcomes.heading")}>
+        <s-stack direction="block" gap="base">
+          {outcomes.length ? (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">{t("jobs.report.reason")}</s-table-header>
+                <s-table-header format="numeric">{kind.label}</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {outcomes.map((o) => (
+                  <s-table-row key={`${o.status}:${o.code ?? ""}`}>
+                    <s-table-cell>{itemOutcome(i18n, o.status, o.code)}</s-table-cell>
+                    <s-table-cell>{i18n.number(o.count)}</s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          ) : (
+            <s-paragraph>{t("jobs.detail.outcomes.empty")}</s-paragraph>
+          )}
+          <s-stack direction="inline" gap="base" alignItems="center">
+            {outcomes.length ? (
+              <s-button onClick={() => void downloadReport(job.id, i18n.locale)}>{t("jobs.detail.outcomes.download")}</s-button>
+            ) : null}
+            <s-text color="subdued">{t("jobs.detail.reference", { id: job.id })}</s-text>
+          </s-stack>
+        </s-stack>
+      </s-section>
+
       {problems.length ? (
-        <s-section heading={t("jobs.detail.failed.heading", { kind: kind.label })} padding="none">
+        <s-section heading={t("jobs.detail.attention.heading", { kind: kind.label })} padding="none">
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">{kind.label}</s-table-header>
               <s-table-header>{t("jobs.detail.failed.reason")}</s-table-header>
               <s-table-header format="numeric">{t("jobs.detail.failed.attempts")}</s-table-header>
+              <s-table-header>{t("jobs.detail.attention.reference")}</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {problems.map((p) => (
@@ -188,10 +262,9 @@ export default function JobDetail() {
                   <s-table-cell>
                     {p.href ? <s-link href={p.href}>{p.label}</s-link> : p.label}
                   </s-table-cell>
-                  <s-table-cell>
-                    {itemErrorMessage(i18n, p.errorCode ?? "") ?? p.errorCode ?? t("jobs.detail.failed.unknown")}
-                  </s-table-cell>
+                  <s-table-cell>{itemOutcome(i18n, p.status, p.errorCode) || t("jobs.detail.failed.unknown")}</s-table-cell>
                   <s-table-cell>{i18n.number(p.attempts)}</s-table-cell>
+                  <s-table-cell>{p.reference}</s-table-cell>
                 </s-table-row>
               ))}
             </s-table-body>

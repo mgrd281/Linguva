@@ -62,3 +62,11 @@ export function itemErrorMessage(i18n: I18n, code: string): string | null {
   if (!code) return null;
   return hasMessage(`common.itemError.${code}`) ? i18n.t(`common.itemError.${code}` as MessageKey) : (ITEM_ERROR_MESSAGES[code] ?? null);
 }
+
+/** Why an item of a job ended as it did ("Already up to date", an error, …). */
+export function itemOutcome(i18n: I18n, status: string, code: string | null): string {
+  if (code && hasMessage(`jobs.outcome.${code}`)) return i18n.t(`jobs.outcome.${code}` as MessageKey);
+  if (code) return itemErrorMessage(i18n, code) ?? jobErrorMessage(i18n, code) ?? code;
+  if (hasMessage(`jobs.outcome.${status}`)) return i18n.t(`jobs.outcome.${status}` as MessageKey);
+  return jobStatus(i18n, status).label;
+}

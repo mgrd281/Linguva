@@ -2,6 +2,10 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "editor.saveError.UNKNOWN_FIELD": "Unknown field",
+  "editor.saveError.EMPTY_TRANSLATION": "Translation is empty",
+  "editor.saveError.SHOPIFY_REJECTED": "{detail}",
+  "editor.saveError.NOT_CONFIRMED": "Shopify did not confirm the translation",
   "editor.leave.heading": "Leave without publishing?",
   "editor.leave.body": "Your changes to this translation aren't published yet. They will be lost if you leave.",
   "editor.leave.stay": "Stay on this page",
@@ -149,6 +153,10 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "editor.saveError.UNKNOWN_FIELD": "Unbekanntes Feld",
+  "editor.saveError.EMPTY_TRANSLATION": "Die Übersetzung ist leer",
+  "editor.saveError.SHOPIFY_REJECTED": "Shopify hat die Übersetzung abgelehnt: {detail}",
+  "editor.saveError.NOT_CONFIRMED": "Shopify hat die Übersetzung nicht bestätigt",
   "editor.leave.heading": "Verlassen, ohne zu veröffentlichen?",
   "editor.leave.body": "Deine Änderungen an dieser Übersetzung sind noch nicht veröffentlicht. Sie gehen verloren, wenn du die Seite verlässt.",
   "editor.leave.stay": "Auf dieser Seite bleiben",

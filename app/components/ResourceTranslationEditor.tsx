@@ -34,6 +34,8 @@ function rejectionMessage(i18n: I18n, reason: string) {
 function saveErrorMessage(i18n: I18n, outcome: { message?: string; code?: string }) {
   const key = `editor.handle.problem.${outcome.code ?? ""}`;
   if (outcome.code && hasMessage(key)) return i18n.t(key, { max: MAX_HANDLE_LENGTH });
+  const saveKey = `editor.saveError.${outcome.code ?? ""}`;
+  if (outcome.code && hasMessage(saveKey)) return i18n.t(saveKey, { detail: outcome.message ?? "" });
   return outcome.message ?? i18n.t("editor.field.notSaved");
 }
 

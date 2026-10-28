@@ -161,7 +161,10 @@ export interface TranslationEdit {
 export type SaveOutcome =
   | { key: string; status: "saved" }
   | { key: string; status: "conflict" }
-  | { key: string; status: "error"; message: string };
+  | { key: string; status: "error"; message: string; code: SaveErrorCode };
+
+/** Why a field wasn't saved; the editor names it in the interface language (editor.saveError.*). */
+export type SaveErrorCode = "UNKNOWN_FIELD" | "EMPTY_TRANSLATION" | "SHOPIFY_REJECTED" | "NOT_CONFIRMED";
 
 /**
  * Writes translations to Shopify. Each edit is checked against the current
@@ -201,11 +204,11 @@ export async function saveResourceTranslations(
   for (const edit of input.edits) {
     const field = current.get(edit.key);
     if (!field || !field.digest) {
-      outcomes.push({ key: edit.key, status: "error", message: "Unknown field" });
+      outcomes.push({ key: edit.key, status: "error", message: "Unknown field", code: "UNKNOWN_FIELD" });
     } else if (field.digest !== edit.digest) {
       outcomes.push({ key: edit.key, status: "conflict" });
     } else if (!edit.value.trim()) {
-      outcomes.push({ key: edit.key, status: "error", message: "Translation is empty" });
+      outcomes.push({ key: edit.key, status: "error", message: "Translation is empty", code: "EMPTY_TRANSLATION" });
     } else {
       writable.push(edit);
     }
@@ -228,9 +231,14 @@ export async function saveResourceTranslations(
       outcomes.push({ key: edit.key, status: "saved" });
       saved.push(edit);
     } else {
-      const message =
-        result.userErrors.map((e) => e.message).join("; ") || "Shopify did not confirm the translation";
-      outcomes.push({ key: edit.key, status: "error", message });
+      // Shopify's own wording is kept as the detail (it is only available in English).
+      const shopifyMessage = result.userErrors.map((e) => e.message).join("; ");
+      outcomes.push({
+        key: edit.key,
+        status: "error",
+        message: shopifyMessage || "Shopify did not confirm the translation",
+        code: shopifyMessage ? "SHOPIFY_REJECTED" : "NOT_CONFIRMED",
+      });
     }
   }
   if (result.userErrors.length) {

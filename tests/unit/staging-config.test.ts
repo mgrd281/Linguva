@@ -43,6 +43,8 @@ describe("staging configuration", () => {
   it("refuses a production store in the staging list", () => {
     expect(() => config({ ...staging, ALLOWED_SHOPS: "linguva-test-lab.myshopify.com,karinex.myshopify.com" })).toThrow(/production store/);
     expect(() => config({ ...staging, ALLOWED_SHOPS: "softwarefach-de.myshopify.com" })).toThrow(/production store/);
+    // KARINEX's real *.myshopify.com domain doesn't contain its name.
+    expect(() => config({ ...staging, ALLOWED_SHOPS: "45dv93-bk.myshopify.com" })).toThrow(/production store/);
   });
 
   it("keeps refusing the mock provider in production", () => {
@@ -82,6 +84,7 @@ describe("which shops a deployment serves", () => {
   it("never serves a production store from staging, even without a list match check", () => {
     const c = { ...config(staging), ALLOWED_SHOPS: "karinex.myshopify.com" };
     expect(isShopAllowed("karinex.myshopify.com", c)).toBe(false);
+    expect(isShopAllowed("45dv93-bk.myshopify.com", { ...c, ALLOWED_SHOPS: "45dv93-bk.myshopify.com" })).toBe(false);
   });
 
   it("serves every shop when no list is set (development, production before a list)", () => {

@@ -6,8 +6,9 @@ const shopDomain = /^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$/;
 /**
  * Stores a staging deployment must never serve, whatever ALLOWED_SHOPS says:
  * the operator's production stores (test translations must not reach them).
+ * KARINEX's admin domain is 45dv93-bk.myshopify.com, without its name in it.
  */
-export const STAGING_DENIED_SHOP_NAMES = ["karinex", "softwarefach"] as const;
+export const STAGING_DENIED_SHOP_NAMES = ["karinex", "softwarefach", "45dv93-bk"] as const;
 
 /** Comma-separated shop domains, trimmed and lower-cased; empty entries dropped. */
 export function shopList(value: string | undefined): string[] {

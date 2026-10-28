@@ -96,6 +96,18 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 - The editor's AI and memory actions only fill the form. Publishing needs the merchant's save.
 - Approval needs explicit draft ids of the same shop with status PENDING; rejected, stale and other shops' drafts are never published.
 
+**Every write path (phase D audit).** Only two functions change translations in a store: `registerTranslations` (called only by `saveResourceTranslations`) and `removeTranslations` (called only by `history.removeTranslation`). `tests/security/structure.test.ts` fails if another caller or another Shopify mutation appears.
+
+| Path | Who starts it | Guards |
+|---|---|---|
+| Editor save (`resource-editor`) | The merchant, per field | Session token; source digest (refused if the original changed); handle changes need a confirmation; the value replaced is kept as a revision |
+| Restore a version (`history`) | The merchant | Same shop's revision of the edited resource; source digest; refused for revisions written for an older original |
+| Remove a translation (`history`) | The merchant | Same shop and resource; the removed value is kept as a revision |
+| Approve drafts (`review/drafts`) | The merchant, explicit draft ids | Same shop, PENDING only; source digest; **the translation the draft replaces must still be in place** (`currentDigest`, phase D), otherwise STALE |
+| Automatic publishing (`jobs/processors`) | A bulk or automatic job | Explicitly enabled and confirmed, still enabled in Settings, plan includes it, no quality warnings, translations a person wrote or approved skipped unless the job allows replacing them, source digest, **translation unchanged since planning** (phase D) |
+
+**Bug found by the audit (fixed in phase D):** a draft or an automatically published result was made for the translation in place when the job ran. If someone wrote a translation afterwards (in Shopify's editor or Linguva's), approving the older draft, or the job finishing a moment later, replaced the person's newer translation. Drafts now store which translation they replace, and publishing checks it again on the store's current state (`tests/security/draft-protection.test.ts`, mutation-checked). The editor itself has no such check between two people editing the same field at the same time (last save wins); the replaced value is kept as a revision and can be restored.
+
 ## 5e. HTTP security headers (implemented, tested)
 
 `app/.server/lib/security-headers.ts`, applied to every page and data response (`entry.server.tsx`):
@@ -140,6 +152,16 @@ Development-only tools (not shipped, not run on user input) also have advisories
 | Queue `translation-auto` | Payload is ids only (`shopId`, resource GID, type), validated by a strict schema in the worker (`INVALID_PAYLOAD` otherwise, tested). The check re-reads consent, settings and plan for that shop, then creates items in that shop's tenant transaction; the item runs through the normal item queue, so publishing, protection of translations a person wrote or approved, AI allowance and daily caps apply unchanged. |
 | Unintended publishing or overwriting | Automatic items never join a running job that only translates search listings or may replace protected translations (`overwriteProtected`); they wait for it. Results are drafts unless the shop enabled automatic publishing (§5b). A bulk job the merchant starts while an automatic job runs takes it over with the merchant's own settings. |
 | Cross-tenant risk | Store B's webhooks never read store A's settings; an automatic check reads only its own shop's Admin API. Covered by `tests/integration/auto-translate.test.ts` ("stay within their store", RLS counts under the other tenant). |
+
+## 5i. Database change review: draft remembers the translation it replaces (migration 20261029200000)
+
+| Change | Review |
+|---|---|
+| `TranslationDraft.currentDigest TEXT NULL` with a CHECK (`none` or 64 hex characters) | Written only by the worker when it saves a draft, from the store's own translation of that field (sha256, never the value itself, so no merchant text is duplicated). Read only when the same shop approves the draft; a mismatch refuses publishing (STALE). NULL for drafts made before the migration keeps the earlier behaviour for them. |
+| Row-level security | Unchanged: `TranslationDraft` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy on `shopId`, which covers the new column. No new grants, functions or roles. |
+| Cross-tenant risk | None added: the column is compared with the translation read from the approving shop's own Admin API. |
+
+**Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 
 ## 6. Admin control center
 

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
@@ -156,11 +156,22 @@ export interface TranslationEdit {
   /** Pairs from the engine; when absent they are aligned from the value. */
   segmentPairs?: SegmentPair[];
   restoredFromId?: string | null;
+  /**
+   * translationDigest of the translation this edit was made to replace. When
+   * given and the field's translation is different now (someone wrote one
+   * in the meantime), the edit is refused instead of overwriting it.
+   */
+  expectedCurrent?: string;
+}
+
+/** Identifies a field's current translation: sha256 of the value, or "none". */
+export function translationDigest(value: string | null | undefined): string {
+  return value ? createHash("sha256").update(value).digest("hex") : "none";
 }
 
 export type SaveOutcome =
   | { key: string; status: "saved" }
-  | { key: string; status: "conflict" }
+  | { key: string; status: "conflict"; reason: "SOURCE_CHANGED" | "TRANSLATION_CHANGED" }
   | { key: string; status: "error"; message: string; code: SaveErrorCode };
 
 /** Why a field wasn't saved; the editor names it in the interface language (editor.saveError.*). */
@@ -206,7 +217,9 @@ export async function saveResourceTranslations(
     if (!field || !field.digest) {
       outcomes.push({ key: edit.key, status: "error", message: "Unknown field", code: "UNKNOWN_FIELD" });
     } else if (field.digest !== edit.digest) {
-      outcomes.push({ key: edit.key, status: "conflict" });
+      outcomes.push({ key: edit.key, status: "conflict", reason: "SOURCE_CHANGED" });
+    } else if (edit.expectedCurrent !== undefined && translationDigest(existing.get(edit.key)?.value) !== edit.expectedCurrent) {
+      outcomes.push({ key: edit.key, status: "conflict", reason: "TRANSLATION_CHANGED" });
     } else if (!edit.value.trim()) {
       outcomes.push({ key: edit.key, status: "error", message: "Translation is empty", code: "EMPTY_TRANSLATION" });
     } else {

@@ -2,6 +2,7 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "jobs.outcome.TRANSLATION_CHANGED": "Kept: someone changed the translation while it was being translated",
   "jobs.itemStatus.PENDING": "Waiting",
   "jobs.itemStatus.RUNNING": "Running",
   "jobs.itemStatus.SUCCEEDED": "Done",
@@ -82,6 +83,7 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "jobs.outcome.TRANSLATION_CHANGED": "Beibehalten: Jemand hat die Übersetzung währenddessen geändert",
   "jobs.itemStatus.PENDING": "Wartet",
   "jobs.itemStatus.RUNNING": "Läuft",
   "jobs.itemStatus.SUCCEEDED": "Erledigt",

@@ -189,3 +189,54 @@ describe("review approval is explicit", () => {
     expect(statuses.find((d) => d.id === first!.id)?.status).toBe("REJECTED");
   });
 });
+
+describe("a translation written in the meantime is never overwritten", () => {
+  it("approving an older draft keeps a translation someone wrote after the draft was made", async () => {
+    const { shop, store } = await setup("dp-later.myshopify.com", 1);
+    await runJob(deps(store), shop.id);
+    const drafts = await listPendingDrafts(shop.id, {}, app);
+    const title = drafts.find((d) => d.key === "title")!;
+    // A person translates the title in Shopify's own editor after the job.
+    store.translate(P1, "de", "title", "Handgeschriebene Jacke");
+    const result = await approveDrafts({ admin: store.asAdmin(), shopId: shop.id, actorId: "u-1", draftIds: drafts.map((d) => d.id) }, app);
+    expect(result).toMatchObject({ stale: 1 });
+    expect(store.translationOf(P1, "de", "title")).toBe("Handgeschriebene Jacke");
+    // The other field had no translation then or now: it is published.
+    expect(store.translationOf(P1, "de", "body_html")).toBe("<p>[de] Warm <b>jacket</b> number 1.</p>");
+    const after = await withTenant(shop.id, (tx) => tx.translationDraft.findUniqueOrThrow({ where: { id: title.id } }), app);
+    expect(after.status).toBe("STALE");
+  });
+
+  it("an outdated machine translation that is still in place is replaced as approved", async () => {
+    const { shop, store } = await setup("dp-same.myshopify.com", 1);
+    // An earlier job published a machine translation; then the original changed.
+    await setBulkPublishMode({ shopId: shop.id, mode: "AUTO_PUBLISH", confirmed: true, actorId: "u-1" }, app);
+    await runJob(deps(store), shop.id);
+    expect(store.translationOf(P1, "de", "title")).toBe("[de] Product 1 jacket");
+    await setBulkPublishMode({ shopId: shop.id, mode: "DRAFT", confirmed: false, actorId: "u-1" }, app);
+    store.updateSource(P1, "title", "Product 1 jacket, new");
+    await runJob(deps(store), shop.id);
+    const drafts = await listPendingDrafts(shop.id, {}, app);
+    expect(drafts.find((d) => d.key === "title")?.currentDigest).toMatch(/^[0-9a-f]{64}$/);
+    const result = await approveDrafts({ admin: store.asAdmin(), shopId: shop.id, actorId: "u-1", draftIds: drafts.map((d) => d.id) }, app);
+    expect(result).toMatchObject({ published: 1, stale: 0 });
+    expect(store.translationOf(P1, "de", "title")).toBe("[de] Product 1 jacket, new");
+  });
+
+  it("automatic publishing keeps a translation written while the AI was translating", async () => {
+    const { shop, store } = await setup("dp-race.myshopify.com", 1);
+    await setBulkPublishMode({ shopId: shop.id, mode: "AUTO_PUBLISH", confirmed: true, actorId: "u-1" }, app);
+    // While the AI translates, a person saves the title in Shopify.
+    class RacingProvider extends MockTranslationProvider {
+      override async translate(request: TranslationRequest): Promise<TranslationResult> {
+        store.translate(P1, "de", "title", "Von Hand übersetzt");
+        return super.translate(request);
+      }
+    }
+    const job = await runJob(deps(store, new RacingProvider()), shop.id);
+    expect(store.translationOf(P1, "de", "title")).toBe("Von Hand übersetzt");
+    expect(store.translationOf(P1, "de", "body_html")).toBe("<p>[de] Warm <b>jacket</b> number 1.</p>");
+    const [item] = await withTenant(shop.id, (tx) => tx.translationJobItem.findMany({ where: { jobId: job.id } }), app);
+    expect(item).toMatchObject({ status: "SUCCEEDED", errorCode: "PARTIAL" });
+  });
+});

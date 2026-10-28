@@ -25,6 +25,8 @@ export interface DraftInput {
   segmentPairs: SegmentPair[];
   issues: unknown[];
   provider: string;
+  /** translationDigest of the field's translation when the draft was made. */
+  currentDigest?: string | null;
 }
 
 /**
@@ -51,6 +53,7 @@ export async function saveDrafts(
           segmentPairs: d.segmentPairs as unknown as Prisma.InputJsonValue,
           issues: d.issues as Prisma.InputJsonValue,
           provider: d.provider,
+          currentDigest: d.currentDigest ?? null,
           status: "PENDING" as const,
           reviewedAt: null,
           reviewedBy: null,
@@ -313,6 +316,8 @@ export async function approveDrafts(
             provider: d.provider,
             approved: true,
             segmentPairs: changed ? undefined : ((d.segmentPairs as unknown as SegmentPair[] | null) ?? undefined),
+            // Never replace a translation someone wrote after the draft was made.
+            ...(d.currentDigest ? { expectedCurrent: d.currentDigest } : {}),
           };
         }),
       },

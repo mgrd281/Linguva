@@ -481,6 +481,9 @@ model TranslationDraft {
   sourceDigest  String
   sourceValue   String
   value         String
+  // The translation this draft replaces (translationDigest), checked again
+  // when it is approved; NULL for drafts made before the check existed.
+  currentDigest String?
   // Aligned segment pairs, stored in memory when the draft is approved.
   segmentPairs  Json?
   issues        Json?

@@ -166,7 +166,7 @@ describe("saveResourceTranslations", () => {
       app,
     );
     expect(outcomes).toEqual([
-      { key: "title", status: "conflict" },
+      { key: "title", status: "conflict", reason: "SOURCE_CHANGED" },
       { key: "body_html", status: "saved" },
     ]);
     expect(fake.translationOf("de", "title")).toBeUndefined();

@@ -11,7 +11,7 @@ export const en = {
 
   "review.saved.heading": "Review saved",
   "review.saved.published": "Published: {count}",
-  "review.saved.stale": "Source changed, not published: {count}",
+  "review.saved.stale": "Original or translation changed in the meantime, not published: {count}",
   "review.saved.failed": "Failed: {count}",
   "review.rejected.heading": "Drafts rejected",
   "review.rejected.body": {
@@ -61,7 +61,7 @@ export const de: Translation<typeof en> = {
 
   "review.saved.heading": "Prüfung gespeichert",
   "review.saved.published": "Veröffentlicht: {count}",
-  "review.saved.stale": "Original geändert, nicht veröffentlicht: {count}",
+  "review.saved.stale": "Original oder Übersetzung inzwischen geändert, nicht veröffentlicht: {count}",
   "review.saved.failed": "Fehlgeschlagen: {count}",
   "review.rejected.heading": "Entwürfe abgelehnt",
   "review.rejected.body": {

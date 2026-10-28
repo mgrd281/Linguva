@@ -11,6 +11,7 @@ import { providerContext, resourceTitle } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
 import {
   saveResourceTranslations,
+  translationDigest,
   sourceLocaleOf,
 } from "../translation/product-translation-service";
 import { completeTranslation, prepareTranslation } from "../translation/translate-fields";
@@ -312,7 +313,9 @@ export async function processItem(
         : drafted > 0
           ? "DRAFTED"
           : null
-      : results.some((r) => r.conflict)
+      : results.some((r) => r.translationChanged)
+        ? "TRANSLATION_CHANGED"
+        : results.some((r) => r.conflict)
         ? "SOURCE_CHANGED"
         : "ALL_FIELDS_REJECTED";
   await finishItem(
@@ -355,6 +358,8 @@ interface ResourceRunResult {
   notSaved: number;
   rejected: number;
   conflict: boolean;
+  /** Someone wrote a translation while this one was being made; theirs was kept. */
+  translationChanged: boolean;
   charsBilled: number;
   memoryHits: number;
   charsSaved: number;
@@ -377,7 +382,7 @@ async function translateOneResource(
 ): Promise<ResourceRunResult> {
   const { deps, payload } = run;
   const { resource } = target;
-  const empty: ResourceRunResult = { planned: 0, protectedSkipped: 0, drafted: 0, saved: 0, notSaved: 0, rejected: 0, conflict: false, charsBilled: 0, memoryHits: 0, charsSaved: 0 };
+  const empty: ResourceRunResult = { planned: 0, protectedSkipped: 0, drafted: 0, saved: 0, notSaved: 0, rejected: 0, conflict: false, translationChanged: false, charsBilled: 0, memoryHits: 0, charsSaved: 0 };
   const [latest, pendingDrafts] = await Promise.all([
     latestRevisions(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma),
     pendingDraftDigests(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma),
@@ -440,6 +445,9 @@ async function translateOneResource(
   await recordMemoryUse(payload.shopId, result.memoryEntryIds, deps.prisma);
 
   const fieldByKey = new Map(fields.map((f) => [f.key, f]));
+  // The translations as planned: publishing or approving later replaces only these.
+  const currentByKey = new Map(resource.translations.map((t) => [t.key, translationDigest(t.value)]));
+  const currentOf = (key: string) => currentByKey.get(key) ?? translationDigest(null);
   const translated = result.outcomes.flatMap((o) => (o.status === "translated" ? [o] : []));
   const rejected = result.outcomes.filter((o) => o.status === "rejected").length;
   const toPublish = run.autoPublish ? translated.filter((o) => o.issues.length === 0) : [];
@@ -461,6 +469,7 @@ async function translateOneResource(
           segmentPairs: o.segmentPairs ?? [],
           issues: o.issues,
           provider: result.provider,
+          currentDigest: currentOf(o.key),
         })),
         deps.prisma,
       )
@@ -484,6 +493,7 @@ async function translateOneResource(
             provider: result.provider,
             approved: false,
             segmentPairs: o.segmentPairs,
+            expectedCurrent: currentOf(o.key),
           })),
         },
         deps.prisma,
@@ -498,6 +508,7 @@ async function translateOneResource(
     notSaved: saved.length - savedCount,
     rejected,
     conflict: saved.some((r) => r.status === "conflict"),
+    translationChanged: saved.some((r) => r.status === "conflict" && r.reason === "TRANSLATION_CHANGED"),
     charsBilled: result.billedCharacters,
     memoryHits: result.memoryHits,
     charsSaved: result.charsSaved,

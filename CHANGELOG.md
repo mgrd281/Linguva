@@ -70,6 +70,7 @@
 - Job report: results grouped by reason, start/end/duration and remaining time, a support reference, and a CSV download of every item.
 - Quality check for the chosen form of address (German Sie/du, French vous/tu, Spanish, Italian, Dutch).
 - Load test with 20 shops at once and a large shop next to small ones.
+- Structural security tests: every way to write to a store, every Shopify mutation, authentication of every page and webhook, no owner database role in app code; review check for every database migration.
 - Phase 0 documentation set.
 
 ### Security
@@ -83,6 +84,7 @@
 - CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
 
 ### Fixed
+- Approving an older draft, or a job publishing automatically a moment after someone translated the same field, could replace that person's newer translation. Drafts and automatic publishing now check that the translation they replace is still in place (migration 20261029200000).
 - The app's `?locale=` parameter (language to translate into) collided with Shopify's `locale` (admin language); it is now `?lang=`.
 - A shop starting a job waited behind another shop's whole queued catalogue; items are now queued by their position in their own job.
 - First open after install could fail (race between the install and parallel page loads writing settings, languages or the subscription cache).

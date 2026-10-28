@@ -100,13 +100,13 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 
 | Path | Who starts it | Guards |
 |---|---|---|
-| Editor save (`resource-editor`) | The merchant, per field | Session token; source digest (refused if the original changed); handle changes need a confirmation; the value replaced is kept as a revision |
+| Editor save (`resource-editor`) | The merchant, per field | Session token; source digest (refused if the original changed); **translation unchanged since the page was opened** (phase D); handle changes need a confirmation; the value replaced is kept as a revision |
 | Restore a version (`history`) | The merchant | Same shop's revision of the edited resource; source digest; refused for revisions written for an older original |
 | Remove a translation (`history`) | The merchant | Same shop and resource; the removed value is kept as a revision |
 | Approve drafts (`review/drafts`) | The merchant, explicit draft ids | Same shop, PENDING only; source digest; **the translation the draft replaces must still be in place** (`currentDigest`, phase D), otherwise STALE |
 | Automatic publishing (`jobs/processors`) | A bulk or automatic job | Explicitly enabled and confirmed, still enabled in Settings, plan includes it, no quality warnings, translations a person wrote or approved skipped unless the job allows replacing them, source digest, **translation unchanged since planning** (phase D) |
 
-**Bug found by the audit (fixed in phase D):** a draft or an automatically published result was made for the translation in place when the job ran. If someone wrote a translation afterwards (in Shopify's editor or Linguva's), approving the older draft, or the job finishing a moment later, replaced the person's newer translation. Drafts now store which translation they replace, and publishing checks it again on the store's current state (`tests/security/draft-protection.test.ts`, mutation-checked). The editor itself has no such check between two people editing the same field at the same time (last save wins); the replaced value is kept as a revision and can be restored.
+**Bug found by the audit (fixed in phase D):** a draft or an automatically published result was made for the translation in place when the job ran. If someone wrote a translation afterwards (in Shopify's editor or Linguva's), approving the older draft, or the job finishing a moment later, replaced the person's newer translation. Drafts now store which translation they replace, and publishing checks it again on the store's current state (`tests/security/draft-protection.test.ts`, mutation-checked). The editor has the same check: each field carries a marker of the translation shown, so when two people edit the same field, the later save is refused with an explanation instead of replacing the earlier one (the marker only prevents accidents; a person can still replace a translation on purpose after reloading, and the replaced value is kept as a revision).
 
 ## 5e. HTTP security headers (implemented, tested)
 

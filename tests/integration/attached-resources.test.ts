@@ -146,7 +146,7 @@ describe("image alt text and metafields in the editor", () => {
     expect(body.kind).toBe("attached-saved");
     expect(body.outcomes).toEqual([
       { ref: attachedRef(img, "alt"), status: "saved" },
-      { ref: attachedRef(mf, "value"), status: "conflict" },
+      { ref: attachedRef(mf, "value"), status: "conflict", code: "SOURCE_CHANGED" },
     ]);
     expect(store.translationOf(img, "de", "alt")).toBe("Rote Wolljacke");
     expect(store.translationOf(mf, "de", "value")).toBeUndefined();

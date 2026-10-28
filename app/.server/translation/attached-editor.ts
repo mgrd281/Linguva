@@ -14,7 +14,7 @@ import type { ResourceKind, TranslatableKind } from "../../lib/resource-kinds";
 import { collectEditorEdits } from "./editor-edits";
 import { sameRichTextStructure } from "./rich-text";
 import { isMachineTranslatable } from "./translate-fields";
-import type { TranslationEdit } from "./product-translation-service";
+import { translationDigest, type TranslationEdit } from "./product-translation-service";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -32,7 +32,7 @@ const EDITABLE_TYPES = new Set(["SINGLE_LINE_TEXT_FIELD", "MULTI_LINE_TEXT_FIELD
 export const MAX_ATTACHED_AI_RESOURCES = 25;
 
 /** Form field name of an attached resource's field, e.g. value:gid://shopify/MediaImage/1:alt. */
-export function attachedFieldName(part: "value" | "digest" | "origin" | "confirm", resourceId: string, key: string) {
+export function attachedFieldName(part: "value" | "digest" | "origin" | "confirm" | "current", resourceId: string, key: string) {
   return `${part}:${resourceId}:${key}`;
 }
 
@@ -85,6 +85,7 @@ export async function loadAttachedData(admin: Admin, kind: TranslatableKind, par
           source: c.value!,
           digest: c.digest!,
           translation: translations.get(c.key)?.value ?? "",
+          currentDigest: translationDigest(translations.get(c.key)?.value),
           outdated: translations.get(c.key)?.outdated ?? false,
           machine: isMachineTranslatable({ key: c.key, value: c.value, type: c.type }),
         })),
@@ -102,7 +103,7 @@ export function collectAttachedEdits(
   return resources.flatMap((resource) => {
     const scoped = {
       get(name: string) {
-        const match = /^(value|digest|origin|confirm):(.+)$/.exec(name);
+        const match = /^(value|digest|origin|confirm|current):(.+)$/.exec(name);
         if (!match) return form.get(name);
         return form.get(attachedFieldName(match[1] as "value", resource.resourceId, match[2]!));
       },

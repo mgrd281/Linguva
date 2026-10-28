@@ -23,10 +23,13 @@ export function collectEditorEdits(resource: TranslatableResourceData, form: For
       const confirmed = form.get(`confirm:${field.key}`) === "on";
       if (!current?.outdated || !confirmed) continue;
     }
+    // The translation the merchant saw: if someone saved another one since, the save is refused.
+    const shown = form.get(`current:${field.key}`);
     edits.push({
       key: field.key,
       value,
       digest,
+      ...(typeof shown === "string" && /^([0-9a-f]{64}|none)$/.test(shown) ? { expectedCurrent: shown } : {}),
       origin: form.get(`origin:${field.key}`) === "AI" ? "AI" : "MANUAL",
       provider: String(form.get("provider") ?? "") || null,
       // Publishing from the editor means the merchant reviewed it.

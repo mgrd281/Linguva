@@ -372,7 +372,9 @@ export function ResourceTranslationEditor() {
     const label = fieldName(i18n, field.key);
     const error =
       status?.status === "conflict"
-        ? t("editor.field.conflict")
+        ? "reason" in status && status.reason === "TRANSLATION_CHANGED"
+          ? t("editor.field.translationChanged")
+          : t("editor.field.conflict")
         : status?.status === "error"
           ? saveErrorMessage(i18n, status)
           : rejected
@@ -382,6 +384,7 @@ export function ResourceTranslationEditor() {
     return (
       <s-section key={field.key} heading={label}>
         <input type="hidden" name={`digest:${field.key}`} value={field.digest} />
+        <input type="hidden" name={`current:${field.key}`} value={field.currentDigest} />
         {draft !== undefined ? <input type="hidden" name={`origin:${field.key}`} value="AI" /> : null}
         <s-stack direction="block" gap="base">
           <s-query-container>

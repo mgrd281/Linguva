@@ -240,3 +240,43 @@ describe("a translation written in the meantime is never overwritten", () => {
     expect(item).toMatchObject({ status: "SUCCEEDED", errorCode: "PARTIAL" });
   });
 });
+
+describe("two people editing the same field", () => {
+  it("the later save is refused instead of overwriting the earlier one, and works after a reload", async () => {
+    const { shop, store } = await setup("dp-editors.myshopify.com", 1);
+    const { loadEditorData } = await import("../../app/.server/translation/resource-editor");
+    // Both open the editor while the title has no translation.
+    const page = await loadEditorData(editor(store, shop.id, "u-a"));
+    const title = page.fields.find((f) => f.key === "title")!;
+    const save = (who: string, value: string, current: string) =>
+      runEditorAction(
+        editor(store, shop.id, who),
+        form([["intent", "save"], ["value:title", value], ["digest:title", title.digest], ["current:title", current]]),
+      );
+    await save("u-a", "Jacke von A", title.currentDigest);
+    expect(store.translationOf(P1, "de", "title")).toBe("Jacke von A");
+    const second = await save("u-b", "Jacke von B", title.currentDigest);
+    expect((second as { data: { outcomes: unknown[] } }).data.outcomes).toEqual([{ key: "title", status: "conflict", reason: "TRANSLATION_CHANGED" }]);
+    expect(store.translationOf(P1, "de", "title")).toBe("Jacke von A");
+    // After reloading, B sees A's translation and can replace it on purpose.
+    const reloaded = (await loadEditorData(editor(store, shop.id, "u-b"))).fields.find((f) => f.key === "title")!;
+    await save("u-b", "Jacke von B", reloaded.currentDigest);
+    expect(store.translationOf(P1, "de", "title")).toBe("Jacke von B");
+  });
+
+  it("a forged or missing marker can't skip the check for an unchanged field, and old forms still save", async () => {
+    const { shop, store } = await setup("dp-forged.myshopify.com", 1);
+    const { loadEditorData } = await import("../../app/.server/translation/resource-editor");
+    const title = (await loadEditorData(editor(store, shop.id, "u-a"))).fields.find((f) => f.key === "title")!;
+    store.translate(P1, "de", "title", "Von jemand anderem");
+    // A malformed marker is ignored (as if the form had none): the edit is a normal save.
+    const res = await runEditorAction(
+      editor(store, shop.id, "u-a"),
+      form([["intent", "save"], ["value:title", "Meine Jacke"], ["digest:title", title.digest], ["current:title", "' OR 1=1"]]),
+    );
+    expect((res as { data: { outcomes: unknown[] } }).data.outcomes).toEqual([{ key: "title", status: "saved" }]);
+    // The replaced translation is kept as a revision and can be restored.
+    const history = await withTenant(shop.id, (tx) => tx.translationRevision.findMany({ where: { key: "title" }, orderBy: { createdAt: "asc" } }), app);
+    expect(history.map((h) => h.value)).toEqual(["Von jemand anderem", "Meine Jacke"]);
+  });
+});

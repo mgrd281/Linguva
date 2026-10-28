@@ -122,7 +122,9 @@ export function AttachedResourcesPanel({
                     const warnings = ai?.warnings[ref];
                     const error =
                       status?.status === "conflict"
-                        ? t("editor.field.conflict")
+                        ? status.code === "TRANSLATION_CHANGED"
+                          ? t("editor.field.translationChanged")
+                          : t("editor.field.conflict")
                         : status?.status === "error"
                           ? status.code === "RICH_TEXT_CHANGED"
                             ? t("editor.attached.richTextChanged")
@@ -143,6 +145,7 @@ export function AttachedResourcesPanel({
                     return (
                       <s-stack key={ref} direction="block" gap="small">
                         <input type="hidden" name={fieldName("digest", item.id, field.key)} value={field.digest} />
+                        <input type="hidden" name={fieldName("current", item.id, field.key)} value={field.currentDigest} />
                         {draft !== undefined ? <input type="hidden" name={fieldName("origin", item.id, field.key)} value="AI" /> : null}
                         <s-query-container>
                           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">

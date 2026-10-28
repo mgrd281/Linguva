@@ -35,6 +35,7 @@ import {
   ResourceNotFoundError,
   saveResourceTranslations,
   sourceLocaleOf,
+  translationDigest,
 } from "./product-translation-service";
 import { collectEditorEdits } from "./editor-edits";
 import { isMachineTranslatable, segmentField } from "./translate-fields";
@@ -156,6 +157,7 @@ export async function loadEditorData(ctx: EditorContext) {
       source: c.value!,
       digest: c.digest!,
       translation: translations.get(c.key)?.value ?? "",
+      currentDigest: translationDigest(translations.get(c.key)?.value),
       outdated: translations.get(c.key)?.outdated ?? false,
       machine: isMachineTranslatable({ key: c.key, value: c.value, type: c.type }),
       history: history[c.key] ?? [],
@@ -420,7 +422,12 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
         edits,
       });
       for (const o of saved) {
-        outcomes.push({ ref: attachedRef(resource.resourceId, o.key), status: o.status, ...("message" in o ? { message: o.message } : {}) });
+        outcomes.push({
+          ref: attachedRef(resource.resourceId, o.key),
+          status: o.status,
+          ...("message" in o ? { message: o.message } : {}),
+          ...("reason" in o ? { code: o.reason } : {}),
+        });
       }
     }
     return data({ kind: "attached-saved", outcomes } satisfies EditorActionResult);

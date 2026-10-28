@@ -14,7 +14,6 @@ embedded = true
 [build]
 # Fixed URL: never replaced by a development tunnel.
 automatically_update_urls_on_dev = false
-include_config_on_deploy = true
 
 [auth]
 redirect_urls = ["https://STAGING-DOMAIN/auth/callback"]

@@ -6,12 +6,12 @@
  */
 import { useFetcher } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
-import { richTextPreviewOrNull } from "../lib/rich-text-preview";
+import { isStructuredValueType } from "../lib/structured-preview";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { fieldName as fieldLabel, hasMessage, issueName } from "../i18n/labels";
 import { useResultToast } from "./app-bridge";
-import { HtmlPreview } from "./HtmlPreview";
+import { StructuredEditor, StructuredView } from "./StructuredValue";
 
 type EditorData = Awaited<ReturnType<typeof loadEditorData>>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
@@ -125,9 +125,7 @@ export function AttachedResourcesPanel({
                           ? t("editor.field.translationChanged")
                           : t("editor.field.conflict")
                         : status?.status === "error"
-                          ? status.code === "RICH_TEXT_CHANGED"
-                            ? t("editor.attached.richTextChanged")
-                            : (status.message ?? t("editor.field.notSaved"))
+                          ? saveErrorText(i18n, status)
                           : rejected
                             ? t("editor.field.discarded")
                             : undefined;
@@ -140,7 +138,8 @@ export function AttachedResourcesPanel({
                       ...(error ? { error } : {}),
                     };
                     const fieldKey = `${ref}:${draft ?? "base"}`;
-                    const richText = field.type === "RICH_TEXT_FIELD";
+                    // Rich text, lists and links: shown readably, lists and links edited item by item.
+                    const structured = isStructuredValueType(field.type);
                     return (
                       <s-stack key={ref} direction="block" gap="small">
                         <input type="hidden" name={fieldName("digest", item.id, field.key)} value={field.digest} />
@@ -150,9 +149,10 @@ export function AttachedResourcesPanel({
                           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                             <s-stack direction="block" gap="small">
                               <s-text color="subdued">{t("editor.field.original", { language: sourceName })}</s-text>
-                              {richText ? (
-                                <HtmlPreview
-                                  html={richTextPreviewOrNull(field.source) ?? ""}
+                              {structured ? (
+                                <StructuredView
+                                  type={field.type}
+                                  value={field.source}
                                   title={t("editor.field.originalFrame", { field: itemLabel(item), language: sourceName })}
                                   lang={data.sourceLocale}
                                 />
@@ -163,20 +163,19 @@ export function AttachedResourcesPanel({
                               )}
                             </s-stack>
                             <s-stack direction="block" gap="small">
-                              {richText ? (
-                                <s-stack direction="block" gap="small">
-                                  <s-text color="subdued">{targetName}</s-text>
-                                  <HtmlPreview
-                                    html={richTextPreviewOrNull(draft ?? field.translation) ?? ""}
-                                    title={t("editor.field.previewFrame", { field: itemLabel(item), language: targetName })}
-                                    lang={data.target.locale}
-                                    dir={data.target.rtl ? "rtl" : "auto"}
-                                  />
-                                  {/* Only an AI draft is sent; formatting is checked again on the server. */}
-                                  {draft !== undefined ? <input type="hidden" name={fieldProps.name} value={draft} /> : null}
-                                  <s-text color="subdued">{t("editor.attached.richTextNote")}</s-text>
-                                  {error ? <s-text tone="critical">{error}</s-text> : null}
-                                </s-stack>
+                              {structured ? (
+                                <StructuredEditor
+                                  key={fieldKey}
+                                  type={field.type}
+                                  source={field.source}
+                                  value={draft ?? field.translation}
+                                  name={fieldProps.name}
+                                  language={targetName}
+                                  title={t("editor.field.previewFrame", { field: itemLabel(item), language: targetName })}
+                                  locale={data.target.locale}
+                                  rtl={data.target.rtl}
+                                  {...(error ? { error } : {})}
+                                />
                               ) : (
                                 <div lang={data.target.locale} {...(data.target.rtl ? { dir: "rtl" } : {})}>
                                   {multiline ? <s-text-area key={fieldKey} {...fieldProps} rows={3} /> : <s-text-field key={fieldKey} {...fieldProps} />}
@@ -227,4 +226,11 @@ function valueTypeLabel(i18n: I18n, type: string) {
   if (type === "json") return "JSON";
   const key = `editor.valueType.${type}`;
   return hasMessage(key) ? i18n.t(key) : type.replace(/^list\./, "list of ").replace(/_/g, " ");
+}
+
+/** Why a value wasn't saved: a known code in the interface language, else the server's message. */
+function saveErrorText(i18n: I18n, outcome: { message?: string; code?: string }) {
+  const key = `editor.saveError.${outcome.code ?? ""}`;
+  if (outcome.code && hasMessage(key)) return i18n.t(key, { detail: outcome.message ?? "" });
+  return outcome.message ?? i18n.t("editor.field.notSaved");
 }

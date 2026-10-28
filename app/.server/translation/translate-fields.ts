@@ -8,7 +8,15 @@ import {
 } from "./html-segmenter";
 import type { ProtectOptions } from "./protect";
 import { markupToPlainText, SegmentStructureError } from "./segment-markup";
-import { markupToRichText, richTextToMarkup, richTextToPreviewHtml, RichTextError } from "./rich-text";
+import { markupToRichText, richTextToMarkup, richTextToPreviewHtml, RichTextError, sameRichTextStructure } from "./rich-text";
+import {
+  sameStructuredShape,
+  segmentStructuredText,
+  STRUCTURED_TEXT_TYPES,
+  structuredHasBlankItem,
+  structuredReadableText,
+  StructuredTextError,
+} from "./structured-text";
 import { formalityMismatch } from "./formality-check";
 import { checkSeoField, plainText } from "../../lib/seo";
 import {
@@ -49,12 +57,30 @@ const MANUAL_ONLY_KEYS = new Set(["handle"]);
 export function isMachineTranslatable(field: SourceField): boolean {
   return (
     !MANUAL_ONLY_KEYS.has(field.key) &&
-    (HTML_TYPES.has(field.type) || PLAIN_TYPES.has(field.type) || field.type === RICH_TEXT_TYPE)
+    (HTML_TYPES.has(field.type) || PLAIN_TYPES.has(field.type) || field.type === RICH_TEXT_TYPE || STRUCTURED_TEXT_TYPES.has(field.type))
   );
+}
+
+/** True when a list or link (of the original's shape) leaves an item of the original untranslated. */
+export function leavesItemUntranslated(field: SourceField, value: string): boolean {
+  return STRUCTURED_TEXT_TYPES.has(field.type) && structuredHasBlankItem(field.type, value, field.value ?? "");
+}
+
+/**
+ * False when a value for rich text, a list or a link lost the source's
+ * structure, number of items or link addresses (other types: always true).
+ * Checked before anything is written to Shopify, whatever a form posted.
+ */
+export function keepsSourceStructure(field: SourceField, value: string): boolean {
+  if (field.type === RICH_TEXT_TYPE) return sameRichTextStructure(value, field.value ?? "");
+  if (STRUCTURED_TEXT_TYPES.has(field.type)) return sameStructuredShape(field.type, value, field.value ?? "");
+  return true;
 }
 
 export function segmentField(field: SourceField, protect: ProtectOptions = {}): SegmentedDocument {
   if (field.type === RICH_TEXT_TYPE) return segmentRichText(field.value ?? "", protect);
+  // Lists of texts and links: only the texts, the JSON around them stays.
+  if (STRUCTURED_TEXT_TYPES.has(field.type)) return segmentStructuredText(field.type, field.value ?? "", protect);
   return HTML_TYPES.has(field.type)
     ? segmentHtml(field.value ?? "", protect)
     : segmentPlainText(field.value ?? "", protect);
@@ -82,6 +108,7 @@ function segmentRichText(json: string, protect: ProtectOptions): SegmentedDocume
 
 /** The readable text of a field value, for checks (rich text JSON → its words). */
 function readableText(type: string, value: string): string {
+  if (STRUCTURED_TEXT_TYPES.has(type)) return structuredReadableText(type, value);
   if (type !== RICH_TEXT_TYPE) return plainText(value);
   try {
     return plainText(richTextToPreviewHtml(value));
@@ -145,8 +172,9 @@ export async function prepareTranslation(input: {
       try {
         doc = segmentField(field, protect);
       } catch (error) {
-        // Rich text with parts Linguva doesn't know: left to Shopify's editor.
-        if (!(error instanceof RichTextError)) throw error;
+        // Rich text with parts Linguva doesn't know, or a list or link of
+        // an unexpected shape: left to Shopify's editor.
+        if (!(error instanceof RichTextError) && !(error instanceof StructuredTextError)) throw error;
         outcomes.push({ key: field.key, status: "skipped", reason: "NOT_TRANSLATABLE" });
         continue;
       }

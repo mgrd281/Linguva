@@ -17,7 +17,7 @@ Rules:
 - **No area gets 10/10 without verification on a development store.** Every Shopify-facing criterion counts as ◐ at most until it is Verified on Shopify (FEATURE_STATUS.md).
 - The criteria were written before scoring. Evidence names the test or document.
 - There is **no measured comparison with competitor apps yet**. Their features were not tested, so "best in class" here means these criteria, not a benchmark.
-- Test basis (update after phase D): 613 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance, structural guards) and 112 Playwright browser tests on the production build, including 14 screenshot comparisons and German pages. All pass locally; CI status per commit in the PR.
+- Test basis (update after phase F): 637 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance, structural guards) and 133 Playwright browser tests on the production build (13 more are desktop-only or phone-only variants), including 14 screenshot comparisons and German pages. All pass locally; CI status per commit in the PR.
 
 ## 2. Summary
 
@@ -119,13 +119,13 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 3 | Bulk translation for every safe type | ✅ | `tests/integration/content-types.test.ts` |
 | 4 | Image alt texts | ✅ | Integration and security tests (editor) |
 | 5 | Text metafields | ✅ | Integration and security tests (editor) |
-| 6 | Rich text, JSON and list metafields | ◐ | Phase B: rich text translated with structure and links kept (`tests/unit/rich-text.test.ts`, attached-resources and bulk tests); JSON and lists still counted only |
+| 6 | Rich text, JSON and list metafields | ◐ | Phase B: rich text translated with structure and links kept (`tests/unit/rich-text.test.ts`, attached-resources and bulk tests). Phase F: lists and links translated item by item, addresses and item count enforced on every write path (`tests/unit/structured-text.test.ts`, `tests/ui/structured.spec.ts`). JSON still counted only; nothing verified on Shopify |
 | 7 | Images and metafields in bulk jobs and the coverage report | ◐ | Phase B: both in bulk jobs (`tests/integration/bulk-attached.test.ts`), images in the coverage report; custom fields can't be listed there (deprecated `METAFIELD` type) |
 | 8 | Market-specific translations | ❌ | Markets page is read-only |
-| 9 | New and changed products are translated automatically (webhooks) | ◐ | Phase B: products and collections, `tests/integration/auto-translate.test.ts` (incl. BullMQ end to end); delivery by Shopify not verified |
+| 9 | New and changed products are translated automatically (webhooks) | ◐ | Phase B: products and collections, `tests/integration/auto-translate.test.ts` (incl. BullMQ end to end). Phase F: pages, blog posts and blogs, and missed webhooks, by a periodic check (`tests/integration/auto-sweep.test.ts`). Delivery and Shopify's sort order not verified on a store |
 | 10 | Coverage confirmed on a development store | ❌ | Live test probes all types, not run yet |
 
-**Plan, without external access:** (6) JSON and list metafields only where a schema says which values are text. (9) Periodic reconciliation for missed webhooks; other types once Shopify offers webhooks for them. **Needs the dev store:** (7) and (9) confirmation, (8), (10).
+**Plan, without external access:** (6) JSON metafields only where a schema says which values are text. (9) Menus, metaobjects and theme content in the periodic check. **Needs the dev store:** (6), (7) and (9) confirmation, (8), (10).
 
 ### 3.6 SEO: 7.5/10
 
@@ -292,6 +292,18 @@ No score changes: the criteria these areas are measured by were already met (Sec
 | Every database change reviewed: each migration names its review section; isolation-weakening statements only where reviewed; new tenant tables get RLS, FORCE and a policy | `tests/unit/migration-review.test.ts` (fails on a probe migration) |
 | Tenant isolation of everything added in phases B–D (automatic translation, job reports, queue fairness) | Integration and UI tests per feature; runtime posture check (§5d) |
 | Keyboard test failed once in CI: focus on "Stay on this page" made robust (retries until the button takes it) | 1ef1366; not reproducible locally |
+
+## 4f. Phase F: translation completeness (all Tested Locally)
+
+No score changes: the two criteria this phase works on (3.5 #6, #9) stay ◐ because JSON metafields are still missing and nothing is verified on Shopify.
+
+| Change | Evidence |
+|---|---|
+| Lists and links (metafields, metaobject fields): AI and manual translation item by item, shown as lists in the editor and on Review, never as JSON | `tests/unit/structured-text.test.ts`, `tests/integration/attached-resources.test.ts`, `tests/ui/structured.spec.ts` |
+| Structure, item count and link addresses of rich text, lists and links checked in `saveResourceTranslations`, so every write path enforces them (was: editor form only) | Same tests plus `bulk-attached.test.ts` (an edit on Review approval that changes an address is refused) |
+| Bug found: approving drafts failed for all selected drafts when one product had been deleted in Shopify; now those drafts become outdated and the others publish | `review-and-history.test.ts` (fails without the fix) |
+| Automatic translation of pages, blog posts and blogs, and of missed product/collection webhooks, by a 30-minute check per shop; starts when turned on, resumes after failures | `tests/integration/auto-sweep.test.ts` (8 tests incl. two stores, missing scope, failure) |
+| Two database changes reviewed (SECURITY_MODEL §5j, §5k) | `tests/unit/migration-review.test.ts` |
 
 ## 5. Next steps, in order of effect
 

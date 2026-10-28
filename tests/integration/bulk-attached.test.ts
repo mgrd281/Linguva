@@ -94,6 +94,38 @@ describe("image alt text and custom fields in bulk jobs", () => {
     expect(store.translationOf(care, "de", "value")).toBe("[de] Hand wash cold.");
   });
 
+  it("lists of links become drafts that keep their addresses; an edit on approval can't change them", async () => {
+    const { shop, store, deps } = await setup();
+    const links = store.addMetafield(P1, {
+      namespace: "custom",
+      key: "guides",
+      type: "list.link",
+      value: '[{"text":"Care guide","url":"https://example.com/care"},{"text":"Size chart","url":"/pages/sizes"}]',
+    });
+    await runJob(deps, shop.id, { includeAttached: true }, "a-links");
+    const { drafts } = await searchPendingDrafts(shop.id, {}, app);
+    const draft = drafts.find((d) => d.resourceGid === links)!;
+    // The type is kept for Review's display; publishing checks Shopify's own type.
+    expect(draft).toMatchObject({ valueType: "LIST_LINK", parentGid: P1 });
+    expect(JSON.parse(draft.value)).toEqual([
+      { text: "[de] Care guide", url: "https://example.com/care" },
+      { text: "[de] Size chart", url: "/pages/sizes" },
+    ]);
+
+    // An edit posted with approval that points a link elsewhere is refused; nothing is published.
+    const tampered = draft.value.replace("https://example.com/care", "https://evil.example/");
+    const refused = await approveDrafts(
+      { admin: store.asAdmin(), shopId: shop.id, actorId: "7", draftIds: [draft.id], edits: new Map([[draft.id, tampered]]) },
+      app,
+    );
+    expect(refused).toMatchObject({ published: 0, failed: 1 });
+    expect(store.translationOf(links, "de", "value")).toBeUndefined();
+
+    // As translated, it publishes.
+    expect(await approveDrafts({ admin: store.asAdmin(), shopId: shop.id, actorId: "7", draftIds: [draft.id] }, app)).toMatchObject({ published: 1 });
+    expect(store.translationOf(links, "de", "value")).toBe(draft.value);
+  });
+
   it("checks every product, also those whose own fields are done", async () => {
     const { shop, store, deps } = await setup();
     // Product 2's own fields are translated; only its new image needs work.

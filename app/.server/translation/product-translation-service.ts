@@ -18,6 +18,8 @@ import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { latestRevisions, revisionKey } from "./revisions";
 import {
   completeTranslation,
+  keepsSourceStructure,
+  leavesItemUntranslated,
   prepareTranslation,
   segmentField,
 } from "./translate-fields";
@@ -175,7 +177,7 @@ export type SaveOutcome =
   | { key: string; status: "error"; message: string; code: SaveErrorCode };
 
 /** Why a field wasn't saved; the editor names it in the interface language (editor.saveError.*). */
-export type SaveErrorCode = "UNKNOWN_FIELD" | "EMPTY_TRANSLATION" | "SHOPIFY_REJECTED" | "NOT_CONFIRMED";
+export type SaveErrorCode = "UNKNOWN_FIELD" | "EMPTY_TRANSLATION" | "STRUCTURE_CHANGED" | "SHOPIFY_REJECTED" | "NOT_CONFIRMED";
 
 /**
  * Writes translations to Shopify. Each edit is checked against the current
@@ -222,6 +224,16 @@ export async function saveResourceTranslations(
       outcomes.push({ key: edit.key, status: "conflict", reason: "TRANSLATION_CHANGED" });
     } else if (!edit.value.trim()) {
       outcomes.push({ key: edit.key, status: "error", message: "Translation is empty", code: "EMPTY_TRANSLATION" });
+    } else if (!keepsSourceStructure(field, edit.value)) {
+      // Rich text, lists and links keep the original's structure and link addresses.
+      outcomes.push({
+        key: edit.key,
+        status: "error",
+        message: "The translation doesn't keep the original's structure (formatting, list items or link addresses)",
+        code: "STRUCTURE_CHANGED",
+      });
+    } else if (leavesItemUntranslated(field, edit.value)) {
+      outcomes.push({ key: edit.key, status: "error", message: "An item of the list is empty", code: "EMPTY_TRANSLATION" });
     } else {
       writable.push(edit);
     }

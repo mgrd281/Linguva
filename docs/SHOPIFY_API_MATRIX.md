@@ -74,7 +74,7 @@ Legend:
 | BLOG | title, handle, meta_title, meta_description | MVP |
 | ARTICLE | title, body_html, summary_html, handle, meta_title, meta_description | MVP |
 | MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Implemented in the editor, bulk jobs and the coverage report (top-level `translatableResources` per image type; ASSUMPTION for collection and blog post images until the live test). Product images: `product.media` (MediaImage ids) → `translatableResourcesByIds`. Collection and blog post images: `nestedTranslatableResources(resourceType: COLLECTION_IMAGE / ARTICLE_IMAGE)` of the parent (schema-valid; how Shopify nests them is ASSUMPTION until the live test runs) |
-| Metafields (2026-10) | value | Implemented in the editor and bulk jobs for text and rich text types. `Metafield.translatable: Boolean!` on the owner's `metafields` (`HasMetafields`), then `translatableResourcesByIds`. The `METAFIELD` resource type for `translatableResources` is deprecated (VERIFIED, schema) |
+| Metafields (2026-10) | value | Implemented in the editor and bulk jobs for text, rich text, list and link types. `Metafield.translatable: Boolean!` on the owner's `metafields` (`HasMetafields`), then `translatableResourcesByIds`. The `METAFIELD` resource type for `translatableResources` is deprecated (VERIFIED, schema) |
 | MENU / LINK | title | Phase 3 |
 | FILTER | label | Phase 3 |
 | METAOBJECT | depends on definition | Phase 3 |
@@ -92,10 +92,11 @@ Legend:
 |---|---|---|
 | `METAFIELD` resource type deprecated for `translatableResources` | Custom fields are found through their owner only: the editor and bulk jobs (with the option on) check each owner; the coverage report can't count them without one request per resource | VERIFIED (schema) |
 | Rich text metafields are JSON (`RICH_TEXT_FIELD`) | Translated through markup and converted back; documents with node types Linguva doesn't know are left to Shopify's editor rather than guessed at | VERIFIED (type); node set per Shopify's rich text editor, unknown types refused |
-| JSON, list, link and file metafields | Counted, not translated (no reliable text to translate, risk of breaking data) | Linguva decision |
+| List and link metafields are JSON (`LIST_SINGLE_LINE_TEXT_FIELD`, `LIST_MULTI_LINE_TEXT_FIELD`, `LINK`, `LIST_LINK`) | Each text is translated; the JSON is rebuilt from the original, so item count and URLs can't change. Values of another shape are refused, not guessed at | VERIFIED (types in `LocalizableContentType`, schema 2026-10); value shapes per Shopify's metafield type docs, to confirm on the dev store |
+| JSON and file metafields | Counted, not translated (no reliable text to translate, risk of breaking data) | Linguva decision |
 | Market-specific translations (`marketId`) | Not written; all translations apply to all markets | Not implemented |
-| No webhook for pages, blog posts, menus, theme content | Automatic translation covers products and collections only; other types need a bulk job or a later reconciliation | ASSUMPTION (topic list reviewed for the types Linguva uses) |
-| Webhook delivery is at least once, and can be late or missed | Duplicate deliveries are suppressed by webhook id; a missed delivery means the change is translated by the next bulk job (no reconciliation yet) | VERIFIED (Shopify docs: at-least-once) |
+| No webhook for pages, blog posts, blogs, menus, theme content | `WebhookSubscriptionTopic` (2026-10) has no `PAGES_*`, `ARTICLES_*` or `BLOGS_*` topics. Pages, blog posts and blogs are found by a periodic check: `products`, `collections`, `pages`, `articles` sorted by `UPDATED_AT` (newest first, stop at the last check), `blogs` filtered with `updated_at:>'…'` (`BlogSortKeys` has no `UPDATED_AT`) | VERIFIED (schema enums and documented search syntax); behaviour on a real store to confirm |
+| Webhook delivery is at least once, and can be late or missed | Duplicate deliveries are suppressed by webhook id; a missed delivery is caught by the periodic check (every 30 minutes, same queue job id as the webhook) | VERIFIED (Shopify docs: at-least-once) |
 | 20 languages per shop; primary language only in the admin | Settings and the database refuse more than 20 automatic languages | VERIFIED |
 
 ## 3. Billing

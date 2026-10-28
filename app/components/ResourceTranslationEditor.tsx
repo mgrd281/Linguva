@@ -9,8 +9,10 @@ import type { loadEditorData, runEditorAction } from "../.server/translation/res
 import { useResultToast, useSaveBar } from "./app-bridge";
 import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
 import { HtmlPreview } from "./HtmlPreview";
+import { StructuredEditor, StructuredView } from "./StructuredValue";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
+import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
@@ -402,6 +404,8 @@ export function ResourceTranslationEditor() {
     const warnings = ai?.warnings[field.key];
     const showCode = codeView.has(field.key);
     const multiline = field.type === "HTML" || field.type === "MULTI_LINE_TEXT_FIELD" || field.source.length > 120;
+    // Rich text, lists and links (e.g. metaobject fields): shown readably, never as JSON.
+    const structured = isStructuredValueType(field.type);
     const label = fieldName(i18n, field.key);
     const error =
       status?.status === "conflict"
@@ -431,7 +435,14 @@ export function ResourceTranslationEditor() {
                     </s-button>
                   ) : null}
                 </s-stack>
-                {field.sourcePreview !== null && !showCode ? (
+                {structured ? (
+                  <StructuredView
+                    type={field.type}
+                    value={field.source}
+                    title={t("editor.field.originalFrame", { field: label, language: sourceName })}
+                    lang={data.sourceLocale}
+                  />
+                ) : field.sourcePreview !== null && !showCode ? (
                   <HtmlPreview
                     html={field.sourcePreview}
                     title={t("editor.field.originalFrame", { field: label, language: sourceName })}
@@ -444,6 +455,21 @@ export function ResourceTranslationEditor() {
                 )}
               </s-stack>
               <s-stack direction="block" gap="small">
+                {structured ? (
+                  <StructuredEditor
+                    key={`${field.key}:${draft ?? "base"}:${resetCount}`}
+                    type={field.type}
+                    source={field.source}
+                    value={value}
+                    name={`value:${field.key}`}
+                    language={targetName}
+                    title={t("editor.field.previewFrame", { field: label, language: targetName })}
+                    locale={data.target.locale}
+                    rtl={data.target.rtl}
+                    {...(error ? { error } : {})}
+                    onValue={(next) => setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), [field.key]: next } }))}
+                  />
+                ) : (
                 <div lang={data.target.locale} {...textDirection(field)}>
                   {multiline ? (
                     <s-text-area
@@ -466,6 +492,7 @@ export function ResourceTranslationEditor() {
                     />
                   )}
                 </div>
+                )}
                 {field.sourcePreview !== null && !showCode ? (
                   <HtmlPreview
                     html={currentValue(field.key)}

@@ -403,16 +403,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
   if (intent === "save-attached") {
     const resources = await listEditorAttachments(admin, ctx.kind, resourceId, target.locale);
     const outcomes: Array<{ ref: string; status: string; message?: string; code?: string }> = [];
-    for (const { resource, edits, rejected } of collectAttachedEdits(resources, form)) {
-      for (const key of rejected) {
-        outcomes.push({
-          ref: attachedRef(resource.resourceId, key),
-          status: "error",
-          message: "This rich text no longer matches the original's formatting. Translate it again with AI.",
-          code: "RICH_TEXT_CHANGED",
-        });
-      }
-      if (!edits.length) continue;
+    for (const { resource, edits } of collectAttachedEdits(resources, form)) {
       const saved = await saveResourceTranslations({
         admin,
         shopId,
@@ -426,7 +417,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
           ref: attachedRef(resource.resourceId, o.key),
           status: o.status,
           ...("message" in o ? { message: o.message } : {}),
-          ...("reason" in o ? { code: o.reason } : {}),
+          ...("code" in o ? { code: o.code } : "reason" in o ? { code: o.reason } : {}),
         });
       }
     }

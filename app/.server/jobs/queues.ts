@@ -22,7 +22,8 @@ import {
   type ItemPayload,
   type JobDependencies,
 } from "./processors";
-import { createAutoItems, type AutoTranslatePayload } from "./auto-translate";
+import { AUTO_GID, createAutoItems, type AutoTranslatePayload } from "./auto-translate";
+import { SWEPT_TYPES } from "../shopify/recent-changes";
 import {
   failCoverageReport,
   runCoveragePage,
@@ -63,11 +64,11 @@ const coveragePayloadSchema = z
 const autoPayloadSchema = z
   .object({
     shopId: uuid,
-    resourceGid: z.string().regex(/^gid:\/\/shopify\/(Product|Collection)\/\d{1,20}$/),
-    resourceType: z.enum(["PRODUCT", "COLLECTION"]),
+    resourceGid: z.string().max(100),
+    resourceType: z.enum(SWEPT_TYPES),
   })
   .strict()
-  .refine((p) => p.resourceGid.startsWith(p.resourceType === "PRODUCT" ? "gid://shopify/Product/" : "gid://shopify/Collection/"));
+  .refine((p) => AUTO_GID[p.resourceType].test(p.resourceGid));
 
 /** How long an automatic check waits for a running job with other settings. */
 const AUTO_BUSY_WAIT_MS = 5 * 60 * 1000;

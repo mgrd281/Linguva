@@ -51,6 +51,21 @@ export const UI_SHOPS = {
       store.setField("gid://shopify/Product/1", "meta_description", "A warm jacket with two pockets, made for long winter walks in the cold.");
       store.addImage("gid://shopify/Product/1", "Red wool jacket, front view");
       store.addMetafield("gid://shopify/Product/1", { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Hand wash cold." });
+      // Lists and links, translated item by item.
+      store.addMetafield("gid://shopify/Product/14", {
+        namespace: "custom",
+        key: "guides",
+        type: "list.link",
+        value: '[{"text":"Care guide","url":"https://example.com/care"},{"text":"Size chart","url":"/pages/sizes"}]',
+      });
+      const features = store.addMetafield("gid://shopify/Product/14", {
+        namespace: "custom",
+        key: "features",
+        type: "list.single_line_text_field",
+        value: '["Warm","Waterproof"]',
+      });
+      // Written elsewhere, spaced differently: left as it is unless edited.
+      store.translate(features, "de", "value", '[ "Warm", "Wasserdicht" ]');
       // Other content: menus, the store listing, theme content with many texts.
       store.addResource("MENU", "1", [{ key: "title", value: "Main menu", type: "SINGLE_LINE_TEXT_FIELD" }]);
       store.addResource("MENU", "2", [{ key: "title", value: "Footer", type: "SINGLE_LINE_TEXT_FIELD" }]);
@@ -101,6 +116,24 @@ export const UI_SHOPS = {
     locales: [en, de],
     plan: null,
     build: () => new FakeShopifyStore(5),
+  },
+  customFields: {
+    // A German job with custom fields: a list of links waits on Review.
+    domain: "ui-fields.myshopify.com",
+    gid: "gid://shopify/Shop/91009",
+    name: "Custom Fields Store",
+    locales: [en, de],
+    plan: "pro",
+    build() {
+      const store = new FakeShopifyStore(2);
+      store.addMetafield("gid://shopify/Product/1", {
+        namespace: "custom",
+        key: "guides",
+        type: "list.link",
+        value: '[{"text":"Care guide","url":"https://example.com/care"},{"text":"Size chart","url":"/pages/sizes"}]',
+      });
+      return store;
+    },
   },
   visual: {
     // Fixed content for screenshot comparisons; no test changes it.

@@ -1,10 +1,14 @@
 /**
- * Automatic translation of new and changed products and collections.
+ * Automatic translation of new and changed products, collections, pages,
+ * blog posts and blogs.
  *
  * Shopify sends products/create|update and collections/create|update
- * webhooks. When the merchant turned automatic translation on (Settings,
- * per language), the resource is queued with a delay and a fixed queue job
- * id: several saves in a row lead to one check. The check runs the same
+ * webhooks; pages, blog posts and blogs have no webhook topics, and a
+ * webhook can be missed, so a periodic check (auto-sweep.ts) queues what
+ * changed since its last run. When the merchant turned automatic
+ * translation on (Settings, per language), the resource is queued with a
+ * delay and a fixed queue job id: several saves in a row, or a webhook and
+ * the periodic check for the same change, lead to one check. The check runs the same
  * item processing as bulk jobs, so the same rules apply: only missing or
  * outdated fields, drafts unless automatic publishing is on, translations
  * written or approved by a person are kept, AI allowance and daily caps,
@@ -20,6 +24,7 @@ import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { withTenant } from "../tenancy/with-tenant";
+import type { SweptType } from "../shopify/recent-changes";
 import { ACTIVE_JOB_STATUSES, AUTO_REQUESTED_BY } from "./bulk-jobs";
 
 export { AUTO_REQUESTED_BY };
@@ -31,7 +36,7 @@ export const AUTO_TRANSLATE_DELAY_MS = 60_000;
 export interface AutoTranslatePayload {
   shopId: string;
   resourceGid: string;
-  resourceType: "PRODUCT" | "COLLECTION";
+  resourceType: SweptType;
 }
 
 /** The queue's add (a BullMQ Queue in production). */
@@ -45,7 +50,14 @@ const TOPICS: Record<string, AutoTranslatePayload["resourceType"]> = {
   COLLECTIONS_CREATE: "COLLECTION",
   COLLECTIONS_UPDATE: "COLLECTION",
 };
-const GID = { PRODUCT: /^gid:\/\/shopify\/Product\/\d{1,20}$/, COLLECTION: /^gid:\/\/shopify\/Collection\/\d{1,20}$/ };
+/** The GID each type's resources have (webhook payloads and Shopify's lists are checked against it). */
+export const AUTO_GID: Record<SweptType, RegExp> = {
+  PRODUCT: /^gid:\/\/shopify\/Product\/\d{1,20}$/,
+  COLLECTION: /^gid:\/\/shopify\/Collection\/\d{1,20}$/,
+  PAGE: /^gid:\/\/shopify\/Page\/\d{1,20}$/,
+  ARTICLE: /^gid:\/\/shopify\/Article\/\d{1,20}$/,
+  BLOG: /^gid:\/\/shopify\/Blog\/\d{1,20}$/,
+};
 
 /** Normalises "products/update" and "PRODUCTS_UPDATE". */
 function topicKey(topic: string) {
@@ -64,7 +76,7 @@ export async function queueAutoTranslate(
 ): Promise<"queued" | "off" | "ignored"> {
   const resourceType = TOPICS[topicKey(input.topic)];
   const gid = (input.payload as { admin_graphql_api_id?: unknown } | null)?.admin_graphql_api_id;
-  if (!resourceType || typeof gid !== "string" || !GID[resourceType].test(gid)) return "ignored";
+  if (!resourceType || typeof gid !== "string" || !AUTO_GID[resourceType].test(gid)) return "ignored";
   const client = deps.prisma ?? defaultClient;
   const shop = await client.shop.findUnique({ where: { shopDomain: input.shopDomain } });
   if (!shop || shop.status !== "ACTIVE") return "ignored";
@@ -74,21 +86,22 @@ export async function queueAutoTranslate(
     logger.warn({ shopId: shop.id }, "automatic translation on, but background jobs aren't configured");
     return "ignored";
   }
-  await deps.queue.add(
-    "auto-translate",
-    { shopId: shop.id, resourceGid: gid, resourceType },
-    {
-      // One pending check per resource: later saves within the delay join it.
-      jobId: `auto_${shop.id}_${gid.replace(/\D/g, "")}_${resourceType}`,
-      delay: AUTO_TRANSLATE_DELAY_MS,
-      attempts: 5,
-      backoff: { type: "exponential", delay: 5_000, jitter: 0.5 },
-      // Removed when done, so the next save can queue a new check.
-      removeOnComplete: true,
-      removeOnFail: { age: 14 * 86_400 },
-    },
-  );
+  await enqueueAutoCheck(deps.queue, { shopId: shop.id, resourceGid: gid, resourceType });
   return "queued";
+}
+
+/** Queues the check of one resource (from a webhook or the periodic check). */
+export async function enqueueAutoCheck(queue: AutoQueue, payload: AutoTranslatePayload) {
+  await queue.add("auto-translate", payload, {
+    // One pending check per resource: later saves within the delay join it.
+    jobId: `auto_${payload.shopId}_${payload.resourceGid.replace(/\D/g, "")}_${payload.resourceType}`,
+    delay: AUTO_TRANSLATE_DELAY_MS,
+    attempts: 5,
+    backoff: { type: "exponential", delay: 5_000, jitter: 0.5 },
+    // Removed when done, so the next save can queue a new check.
+    removeOnComplete: true,
+    removeOnFail: { age: 14 * 86_400 },
+  });
 }
 
 /**

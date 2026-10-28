@@ -19,7 +19,9 @@ import {
 import { editorPathFor, RESOURCE_KINDS } from "../lib/resource-kinds";
 import { sanitizeHtml } from "../.server/lib/sanitize-html";
 import { HtmlPreview } from "../components/HtmlPreview";
+import { StructuredView } from "../components/StructuredValue";
 import { richTextPreviewOrNull } from "../lib/rich-text-preview";
+import { structuredItems } from "../lib/structured-preview";
 import { useResultToast } from "../components/app-bridge";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
@@ -70,6 +72,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           : null,
       // Rich text (JSON): shown rendered, approved as is (no raw JSON to edit).
       valuePreview: richTextPreviewOrNull(d.value) !== null ? sanitizeHtml(richTextPreviewOrNull(d.value)!) : null,
+      // Lists and links: shown as lists, approved as is (items are edited in the editor).
+      listType: d.valueType && structuredItems(d.valueType, d.value) && structuredItems(d.valueType, d.sourceValue) ? d.valueType : null,
       issues: Array.isArray(d.issues) ? (d.issues as Array<{ code?: string }>).map((i) => i.code ?? "") : [],
     })),
   };
@@ -245,7 +249,9 @@ export default function Review() {
                     <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                       <s-stack direction="block" gap="small">
                         <s-text color="subdued">{t("review.draft.original")}</s-text>
-                        {d.sourcePreview !== null ? (
+                        {d.listType ? (
+                          <StructuredView type={d.listType} value={d.source} title={t("review.draft.originalTitle", { title, field })} lang="" />
+                        ) : d.sourcePreview !== null ? (
                           <HtmlPreview html={d.sourcePreview} title={t("review.draft.originalTitle", { title, field })} lang="" />
                         ) : (
                           <s-box padding="base" background="subdued" borderRadius="base">
@@ -253,7 +259,12 @@ export default function Review() {
                           </s-box>
                         )}
                       </s-stack>
-                      {d.valuePreview !== null ? (
+                      {d.listType ? (
+                        <s-stack direction="block" gap="small">
+                          <s-text color="subdued">{t("review.draft.structured", { language })}</s-text>
+                          <StructuredView type={d.listType} value={d.value} title={t("review.draft.previewTitle", { title, field })} lang={d.locale} />
+                        </s-stack>
+                      ) : d.valuePreview !== null ? (
                         <s-stack direction="block" gap="small">
                           <s-text color="subdued">{t("review.draft.richText", { language })}</s-text>
                           <HtmlPreview html={d.valuePreview} title={t("review.draft.previewTitle", { title, field })} lang={d.locale} />

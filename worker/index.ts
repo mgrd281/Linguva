@@ -11,6 +11,7 @@ import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
 import { createQueues, createWorkers, requeueStalledItems } from "../app/.server/jobs/queues";
+import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
 import { createRedis, keyPrefix } from "../app/.server/queue/redis";
 import { TokenBucket } from "../app/.server/queue/rate-limiter";
@@ -67,6 +68,21 @@ async function main() {
   const timer = setInterval(sweep, SWEEP_INTERVAL_MS);
   void sweep();
 
+  // Automatic translation: content changed without a webhook (pages, blog
+  // posts, blogs) or whose webhook was missed. One worker per interval.
+  const autoSweep = async () => {
+    try {
+      const lock = await connection.set(`${prefix}:auto-sweep-lock`, String(process.pid), "PX", AUTO_SWEEP_INTERVAL_MS - 60_000, "NX");
+      if (lock !== "OK") return;
+      const summary = await sweepChangedContent(deps, queues.auto);
+      if (summary.queued || summary.failed) logger.info(summary, "automatic translation: changed content checked");
+    } catch (error) {
+      logger.error({ err: (error as Error).name }, "automatic translation check failed");
+    }
+  };
+  const autoTimer = setInterval(autoSweep, AUTO_SWEEP_INTERVAL_MS);
+  void autoSweep();
+
   logger.info({ provider: deps.provider?.id ?? "none", concurrency: config.WORKER_CONCURRENCY }, "worker started");
 
   let stopping = false;
@@ -75,6 +91,7 @@ async function main() {
     stopping = true;
     logger.info({ signal }, "worker shutting down");
     clearInterval(timer);
+    clearInterval(autoTimer);
     // Lets active jobs finish; unfinished ones are picked up again after restart.
     await workers.close();
     await queues.close();

@@ -96,10 +96,14 @@ model ShopInstallation {
 
 model ShopSettings {
   shopId                    String          @id @db.Uuid
-  /// Automatic translation of new and changed products and collections
-  /// (webhooks), into the languages in autoTranslateLocales.
+  /// Automatic translation of new and changed products, collections,
+  /// pages, blog posts and blogs (webhooks and a periodic check), into the
+  /// languages in autoTranslateLocales.
   autoTranslateNew          Boolean         @default(false)
   autoTranslateLocales      String[]        @default([])
+  /// Content changed after this time is checked by the periodic sweep
+  /// (pages, blog posts, blogs, missed webhooks). Set when turned on.
+  autoSweptAt               DateTime?       @db.Timestamptz(3)
   protectManualEdits        Boolean         @default(true)
   reviewRequired            Boolean         @default(true)
   aiDataProcessingConsentAt DateTime?       @db.Timestamptz(3)
@@ -484,6 +488,9 @@ model TranslationDraft {
   // The translation this draft replaces (translationDigest), checked again
   // when it is approved; NULL for drafts made before the check existed.
   currentDigest String?
+  // Shopify's content type of the field (LINK, RICH_TEXT_FIELD, …), for
+  // display on Review; publishing checks the type Shopify reports then.
+  valueType     String?
   // Aligned segment pairs, stored in memory when the draft is approved.
   segmentPairs  Json?
   issues        Json?

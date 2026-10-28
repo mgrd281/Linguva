@@ -3,7 +3,7 @@ import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
 import type { SegmentPair } from "../memory/alignment";
 import { withTenant } from "../tenancy/with-tenant";
-import { saveResourceTranslations } from "../translation/product-translation-service";
+import { ResourceNotFoundError, saveResourceTranslations } from "../translation/product-translation-service";
 import { RESOURCE_KINDS } from "../../lib/resource-kinds";
 
 type Admin = Pick<AdminApiContext, "graphql">;
@@ -27,6 +27,8 @@ export interface DraftInput {
   provider: string;
   /** translationDigest of the field's translation when the draft was made. */
   currentDigest?: string | null;
+  /** Shopify's content type of the field, for display (LINK, RICH_TEXT_FIELD, …). */
+  valueType?: string | null;
 }
 
 /**
@@ -54,6 +56,7 @@ export async function saveDrafts(
           issues: d.issues as Prisma.InputJsonValue,
           provider: d.provider,
           currentDigest: d.currentDigest ?? null,
+          valueType: d.valueType && /^[A-Z][A-Z_]{0,63}$/.test(d.valueType) ? d.valueType : null,
           status: "PENDING" as const,
           reviewedAt: null,
           reviewedBy: null,
@@ -298,31 +301,38 @@ export async function approveDrafts(
 
   for (const group of byResource.values()) {
     const { resourceGid, locale } = group[0]!;
-    const outcomes = await saveResourceTranslations(
-      {
-        admin: input.admin,
-        shopId: input.shopId,
-        actorId: input.actorId,
-        resourceId: resourceGid,
-        locale,
-        edits: group.map((d) => {
-          const edited = input.edits?.get(d.id);
-          const changed = edited !== undefined && edited !== d.value;
-          return {
-            key: d.key,
-            value: changed ? edited : d.value,
-            digest: d.sourceDigest,
-            origin: changed ? ("MANUAL" as const) : ("AI" as const),
-            provider: d.provider,
-            approved: true,
-            segmentPairs: changed ? undefined : ((d.segmentPairs as unknown as SegmentPair[] | null) ?? undefined),
-            // Never replace a translation someone wrote after the draft was made.
-            ...(d.currentDigest ? { expectedCurrent: d.currentDigest } : {}),
-          };
-        }),
-      },
-      client,
-    );
+    let outcomes: Awaited<ReturnType<typeof saveResourceTranslations>>;
+    try {
+      outcomes = await saveResourceTranslations(
+        {
+          admin: input.admin,
+          shopId: input.shopId,
+          actorId: input.actorId,
+          resourceId: resourceGid,
+          locale,
+          edits: group.map((d) => {
+            const edited = input.edits?.get(d.id);
+            const changed = edited !== undefined && edited !== d.value;
+            return {
+              key: d.key,
+              value: changed ? edited : d.value,
+              digest: d.sourceDigest,
+              origin: changed ? ("MANUAL" as const) : ("AI" as const),
+              provider: d.provider,
+              approved: true,
+              segmentPairs: changed ? undefined : ((d.segmentPairs as unknown as SegmentPair[] | null) ?? undefined),
+              // Never replace a translation someone wrote after the draft was made.
+              ...(d.currentDigest ? { expectedCurrent: d.currentDigest } : {}),
+            };
+          }),
+        },
+        client,
+      );
+    } catch (error) {
+      // Deleted in Shopify since it was translated: outdated, like a changed source.
+      if (!(error instanceof ResourceNotFoundError)) throw error;
+      outcomes = group.map((d) => ({ key: d.key, status: "conflict" as const, reason: "SOURCE_CHANGED" as const }));
+    }
     const byKey = new Map(outcomes.map((o) => [o.key, o]));
     await withTenant(
       input.shopId,

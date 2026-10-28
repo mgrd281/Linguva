@@ -108,6 +108,8 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 
 **Bug found by the audit (fixed in phase D):** a draft or an automatically published result was made for the translation in place when the job ran. If someone wrote a translation afterwards (in Shopify's editor or Linguva's), approving the older draft, or the job finishing a moment later, replaced the person's newer translation. Drafts now store which translation they replace, and publishing checks it again on the store's current state (`tests/security/draft-protection.test.ts`, mutation-checked). The editor has the same check: each field carries a marker of the translation shown, so when two people edit the same field, the later save is refused with an explanation instead of replacing the earlier one (the marker only prevents accidents; a person can still replace a translation on purpose after reloading, and the replaced value is kept as a revision).
 
+**Structure of rich text, lists and links (phase F).** For these types `saveResourceTranslations` itself refuses a value whose structure, number of items or link addresses differ from the original Shopify reports at that moment (`keepsSourceStructure`, code `STRUCTURE_CHANGED`), and a list with an untranslated item (`EMPTY_TRANSLATION`). Because every path above goes through it, a form or an edited draft can't point a link elsewhere or drop list items, whichever page posted it (`tests/integration/attached-resources.test.ts`, `bulk-attached.test.ts`). Trade-off: a rich text translation someone wrote in Shopify's own editor with different formatting stays in the store, but Linguva won't write it again (for example when restoring it from the history).
+
 ## 5e. HTTP security headers (implemented, tested)
 
 `app/.server/lib/security-headers.ts`, applied to every page and data response (`entry.server.tsx`):
@@ -160,6 +162,22 @@ Development-only tools (not shipped, not run on user input) also have advisories
 | `TranslationDraft.currentDigest TEXT NULL` with a CHECK (`none` or 64 hex characters) | Written only by the worker when it saves a draft, from the store's own translation of that field (sha256, never the value itself, so no merchant text is duplicated). Read only when the same shop approves the draft; a mismatch refuses publishing (STALE). NULL for drafts made before the migration keeps the earlier behaviour for them. |
 | Row-level security | Unchanged: `TranslationDraft` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy on `shopId`, which covers the new column. No new grants, functions or roles. |
 | Cross-tenant risk | None added: the column is compared with the translation read from the approving shop's own Admin API. |
+
+## 5j. Database change review: draft remembers its field type (migration 20261030090000)
+
+| Change | Review |
+|---|---|
+| `TranslationDraft.valueType TEXT NULL` with a CHECK (upper-case letters and `_`, at most 64) | Written only by the worker when it saves a draft, from the content type Shopify reported for the field. Used only to display the draft (a list, link or rich text shown readably on Review). Never trusted for publishing: `saveResourceTranslations` checks rich text, lists and links against the type and source Shopify reports at that moment (`keepsSourceStructure`), so a wrong or missing value can't let a changed structure or link address through. |
+| Row-level security | Unchanged: `TranslationDraft` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy on `shopId`, which covers the new column. No new grants, functions or roles. |
+| Cross-tenant risk | None added: the column holds a Shopify type name, never merchant text, and is read only by the draft's own shop. |
+
+## 5k. Database change review: periodic check for automatic translation (migration 20261030100000)
+
+| Change | Review |
+|---|---|
+| `ShopSettings.autoSweptAt TIMESTAMPTZ NULL` | A time, no merchant content. Written by `setAutoTranslate` (now when turned on, NULL when turned off) and by the worker's sweep after a complete check of the shop. Read only by the sweep to ask Shopify for resources changed since then. |
+| Row-level security | Unchanged: `ShopSettings` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy; the sweep reads and writes it per shop through `withTenant`. No new grants, functions or roles. |
+| Cross-tenant risk | None added: the sweep lists active shops (the `Shop` table, as the stalled-item sweeper does), then works inside each shop's tenant context with that shop's own Admin API session; resource ids from Shopify are queued with the shop's id, never another's. |
 
 **Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 

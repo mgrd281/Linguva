@@ -33,7 +33,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -52,6 +52,16 @@ export default async function globalSetup() {
     );
     const page = await runDiscoveryPage({ ...deps, discoveryPageSize: 8 }, { shopId: ids.full!, jobId: job.id });
     for (const itemId of page.itemIds) await processItem(deps, { shopId: ids.full!, itemId }, 1);
+
+    // A German job with custom fields: a list of links waits on Review.
+    const fieldsStore = UI_SHOPS.customFields.build();
+    const fieldsDeps = { ...deps, adminFor: async () => fieldsStore.asAdmin() };
+    const { job: fieldsJob } = await createBulkJob(
+      { shopId: ids.customFields!, resourceType: "PRODUCT", targetLocale: "de", requestedBy: null, idempotencyKey: "ui-seed-fields-de", includeAttached: true },
+      app,
+    );
+    const fieldsPage = await runDiscoveryPage(fieldsDeps, { shopId: ids.customFields!, jobId: fieldsJob.id });
+    for (const itemId of fieldsPage.itemIds) await processItem(fieldsDeps, { shopId: ids.customFields!, itemId }, 1);
 
     await grantComplimentaryAccess(owner, {
       shopifyShopGid: UI_SHOPS.owner.gid,

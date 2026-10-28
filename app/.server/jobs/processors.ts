@@ -470,6 +470,7 @@ async function translateOneResource(
           issues: o.issues,
           provider: result.provider,
           currentDigest: currentOf(o.key),
+          valueType: fieldByKey.get(o.key)!.type,
         })),
         deps.prisma,
       )

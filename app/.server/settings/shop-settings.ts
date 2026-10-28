@@ -158,10 +158,12 @@ export function translationContext(storeContext: string | null | undefined, item
 }
 
 /**
- * Automatic translation of new and changed products and collections. Only
- * the shop's additional languages are kept; turning it on without a
- * language turns it off. Recorded in the audit log (it spends AI allowance
- * without someone starting each run).
+ * Automatic translation of new and changed products, collections, pages,
+ * blog posts and blogs. Only the shop's additional languages are kept;
+ * turning it on without a language turns it off. Turning it on starts the
+ * periodic check from now: content changed before isn't picked up.
+ * Recorded in the audit log (it spends AI allowance without someone
+ * starting each run).
  */
 export async function setAutoTranslate(
   input: { shopId: string; enabled: boolean; locales: readonly string[]; allowedLocales: readonly string[]; actorId: string | null },
@@ -169,7 +171,17 @@ export async function setAutoTranslate(
 ) {
   const locales = [...new Set(input.locales)].filter((l) => input.allowedLocales.includes(l)).slice(0, 20);
   const enabled = input.enabled && locales.length > 0;
-  await updateSettings(input.shopId, { autoTranslateNew: enabled, autoTranslateLocales: enabled ? locales : [] }, client);
+  const wasOn = (await getShopSettings(input.shopId, client)).autoTranslateNew;
+  await updateSettings(
+    input.shopId,
+    {
+      autoTranslateNew: enabled,
+      autoTranslateLocales: enabled ? locales : [],
+      // Changing the languages keeps the position; off clears it.
+      ...(enabled ? (wasOn ? {} : { autoSweptAt: new Date() }) : { autoSweptAt: null }),
+    },
+    client,
+  );
   await client.auditLog.createMany({
     data: [{
       shopId: input.shopId,

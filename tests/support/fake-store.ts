@@ -69,6 +69,8 @@ export class FakeShopifyStore {
     { locale: "en", name: "English", primary: true, published: true },
     { locale: "de", name: "German", primary: false, published: true },
   ];
+  /** When resources last changed (Product.updatedAt etc.); unset: long ago. */
+  readonly updatedAt = new Map<string, Date>();
   /** Resource types the app has no access scope for (ACCESS_DENIED). */
   readonly deniedTypes = new Set<string>();
   /** Throw this error for the next N calls (any operation). */
@@ -147,7 +149,8 @@ export class FakeShopifyStore {
       ...(this.metafields.get(ownerGid) ?? []),
       { id, namespace: m.namespace, key: m.key, type: m.type, translatable, definition: m.name ? { name: m.name } : null },
     ]);
-    if (translatable) this.products.set(id, [{ key: "value", value: m.value, type: m.type.toUpperCase() }]);
+    // Shopify's content type: list.single_line_text_field → LIST_SINGLE_LINE_TEXT_FIELD.
+    if (translatable) this.products.set(id, [{ key: "value", value: m.value, type: m.type.toUpperCase().replace(".", "_") }]);
     return id;
   }
 
@@ -173,6 +176,12 @@ export class FakeShopifyStore {
     );
   }
 
+  /** Marks a resource as changed at a time (as a save in the admin would). */
+  touch(gid: string, at: Date) {
+    this.updatedAt.set(gid, at);
+    return this;
+  }
+
   translationOf(gid: string, locale: string, key: string) {
     return this.translations.get(`${gid}|${locale}|${key}`)?.value;
   }
@@ -189,6 +198,31 @@ export class FakeShopifyStore {
     if ((name === "LinguvaTranslatableResources" || name === "LinguvaProbeTranslatable") && this.deniedTypes.has(String(vars.resourceType))) {
       return Response.json({
         errors: [{ message: "Access denied for translatableResources field.", extensions: { code: "ACCESS_DENIED" } }],
+      });
+    }
+    const recent = /^LinguvaRecent(Products|Collections|Pages|Articles|Blogs)$/.exec(name);
+    if (recent) {
+      // Newest first by updatedAt (blogs: filtered by updated_at:>'…' instead).
+      const resourceType = { Products: "PRODUCT", Collections: "COLLECTION", Pages: "PAGE", Articles: "ARTICLE", Blogs: "BLOG" }[recent[1]!]!;
+      if (this.deniedTypes.has(resourceType)) {
+        return Response.json({ errors: [{ message: "Access denied", extensions: { code: "ACCESS_DENIED" } }] });
+      }
+      const changedAt = (gid: string) => this.updatedAt.get(gid) ?? new Date("2026-01-01T00:00:00Z");
+      let all = [...this.products.keys()].filter((gid) => gid.startsWith(`gid://shopify/${gidTypeOf(resourceType)}/`));
+      // Blogs keep Shopify's default order (by id); the others are sorted by UPDATED_AT, reversed.
+      if (resourceType !== "BLOG") all.sort((a, b) => changedAt(b).getTime() - changedAt(a).getTime());
+      const after = /^updated_at:>'(.+)'$/.exec(String(vars.query ?? ""));
+      if (after) all = all.filter((gid) => changedAt(gid) > new Date(after[1]!));
+      const start = vars.after ? Number(vars.after) : 0;
+      const slice = all.slice(start, start + Number(vars.first));
+      const end = start + slice.length;
+      return Response.json({
+        data: {
+          [recent[1]!.toLowerCase()]: {
+            nodes: slice.map((id) => ({ id, updatedAt: changedAt(id).toISOString() })),
+            pageInfo: { hasNextPage: end < all.length, endCursor: slice.length ? String(end) : null },
+          },
+        },
       });
     }
     if (name === "LinguvaProbeTranslatable") {

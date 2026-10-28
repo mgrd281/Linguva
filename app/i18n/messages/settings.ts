@@ -40,9 +40,9 @@ export const en = {
 
   "settings.auto.heading": "Automatic translation",
   "settings.auto.bodyAutoPublish":
-    "Translates new and changed products and collections about a minute after you save them. Only missing or outdated texts are translated, translations you wrote or approved are kept, and results follow the publishing setting above (currently: published automatically). It uses your AI allowance.",
+    "Translates new and changed products and collections about a minute after you save them. Only missing or outdated texts are translated, translations you wrote or approved are kept, and results follow the publishing setting above (currently: published automatically). It uses your AI allowance. Pages, blog posts and blogs are translated within about half an hour.",
   "settings.auto.bodyReview":
-    "Translates new and changed products and collections about a minute after you save them. Only missing or outdated texts are translated, translations you wrote or approved are kept, and results follow the publishing setting above (currently: wait in Review). It uses your AI allowance.",
+    "Translates new and changed products and collections about a minute after you save them. Only missing or outdated texts are translated, translations you wrote or approved are kept, and results follow the publishing setting above (currently: wait in Review). It uses your AI allowance. Pages, blog posts and blogs are translated within about half an hour.",
   "settings.auto.offBody": "Changes are translated when you start a translation.",
   "settings.auto.unavailable.heading": "Not available on this installation",
   "settings.auto.unavailable.body": "Automatic translation needs AI translation and background jobs to be set up.",
@@ -56,7 +56,7 @@ export const en = {
   "settings.auto.consent.body": "Automatic translation sends texts to the AI service. Allow it in the section above.",
   "settings.auto.noLanguage.heading": "Choose at least one language",
   "settings.auto.noLanguage.body": "Tick the languages new and changed content should be translated into.",
-  "settings.auto.savedOn": "Products and collections you save from now on are translated about a minute later.",
+  "settings.auto.savedOn": "Products and collections you save from now on are translated about a minute later; pages, blog posts and blogs within about half an hour.",
   "settings.auto.savedOff": "Automatic translation is off.",
 
   "settings.memory.body":
@@ -113,9 +113,9 @@ export const de: Translation<typeof en> = {
 
   "settings.auto.heading": "Automatische Übersetzung",
   "settings.auto.bodyAutoPublish":
-    "Übersetzt neue und geänderte Produkte und Kollektionen etwa eine Minute, nachdem du sie gespeichert hast. Nur fehlende oder veraltete Texte werden übersetzt, von dir geschriebene oder freigegebene Übersetzungen bleiben erhalten, und die Ergebnisse folgen der Veröffentlichungseinstellung oben (derzeit: automatisch veröffentlicht). Dafür wird dein KI-Kontingent verwendet.",
+    "Übersetzt neue und geänderte Produkte und Kollektionen etwa eine Minute, nachdem du sie gespeichert hast. Nur fehlende oder veraltete Texte werden übersetzt, von dir geschriebene oder freigegebene Übersetzungen bleiben erhalten, und die Ergebnisse folgen der Veröffentlichungseinstellung oben (derzeit: automatisch veröffentlicht). Dafür wird dein KI-Kontingent verwendet. Seiten, Blogbeiträge und Blogs werden innerhalb von etwa einer halben Stunde übersetzt.",
   "settings.auto.bodyReview":
-    "Übersetzt neue und geänderte Produkte und Kollektionen etwa eine Minute, nachdem du sie gespeichert hast. Nur fehlende oder veraltete Texte werden übersetzt, von dir geschriebene oder freigegebene Übersetzungen bleiben erhalten, und die Ergebnisse folgen der Veröffentlichungseinstellung oben (derzeit: warten unter „Prüfen“). Dafür wird dein KI-Kontingent verwendet.",
+    "Übersetzt neue und geänderte Produkte und Kollektionen etwa eine Minute, nachdem du sie gespeichert hast. Nur fehlende oder veraltete Texte werden übersetzt, von dir geschriebene oder freigegebene Übersetzungen bleiben erhalten, und die Ergebnisse folgen der Veröffentlichungseinstellung oben (derzeit: warten unter „Prüfen“). Dafür wird dein KI-Kontingent verwendet. Seiten, Blogbeiträge und Blogs werden innerhalb von etwa einer halben Stunde übersetzt.",
   "settings.auto.offBody": "Änderungen werden übersetzt, wenn du eine Übersetzung startest.",
   "settings.auto.unavailable.heading": "In dieser Installation nicht verfügbar",
   "settings.auto.unavailable.body": "Für die automatische Übersetzung müssen KI-Übersetzung und Hintergrundaufträge eingerichtet sein.",
@@ -129,7 +129,7 @@ export const de: Translation<typeof en> = {
   "settings.auto.consent.body": "Die automatische Übersetzung sendet Texte an den KI-Dienst. Erlaube das im Abschnitt oben.",
   "settings.auto.noLanguage.heading": "Wähle mindestens eine Sprache",
   "settings.auto.noLanguage.body": "Wähle die Sprachen aus, in die neue und geänderte Inhalte übersetzt werden sollen.",
-  "settings.auto.savedOn": "Produkte und Kollektionen, die du ab jetzt speicherst, werden etwa eine Minute später übersetzt.",
+  "settings.auto.savedOn": "Produkte und Kollektionen, die du ab jetzt speicherst, werden etwa eine Minute später übersetzt; Seiten, Blogbeiträge und Blogs innerhalb von etwa einer halben Stunde.",
   "settings.auto.savedOff": "Die automatische Übersetzung ist deaktiviert.",
 
   "settings.memory.body":

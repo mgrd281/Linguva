@@ -72,6 +72,8 @@
 - Load test with 20 shops at once and a large shop next to small ones.
 - Structural security tests: every way to write to a store, every Shopify mutation, authentication of every page and webhook, no owner database role in app code; review check for every database migration.
 - Phase 0 documentation set.
+- Lists and links in metafields and metaobject fields: translated item by item with AI or by hand, shown as lists (never as JSON); the number of items and the link addresses always stay those of the original.
+- Automatic translation also covers pages, blog posts and blogs, and catches missed product and collection webhooks: the worker checks every 30 minutes for content changed since its last check (migration 20261030100000).
 
 ### Security
 - HTTP security headers on every page and data response (nosniff, Referrer-Policy, Permissions-Policy, `base-uri` and `object-src` in the CSP, HSTS in production over HTTPS). Pages requested without a shop parameter had no framing protection; they can now only be framed by the Shopify admin.
@@ -82,6 +84,7 @@
 - Any change to a SECURITY DEFINER function must be reviewed: the posture check compares each function's definition with a reviewed hash; CODEOWNERS and a PR checklist cover migrations and tenancy code.
 - Images and metafields can only be written for the resource being edited: the server lists them from Shopify and reads form values only under those names.
 - CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
+- Rich text, lists and links are checked against the original's structure and link addresses on every write path (editor, Review approval, bulk publishing), not only in the editor's form handling.
 
 ### Fixed
 - Approving an older draft, or a job publishing automatically a moment after someone translated the same field, could replace that person's newer translation. Drafts, automatic publishing and the editor (two people editing the same field) now check that the translation they replace is still in place (migration 20261029200000).
@@ -105,6 +108,7 @@
 - Latest revisions are read with one `DISTINCT ON` query instead of the full history; locale sync skips unchanged rows; fuzzy memory search uses the trigram index (new migration).
 - Glossary CSV uploads over the size limit are refused before the body is parsed.
 - Restoring from an editor only accepts revisions of the resource shown.
+- Approving drafts failed for all selected drafts when one of their products had been deleted in Shopify; those drafts are now marked outdated and the others publish.
 
 ### Removed
 - Template demo pages and the `write_products` scope.

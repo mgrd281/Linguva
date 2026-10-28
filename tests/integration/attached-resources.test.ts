@@ -197,6 +197,67 @@ describe("image alt text and metafields in the editor", () => {
     expect(store.translationOf(rich, "de", "value")).toBe(draft);
   });
 
+  it("translates lists and links item by item; addresses and item count can't be changed", async () => {
+    const { shop, store } = await setup();
+    const list = store.addMetafield(P1, { namespace: "custom", key: "features", type: "list.single_line_text_field", value: '["Warm","Waterproof"]' });
+    const links = store.addMetafield(P1, {
+      namespace: "custom",
+      key: "guides",
+      type: "list.link",
+      value: '[{"text":"Care guide","url":"https://example.com/care"},{"text":"Size chart","url":"/pages/sizes"}]',
+    });
+
+    const data = await loadEditorData(ctx(store, shop.id));
+    expect(data.attached.items.find((i) => i.id === list)?.fields[0]).toMatchObject({ type: "LIST_SINGLE_LINE_TEXT_FIELD", machine: true });
+    expect(data.attached.items.find((i) => i.id === links)?.fields[0]).toMatchObject({ type: "LIST_LINK", machine: true });
+    expect(data.attached.unsupported).toBe(0);
+
+    const ai = await runEditorAction(ctx(store, shop.id), form([["intent", "ai-translate-attached"]]));
+    if (!("kind" in ai) || ai.kind !== "attached-ai") throw new Error("unexpected result");
+    expect(JSON.parse(ai.drafts[attachedRef(list, "value")]!)).toEqual(["[de] Warm", "[de] Waterproof"]);
+    const linkDraft = ai.drafts[attachedRef(links, "value")]!;
+    expect(JSON.parse(linkDraft)).toEqual([
+      { text: "[de] Care guide", url: "https://example.com/care" },
+      { text: "[de] Size chart", url: "/pages/sizes" },
+    ]);
+
+    const digestOf = (id: string) => data.attached.items.find((i) => i.id === id)!.fields[0]!.digest;
+    // Another address, a dropped item or malformed JSON: refused with a structure error, nothing published.
+    for (const bad of [
+      linkDraft.replace("https://example.com/care", "https://evil.example/"),
+      JSON.stringify([{ text: "Pflege", url: "https://example.com/care" }]),
+      "Pflegehinweise",
+    ]) {
+      const refused = await runEditorAction(ctx(store, shop.id), form([["intent", "save-attached"], ...saveEntries(links, "value", bad, digestOf(links))]));
+      expect((refused as { data: { outcomes: Array<{ status: string; code?: string }> } }).data.outcomes, bad).toEqual([
+        expect.objectContaining({ ref: attachedRef(links, "value"), status: "error", code: "STRUCTURE_CHANGED" }),
+      ]);
+    }
+    expect(store.translationOf(links, "de", "value")).toBeUndefined();
+    // An item left untranslated is refused as empty.
+    const partial = await runEditorAction(
+      ctx(store, shop.id),
+      form([["intent", "save-attached"], ...saveEntries(links, "value", '[{"text":"Pflege","url":"https://example.com/care"},{"text":"","url":"/pages/sizes"}]', digestOf(links))]),
+    );
+    expect((partial as { data: { outcomes: Array<{ code?: string }> } }).data.outcomes).toEqual([expect.objectContaining({ code: "EMPTY_TRANSLATION" })]);
+
+    // Edited texts with the source's addresses publish.
+    const edited = JSON.stringify([
+      { text: "Pflegehinweise", url: "https://example.com/care" },
+      { text: "Größentabelle", url: "/pages/sizes" },
+    ]);
+    await runEditorAction(
+      ctx(store, shop.id),
+      form([
+        ["intent", "save-attached"],
+        ...saveEntries(links, "value", edited, digestOf(links)),
+        ...saveEntries(list, "value", '["Warm","Wasserdicht"]', digestOf(list)),
+      ]),
+    );
+    expect(store.translationOf(links, "de", "value")).toBe(edited);
+    expect(store.translationOf(list, "de", "value")).toBe('["Warm","Wasserdicht"]');
+  });
+
   it("respects the plan's languages for AI on attached resources", async () => {
     const { shop, store } = await setup();
     store.addImage(P1, "Red wool jacket");

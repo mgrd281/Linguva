@@ -40,11 +40,13 @@ Three states, never mixed:
 | Review | Review page: filters, search, pagination, approve, reject | Yes | Server; UI (content, empty state, accessibility) | No | H1–H2 |
 | History | Revisions, restore, remove translation | Yes | Server | No | H3–H5 |
 | Images | Image alt text for product images (MEDIA_IMAGE) and collection / blog post images (nested COLLECTION_IMAGE, ARTICLE_IMAGE): editor, AI drafts, publish | Yes | Server (incl. security tests) | No (live test prepared) | I1–I3 |
-| Metafields | Metafields Shopify marks translatable (single and multi-line text): editor, AI drafts, publish. JSON, lists, links and files are counted, not edited | Yes | Server (incl. security tests) | No (live test prepared) | I4–I6 |
+| Metafields | Metafields Shopify marks translatable (single and multi-line text): editor, AI drafts, publish. JSON and files are counted, not edited | Yes | Server (incl. security tests) | No (live test prepared) | I4–I6 |
 | Metafields | Rich text metafields (`rich_text_field`): translated with structure, heading levels and link targets kept (any change is refused), rendered preview in editor and Review | Yes | Unit + server (tampered links, malformed JSON refused) | No | I4–I6 |
+| Metafields, metaobject fields | Lists and links (`list.single_line_text_field`, `list.multi_line_text_field`, `link`, `list.link`): AI translates each item; the merchant edits item by item; number of items and link addresses always come from the original. Shown as lists in the editor and on Review, never as JSON. Every write path (editor, Review approval, bulk publishing) refuses a changed structure or address (`keepsSourceStructure`) and a list with an untranslated item | Yes | Unit + server (tampered address, dropped item, malformed JSON, blank item refused) + browser (`structured.spec.ts`) | No | I4–I6 |
 | Bulk | Option "Also translate image alt text and custom fields" in bulk jobs (products, collections, pages, blog posts, blogs): drafts linked to their product, same protection and review rules | Yes | Server (incl. tenant isolation); UI (option shown) | No | E1, I1–I6 |
 | SEO | Coverage report includes product, collection and blog post image alt text; "Translate gaps" starts the owner's job with images | Yes | Server | No (nesting of collection / blog post images unconfirmed) | K1–K3 |
 | Automation | Automatic translation of new and changed products and collections (webhooks `products/*`, `collections/*`; off by default, per language in Settings): one check about a minute after the last save, same rules as bulk jobs (drafts, protected translations kept, allowance, plan, consent), shown as "Automatic" jobs | Yes | Server (real PostgreSQL, Redis, BullMQ) + UI (Settings) | No (webhook delivery not tested on a store) | P1–P5 |
+| Automation | Pages, blog posts and blogs (no webhook topics exist) and missed product/collection webhooks: the worker checks every 30 minutes for content changed since the last check (sorted by `UPDATED_AT`; blogs by the `updated_at` filter) and queues the same check a webhook queues (same queue job id, so no double work). Starts when automatic translation is turned on (`autoSweptAt`), keeps its position after a failure, skips types without access, at most 500 changes per type and run (more: logged, left to "Translate all") | Yes | Server (`auto-sweep.test.ts`: types, start position, failure, missing scope, two stores, cap, worker payloads) | No | P1–P5 |
 | Markets | Read-only Markets page (optional scope `read_markets`): languages and addresses per market, checks | Yes | Server | No (live read test prepared) | J1–J4 |
 | Billing | Owner complimentary access: shop GID in server configuration AND an operator grant (owner database role), metered AI usage, internal cost estimate, audit | Yes | Server (incl. security tests) + UI (Plan page) | No | L10 |
 | Billing | Shopify App Pricing: plan entitlements, Partner API subscription check (6 h cache, never locks out a paying shop on API errors), plan selection redirect, welcome link, gating in editor, bulk, settings, glossary, worker | Yes | Server (simulated Partner API) + UI (Plan page states) | No | L1–L9 |
@@ -64,10 +66,10 @@ Three states, never mixed:
 |---|---|
 | App interface in languages other than German and English | Catalogue structure in place |
 | Review text search through an index | Linear scan under RLS (PERFORMANCE.md §1) |
-| JSON, list, link and file metafields | Need structure-aware editing; not plain text |
+| JSON and file metafields | JSON has no reliable text to translate; files are references |
 | Custom fields in the coverage report | Shopify lists metafields only through their owner (the `METAFIELD` resource type is deprecated), so a scan would need one request per resource |
 | Market-specific translations (`marketId`), changing markets or web presences | Markets page is read-only |
 | Usage-based overage (App Events) | Planned |
-| Automatic translation for pages, blog posts and other types; periodic reconciliation for missed webhooks | Planned. Products and collections are implemented |
+| Automatic translation for menus, metaobjects, theme content and other types | Planned. Products, collections, pages, blog posts and blogs are implemented |
 | Admin center for the operator (MFA, roles) | Planned |
 | Production hosting, backups, monitoring | Not set up; needs the owner's approval |

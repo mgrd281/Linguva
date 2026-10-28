@@ -162,6 +162,20 @@ describe("bulk review (draft mode)", () => {
     expect(store.translationOf(P1, "de", "title")).toBeUndefined();
   });
 
+  it("marks drafts stale when their product was deleted in Shopify, and still publishes the others", async () => {
+    const { shop, store, deps } = await setup(2);
+    await runJob(deps, shop.id);
+    store.products.delete(P1);
+    const drafts = await listPendingDrafts(shop.id, {}, app);
+    const result = await approveDrafts(
+      { admin: store.asAdmin(), shopId: shop.id, actorId: null, draftIds: drafts.map((d) => d.id) },
+      app,
+    );
+    const p1 = drafts.filter((d) => d.resourceGid === P1).length;
+    expect(p1).toBeGreaterThan(0);
+    expect(result).toEqual({ published: drafts.length - p1, stale: p1, failed: 0 });
+  });
+
   it("rejects drafts without publishing", async () => {
     const { shop, store, deps } = await setup(1);
     await runJob(deps, shop.id);

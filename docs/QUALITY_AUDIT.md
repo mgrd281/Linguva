@@ -25,7 +25,7 @@ Rules:
 |---|---|---|---|---|---|---|
 | Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | **7.5** | Not checked inside the real admin; no native save bar; no App Store assets |
 | Usability for beginners | 5.5 | 8 | 8 | 8 | **8.5** | German and English only; no test with real merchants |
-| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | **8.5** | No check on real devices or in the Shopify mobile app |
+| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | **9** | No check on real devices or in the Shopify mobile app |
 | AI translation | 5 | 7 | 7 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
 | Content coverage | 3 | 5 | 5 | 6.5 | **6.5** | Webhooks and image nesting unverified on Shopify; JSON/list metafields and market-specific translations missing |
 | SEO | 7 | 7 | 7 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
@@ -53,11 +53,11 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 5 | HTML texts shown rendered (sanitised), not as raw HTML | ✅ | Phase A: sanitiser + sandboxed frames; `tests/security/sanitize-html.test.ts`, `tests/ui/preview.spec.ts` |
 | 6 | Search result preview like on Google | ✅ | `SeoPreview`; `tests/ui/pages.spec.ts` (Editor) |
 | 7 | Empty states with guidance and a next step | ✅ | `tests/ui/states.spec.ts` |
-| 8 | Native admin elements: title bar, save bar, toasts, modals (App Bridge) | ◐ | Admin loading bar and navigation only |
+| 8 | Native admin elements: title bar, save bar, toasts, modals (App Bridge) | ◐ | Phase E: save bar in the editor, toasts for every success, Polaris modals for actions that can't be undone (`tests/ui/unsaved.spec.ts`, `tests/ui/confirm.spec.ts`, App Bridge simulated). Stays ◐ until seen in the real admin |
 | 9 | Checked visually inside the real Shopify admin | ❌ | Needs a development store |
 | 10 | App Store assets: icon, screenshots, listing text | ❌ | Not created |
 
-**Plan:** (8) After the dev store check: the App Bridge save bar in the editor and toasts for publishing. (9) Screenshot review in the admin, light and dark. (10) Listing assets once the design is confirmed in the admin.
+**Plan:** (8) and (9) dev store: check save bar, toasts and modals in the admin, light and dark. (10) Listing text and screenshots are prepared in phase H (APP_STORE_LISTING.md); the icon and final screenshots after the admin check.
 
 ### 3.2 Usability for beginners: 8.5/10
 
@@ -76,14 +76,14 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 
 **Plan:** (9) French and Spanish catalogues (the structure is in place; a native speaker should review them). (10) 3–5 beta merchants with a short task list. That needs the owner.
 
-### 3.3 Desktop and mobile: 8.5/10
+### 3.3 Desktop and mobile: 9/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
 | 1 | No horizontal scrolling on a phone (Pixel 7) on all main pages | ✅ | `@responsive` tests, `expectNoHorizontalScroll` |
 | 2 | Tables become readable lists on a phone | ✅ | Polaris tables; checked in the mobile project |
 | 3 | Main flows run on a phone, not only page views | ✅ | `@responsive`: settings, content, editor warnings, RTL |
-| 4 | Comfortable touch targets | ◐ | Polaris defaults; not measured |
+| 4 | Comfortable touch targets | ✅ | Phase E: WCAG 2.2 2.5.8 (24 px or spacing) measured on 13 pages on a phone, `tests/ui/touch.spec.ts`; found and fixed the 21 px CSV file input |
 | 5 | Right-to-left languages are typed right to left | ✅ | New: `tests/ui/rtl.spec.ts` |
 | 6 | Checked on real devices and in the Shopify mobile app | ❌ | Needs a development store |
 | 7 | Accessibility: axe WCAG 2.1 A/AA without serious findings | ✅ | `expectAccessible` on every tested page |
@@ -91,7 +91,7 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 9 | Language set on input fields for screen readers | ✅ | New: `lang` on the editor fields (`tests/ui/rtl.spec.ts`) |
 | 10 | Small download for mobile networks | ✅ | 122 KB gzipped JavaScript, split by page (PERFORMANCE.md §4) |
 
-**Plan:** (4) Measure touch targets in the mobile project. (6) Dev store check in the Shopify mobile app.
+**Plan:** (6) Dev store check in the Shopify mobile app.
 
 ### 3.4 AI translation: 7/10
 

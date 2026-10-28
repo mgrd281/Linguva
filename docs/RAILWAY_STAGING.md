@@ -203,7 +203,9 @@ Problems met on the way, for the next environment:
 - `shopify app deploy --config staging` asks "Create this project as a new app?": answer **No, connect it to an existing app** and pick "Linguva Staging"; release only when the prompt names "Linguva Staging".
 - The `worker` service is required: without it bulk jobs, coverage scans and automatic translation wait forever in the queue.
 
-Still open on staging: coverage scan from the app, an automatic-translation job triggered by a webhook, and the clean-up below.
+| Coverage scan (worker) | "Shop prüfen" finished in under a minute (21:01 UTC): French 15 % = 4 of 26 fields (3 outdated, 19 missing); by field 1/23 titles and names, 3/3 descriptions, handles 0/5 (not in the totals); the whole-store figure stays empty because French isn't published. The parts add up to the total; I did not recount against the Admin API this time (the earlier live run did, DEV_STORE_VERIFICATION.md) |
+
+Still open on staging: an automatic-translation job triggered by a webhook, and the clean-up below.
 
 Clean-up the owner still has to do: new passwords for `linguva_owner` and `linguva_app` (they appeared in a terminal transcript) and updated `DATABASE_URL` / `MIGRATION_DATABASE_URL`; remove Postgres's public TCP proxy; rotate the development app's client secret that was pasted earlier.
 

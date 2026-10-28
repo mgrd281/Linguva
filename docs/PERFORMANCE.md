@@ -61,7 +61,7 @@ All content checks the 30 content types in batches of 6, so in a real store its 
 
 ## 4. Client bundle
 
-`pnpm build`: 45 JavaScript files, 364 KB in total, **122 KB gzipped**. The shared part (React, router, entry) is 86 KB gzipped. Pages are split by route: the largest page chunk is the translation editor at 7 KB gzipped. Polaris and App Bridge load from Shopify's CDN and are usually cached by the admin.
+`pnpm build` (after phase C): **155 KB gzipped** JavaScript in total (was 122 KB). The increase is the interface texts in English and German (about 520 keys each), which are part of the shared code so pages render without waiting for a text file. The shared part (React, router, entry, texts) is about 116 KB gzipped. Pages are split by route: the largest page chunk is the translation editor at 7 KB gzipped. Polaris and App Bridge load from Shopify's CDN and are usually cached by the admin. With more interface languages, the catalogues should be loaded per language (one chunk each) instead of all at once.
 
 ## 5. Next steps
 

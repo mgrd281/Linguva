@@ -66,6 +66,10 @@
 - Rich text custom fields: translated with their structure and links kept; rendered preview in the editor and on Review.
 - Automatic translation of new and changed products and collections (Settings, per language, off by default): webhooks `products/create|update` and `collections/create|update` with `include_fields`, a debounced queue (`translation-auto`), items through the normal item queue, "Automatic" jobs (one per day, type and language), a bulk job started meanwhile takes the automatic job over with the merchant's settings.
 - Webhook delivery log retention (14 days, deleted by the worker's sweep).
+- App interface in German and English, following the admin user's language; numbers, dates (UTC) and language names per language.
+- Job report: results grouped by reason, start/end/duration and remaining time, a support reference, and a CSV download of every item.
+- Quality check for the chosen form of address (German Sie/du, French vous/tu, Spanish, Italian, Dutch).
+- Load test with 20 shops at once and a large shop next to small ones.
 - Phase 0 documentation set.
 
 ### Security
@@ -79,6 +83,8 @@
 - CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
 
 ### Fixed
+- The app's `?locale=` parameter (language to translate into) collided with Shopify's `locale` (admin language); it is now `?lang=`.
+- A shop starting a job waited behind another shop's whole queued catalogue; items are now queued by their position in their own job.
 - First open after install could fail (race between the install and parallel page loads writing settings, languages or the subscription cache).
 - Settings showed the server's default AI allowance instead of the plan's.
 - Polaris layouts with several breakpoints were ignored (wrong responsive syntax).

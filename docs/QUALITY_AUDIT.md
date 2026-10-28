@@ -17,28 +17,28 @@ Rules:
 - **No area gets 10/10 without verification on a development store.** Every Shopify-facing criterion counts as ◐ at most until it is Verified on Shopify (FEATURE_STATUS.md).
 - The criteria were written before scoring. Evidence names the test or document.
 - There is **no measured comparison with competitor apps yet**. Their features were not tested, so "best in class" here means these criteria, not a benchmark.
-- Test basis (update after phase B): 547 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance) and 84 Playwright browser tests on the production build, including 14 screenshot comparisons. All pass locally; CI status per commit in the PR.
+- Test basis (update after phase C): 564 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance) and 112 Playwright browser tests on the production build, including 14 screenshot comparisons and German pages. All pass locally; CI status per commit in the PR.
 
 ## 2. Summary
 
-| Area | Before (9a89523) | Round 1 | Phase A | **Phase B** | Biggest gap now |
-|---|---|---|---|---|---|
-| Design and modernity | 5.5 | 6.5 | 7.5 | **7.5** | Not checked inside the real admin; no native save bar; no App Store assets |
-| Usability for beginners | 5.5 | 8 | 8 | **8** | App interface only in English; no test with real merchants |
-| Desktop and mobile | 5 | 7.5 | 8.5 | **8.5** | No check on real devices or in the Shopify mobile app |
-| AI translation | 5 | 7 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
-| Content coverage | 3 | 5 | 5 | **6.5** | Webhooks and image nesting unverified on Shopify; JSON/list metafields and market-specific translations missing |
-| SEO | 7 | 7 | 7 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
-| Performance | 4.5 | 6.5 | 6.5 | **6.5** | Real Shopify latency not measured; Review text search not indexed |
-| Security | 6.5 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
-| Billing | 5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
-| Shopify integration | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
-| Error handling and loading states | 6 | 7 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
-| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | |
+| Area | Before (9a89523) | Round 1 | Phase A | Phase B | **Phase C** | Biggest gap now |
+|---|---|---|---|---|---|---|
+| Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | **7.5** | Not checked inside the real admin; no native save bar; no App Store assets |
+| Usability for beginners | 5.5 | 8 | 8 | 8 | **8.5** | German and English only; no test with real merchants |
+| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | **8.5** | No check on real devices or in the Shopify mobile app |
+| AI translation | 5 | 7 | 7 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
+| Content coverage | 3 | 5 | 5 | 6.5 | **6.5** | Webhooks and image nesting unverified on Shopify; JSON/list metafields and market-specific translations missing |
+| SEO | 7 | 7 | 7 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
+| Performance | 4.5 | 6.5 | 6.5 | 6.5 | **7** | Real Shopify latency not measured; Review text search not indexed; no production monitoring |
+| Security | 6.5 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
+| Billing | 5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
+| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
+| Error handling and loading states | 6 | 7 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
+| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | |
 
-Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b. A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
+Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c. A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
-**Honest overall verdict: 7.3/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
+**Honest overall verdict: 7.4/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
 
 ## 3. Areas in detail
 
@@ -59,7 +59,7 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 
 **Plan:** (8) After the dev store check: the App Bridge save bar in the editor and toasts for publishing. (9) Screenshot review in the admin, light and dark. (10) Listing assets once the design is confirmed in the admin.
 
-### 3.2 Usability for beginners: 8/10
+### 3.2 Usability for beginners: 8.5/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -71,10 +71,10 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 6 | Unpublished changes aren't lost by leaving the page | ✅ | New: `tests/ui/unsaved.spec.ts` |
 | 7 | Every change can be undone | ✅ | Revisions and restore; integration tests |
 | 8 | Search and filters on long lists | ✅ | Review, Jobs, theme texts; `tests/ui/content.spec.ts` |
-| 9 | App interface in the merchant's language (at least German, French, Spanish) | ❌ | English only |
+| 9 | App interface in the merchant's language (at least German, French, Spanish) | ◐ | Phase C: German and English, from the admin user's language (`tests/ui/i18n.spec.ts`, `tests/unit/i18n.test.ts`); French and Spanish missing |
 | 10 | Tested with real merchants (usability sessions) | ❌ | Not done |
 
-**Plan:** (9) Move interface texts into message catalogues and use the admin's language from the session token; German first. This is a large change, so it goes in its own step. (10) 3–5 beta merchants with a short task list. That needs the owner.
+**Plan:** (9) French and Spanish catalogues (the structure is in place; a native speaker should review them). (10) 3–5 beta merchants with a short task list. That needs the owner.
 
 ### 3.3 Desktop and mobile: 8.5/10
 
@@ -144,7 +144,7 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 
 **Plan:** (10) dev store. (9) after market-specific translations.
 
-### 3.7 Performance: 6.5/10
+### 3.7 Performance: 7/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -156,10 +156,10 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 6 | Fast page responses from the server | ✅ | New: `tests/ui/timings.spec.ts` (22–54 ms) |
 | 7 | Small, split client bundle | ✅ | 122 KB gzipped |
 | 8 | Real Shopify latency and throttling measured | ❌ | Needs a development store |
-| 9 | Load test with many merchants at once | ❌ | Not done |
+| 9 | Load test with many merchants at once | ◐ | Phase C: 20 shops at once and a large shop next to small ones with simulated Shopify (`tests/performance/multi-shop.perf.test.ts`); found and fixed queue unfairness. Not against real infrastructure |
 | 10 | Production monitoring (response times, queue lengths) | ❌ | No hosting yet |
 
-**Plan:** (5) a reviewed definer function for the search, with a security review. (9) Load test with k6 or autocannon against the production build with simulated Shopify: 50 shops in parallel. (8) and (10) with the dev store and hosting.
+**Plan:** (5) a reviewed definer function for the search, with a security review. (9) Repeat the load test on the production host (several worker processes, its database limits). (8) and (10) with the dev store and hosting.
 
 ### 3.8 Security: 8/10
 
@@ -267,14 +267,25 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | **Bug found by the UI test:** Polaris choice lists submit multiple values comma-separated | 77fc8dc |
 | Shopify limits documented (SHOPIFY_API_MATRIX §2.2) | docs |
 
+## 4c. Phase C: interface languages, quality checks, reports, load (all Tested Locally)
+
+| Change | Evidence |
+|---|---|
+| Interface in German and English from the admin user's language (Shopify's `locale` parameter), about 520 texts per language; numbers, dates and language names per language | a7ed130, 62fb95b, ff33977; `tests/unit/i18n.test.ts` (complete, consistent catalogues), `tests/ui/i18n.spec.ts` (10 German pages, accessibility, phone layout, no English left) |
+| **Bug:** the app's own `?locale=` (language to translate into) collided with Shopify's `locale` (admin language) | 62fb95b; target language now `?lang=`, UI test |
+| **Bug:** dates were formatted with the server's and the browser's own locale and time zone (hydration mismatch risk) | 62fb95b; dates in UTC with "UTC" |
+| Job report: results by reason, timing and remaining time, support reference, CSV download; save errors with codes | b13c247; integration and UI tests (incl. another store's report: 404) |
+| **Bug:** a shop starting a job waited behind another shop's whole queued catalogue | 0e5b30b; load test, mutation-checked |
+| Quality check for the chosen form of address (Sie/du and others) | 4b4fe22; unit and pipeline tests |
+| Client JavaScript 122 → 155 KB gzipped because of the texts of both languages | PERFORMANCE.md §4 |
+
 ## 5. Next steps, in order of effect
 
 **Without external access (I can continue):**
 
-1. App interface in German and English (usability)
-2. Load test with many shops in parallel (performance)
-3. Clearer progress and error reports on jobs (usability, error handling)
-4. Audit of publishing and overwrite protection across all paths (security)
+1. Audit of publishing and overwrite protection across all paths (security)
+2. French and Spanish interface (usability), reviewed by native speakers
+3. Indexed Review text search with a reviewed definer function (performance)
 
 **Need the owner (accounts, decisions, money):**
 

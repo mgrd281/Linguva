@@ -46,6 +46,10 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `network.spec.ts` | Hanging Shopify ends in a clear page within the time limit; loading bar on slow navigation; AI translation can't be sent twice |
 | `timings.spec.ts` | Server response times of the main pages (PERFORMANCE.md) |
 | `visual.spec.ts` | Screenshot comparison of 7 pages on desktop and phone (see below) |
+| `i18n.spec.ts` | German interface from Shopify's `locale` parameter: 10 pages with axe, phone layout and no English interface text left; navigation stays German inside the app; the target language (`?lang=`) never changes the interface; German error page; browser language without the parameter |
+| `job-report.spec.ts` | Job page results by reason, timing and support reference; CSV report in English and German; another store's report is 404 |
+
+`openApp(page, shop, path, { locale: "de" })` opens a page as a German admin user would (Shopify adds `locale` to the app's URL). The app's own language parameter for the translation target is `lang`.
 
 ## Accessibility rule note
 

@@ -15,8 +15,9 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
       await expect(page.getByText(/of 5 steps done/)).toBeVisible();
       await expect(page.getByRole("progressbar", { name: "Setup progress" })).toBeVisible();
       // Languages with their storefront state.
-      await expect(page.locator("s-table").getByText("Arabic", { exact: true })).toBeVisible();
-      await expect(page.locator("s-table").getByText("Hidden")).toBeVisible();
+      const languages = page.locator('s-section[heading="Your languages"]');
+      await expect(languages.getByText("Arabic", { exact: true })).toBeVisible();
+      await expect(languages.getByText("Hidden", { exact: true })).toBeVisible();
       await expect(page.getByText(/translations? to review/)).toBeVisible();
       await expect(page.getByRole("progressbar", { name: "AI usage this month" })).toBeVisible();
     },

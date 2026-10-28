@@ -80,6 +80,8 @@ export interface DiscoveryResult {
   itemIds: string[];
   hasMore: boolean;
   cursor: string | null;
+  /** Items the job had before this page (queue priority of the page's items). */
+  position: number;
 }
 
 /**
@@ -92,7 +94,7 @@ export async function runDiscoveryPage(
   deps: JobDependencies,
   payload: DiscoveryPayload,
 ): Promise<DiscoveryResult> {
-  const done: DiscoveryResult = { itemIds: [], hasMore: false, cursor: null };
+  const done: DiscoveryResult = { itemIds: [], hasMore: false, cursor: null, position: 0 };
   const job = await withTenant(
     payload.shopId,
     (tx) => tx.translationJob.findFirst({ where: { id: payload.jobId, shopId: payload.shopId } }),
@@ -170,7 +172,7 @@ export async function runDiscoveryPage(
   );
 
   if (!page.pageInfo.hasNextPage) await completeIfDone(payload.shopId, job.id, deps.prisma);
-  return { itemIds, hasMore: page.pageInfo.hasNextPage, cursor: page.pageInfo.endCursor };
+  return { itemIds, hasMore: page.pageInfo.hasNextPage, cursor: page.pageInfo.endCursor, position: job.totalItems };
 }
 
 export interface ItemPayload {

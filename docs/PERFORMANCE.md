@@ -29,6 +29,19 @@ The translation memory solved the same problem with a reviewed `SECURITY DEFINER
 
 Same test file, 5,000 products. Discovery runs in pages of at most 50 resources, with exactly one Shopify request per page: 100 pages, 2.3 s in total, 23 ms per page without Shopify latency. Memory use stays bounded because a page is processed and stored before the next one is read. Real throughput is limited by Shopify's API cost limits (handled by the shop rate limiter) and by the AI provider.
 
+## 2a. Many shops at once (`tests/performance/multi-shop.perf.test.ts`)
+
+One worker (concurrency 8), real PostgreSQL with RLS, Redis and BullMQ, the per-shop Shopify rate limiter with production defaults, Shopify answering each call after 15 ms, mock AI provider. Measured in the development container (CI repeats it on every push):
+
+| Scenario | Result |
+|---|---|
+| 20 shops × 25 products start at the same moment | All 500 items in about 6 s (about 80 items/s). The first shop finished at about 90 % of the total time, the last at 100 %: the shops progress side by side. Every draft belongs to its own shop's catalogue (marker check). |
+| A large shop (400 products, no Shopify rate limit, e.g. a Plus shop) has its work queued; then 5 small shops (5 products each) start | The small shops finish about 0.6 s after starting, while the large shop has about 30 of 400 done. |
+
+**Bug found by the second scenario:** the item queue was first in, first out, so a shop starting a job waited behind another shop's whole catalogue (measured: the large shop had 203 of 400 done before the small shops finished). Items now get a queue priority from their position in their own job (`itemPriority`): every shop's first items come before another shop's later items, and a job keeps its own order. The test fails without the change (mutation-checked).
+
+Not measured: real Shopify and DeepL latency and limits, several worker processes, database connection limits of the production host.
+
 ## 3. Page response times
 
 `tests/ui/timings.spec.ts`: the production build under `react-router-serve`, full HTML including session token validation. Median of 3 runs after a warm-up; the CI limit is 1,500 ms.

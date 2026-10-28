@@ -122,6 +122,20 @@ export async function enqueueDiscovery(
   });
 }
 
+/** BullMQ's lowest priority (largest number). */
+const MAX_PRIORITY = 2_097_152;
+
+/**
+ * Fair share between shops: an item's queue priority is its position in
+ * its own job (1 = first item). A shop that starts a job while another
+ * shop's large job is queued gets its first items translated next, instead
+ * of waiting behind the whole catalogue of the other shop. Within a job,
+ * items keep their order.
+ */
+export function itemPriority(position: number) {
+  return Math.min(MAX_PRIORITY, Math.max(1, Math.floor(position) + 1));
+}
+
 /**
  * Enqueues items. The first round uses the item id as queue job id, so
  * enqueueing the same item twice is a no-op; explicit retries and re-queues
@@ -134,6 +148,8 @@ export async function enqueueItems(
   itemIds: readonly string[],
   round?: string,
   client: PrismaClient = defaultClient,
+  /** Items of the same job queued before these (see itemPriority). */
+  position = 0,
 ) {
   if (itemIds.length === 0) return;
   const jobs = itemIds.map((itemId) => ({
@@ -153,10 +169,10 @@ export async function enqueueItems(
     client,
   );
   await queues.items.addBulk(
-    jobs.map((job) => ({
+    jobs.map((job, index) => ({
       name: "translate",
       data: { shopId, itemId: job.itemId },
-      opts: { ...queues.itemJobOptions, jobId: job.queueJobId },
+      opts: { ...queues.itemJobOptions, jobId: job.queueJobId, priority: itemPriority(position + index) },
     })),
   );
 }
@@ -244,7 +260,7 @@ export function createDiscoveryProcessor(deps: JobDependencies, queues: Queues) 
 
     try {
       const result = await runDiscoveryPage(deps, payload);
-      await enqueueItems(queues, payload.shopId, result.itemIds, undefined, deps.prisma);
+      await enqueueItems(queues, payload.shopId, result.itemIds, undefined, deps.prisma, result.position);
       if (result.hasMore) await enqueueDiscovery(queues, payload, result.cursor);
       log.info({ items: result.itemIds.length, hasMore: result.hasMore }, "discovery page processed");
       return { items: result.itemIds.length, hasMore: result.hasMore };

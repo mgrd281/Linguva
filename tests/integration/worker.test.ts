@@ -156,7 +156,8 @@ describe("bulk translation worker (BullMQ + Redis)", () => {
     const { itemIds } = await runDiscoveryPage(deps, { shopId: shop.id, jobId: job.id });
     await enqueueItems(queues, shop.id, itemIds, undefined, app);
     await enqueueItems(queues, shop.id, itemIds, undefined, app);
-    expect(await queues.items.getWaitingCount()).toBe(1);
+    // Items wait as "prioritized" (fair share between shops, see itemPriority).
+    expect(await queues.items.getPrioritizedCount()).toBe(1);
   });
 });
 
@@ -171,7 +172,7 @@ describe("stalled-item sweeper", () => {
     await enqueueItems(queues, shop.id, [itemIds[0]!], undefined, app);
     const later = new Date(Date.now() + 60 * 60 * 1000);
     expect(await requeueStalledItems(deps, queues, later)).toBe(1);
-    expect(await queues.items.getWaitingCount()).toBe(2);
+    expect(await queues.items.getPrioritizedCount()).toBe(2);
     // Running the sweeper again doesn't duplicate anything.
     expect(await requeueStalledItems(deps, queues, later)).toBe(0);
   });

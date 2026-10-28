@@ -93,7 +93,7 @@ jobs:
       - name: Security tests (tenant isolation, payloads, XSS)
         run: pnpm test:security
 
-      - name: Performance tests (fuzzy memory at 100,000 entries; large shop with 50,000 drafts, 5,000 jobs, 5,000 products)
+      - name: Performance tests (fuzzy memory at 100,000 entries; large shop with 50,000 drafts, 5,000 jobs, 5,000 products; 20 shops at once and fair share)
         run: pnpm test:performance
 
       - name: Build (web app, worker, operator tools)

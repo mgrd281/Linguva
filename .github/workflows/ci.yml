@@ -102,6 +102,12 @@ jobs:
       - name: Build (web app, worker, operator tools)
         run: pnpm build
 
+      - name: Docker image (multi-stage build; migrations, web and worker in staging mode, smoke checks)
+        run: |
+          docker build -t linguva:ci .
+          docker images linguva:ci --format 'Image size: {{.Size}}'
+          scripts/ci/image-check.sh linguva:ci
+
       - name: Install Chromium for the UI tests
         run: pnpm exec playwright install --with-deps chromium
 

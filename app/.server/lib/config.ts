@@ -1,6 +1,21 @@
 import { z } from "zod";
 
 const keyEntry = /^[A-Za-z0-9_-]{1,32}:[A-Za-z0-9+/]{43}=$/;
+const shopDomain = /^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$/;
+
+/**
+ * Stores a staging deployment must never serve, whatever ALLOWED_SHOPS says:
+ * the operator's production stores (test translations must not reach them).
+ */
+export const STAGING_DENIED_SHOP_NAMES = ["karinex", "softwarefach"] as const;
+
+/** Comma-separated shop domains, trimmed and lower-cased; empty entries dropped. */
+export function shopList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 const schema = z.object({
   NODE_ENV: z
@@ -67,7 +82,21 @@ const schema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
   // Longest wait for one Shopify Admin API call before giving up (ms).
   SHOPIFY_TIMEOUT_MS: z.coerce.number().int().min(500).max(120_000).default(15_000),
-}).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock"), {
+  // Hosted stage (docs/RAILWAY_STAGING.md). "staging": a production build
+  // that serves only ALLOWED_SHOPS, with the mock provider and no AI key.
+  LINGUVA_STAGE: z.enum(["staging", "production"]).optional(),
+  // Comma-separated *.myshopify.com domains this deployment may serve.
+  // Required for staging; optional for production (for example the first
+  // custom-distribution store). Unset: every shop.
+  ALLOWED_SHOPS: z
+    .string()
+    .optional()
+    .refine((v) => shopList(v).every((d) => shopDomain.test(d)), "must be comma-separated *.myshopify.com domains"),
+  // Set by Railway in every deployment: the environment's name.
+  RAILWAY_ENVIRONMENT_NAME: z.string().optional(),
+  // "yes" only when the owner has approved a production release.
+  LINGUVA_PRODUCTION_APPROVED: z.enum(["yes"]).optional(),
+}).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock" && c.LINGUVA_STAGE !== "staging"), {
   message: "the mock translation provider can't be used in production",
   path: ["TRANSLATION_PROVIDER"],
 }).refine(
@@ -82,7 +111,46 @@ const schema = z.object({
   // Rate limits must be shared by all app instances.
   message: "is required in production (shared rate limits)",
   path: ["REDIS_URL"],
+}).refine((c) => c.LINGUVA_STAGE !== "staging" || c.TRANSLATION_PROVIDER === "mock", {
+  // No paid AI calls from staging.
+  message: "must be mock in staging",
+  path: ["TRANSLATION_PROVIDER"],
+}).refine((c) => c.LINGUVA_STAGE !== "staging" || !c.DEEPL_API_KEY, {
+  message: "must not be set in staging",
+  path: ["DEEPL_API_KEY"],
+}).refine((c) => c.LINGUVA_STAGE !== "staging" || shopList(c.ALLOWED_SHOPS).length > 0, {
+  message: "is required in staging (the test stores it may serve)",
+  path: ["ALLOWED_SHOPS"],
+}).refine(
+  (c) => c.LINGUVA_STAGE !== "staging" || !shopList(c.ALLOWED_SHOPS).some((d) => STAGING_DENIED_SHOP_NAMES.some((n) => d.includes(n))),
+  { message: "must not list a production store in staging", path: ["ALLOWED_SHOPS"] },
+).refine((c) => !c.RAILWAY_ENVIRONMENT_NAME || Boolean(c.LINGUVA_STAGE), {
+  // A Railway deployment always says what it is.
+  message: "must be set on Railway (staging or production)",
+  path: ["LINGUVA_STAGE"],
+}).refine((c) => !c.RAILWAY_ENVIRONMENT_NAME || !c.LINGUVA_STAGE || c.RAILWAY_ENVIRONMENT_NAME === c.LINGUVA_STAGE, {
+  // Staging variables copied into the production environment (or the
+  // other way round) stop the start instead of running in the wrong place.
+  message: "must match the Railway environment's name",
+  path: ["LINGUVA_STAGE"],
+}).refine((c) => c.LINGUVA_STAGE !== "production" || c.LINGUVA_PRODUCTION_APPROVED === "yes", {
+  // No accidental production release: the owner sets this when approving one.
+  message: "production needs LINGUVA_PRODUCTION_APPROVED=yes (set by the owner for an approved release)",
+  path: ["LINGUVA_STAGE"],
 });
+
+/**
+ * Whether this deployment may serve a shop: listed in ALLOWED_SHOPS (when
+ * set) and, in staging, never one of the operator's production stores.
+ */
+export function isShopAllowed(shop: string | null | undefined, config: AppConfig = getConfig()): boolean {
+  const domain = (shop ?? "").trim().toLowerCase();
+  if (!domain) return false;
+  if (config.LINGUVA_STAGE === "staging" && STAGING_DENIED_SHOP_NAMES.some((n) => domain.includes(n))) return false;
+  const allowed = shopList(config.ALLOWED_SHOPS);
+  // No list: every shop (custom shop domains included), as before stages existed.
+  return allowed.length === 0 || allowed.includes(domain);
+}
 
 /** The AI character limits applied to every reservation. */
 export function aiUsageLimits(config: AppConfig) {
@@ -96,6 +164,11 @@ export function aiUsageLimits(config: AppConfig) {
 export type AppConfig = z.infer<typeof schema>;
 
 let cached: AppConfig | undefined;
+
+/** Tests only: forget the validated environment so a changed process.env is read again. */
+export function resetConfigCache() {
+  cached = undefined;
+}
 
 /**
  * Validates environment configuration on first use and fails fast with a

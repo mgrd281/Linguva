@@ -3,15 +3,19 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 
 import { login } from "../../shopify.server";
+import { refuseShop, refuseShopInput } from "../../.server/shopify/require-shop";
 import { loginErrorMessage } from "./error.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // A store this deployment doesn't serve never reaches Shopify's install.
+  refuseShop(new URL(request.url).searchParams.get("shop"));
   const errors = loginErrorMessage(await login(request));
 
   return { errors };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  refuseShopInput((await request.clone().formData()).get("shop"));
   const errors = loginErrorMessage(await login(request));
 
   return {

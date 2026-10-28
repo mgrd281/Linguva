@@ -1,5 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../../shopify.server";
+import { isShopAllowed } from "../lib/config";
+import { logger } from "../lib/logger";
 import {
   processWebhook,
   webhookResponse,
@@ -16,6 +18,12 @@ export function webhookAction(
 ) {
   return async ({ request }: ActionFunctionArgs) => {
     const context = await authenticate.webhook(request);
+    // A store this deployment doesn't serve: acknowledged (so Shopify stops
+    // retrying) and dropped, nothing stored. Only after the HMAC check.
+    if (!isShopAllowed(context.shop)) {
+      logger.warn({ shop: context.shop, topic: context.topic }, "webhook dropped: store not served by this deployment");
+      return new Response(null, { status: 200 });
+    }
     const webhook: VerifiedWebhook = {
       webhookId: context.webhookId,
       topic: context.topic,

@@ -2,7 +2,7 @@
 
 AI translation and multilingual SEO app for Shopify merchants (public app, planned for the Shopify App Store).
 
-**Status:** commercial feature set in development on a draft PR (not merged, not deployed). Implemented and tested locally against simulated Shopify, Partner and DeepL APIs: tenancy with row-level security, encrypted tokens, compliance webhooks, translation editor for products, collections, pages, blog posts and blogs (including image alt text and text metafields), SEO checks and handles, coverage report, bulk jobs with review, translation memory, glossary, history and restore, cost limits, Shopify App Pricing and a read-only Markets page. **Nothing is verified on a real Shopify store yet.** See [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) for the exact state of each feature and [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) for the verification plan.
+**Status:** commercial feature set in development on a draft PR (not merged, not deployed). Implemented and tested locally against simulated Shopify, Partner and DeepL APIs: tenancy with row-level security, encrypted tokens, compliance webhooks, translation editor for products, collections, pages, blog posts and blogs (including image alt text and text metafields), SEO checks and handles, coverage report, bulk jobs with review, translation memory, glossary, history and restore, cost limits, Shopify App Pricing and a read-only Markets page. **Verified on Shopify so far: read-only checks on a development store** (FEATURE_STATUS.md). See [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) for the exact state of each feature and [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) for the verification plan.
 
 ## Stack
 
@@ -98,6 +98,7 @@ docs/               architecture, security, billing, roadmap
 | [docs/BETA_READINESS.md](docs/BETA_READINESS.md) | Beta readiness review: blockers, defects fixed, open items |
 | [docs/UI_TESTING.md](docs/UI_TESTING.md) | Playwright UI tests: what is real, what is simulated |
 | [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
+| [docs/RAILWAY_STAGING.md](docs/RAILWAY_STAGING.md) | Hosting on Railway: staging (test stores only, mock AI), image, roles, variables, approvals; KARINEX production plan |
 | [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
 | [docs/SECURITY_REVIEW_MEMORY_FUZZY.md](docs/SECURITY_REVIEW_MEMORY_FUZZY.md) | Security review of the fuzzy search function, roles and grants |
 | [CHANGELOG.md](CHANGELOG.md) | Change history |

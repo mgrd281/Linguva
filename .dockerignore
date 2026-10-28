@@ -7,7 +7,14 @@ node_modules
 .env.*
 !.env.example
 .git
+.github
 .shopify
 coverage
 playwright-report
 test-results
+*.log
+dump.rdb
+
+# Not needed to build or run the app.
+docs
+tests

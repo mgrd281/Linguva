@@ -43,6 +43,8 @@ Plans are configured in the Partner Dashboard (Shopify App Pricing); the app rea
 
 ## 4. Hosting and running costs (unblocks: production, monitoring)
 
+Staging on Railway is prepared (docs/RAILWAY_STAGING.md): what to click, the variables, and which steps need your approval (§9). Production for KARINEX follows after staging is verified.
+
 The app needs a web process, a worker process, PostgreSQL 16 and Redis 7, plus backups.
 
 | Item | Estimate per month | Note |

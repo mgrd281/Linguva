@@ -200,6 +200,17 @@ Development-only tools (not shipped, not run on user input) also have advisories
 
 **Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 
+## 5n. Hosted stages: staging isolation and release guard (no database change)
+
+Hosting on Railway (docs/RAILWAY_STAGING.md) adds configuration guards, one public route and a container image; no migration.
+
+- **Staging can't reach a production store.** `LINGUVA_STAGE=staging` requires `ALLOWED_SHOPS` (the test stores), refuses KARINEX and SOFTWAREFACH even when listed, requires the mock provider and refuses a DeepL key. A store outside the list gets 403 on every app page, `/auth/*`, the login form and the install hook (no session, no tenant), checked before Shopify's token exchange from the `shop` parameter and again from the verified session. Its webhooks are acknowledged after the HMAC check and dropped (nothing stored).
+- **No accidental production release.** On Railway, `LINGUVA_STAGE` must be set and equal the environment's name; `production` also needs `LINGUVA_PRODUCTION_APPROVED=yes`, set by the owner for an approved release. Both web and worker validate this at start and exit otherwise.
+- **`/healthz`**: public, read-only `SELECT 1` as the runtime role, answers only `{"status":"ok"}` or 503; no shop, no error details, `Cache-Control: no-store`.
+- **Image**: runs as the unprivileged `node` user; production dependencies only; `.env*`, `.git` and `.shopify` never enter the build context. Migrations run as the owner role in a pre-deploy step; the runtime role has no DDL (hosted roles: `scripts/db/hosted-roles.sql`, passwords from the shell environment, never in files).
+
+Evidence: `tests/unit/staging-config.test.ts`, `tests/integration/webhooks.test.ts` (staging cases), `tests/integration/healthz.test.ts`, `tests/unit/deploy-config.test.ts`, `scripts/ci/image-check.sh` (CI: image built, migrated, started in staging mode, smoke-checked).
+
 ## 6. Admin control center
 
 - Separate deployment and domain. Email + password (argon2id) **plus mandatory TOTP/WebAuthn**.

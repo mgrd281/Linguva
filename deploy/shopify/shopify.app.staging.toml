@@ -1,0 +1,64 @@
+# Linguva STAGING app configuration (docs/RAILWAY_STAGING.md §5). Template:
+# copy to the project root as shopify.app.staging.toml, fill in client_id
+# (the "Linguva Staging" app's Client ID; not a secret) and the staging
+# domain, then `pnpm shopify app deploy --config staging`.
+# A separate Shopify app from development and production: its own client ID,
+# secret and install base. Install it only on development stores; the
+# server refuses every store not in ALLOWED_SHOPS, and KARINEX/SOFTWAREFACH
+# always (LINGUVA_STAGE=staging).
+client_id = ""
+name = "Linguva Staging"
+application_url = "https://STAGING-DOMAIN"
+embedded = true
+
+[build]
+# Fixed URL: never replaced by a development tunnel.
+automatically_update_urls_on_dev = false
+include_config_on_deploy = true
+
+[auth]
+redirect_urls = ["https://STAGING-DOMAIN/auth/callback"]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# Least privilege: read catalog/content, read+write translations and locales.
+# No customer or order scopes (ADR-007).
+scopes = "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales"
+# Requested only where needed, when the merchant opens that feature: Markets
+# overview, menus, metaobjects, theme content, policies, shipping methods.
+# All read-only; the app works without them.
+optional_scopes = ["read_markets", "read_online_store_navigation", "read_metaobjects", "read_themes", "read_legal_policies", "read_shipping"]
+
+[webhooks]
+api_version = "2026-10"
+
+  # Handled by: /app/routes/webhooks.app.uninstalled.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = ["app/uninstalled"]
+
+  # Handled by: /app/routes/webhooks.app.scopes_update.tsx
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  # Handled by: /app/routes/webhooks.content.tsx
+  # Automatic translation of new and changed content (off unless the merchant turns it on).
+  [[webhooks.subscriptions]]
+  topics = ["products/create", "products/update", "collections/create", "collections/update"]
+  uri = "/webhooks/content"
+  include_fields = ["admin_graphql_api_id", "updated_at"]
+
+  # Mandatory compliance topics for public apps.
+  # See: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = ["customers/data_request"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = ["customers/redact"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = ["shop/redact"]

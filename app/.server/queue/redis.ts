@@ -2,10 +2,12 @@ import { Redis } from "ioredis";
 
 /**
  * Redis connection for BullMQ and rate limiting. BullMQ requires
- * `maxRetriesPerRequest: null` for blocking connections.
+ * `maxRetriesPerRequest: null` for blocking connections. `family: 0` looks
+ * up IPv4 and IPv6 addresses: hosted private networks (Railway's
+ * *.railway.internal) can be IPv6-only, which ioredis' IPv4 default misses.
  */
 export function createRedis(url: string): Redis {
-  return new Redis(url, { maxRetriesPerRequest: null, enableReadyCheck: true });
+  return new Redis(url, { maxRetriesPerRequest: null, enableReadyCheck: true, family: 0 });
 }
 
 /** Namespace for all Linguva keys, separated per environment. */

@@ -46,6 +46,7 @@ function AppNav() {
       <s-link href="/app/review">{t("common.nav.review")}</s-link>
       <s-link href="/app/jobs">{t("common.nav.jobs")}</s-link>
       <s-link href="/app/coverage">{t("common.nav.coverage")}</s-link>
+      <s-link href="/app/translations">{t("common.nav.transfer")}</s-link>
       <s-link href="/app/markets">{t("common.nav.markets")}</s-link>
       <s-link href="/app/glossary">{t("common.nav.glossary")}</s-link>
       <s-link href="/app/memory">{t("common.nav.memory")}</s-link>

@@ -26,6 +26,24 @@ Status: **Phase 0 — assumptions only.** Every provider price below is an **unv
 - Premium LLM routing must be cost-capped per plan (BUSINESS only by default) so the margin never goes negative.
 - Example scenario: 1,000 products × 2,000 chars × 5 languages = **10M characters ≈ $250 provider cost** for a first full pass. This is above every self-serve plan, so a large first pass must use overage or ENTERPRISE, and the UI must show an estimate before starting.
 
+## 2a. Measured in phase I (local, no provider calls)
+
+| Measure | Value | How |
+|---|---|---|
+| Characters sent to the AI per product, fictional demo catalog (title, HTML description, SEO title, meta description; markup and protected terms not counted) | **209** on average (8 products, 1,669 characters) | `prepareTranslation` on `tests/ui/fixtures/demo-store.ts` |
+| Same products, raw source length | 223 | Sum of field lengths |
+| Billed characters from DeepL, quality per language | **Not measured**: no DeepL key in this environment | `pnpm test:deepl` with a local key writes docs/quality/DEEPL_MEASUREMENT.md |
+| DeepL API price per character | **Not verified**: deepl.com shows API prices only with JavaScript | Owner checks at sign-up |
+
+What this means for the plan proposal (DeepL Pro assumed at $25 per million characters):
+
+| Catalog type | Characters per product and language | Products per language in STARTER (300k) | Provider cost per 1,000 products and language |
+|---|---|---|---|
+| Short texts (like the demo catalog) | ~210 | ~1,400 | ~$5 |
+| Typical descriptions (assumption above) | ~2,000 | ~150 | ~$50 |
+
+**Recommendation:** don't publish prices until the characters per product are measured on a realistic catalog on the development store (bulk job reports already record characters per job) and DeepL's current price is confirmed. The margins in §2 hold at any catalog size because allowances are in characters, not products; what changes is how many products a plan covers, which decides whether STARTER feels generous. Translation memory and the "only missing and outdated fields" rule reduce repeat costs; first full passes of large catalogs need the cost estimate shown before every bulk job (implemented).
+
 ## 3. Guardrails
 
 - Per-shop monthly cost cap (`Entitlement.costCapMicros`) and a global daily provider spend alert.

@@ -39,6 +39,9 @@ const DYNAMIC = [
   "coverage.state.",
   "coverage.stateHelp.",
   "coverage.group.",
+  "transfer.problem.",
+  "transfer.import.",
+  "languages.ai.",
   "glossary.rule.",
   "markets.market.status.",
 ];

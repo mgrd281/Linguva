@@ -19,6 +19,7 @@ import * as plan from "./plan";
 import * as resources from "./resources";
 import * as review from "./review";
 import * as settings from "./settings";
+import * as transfer from "./transfer";
 
 export type { Message };
 
@@ -38,6 +39,7 @@ export const NAMESPACES = {
   resources,
   review,
   settings,
+  transfer,
 } as const;
 
 const en = {
@@ -56,6 +58,7 @@ const en = {
   ...resources.en,
   ...review.en,
   ...settings.en,
+  ...transfer.en,
 };
 
 export type MessageKey = keyof typeof en;
@@ -76,6 +79,7 @@ const de: Record<MessageKey, Message> = {
   ...resources.de,
   ...review.de,
   ...settings.de,
+  ...transfer.de,
 };
 
 const fr: Record<MessageKey, Message> = {
@@ -94,6 +98,7 @@ const fr: Record<MessageKey, Message> = {
   ...resources.fr,
   ...review.fr,
   ...settings.fr,
+  ...transfer.fr,
 };
 
 const es: Record<MessageKey, Message> = {
@@ -112,6 +117,7 @@ const es: Record<MessageKey, Message> = {
   ...resources.es,
   ...review.es,
   ...settings.es,
+  ...transfer.es,
 };
 
 export const MESSAGES: Record<"en" | "de" | "fr" | "es", Record<MessageKey, Message>> = { en, de, fr, es };

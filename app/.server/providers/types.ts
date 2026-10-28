@@ -20,6 +20,11 @@ export interface TranslationResult {
 export interface TranslationProvider {
   readonly id: string;
   translate(request: TranslationRequest, signal?: AbortSignal): Promise<TranslationResult>;
+  /**
+   * Which Shopify locales the provider can translate into, read from the
+   * provider itself (true / false per locale). Absent: every locale.
+   */
+  targetSupport?(locales: readonly string[]): Promise<Map<string, boolean>>;
 }
 
 export type ProviderErrorKind =

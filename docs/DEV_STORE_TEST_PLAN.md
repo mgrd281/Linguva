@@ -88,10 +88,28 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **J3** Arabic offered in a market while unpublished → warning "isn't published".
 - **J4** Revoke the optional scope (uninstall-free: via `scopes.revoke` or the app's settings in Shopify) → page returns to the permission screen, rest of the app works.
 
-### K. Coverage
-- **K1** Run the coverage report → finishes; per-language and per-type numbers match a manual count on 5 items.
+### K. Coverage (docs/COVERAGE_RULES.md)
+- **K1** "Scan store" → finishes; for 5 products count by hand per language: complete, outdated, missing fields (empty originals not counted); the dashboard and "Show items" match.
 - **K2** Duplicate SEO titles and missing SEO titles in the source → reported.
-- **K3** "Translate gaps" → creates a job for the missing fields only.
+- **K3** "Translate missing" on a row → a job for missing and outdated fields only; while it runs, the dashboard shows progress and, once enough items are done, a remaining time; compare with the real end time.
+- **K4** Approve a draft on Review → the field turns complete on the dashboard without a rescan; reject one → missing again.
+- **K5** Change a product's English description in Shopify's admin → within about a minute its translation shows as outdated (webhook refresh). Record the delay.
+- **K6** Change a page's text in Shopify's admin → shows after the next scan only (no webhook for pages); confirm the page says so.
+- **K7** A type without its optional scope (policies) → "no access" with "Allow access", not a failed scan; after granting and rescanning → counted.
+- **K8** Unpublish a language → marked "Not published" and left out of the whole-store figure.
+- **K9** Market filter (with `read_markets`): only the market's languages are shown.
+- **K10** Large catalog (if available, 1,000+ products): scan duration, dashboard load time, item pages.
+- **K11** Theme content and notification templates appear on their own rows, "Not in the totals".
+
+### K2. Import and export
+- **K2.1** Export Products for German (only gaps) → CSV opens in a spreadsheet without formulas firing; columns as documented.
+- **K2.2** Fill 5 translations, import → 5 drafts on Review; approve → live on the storefront.
+- **K2.3** Change one product's original after the export, import → that row is refused ("original changed").
+- **K2.4** Import a file from another store's export → rows "not found", nothing written.
+
+### K3. AI languages
+- **K3.1** Languages page with a real DeepL key: each language shows "Available" or "Not available with DeepL"; compare with DeepL's language list.
+- **K3.2** A language DeepL lacks (if the store has one): manual translation and CSV import work.
 
 ### L. Billing (Shopify App Pricing, $0 on development stores)
 - **L1** `BILLING_REQUIRED=true`, no plan → the app sends the merchant to Shopify's plan selection page (outside the iframe).

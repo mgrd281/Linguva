@@ -20,14 +20,16 @@ function testFiles(dir: string): string[] {
 }
 
 describe("test layout", () => {
-  it("puts every test file in a suite that CI runs (live tests excepted)", () => {
+  it("puts every test file in a suite that CI runs (live and DeepL measurement excepted)", () => {
     const files = [...testFiles(join(ROOT, "tests")), ...testFiles(join(ROOT, "app"))];
     expect(files.length).toBeGreaterThan(40);
     const orphans = files.filter(
       (f) =>
         !CI_SUITES.some((s) => f.startsWith(s) && f.endsWith(".test.ts")) &&
         !UI_SUITE.test(f) &&
-        !(f.startsWith("tests/live/") && f.endsWith(".live.test.ts")),
+        !(f.startsWith("tests/live/") && f.endsWith(".live.test.ts")) &&
+        // Needs a local DeepL key (pnpm test:deepl), never in CI.
+        !(f.startsWith("tests/quality/") && f.endsWith(".quality.test.ts")),
     );
     expect(orphans).toEqual([]);
   });

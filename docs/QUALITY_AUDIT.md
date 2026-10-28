@@ -21,24 +21,24 @@ Rules:
 
 ## 2. Summary
 
-| Area | Before (9a89523) | Round 1 | Phase A | Phase B | Phase C | Phase G | **Phase H** | Biggest gap now |
-|---|---|---|---|---|---|---|---|---|
-| Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | 7.5 | 7.5 | **8** | Not checked inside the real admin; app icon and feature image missing |
-| Usability for beginners | 5.5 | 8 | 8 | 8 | 8.5 | 9 | **9** | No test with real merchants; French and Spanish not yet read by native speakers |
-| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | 9 | 9 | **9** | No check on real devices or in the Shopify mobile app |
-| AI translation | 5 | 7 | 7 | 7 | 7 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
-| Content coverage | 3 | 5 | 5 | 6.5 | 6.5 | 6.5 | **6.5** | Nothing verified on Shopify; JSON metafields and market-specific translations missing |
-| SEO | 7 | 7 | 7 | 7.5 | 7.5 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
-| Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | 7.5 | **7.5** | Real Shopify latency not measured; no production monitoring |
-| Security | 6.5 | 8 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
-| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
-| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
-| Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
-| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | **7.5** | |
+| Area | Before (9a89523) | Round 1 | Phase A | Phase B | Phase C | Phase G | Phase H | **Phase I** | Biggest gap now |
+|---|---|---|---|---|---|---|---|---|---|
+| Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | 7.5 | 7.5 | 8 | **8** | Not checked inside the real admin; app icon and feature image not designed (brief in BRAND_ASSETS.md) |
+| Usability for beginners | 5.5 | 8 | 8 | 8 | 8.5 | 9 | 9 | **9** | No test with real merchants; French and Spanish not yet read by native speakers |
+| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | 9 | 9 | 9 | **9** | No check on real devices or in the Shopify mobile app |
+| AI translation | 5 | 7 | 7 | 7 | 7 | 7 | 7 | **7** | No measured quality: the DeepL key isn't in this environment (harness ready: `pnpm test:deepl`) |
+| Content coverage | 3 | 5 | 5 | 6.5 | 6.5 | 6.5 | 6.5 | **7** | Nothing verified on Shopify; market-specific translations and third-party app content missing |
+| SEO | 7 | 7 | 7 | 7.5 | 7.5 | 7.5 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
+| Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | 7.5 | 7.5 | **7.5** | Real Shopify latency and scan duration not measured; no production monitoring |
+| Security | 6.5 | 8 | 8 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
+| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; characters per real product not measured |
+| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
+| Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
+| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | 7.5 | **7.6** | |
 
-Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d, phase F in §4f, phase G in §4g, phase H in §4h (phases D–F added evidence, not new scores). A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
+Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d, phase F in §4f, phase G in §4g, phase H in §4h, phase I in §4i (phases D–F added evidence, not new scores). A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
-**Honest overall verdict: 7.5/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
+**Honest overall verdict: 7.6/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
 
 ## 3. Areas in detail
 
@@ -324,6 +324,22 @@ No score changes: the two criteria this phase works on (3.5 #6, #9) stay ◐ bec
 | Precise list of what the owner must provide or decide, with steps and estimated costs | — | docs/OWNER_DECISIONS.md |
 
 **Where 10/10 stops today.** The remaining points in every area need one of: the development store (Shopify behaviour, the real admin, App Bridge, webhooks, billing), a DeepL key (measured quality), the owner's decisions (prices, hosting, legal, branch protection), real merchants (usability, reviews) or an external security review. None of these can be replaced by more local tests, so the honest score stays 7.5 until they happen.
+
+## 4i. Phase I: live coverage dashboard, import/export, AI languages, launch readiness (all Tested Locally)
+
+| Change | Area | Evidence |
+|---|---|---|
+| Live coverage per item and language for every translatable type, image alt text and custom fields per owner; six field states (complete, needs review, draft, failed, outdated, missing); drafts never complete; empty originals and 0/0 not counted; theme, notifications and URLs shown but not in the totals; published languages only in the whole-store figure | Content coverage | a27ae1a; `tests/unit/coverage-rules.test.ts` (16), `tests/integration/coverage.test.ts` (15) |
+| Kept current after saves, removals, drafts, job items and product/collection webhooks; an older scan never overwrites a newer save; counts kept with every change equal counts rebuilt from items | Content coverage | Same integration tests (`expectCountsConsistent`) |
+| Dashboard: whole store, next step, language cards with segmented bars, per type and field, SEO findings, market filter, running jobs; drill-down with filters, title search where Shopify can search, paging, bulk actions; 4 interface languages | Design, usability | `tests/ui/coverage.spec.ts` (accessibility, phone layout), i18n tests |
+| 50,000 products × 3 languages: summary 170 ms, item pages ≤ 11 ms, update after a save 22 ms | Performance | `tests/performance/coverage-scale.perf.test.ts` |
+| No merchant text in coverage tables; tenant isolation; migration reviewed (SECURITY_MODEL §5m) | Security | `tests/security/coverage-security.test.ts` |
+| Remaining time only when reliable (10 items, 5 %, 30 s), also on the job page | Error handling | `tests/unit/coverage-rules.test.ts` |
+| CSV export/import of translations: imports become drafts on Review, rows checked against the shop's own data (unknown, changed original, empty, unchanged, broken structure, duplicates), formula-safe | Content coverage, security | `tests/integration/csv-transfer.test.ts`, `tests/ui/transfer.spec.ts` |
+| AI languages read from DeepL (`/v2/languages`, cached) and shown per language | AI translation | `tests/unit/deepl.test.ts` |
+| Launch documents: screencast script and test instructions, listing audit, icon and feature image brief, storefront selector strategy, second-engine plan, measured characters per demo product | Launch | SUBMISSION_DEMO.md, APP_STORE_LISTING.md, BRAND_ASSETS.md, STOREFRONT_LANGUAGE_SELECTOR.md, AI_ENGINES.md, COST_MODEL.md §2a |
+
+Content coverage moves from 6.5 to 7: every translatable type is now measured per item with tested rules, and CSV import adds a path for languages and content AI doesn't cover. It stays below 8 because nothing is verified on Shopify and market-specific translations are still missing. AI translation stays at 7: language support is now read from DeepL, but quality is still unmeasured.
 
 ## 5. Next steps, in order of effect
 

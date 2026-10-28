@@ -25,6 +25,8 @@ Everything that can be built without accounts, money or legal decisions is done 
 
 **Steps:** create the account at deepl.com → API, copy the key, set it only as `DEEPL_API_KEY` in your local `.env` (keys of the free plan end in `:fx`). Never paste it into the PR or chat.
 
+**Status (phase I):** you said a key is available for local testing, but it is **not present in the cloud environment I work in** (no `DEEPL_API_KEY`). The measurement is ready: with the key in your local environment, `pnpm test:deepl` translates the fictional demo catalog into German, French and Spanish through the real pipeline, checks a character budget first, never prints the key, and writes docs/quality/DEEPL_MEASUREMENT.md (translations for you to judge, billed characters, cost per 1,000 products). Alternatively, add the key as a secret of this cloud environment so I can run it.
+
 **Then I can:** run a reference set (product texts with HTML, numbers, brand names) in German, French and Spanish, record quality and characters per product, and update COST_MODEL.md with measured values.
 
 ## 3. Prices and plans (unblocks: billing tests and the listing's pricing section)

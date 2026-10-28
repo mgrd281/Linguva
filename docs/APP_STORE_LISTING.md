@@ -41,6 +41,8 @@ Lengths are checked by `tests/unit/app-store-listing.test.ts`. **Nothing here is
 | 6 | SEO titles, descriptions and URLs with a search result preview | SEO-Titel, Beschreibungen und URLs mit Vorschau des Suchergebnisses |
 | 7 | Image alt text and custom fields, with links and lists kept intact | Alt-Texte und benutzerdefinierte Felder, Links und Listen bleiben intakt |
 | 8 | History of every translation, with earlier versions to restore | Verlauf jeder Übersetzung, frühere Versionen wiederherstellbar |
+| 9 | Coverage dashboard: what is missing, waiting or outdated in each language | Abdeckung im Überblick: was je Sprache fehlt, wartet oder veraltet ist |
+| 10 | Import and export translations as CSV; imports wait for your approval | Übersetzungen per CSV importieren und exportieren, Importe warten auf Freigabe |
 
 ## Search terms (max. 5, one idea each)
 
@@ -74,6 +76,24 @@ Recommended order in the listing: 4, 2, 1, 5, 6, 8 (six images; 3 and 7 as spare
 ## Feature media
 
 A static feature image (1600 × 900, one focal point, no Shopify logo, no pricing) is still to be designed: suggestion "Review before it goes live" with the Review queue cropped large. A 2–3 minute video can follow after launch.
+
+## Audit against current requirements (phase I, 2026-10-28)
+
+Read again on shopify.dev ("App Store requirements" §4.5, "Pass app review", "Best practices").
+
+| Requirement | Status |
+|---|---|
+| Introduction ≤ 100, details ≤ 500, features ≤ 80 characters; no statistics, superlatives or pricing outside pricing details | Met (checked by `tests/unit/app-store-listing.test.ts`) |
+| Screenshots 1600 × 900, 3–6 desktop, alt text, no browser chrome or personal data; mobile if responsive | Met with the demo catalog; regenerate inside the real admin after the dev-store check; add one of the coverage dashboard |
+| Feature media: video 2–3 min (≤ 25 % screencast) or a 1600 × 900 image, one focal point, contrast 4.5:1, no Shopify logos, not repeating the subtitle | Brief ready (BRAND_ASSETS.md §2); not designed |
+| App icon 1200 × 1200, no text | Brief ready (BRAND_ASSETS.md §1); not designed |
+| 4.5.3 Demo screencast of onboarding and listed features, English | Script ready (SUBMISSION_DEMO.md §1); needs the dev store |
+| 4.5.4 / 4.5.5 Testing instructions and working access | Draft ready (SUBMISSION_DEMO.md §2) |
+| 4.5.6 Emergency developer contact | Owner, Partner Dashboard |
+| Only list interface languages fully supported | English and German; French and Spanish after native review |
+| Online store changes only through theme app extensions | Met: Linguva changes no theme files and adds no storefront script (STOREFRONT_LANGUAGE_SELECTOR.md) |
+| Billing through Shopify | Met in code (App Pricing); plans not created yet |
+| Claims only for features verified on Shopify | Features 9 and 10 are Tested Locally; keep them out of the submitted listing until the dev-store checks K and K2 pass |
 
 ## Still needed from the owner
 

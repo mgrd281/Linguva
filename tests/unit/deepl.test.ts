@@ -198,3 +198,36 @@ describe("DeepLProvider.getUsage", () => {
     await expect(new DeepLProvider({ apiKey: "k:fx", fetch: impl }).getUsage()).rejects.toMatchObject({ kind: "auth" });
   });
 });
+
+describe("DeepL target languages", () => {
+  it("are read from DeepL once a day and matched to Shopify locales", async () => {
+    const { deeplSupports } = await import("../../app/.server/providers/deepl");
+    const { aiLanguageSupport } = await import("../../app/.server/providers/language-support");
+    let calls = 0;
+    const impl = (async (url: string, init?: RequestInit) => {
+      calls++;
+      expect(url).toBe("https://api-free.example/v2/languages?type=target");
+      expect((init?.headers as Record<string, string>).Authorization).toBe("DeepL-Auth-Key key:fx");
+      return Response.json([{ language: "DE" }, { language: "EN-GB" }, { language: "EN-US" }, { language: "PT-BR" }, { language: "ZH-HANS" }]);
+    }) as unknown as typeof fetch;
+    const provider = new DeepLProvider({ apiKey: "key:fx", baseUrl: "https://api-free.example", fetch: impl });
+    expect(await aiLanguageSupport(provider, ["de", "en-GB", "pt-BR", "pt-PT", "zh-CN", "ga"])).toEqual({
+      de: "supported",
+      "en-GB": "supported",
+      "pt-BR": "supported",
+      "pt-PT": "unsupported",
+      "zh-CN": "supported",
+      ga: "unsupported",
+    });
+    await provider.targetSupport(["de"]);
+    expect(calls).toBe(1);
+    expect(deeplSupports(new Set(["NB"]), "no")).toBe(true);
+  });
+
+  it("are 'unknown' when DeepL can't be asked, and 'none' without a provider", async () => {
+    const { aiLanguageSupport } = await import("../../app/.server/providers/language-support");
+    const failing = new DeepLProvider({ apiKey: "bad", baseUrl: "https://down.example", fetch: (async () => new Response("", { status: 403 })) as unknown as typeof fetch });
+    expect(await aiLanguageSupport(failing, ["de"])).toEqual({ de: "unknown" });
+    expect(await aiLanguageSupport(null, ["de"])).toEqual({ de: "none" });
+  });
+});

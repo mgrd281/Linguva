@@ -10,7 +10,7 @@ Status: 2026-10-28. Competitor facts come from their public App Store listings, 
 | Since | 2014 | 2020 | — |
 | Paid plans (monthly) | $17.50, $29.95, $59.95 (§1.2) | $29, $69, $99 on the listing; $14.9 and $599 more on the website (§2.2) | Proposal: $19, $59, $179 (COST_MODEL.md; owner decision) |
 | What AI use costs | Words included **once** at sign-up (10k / 50k / 200k), then packages of $0.29–0.50 per 1,000 words (§1.3) | Token wallet, about $1.20 per 1,000 words, non-refundable; product caps and monthly add-on quotas (§2.3) | Monthly character allowance per plan (300k / 1.2M / 4M), resets each month; text reused from translation memory is free |
-| Engines | DeepL, Google fallback (§1.4) | OpenAI, DeepL, Gemini, Google and more; own API key (§2.4) | DeepL only |
+| Engines | DeepL, Google fallback (§1.4) | OpenAI, DeepL, Gemini, Google and more; own API key (§2.4) | DeepL only; languages it covers are read from DeepL and shown per language; second engine planned (AI_ENGINES.md) |
 | Automatic translation of new/changed content | **Not offered** ("will not automatically translate your store without your input", §1.4) | Rules capped by plan (10 products + 10 collections on Regional; real-time only at $99+) (§2.3, §2.4) | Products and collections by webhook; pages, blog posts, blogs and missed webhooks by a 30-minute check; **no item cap**; results wait in Review by default |
 | Review / approval before publishing | Not found (§1.7) | Not found (§2.7) | **Yes**: drafts, Review page with filters and search, approve or reject; automatic publishing only after an explicit, recorded confirmation |
 | Translation memory | Not found | Not found (version history only) | **Yes**, exact reuse at no cost plus fuzzy suggestions |
@@ -21,7 +21,7 @@ Status: 2026-10-28. Competitor facts come from their public App Store listings, 
 | Custom fields (metafields) | Yes, not in bulk (§1.4) | Yes | Text, rich text, lists and links, structure and link addresses enforced; in the editor and bulk |
 | Content types | Broad, plus Custom Content and third-party apps | Broad, plus third-party apps, checkout | All 30 of Shopify's translatable types (menus, theme, policies, notifications, checkout methods, …); **no third-party app content** |
 | SEO | Translated handles; hreflang left to Shopify (§1.4) | Same; reviews report hreflang conflicts and ranking drops (§2.6 #5) | SEO title/description checks and preview, "SEO fields only" jobs, coverage report; uses Shopify's native translations only (no client-side rendering), so Shopify's hreflang applies |
-| Import / export of translations | CSV/PO per section (§1.4) | **Not supported** (§2.4) | Not yet (glossary and job reports only) |
+| Import / export of translations | CSV/PO per section (§1.4) | **Not supported** (§2.4) | CSV per content type and language; imports become drafts on Review, rows with a changed original are refused (Tested locally) |
 | Storefront switcher, currency, geo redirect | Switcher, currency, browser-language redirect (§1.4) | Switcher, 168 currencies, geo redirect (§2.4) | **None** (relies on Shopify's own language selector and Markets) |
 | AI image text translation | No | Yes, one image at a time (§2.4) | No |
 | App interface languages | 5 (§1.1) | 13 (§2.1) | 4 (EN, DE; FR and ES awaiting native review) |
@@ -60,10 +60,10 @@ Complaint themes come from the newest reviews of each app (§1.6, §2.6). Counts
 |---|---|---|---|---|
 | 1 | Verified on a real store (all of the above) | Without it nothing can be claimed in the listing | Days | Development store (owner) |
 | 2 | Real DeepL quality and cost measured | Quality is the product | Days | Free DeepL API key (owner) |
-| 3 | Import/export of translations (CSV, later XLIFF) | Agencies and translators; Transcy has none, Langify per section only | 1–2 weeks | — |
+| 3 | ~~Import/export of translations (CSV)~~ Done in phase I (CSV; XLIFF later) | Agencies and translators; Transcy has none, Langify per section only | — | Live check on the dev store |
 | 4 | Second engine for languages DeepL lacks (and optional LLM) | DeepL covers about 30 languages; both competitors fall back to Google or LLMs | 1–2 weeks | Provider account and data processing terms (owner) |
 | 5 | Third-party app and page-builder content | Most common "not translated" complaint for Langify | Large; partly impossible through Shopify's API | Research |
-| 6 | Storefront language/country selector as a theme app extension | Merchants expect it; Shopify's own selector exists in most themes | 1 week | — |
+| 6 | Storefront language/country selector as a theme app extension | Merchants expect it; Shopify's own selector exists in most themes. Strategy: rely on it (STOREFRONT_LANGUAGE_SELECTOR.md) | 1 week, only if beta merchants need it | Dev store |
 | 7 | Interface in more languages; native review of FR/ES | Transcy has 13 | Ongoing | Native speakers |
 | 8 | Visual in-context editor | Nice to have; neither competitor has one documented | Large | — |
 

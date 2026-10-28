@@ -4,11 +4,16 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { MAX_ENABLED_LOCALES } from "../lib/locale-limits";
+import { getTranslationProvider } from "../.server/providers";
+import { aiLanguageSupport } from "../.server/providers/language-support";
 import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
-  return fetchAndSyncShopLocales(admin, shop.id);
+  const summary = await fetchAndSyncShopLocales(admin, shop.id);
+  // Read from the provider (DeepL's own list), never assumed.
+  const ai = await aiLanguageSupport(getTranslationProvider(), summary.locales.filter((l) => !l.primary).map((l) => l.locale));
+  return { ...summary, ai };
 };
 
 export default function Languages() {
@@ -45,6 +50,7 @@ export default function Languages() {
             <s-table-header>{t("languages.table.code")}</s-table-header>
             <s-table-header>{t("languages.table.role")}</s-table-header>
             <s-table-header>{t("languages.table.storefront")}</s-table-header>
+            <s-table-header>{t("languages.table.ai")}</s-table-header>
           </s-table-header-row>
           <s-table-body>
             {summary.locales.map((l) => (
@@ -62,6 +68,15 @@ export default function Languages() {
                     <s-badge tone="success">{t("common.state.published")}</s-badge>
                   ) : (
                     <s-badge>{t("languages.unpublished")}</s-badge>
+                  )}
+                </s-table-cell>
+                <s-table-cell>
+                  {l.primary ? (
+                    "—"
+                  ) : summary.ai[l.locale] === "supported" ? (
+                    <s-badge tone="success">{t("languages.ai.supported")}</s-badge>
+                  ) : (
+                    <s-text color="subdued">{t(`languages.ai.${summary.ai[l.locale] ?? "unknown"}`)}</s-text>
                   )}
                 </s-table-cell>
               </s-table-row>

@@ -76,6 +76,7 @@
 - Automatic translation also covers pages, blog posts and blogs, and catches missed product and collection webhooks: the worker checks every 30 minutes for content changed since its last check (migration 20261030100000).
 - French and Spanish interface (about 800 texts each), chosen from the admin user's language; still to be reviewed by native speakers (docs/I18N_REVIEW.md).
 - Review text search through a reviewed definer function and a trigram index: 207 → 12.5 ms at 50,000 drafts (migration 20261030110000).
+- Launch preparation: competitive analysis (Langify, Transcy), App Store listing draft in English and German with 8 screenshots of the real app, a 30-day launch plan and the list of owner decisions (docs).
 
 ### Security
 - HTTP security headers on every page and data response (nosniff, Referrer-Policy, Permissions-Policy, `base-uri` and `object-src` in the CSP, HSTS in production over HTTPS). Pages requested without a shop parameter had no framing protection; they can now only be framed by the Shopify admin.

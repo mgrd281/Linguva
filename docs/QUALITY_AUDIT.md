@@ -21,28 +21,28 @@ Rules:
 
 ## 2. Summary
 
-| Area | Before (9a89523) | Round 1 | Phase A | Phase B | Phase C | **Phase G** | Biggest gap now |
-|---|---|---|---|---|---|---|---|
-| Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | 7.5 | **7.5** | Not checked inside the real admin (save bar, toasts, modals built, simulated); no App Store assets |
-| Usability for beginners | 5.5 | 8 | 8 | 8 | 8.5 | **9** | No test with real merchants; French and Spanish not yet read by native speakers |
-| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | 9 | **9** | No check on real devices or in the Shopify mobile app |
-| AI translation | 5 | 7 | 7 | 7 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
-| Content coverage | 3 | 5 | 5 | 6.5 | 6.5 | **6.5** | Nothing verified on Shopify; JSON metafields and market-specific translations missing |
-| SEO | 7 | 7 | 7 | 7.5 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
-| Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | **7.5** | Real Shopify latency not measured; no production monitoring |
-| Security | 6.5 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
-| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
-| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
-| Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
-| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | |
+| Area | Before (9a89523) | Round 1 | Phase A | Phase B | Phase C | Phase G | **Phase H** | Biggest gap now |
+|---|---|---|---|---|---|---|---|---|
+| Design and modernity | 5.5 | 6.5 | 7.5 | 7.5 | 7.5 | 7.5 | **8** | Not checked inside the real admin; app icon and feature image missing |
+| Usability for beginners | 5.5 | 8 | 8 | 8 | 8.5 | 9 | **9** | No test with real merchants; French and Spanish not yet read by native speakers |
+| Desktop and mobile | 5 | 7.5 | 8.5 | 8.5 | 9 | 9 | **9** | No check on real devices or in the Shopify mobile app |
+| AI translation | 5 | 7 | 7 | 7 | 7 | 7 | **7** | No real provider tested (no DeepL key), no measured quality |
+| Content coverage | 3 | 5 | 5 | 6.5 | 6.5 | 6.5 | **6.5** | Nothing verified on Shopify; JSON metafields and market-specific translations missing |
+| SEO | 7 | 7 | 7 | 7.5 | 7.5 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
+| Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | 7.5 | **7.5** | Real Shopify latency not measured; no production monitoring |
+| Security | 6.5 | 8 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
+| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; nothing verified on Shopify |
+| Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **6.5** | Not verified on a development store |
+| Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
+| **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | **7.5** | |
 
-Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d, phase F in §4f, phase G in §4g (phases D–F added evidence, not new scores). A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
+Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d, phase F in §4f, phase G in §4g, phase H in §4h (phases D–F added evidence, not new scores). A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
 **Honest overall verdict: 7.5/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
 
 ## 3. Areas in detail
 
-### 3.1 Design and modernity: 7.5/10
+### 3.1 Design and modernity: 8/10
 
 | # | Criterion | Mark | Evidence |
 |---|---|---|---|
@@ -55,9 +55,9 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 7 | Empty states with guidance and a next step | ✅ | `tests/ui/states.spec.ts` |
 | 8 | Native admin elements: title bar, save bar, toasts, modals (App Bridge) | ◐ | Phase E: save bar in the editor, toasts for every success, Polaris modals for actions that can't be undone (`tests/ui/unsaved.spec.ts`, `tests/ui/confirm.spec.ts`, App Bridge simulated). Stays ◐ until seen in the real admin |
 | 9 | Checked visually inside the real Shopify admin | ❌ | Needs a development store |
-| 10 | App Store assets: icon, screenshots, listing text | ❌ | Not created |
+| 10 | App Store assets: icon, screenshots, listing text | ◐ | Phase H: listing text in English and German within Shopify's limits and rules, 8 screenshots of the real app at 1600 × 900 (`docs/APP_STORE_LISTING.md`, `tests/unit/app-store-listing.test.ts`, `tests/ui/app-store-screenshots.spec.ts`). Icon and feature image missing; screenshots not yet taken inside the real admin |
 
-**Plan:** (8) and (9) dev store: check save bar, toasts and modals in the admin, light and dark. (10) Listing text and screenshots are prepared in phase H (APP_STORE_LISTING.md); the icon and final screenshots after the admin check.
+**Plan:** (8) and (9) dev store: check save bar, toasts and modals in the admin, light and dark. (10) the icon (owner) and the final screenshots inside the real admin.
 
 ### 3.2 Usability for beginners: 9/10
 
@@ -313,6 +313,17 @@ No score changes: the two criteria this phase works on (3.5 #6, #9) stay ◐ bec
 | Review text search through a second reviewed definer function and a partial trigram index: 207 → 12.5 ms at 50,000 drafts | Performance 7 → 7.5 | `tests/performance/large-shop.perf.test.ts`; `tests/security/draft-search.test.ts` (9 threat tests); SECURITY_REVIEW_MEMORY_FUZZY.md §10 |
 | `script-src` with a per-page nonce; injected inline scripts are blocked | Security (criterion 6 already ✅) | `tests/unit/security-headers.test.ts`, `tests/ui/csp.spec.ts` |
 | Language names in lower case in French and Spanish | Usability | `tests/unit/i18n.test.ts` |
+
+## 4h. Phase H: market and launch preparation (documents; listing assets Tested Locally)
+
+| Change | Area | Evidence |
+|---|---|---|
+| Competitive analysis against Langify and Transcy from their public listings, help centers and reviews, with sources; gaps and positioning | — (no criterion) | docs/COMPETITIVE_ANALYSIS.md, docs/research/competitors-raw.md |
+| App Store listing draft (EN/DE) within Shopify's limits and rules; 8 screenshots of the real app at 1600 × 900 from a demo catalog | Design 7.5 → 8 (criterion 10 ❌ → ◐) | docs/APP_STORE_LISTING.md, `tests/unit/app-store-listing.test.ts`, `tests/ui/app-store-screenshots.spec.ts` |
+| 30-day launch plan with a launch gate, weekly steps, targets and risks | — | docs/LAUNCH_PLAN_30_DAYS.md |
+| Precise list of what the owner must provide or decide, with steps and estimated costs | — | docs/OWNER_DECISIONS.md |
+
+**Where 10/10 stops today.** The remaining points in every area need one of: the development store (Shopify behaviour, the real admin, App Bridge, webhooks, billing), a DeepL key (measured quality), the owner's decisions (prices, hosting, legal, branch protection), real merchants (usability, reviews) or an external security review. None of these can be replaced by more local tests, so the honest score stays 7.5 until they happen.
 
 ## 5. Next steps, in order of effect
 

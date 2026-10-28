@@ -10,9 +10,12 @@ import { grantComplimentaryAccess } from "../../app/.server/billing/complimentar
 import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
 import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
-import { setAiConsent } from "../../app/.server/settings/shop-settings";
+import { upsertTerms } from "../../app/.server/glossary/glossary";
+import { saveDrafts } from "../../app/.server/review/drafts";
+import { setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { testEnv } from "../support/env";
+import { DEMO_GLOSSARY, demoDrafts } from "./fixtures/demo-store";
 import { UI_SHOPS } from "./fixtures/shops";
 
 export default async function globalSetup() {
@@ -33,7 +36,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -52,6 +55,11 @@ export default async function globalSetup() {
     );
     const page = await runDiscoveryPage({ ...deps, discoveryPageSize: 8 }, { shopId: ids.full!, jobId: job.id });
     for (const itemId of page.itemIds) await processItem(deps, { shopId: ids.full!, itemId }, 1);
+
+    // The demo store (App Store screenshots): French drafts, glossary, automatic translation on.
+    await saveDrafts(ids.demo!, demoDrafts(), app);
+    await upsertTerms(ids.demo!, DEMO_GLOSSARY, {}, app);
+    await setAutoTranslate({ shopId: ids.demo!, enabled: true, locales: ["de", "fr"], allowedLocales: ["de", "fr", "es"], actorId: null }, app);
 
     // A German job with custom fields: a list of links waits on Review.
     const fieldsStore = UI_SHOPS.customFields.build();

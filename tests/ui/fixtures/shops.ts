@@ -4,6 +4,7 @@
  * from these definitions, so both processes see the same catalog.
  */
 import { FakeShopifyStore } from "../../support/fake-store";
+import { buildDemoStore } from "./demo-store";
 
 export const UI_THEME_GID = "gid://shopify/OnlineStoreThemeJsonTemplate/index?theme_id=42";
 
@@ -116,6 +117,20 @@ export const UI_SHOPS = {
     locales: [en, de],
     plan: null,
     build: () => new FakeShopifyStore(5),
+  },
+  demo: {
+    // Realistic catalog for the App Store screenshots (fixtures/demo-store.ts).
+    domain: "ui-demo.myshopify.com",
+    gid: "gid://shopify/Shop/91010",
+    name: "Alpine Demo Store",
+    locales: [
+      { locale: "en", name: "English", primary: true, published: true },
+      { locale: "de", name: "German", primary: false, published: true },
+      { locale: "fr", name: "French", primary: false, published: true },
+      { locale: "es", name: "Spanish", primary: false, published: false },
+    ],
+    plan: "pro",
+    build: buildDemoStore,
   },
   customFields: {
     // A German job with custom fields: a list of links waits on Review.

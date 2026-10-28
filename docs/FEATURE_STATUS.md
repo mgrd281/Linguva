@@ -55,6 +55,8 @@ Three states, never mixed:
 | Jobs | Job report: results by reason, timing, remaining time, support reference, CSV download | Yes | Integration + UI | No | E1–E6 |
 | Jobs | Fair share between shops in the queue | Yes | Performance test (20 shops; large and small shops) | No | — |
 | AI | Check for the chosen form of address (de, fr, es, it, nl) | Yes | Unit + pipeline | No (no DeepL key) | C7 |
+| Safety | A translation written in the meantime is never overwritten (draft approval, automatic publishing, two people in the editor) | Yes | Security suite (mutation-checked) | No | E2–E4 |
+| Safety | Structural guards for write paths and database changes | Yes | Unit + security suites | — | — |
 
 ## Not implemented
 

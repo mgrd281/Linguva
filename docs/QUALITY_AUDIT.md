@@ -17,7 +17,7 @@ Rules:
 - **No area gets 10/10 without verification on a development store.** Every Shopify-facing criterion counts as ◐ at most until it is Verified on Shopify (FEATURE_STATUS.md).
 - The criteria were written before scoring. Evidence names the test or document.
 - There is **no measured comparison with competitor apps yet**. Their features were not tested, so "best in class" here means these criteria, not a benchmark.
-- Test basis (update after phase C): 564 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance) and 112 Playwright browser tests on the production build, including 14 screenshot comparisons and German pages. All pass locally; CI status per commit in the PR.
+- Test basis (update after phase D): 613 Vitest tests (unit, integration with PostgreSQL and RLS, security, performance, structural guards) and 112 Playwright browser tests on the production build, including 14 screenshot comparisons and German pages. All pass locally; CI status per commit in the PR.
 
 ## 2. Summary
 
@@ -36,7 +36,7 @@ Rules:
 | Error handling and loading states | 6 | 7 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
 | **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | |
 
-Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c. A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
+Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d. A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
 **Honest overall verdict: 7.4/10, Tested Locally only.** The code base is solid and well tested. Reaching 9–10 needs two things code can't supply: verification on a development store, and the owner's decisions and accounts (DeepL key, prices, hosting). Those are listed in §5.
 
@@ -279,13 +279,27 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | Quality check for the chosen form of address (Sie/du and others) | 4b4fe22; unit and pipeline tests |
 | Client JavaScript 122 → 155 KB gzipped because of the texts of both languages | PERFORMANCE.md §4 |
 
+## 4d. Phase D: publishing and overwrite protection, isolation, database changes (all Tested Locally)
+
+No score changes: the criteria these areas are measured by were already met (Security 1, 4, 8; Usability 5, 7). Phase D made them harder to break and closed gaps the criteria didn't name.
+
+| Change | Evidence |
+|---|---|
+| Audit of every way to change a store's translations (two Shopify mutations, four save paths, one removal path), with the guards of each | SECURITY_MODEL §5b |
+| **Bug:** approving an older draft, or automatic publishing a moment after someone translated the same field, replaced that person's newer translation. Drafts now remember the translation they replace; publishing re-checks it | c68a2d2; security tests, mutation-checked; migration 20261029200000 reviewed in §5i |
+| **Gap:** two people editing the same field in the editor, last save won silently. Now refused with an explanation | 436771c; security test |
+| Structural guards: new write paths, Shopify mutations, unauthenticated pages or the owner database role in app code fail a test | `tests/security/structure.test.ts` (fails on a probe file) |
+| Every database change reviewed: each migration names its review section; isolation-weakening statements only where reviewed; new tenant tables get RLS, FORCE and a policy | `tests/unit/migration-review.test.ts` (fails on a probe migration) |
+| Tenant isolation of everything added in phases B–D (automatic translation, job reports, queue fairness) | Integration and UI tests per feature; runtime posture check (§5d) |
+| Keyboard test failed once in CI: focus on "Stay on this page" made robust (retries until the button takes it) | 1ef1366; not reproducible locally |
+
 ## 5. Next steps, in order of effect
 
 **Without external access (I can continue):**
 
-1. Audit of publishing and overwrite protection across all paths (security)
-2. French and Spanish interface (usability), reviewed by native speakers
-3. Indexed Review text search with a reviewed definer function (performance)
+1. French and Spanish interface (usability), reviewed by native speakers
+2. Indexed Review text search with a reviewed definer function (performance)
+3. Native admin elements: App Bridge save bar and toasts (design)
 
 **Need the owner (accounts, decisions, money):**
 

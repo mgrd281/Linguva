@@ -52,6 +52,9 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **E4** Translate one field by hand in Translate & Adapt, run bulk again → that field is kept; with "also replace" it is replaced and the old value appears in the history as "Before Linguva".
 - **E5** Cancel a running job → stops; "Retry" resumes only open items.
 - **E6** Stop the worker during a job, start it again → job resumes without duplicate work.
+- **E7** Run a job in review mode, then translate one of its fields by hand in Shopify's Translate & Adapt, then approve the draft in Review → the hand-written translation stays; the draft is marked as changed meanwhile.
+- **E8** Open the same product in Linguva in two browser tabs, save a title in the first, then in the second → the second save is refused with an explanation; after reloading it can be saved.
+- **E9** Open the app with the admin language set to German → the interface is German; job report CSV downloads with German headings.
 
 ### F. Translation memory
 - **F1** Publish a product, then translate a second product with an identical sentence → that segment uses zero AI characters (Settings usage unchanged for it).

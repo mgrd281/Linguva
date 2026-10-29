@@ -1,6 +1,7 @@
 /**
- * "Everything you can translate": which Shopify content types the shop has,
- * and which need an extra permission (optional access scope).
+ * "Everything you can translate", the one place every list opens from:
+ * which Shopify content types the shop has, and which need an extra
+ * permission (optional access scope). Products and collections come first.
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { probeTranslatableType } from "../shopify/translations-api";
@@ -21,8 +22,10 @@ export interface HubEntry {
   caution: "legal" | "liquid" | null;
 }
 
-/** Storefront pages that have their own pages in the app, shown with the rest. */
+/** The types with their own list pages in the app (the catalog first), shown before the other content types. */
 const MAIN_ON_HUB: Array<{ type: TranslatableKind; group: string }> = [
+  { type: "PRODUCT", group: "Catalog" },
+  { type: "COLLECTION", group: "Catalog" },
   { type: "PAGE", group: "Online store" },
   { type: "ARTICLE", group: "Online store" },
   { type: "BLOG", group: "Online store" },

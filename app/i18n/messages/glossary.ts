@@ -41,7 +41,7 @@ export const en = {
   "glossary.import.count": { one: "{count} term imported.", other: "{count} terms imported." },
   "glossary.import.failed": "Import failed",
 
-  "glossary.error.notOnPlan": "The glossary is part of the Pro and Business plans. See Plan to change your plan.",
+  "glossary.error.notOnPlan": "The glossary is part of the Pro and Business plans. Change your plan in Linguva under Settings → Plan.",
   "glossary.error.uploadTooLarge": "The upload is larger than 1 MB.",
   "glossary.error.fileTooLarge": "The file is larger than 1 MB.",
   "glossary.error.csvTooLarge": "The CSV is larger than 1 MB.",
@@ -102,7 +102,7 @@ export const de: Translation<typeof en> = {
   "glossary.import.count": { one: "{count} Begriff importiert.", other: "{count} Begriffe importiert." },
   "glossary.import.failed": "Import fehlgeschlagen",
 
-  "glossary.error.notOnPlan": "Das Glossar ist in den Tarifen Pro und Business enthalten. Unter „Tarif“ kannst du deinen Tarif ändern.",
+  "glossary.error.notOnPlan": "Das Glossar ist in den Tarifen Pro und Business enthalten. Deinen Tarif änderst du in Linguva unter „Einstellungen“ → „Tarif“.",
   "glossary.error.uploadTooLarge": "Der Upload ist größer als 1 MB.",
   "glossary.error.fileTooLarge": "Die Datei ist größer als 1 MB.",
   "glossary.error.csvTooLarge": "Der CSV-Text ist größer als 1 MB.",
@@ -163,7 +163,7 @@ export const fr: Translation<typeof en> = {
   "glossary.import.count": { one: "{count} terme importé.", other: "{count} termes importés." },
   "glossary.import.failed": "Échec de l'importation",
 
-  "glossary.error.notOnPlan": "Le glossaire est inclus dans les forfaits Pro et Business. Pour changer de forfait, rendez-vous dans Forfait.",
+  "glossary.error.notOnPlan": "Le glossaire est inclus dans les forfaits Pro et Business. Pour changer de forfait, rendez-vous dans Linguva, sous Paramètres → Forfait.",
   "glossary.error.uploadTooLarge": "Les données envoyées dépassent 1 Mo.",
   "glossary.error.fileTooLarge": "Le fichier dépasse 1 Mo.",
   "glossary.error.csvTooLarge": "Le texte CSV dépasse 1 Mo.",
@@ -224,7 +224,7 @@ export const es: Translation<typeof en> = {
   "glossary.import.count": { one: "{count} término importado.", other: "{count} términos importados." },
   "glossary.import.failed": "Error al importar",
 
-  "glossary.error.notOnPlan": "El glosario está incluido en los planes Pro y Business. Ve a Plan para cambiar tu plan.",
+  "glossary.error.notOnPlan": "El glosario está incluido en los planes Pro y Business. Cambia tu plan en Linguva, en Configuración → Plan.",
   "glossary.error.uploadTooLarge": "Los datos enviados superan 1 MB.",
   "glossary.error.fileTooLarge": "El archivo supera 1 MB.",
   "glossary.error.csvTooLarge": "El texto CSV supera 1 MB.",

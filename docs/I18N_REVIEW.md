@@ -25,7 +25,8 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - `common.kind.PACKING_SLIP_TEMPLATE.*`: "Bordereau d'expédition" / "Albarán" (Spain; Latin America: "lista de empaque").
 - `common.group.Checkout`: "Paiement" / "Pantalla de pago".
 - `common.issue.FORMALITY_MISMATCH`, `WRONG_SCRIPT`, `SEO_TOO_SHORT`: free renderings.
-- `common.nav.coverage`: "Couverture et SEO" / "Cobertura y SEO".
+- `common.nav.content` and `common.nav.jobs`: the short menu items "Contenus" / "Contenido" and "Tâches" / "Tareas" (the pages keep their longer headings).
+- `settings.tools.*`: the tool names "Pays et marchés" / "Países y mercados", "Couverture en détail" / "Cobertura en detalle" and their one-line explanations.
 
 **Editor, content, languages, landing page**
 - `content.table.area` / `content.table.how`: "Domaine" / "Área", "Méthode" / "Método".

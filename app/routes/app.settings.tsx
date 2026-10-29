@@ -169,6 +169,45 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: true };
 };
 
+/**
+ * The pages that aren't in the navigation, beside the settings: the store's
+ * languages and countries, every figure in detail, and the tools for
+ * wording, reuse, files and the plan. The smart schedule opens from its
+ * section.
+ */
+const TOOLS = [
+  { href: "/app/languages", icon: "language", label: "common.languages", detail: "settings.tools.languages.detail" },
+  { href: "/app/markets", icon: "globe", label: "settings.tools.markets.label", detail: "settings.tools.markets.detail" },
+  { href: "/app/coverage", icon: "chart-donut", label: "settings.tools.coverage.label", detail: "settings.tools.coverage.detail" },
+  { href: "/app/glossary", icon: "book-open", label: "common.nav.glossary", detail: "settings.tools.glossary.detail" },
+  { href: "/app/memory", icon: "database", label: "common.nav.memory", detail: "settings.tools.memory.detail" },
+  { href: "/app/translations", icon: "transfer", label: "transfer.page.heading", detail: "settings.tools.transfer.detail" },
+  { href: "/app/plan", icon: "plan", label: "common.nav.plan", detail: "settings.tools.plan.detail" },
+] as const;
+
+// Each tool is one link (the whole row, at least 44 px high), its name and what it is for inside.
+function ToolsSection() {
+  const { t } = useI18n();
+  return (
+    <s-section slot="aside" heading={t("settings.tools.heading")}>
+      <s-stack direction="block" gap="small-300">
+        {TOOLS.map((tool) => (
+          <s-clickable key={tool.href} href={tool.href} padding="small" borderRadius="base">
+            <s-grid gridTemplateColumns="auto 1fr auto" columnGap="small" alignItems="center">
+              <s-icon type={tool.icon} />
+              <s-stack direction="block">
+                <s-text type="strong">{t(tool.label)}</s-text>
+                <s-text color="subdued">{t(tool.detail)}</s-text>
+              </s-stack>
+              <s-icon type="chevron-right" color="subdued" />
+            </s-grid>
+          </s-clickable>
+        ))}
+      </s-stack>
+    </s-section>
+  );
+}
+
 export default function Settings() {
   const data = useLoaderData<typeof loader>();
   const i18n = useI18n();
@@ -558,6 +597,8 @@ export default function Settings() {
           <s-paragraph>{t("settings.usage.notCounted")}</s-paragraph>
         </s-stack>
       </s-section>
+
+      <ToolsSection />
     </s-page>
   );
 }

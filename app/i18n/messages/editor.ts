@@ -36,7 +36,7 @@ export const en = {
   "editor.aiError.DAILY_LIMIT": "Today's AI translation allowance is used up. It resets at midnight UTC.",
   "editor.aiError.PLATFORM_LIMIT": "The app's AI translation limit for today is reached. It resets at midnight UTC.",
   "editor.aiError.REQUEST_TOO_LARGE": "This is too much text for one request. Translate fewer fields at a time, or use bulk translation.",
-  "editor.aiError.PLAN_LANGUAGE": "Your plan doesn't include AI translation into this language. Change your plan under Plan, or translate by hand.",
+  "editor.aiError.PLAN_LANGUAGE": "Your plan doesn't include AI translation into this language. Change your plan in Linguva under Settings → Plan, or translate by hand.",
   "editor.aiError.RATE_LIMITED_USER": "You're translating very quickly. Please wait a moment and try again.",
   "editor.aiError.RATE_LIMITED_SHOP": "Your team is sending many AI requests right now. Please wait a moment and try again.",
   "editor.aiError.PROVIDER_RETRYABLE": "The translation service is busy. Please try again in a moment.",
@@ -202,7 +202,7 @@ export const de: Translation<typeof en> = {
   "editor.aiError.REQUEST_TOO_LARGE":
     "Das ist zu viel Text für eine Anfrage. Übersetze weniger Felder auf einmal oder nutze die Massenübersetzung.",
   "editor.aiError.PLAN_LANGUAGE":
-    "Dein Tarif enthält keine KI-Übersetzung in diese Sprache. Ändere deinen Tarif unter „Tarif“ oder übersetze von Hand.",
+    "Dein Tarif enthält keine KI-Übersetzung in diese Sprache. Ändere deinen Tarif in Linguva unter „Einstellungen“ → „Tarif“ oder übersetze von Hand.",
   "editor.aiError.RATE_LIMITED_USER": "Du übersetzt sehr schnell. Bitte warte einen Moment und versuche es dann noch einmal.",
   "editor.aiError.RATE_LIMITED_SHOP": "Dein Team sendet gerade viele KI-Anfragen. Bitte warte einen Moment und versuche es dann noch einmal.",
   "editor.aiError.PROVIDER_RETRYABLE": "Der Übersetzungsdienst ist ausgelastet. Bitte versuche es gleich noch einmal.",
@@ -373,7 +373,7 @@ export const fr: Translation<typeof en> = {
   "editor.aiError.REQUEST_TOO_LARGE":
     "Il y a trop de texte pour une seule requête. Traduisez moins de champs à la fois ou utilisez la traduction groupée.",
   "editor.aiError.PLAN_LANGUAGE":
-    "Votre forfait n'inclut pas la traduction par IA vers cette langue. Changez de forfait sous « Forfait » ou traduisez manuellement.",
+    "Votre forfait n'inclut pas la traduction par IA vers cette langue. Changez de forfait dans Linguva, sous « Paramètres » → « Forfait », ou traduisez manuellement.",
   "editor.aiError.RATE_LIMITED_USER": "Vous traduisez très rapidement. Veuillez patienter un instant, puis réessayer.",
   "editor.aiError.RATE_LIMITED_SHOP":
     "Votre équipe envoie actuellement de nombreuses requêtes d'IA. Veuillez patienter un instant, puis réessayer.",
@@ -548,7 +548,7 @@ export const es: Translation<typeof en> = {
   "editor.aiError.REQUEST_TOO_LARGE":
     "Hay demasiado texto para una sola solicitud. Traduce menos campos a la vez o usa la traducción masiva.",
   "editor.aiError.PLAN_LANGUAGE":
-    "Tu plan no incluye la traducción con IA a este idioma. Cambia tu plan en “Plan” o traduce manualmente.",
+    "Tu plan no incluye la traducción con IA a este idioma. Cambia tu plan en Linguva, en “Configuración” → “Plan”, o traduce manualmente.",
   "editor.aiError.RATE_LIMITED_USER": "Estás traduciendo muy rápido. Espera un momento y vuelve a intentarlo.",
   "editor.aiError.RATE_LIMITED_SHOP": "Tu equipo está enviando muchas solicitudes de IA ahora mismo. Espera un momento y vuelve a intentarlo.",
   "editor.aiError.PROVIDER_RETRYABLE": "El servicio de traducción está ocupado. Vuelve a intentarlo en un momento.",

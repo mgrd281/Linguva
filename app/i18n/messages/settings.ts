@@ -85,6 +85,17 @@ export const en = {
     "Today: {used} of {limit} characters (the daily limit protects against unexpected costs and resets at midnight UTC).",
   "settings.usage.notCounted":
     "Text reused from your translation memory, repeated sentences and glossary-only text aren't sent to AI and don't count towards this limit.",
+
+  "settings.tools.heading": "Tools",
+  "settings.tools.languages.detail": "Which languages customers see, and which ones AI can translate",
+  "settings.tools.markets.label": "Countries & markets",
+  "settings.tools.markets.detail": "Which language customers read in each country",
+  "settings.tools.coverage.label": "Coverage in detail",
+  "settings.tools.coverage.detail": "Every figure by content type and field",
+  "settings.tools.glossary.detail": "Brand names and fixed terms the AI sticks to",
+  "settings.tools.memory.detail": "Translations Linguva reuses for free",
+  "settings.tools.transfer.detail": "Translations as a CSV file, for translators and spreadsheets",
+  "settings.tools.plan.detail": "Your plan and this month's AI characters",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -172,6 +183,17 @@ export const de: Translation<typeof en> = {
     "Heute: {used} von {limit} Zeichen (das Tageslimit schützt vor unerwarteten Kosten und wird um Mitternacht UTC zurückgesetzt).",
   "settings.usage.notCounted":
     "Text aus deinem Übersetzungsspeicher, wiederholte Sätze und Text, der nur aus Glossar-Begriffen besteht, werden nicht an die KI gesendet und zählen nicht zu diesem Limit.",
+
+  "settings.tools.heading": "Werkzeuge",
+  "settings.tools.languages.detail": "Welche Sprachen Kunden sehen und welche die KI übersetzen kann",
+  "settings.tools.markets.label": "Länder & Märkte",
+  "settings.tools.markets.detail": "Welche Sprache Kunden in jedem Land lesen",
+  "settings.tools.coverage.label": "Abdeckung im Detail",
+  "settings.tools.coverage.detail": "Alle Zahlen nach Inhaltsart und Feld",
+  "settings.tools.glossary.detail": "Markennamen und feste Begriffe, an die sich die KI hält",
+  "settings.tools.memory.detail": "Übersetzungen, die Linguva kostenlos wiederverwendet",
+  "settings.tools.transfer.detail": "Übersetzungen als CSV-Datei, für Übersetzer und Tabellen",
+  "settings.tools.plan.detail": "Dein Tarif und deine KI-Zeichen in diesem Monat",
 };
 
 export const fr: Translation<typeof en> = {
@@ -263,6 +285,17 @@ export const fr: Translation<typeof en> = {
     "Aujourd'hui : {used} sur {limit} caractères (la limite quotidienne protège contre les coûts imprévus et est réinitialisée à minuit UTC).",
   "settings.usage.notCounted":
     "Le texte réutilisé depuis votre mémoire de traduction, les phrases répétées et le texte composé uniquement de termes du glossaire ne sont pas envoyés à l'IA et ne comptent pas dans cette limite.",
+
+  "settings.tools.heading": "Outils",
+  "settings.tools.languages.detail": "Les langues que voient vos clients et celles que l'IA peut traduire",
+  "settings.tools.markets.label": "Pays et marchés",
+  "settings.tools.markets.detail": "La langue que lisent vos clients dans chaque pays",
+  "settings.tools.coverage.label": "Couverture en détail",
+  "settings.tools.coverage.detail": "Tous les chiffres par type de contenu et par champ",
+  "settings.tools.glossary.detail": "Les noms de marque et les termes fixes que l'IA respecte",
+  "settings.tools.memory.detail": "Les traductions que Linguva réutilise gratuitement",
+  "settings.tools.transfer.detail": "Les traductions en fichier CSV, pour les traducteurs et les tableurs",
+  "settings.tools.plan.detail": "Votre forfait et vos caractères d'IA de ce mois-ci",
 };
 
 export const es: Translation<typeof en> = {
@@ -351,4 +384,15 @@ export const es: Translation<typeof en> = {
     "Hoy: {used} de {limit} caracteres (el límite diario te protege de gastos inesperados y se restablece a medianoche UTC).",
   "settings.usage.notCounted":
     "El texto reutilizado de tu memoria de traducción, las frases repetidas y el texto formado solo por términos del glosario no se envían a la IA y no cuentan para este límite.",
+
+  "settings.tools.heading": "Herramientas",
+  "settings.tools.languages.detail": "Qué idiomas ven tus clientes y cuáles puede traducir la IA",
+  "settings.tools.markets.label": "Países y mercados",
+  "settings.tools.markets.detail": "Qué idioma leen tus clientes en cada país",
+  "settings.tools.coverage.label": "Cobertura en detalle",
+  "settings.tools.coverage.detail": "Todas las cifras por tipo de contenido y campo",
+  "settings.tools.glossary.detail": "Los nombres de marca y los términos fijos que la IA respeta",
+  "settings.tools.memory.detail": "Las traducciones que Linguva reutiliza gratis",
+  "settings.tools.transfer.detail": "Las traducciones en un archivo CSV, para traductores y hojas de cálculo",
+  "settings.tools.plan.detail": "Tu plan y tus caracteres de IA de este mes",
 };

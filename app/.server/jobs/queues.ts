@@ -15,6 +15,8 @@ import { logger } from "../lib/logger";
 import { withTenant } from "../tenancy/with-tenant";
 import { AUTO_REQUESTED_BY, finishItem, stopJob } from "./bulk-jobs";
 import { autoPauseAfterStop } from "../settings/shop-settings";
+import { smartPauseAfterStop } from "../smart/config";
+import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { currentShopLocales } from "../locales/current-locales";
 import { classifyError } from "./errors";
 import {
@@ -276,6 +278,8 @@ export function createItemProcessor(deps: JobDependencies) {
             await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: decision.code }, deps.prisma);
             // Automatic translation waits for the limit or the provider instead of failing again on every change.
             if (item.job.requestedBy === AUTO_REQUESTED_BY) await autoPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma);
+            // So does the smart schedule: its other jobs stop at their next item, and its page says why.
+            if (item.job.requestedBy === SMART_REQUESTED_BY) await smartPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma);
           }
           log.warn({ code: decision.code }, "job stopped");
           throw new UnrecoverableError(decision.code);
@@ -351,7 +355,10 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
     const payload = parsed.data;
     const log = logger.child({ queue: QUEUE_NAMES.coverage, queueJobId: job.id, shopId: payload.shopId, reportId: payload.reportId });
     try {
-      const next = await runCoveragePage(deps, payload);
+      const next = await runCoveragePage(deps, payload, {
+        // Translation a Smart Auto-Translate run planned on the page.
+        enqueueSmartItems: (shopId, itemIds, position) => enqueueItems(queues, shopId, itemIds, undefined, deps.prisma, position),
+      });
       if (next) await enqueueCoveragePage(queues, next);
       return { done: !next };
     } catch (error) {
@@ -516,7 +523,8 @@ export async function requeueStalledDiscovery(deps: JobDependencies, queues: Que
       shop.id,
       (tx) =>
         tx.translationJob.findMany({
-          where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] }, discoveryDone: false, updatedAt: { lt: cutoff } },
+          // A smart run's jobs are filled by its measurement, not by discovery (repairSmartRuns finishes them).
+          where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] }, discoveryDone: false, smartRunId: null, updatedAt: { lt: cutoff } },
           select: { id: true, discoveryCursor: true },
           take: 100,
         }),

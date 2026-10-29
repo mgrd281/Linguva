@@ -24,6 +24,8 @@ export interface CoverageBase {
   sourceKeys: string[];
   /** digestTag of each source key's original, in the same order ("" when unknown). */
   sourceDigests: string[];
+  /** Length of each source key's original, in the same order (what translating it would send). */
+  sourceChars: number[];
   currentKeys: string[];
   outdatedKeys: string[];
   seoIssues: number;
@@ -55,11 +57,12 @@ export function digestTag(digest: string | null | undefined): string {
 /** The base state from Shopify's translatable content and translations. Pure. */
 export function baseFromShopify(data: Pick<TranslatableResourceData, "content" | "translations">): CoverageBase {
   const translations = new Map(data.translations.map((t) => [t.key, t]));
-  const base: CoverageBase = { sourceKeys: [], sourceDigests: [], currentKeys: [], outdatedKeys: [], seoIssues: 0, seoTitleHash: null };
+  const base: CoverageBase = { sourceKeys: [], sourceDigests: [], sourceChars: [], currentKeys: [], outdatedKeys: [], seoIssues: 0, seoTitleHash: null };
   for (const field of data.content) {
     if (!hasText(field.value)) continue;
     base.sourceKeys.push(field.key);
     base.sourceDigests.push(digestTag(field.digest));
+    base.sourceChars.push(field.value.length);
     const t = translations.get(field.key);
     if (!t || !hasText(t.value)) continue;
     if (t.outdated) base.outdatedKeys.push(field.key);
@@ -131,6 +134,7 @@ type ItemRow = {
   parentGid: string | null;
   sourceKeys: string[];
   sourceDigests: string[];
+  sourceChars: number[];
   currentKeys: string[];
   outdatedKeys: string[];
   seoIssues: number;
@@ -184,30 +188,33 @@ async function loadOverlays(tx: TenantTx, shopId: string, locale: string, gids: 
 }
 
 type DeltaKey = string;
+type Delta = { count: number; chars: number };
 const deltaKey = (resourceType: string, groupState: string): DeltaKey => `${resourceType}\u0000${groupState}`;
 
-function addDeltas(deltas: Map<DeltaKey, number>, resourceType: string, states: readonly string[], sign: 1 | -1) {
-  for (const s of states) {
+/** Adds (or removes) an item's fields to the counts: one per field, with its original's length. */
+function addDeltas(deltas: Map<DeltaKey, Delta>, resourceType: string, states: readonly string[], chars: readonly number[], sign: 1 | -1) {
+  states.forEach((s, i) => {
     const k = deltaKey(resourceType, s);
-    deltas.set(k, (deltas.get(k) ?? 0) + sign);
-  }
+    const d = deltas.get(k) ?? { count: 0, chars: 0 };
+    deltas.set(k, { count: d.count + sign, chars: d.chars + sign * (chars[i] ?? 0) });
+  });
 }
 
-async function applyDeltas(tx: TenantTx, shopId: string, locale: string, deltas: Map<DeltaKey, number>) {
+async function applyDeltas(tx: TenantTx, shopId: string, locale: string, deltas: Map<DeltaKey, Delta>) {
   const rows = [...deltas.entries()]
-    .filter(([, n]) => n !== 0)
-    .map(([k, n]) => {
+    .filter(([, d]) => d.count !== 0 || d.chars !== 0)
+    .map(([k, d]) => {
       const [resourceType, groupState] = k.split("\u0000") as [string, string];
       const [fieldGroup, state] = groupState.split(":") as [string, string];
-      return { resourceType, fieldGroup, state, count: n };
+      return { resourceType, fieldGroup, state, count: d.count, chars: d.chars };
     });
   if (!rows.length) return;
   await tx.$executeRaw`
-    INSERT INTO "CoverageCount" ("shopId", "locale", "resourceType", "fieldGroup", "state", "count")
-    SELECT ${shopId}::uuid, ${locale}, x."resourceType", x."fieldGroup", x."state", x."count"
-    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x("resourceType" text, "fieldGroup" text, "state" text, "count" integer)
+    INSERT INTO "CoverageCount" ("shopId", "locale", "resourceType", "fieldGroup", "state", "count", "chars")
+    SELECT ${shopId}::uuid, ${locale}, x."resourceType", x."fieldGroup", x."state", x."count", x."chars"
+    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x("resourceType" text, "fieldGroup" text, "state" text, "count" integer, "chars" bigint)
     ON CONFLICT ("shopId", "locale", "resourceType", "fieldGroup", "state")
-    DO UPDATE SET "count" = "CoverageCount"."count" + EXCLUDED."count"`;
+    DO UPDATE SET "count" = "CoverageCount"."count" + EXCLUDED."count", "chars" = "CoverageCount"."chars" + EXCLUDED."chars"`;
   await tx.$executeRaw`DELETE FROM "CoverageCount" WHERE "shopId" = ${shopId}::uuid AND "locale" = ${locale} AND "count" = 0`;
 }
 
@@ -237,6 +244,7 @@ export async function syncCoverageTx(
           parentGid: true,
           sourceKeys: true,
           sourceDigests: true,
+          sourceChars: true,
           currentKeys: true,
           outdatedKeys: true,
           seoIssues: true,
@@ -249,7 +257,7 @@ export async function syncCoverageTx(
     ).map((i) => [i.resourceGid, i as ItemRow]),
   );
   const overlays = await loadOverlays(tx, shopId, locale, gids);
-  const deltas = new Map<DeltaKey, number>();
+  const deltas = new Map<DeltaKey, Delta>();
   const rows: Array<Record<string, unknown>> = [];
 
   for (const change of changes) {
@@ -257,7 +265,7 @@ export async function syncCoverageTx(
     const resourceType = before?.resourceType ?? change.resourceType;
     if (!resourceType) continue;
     if (!before && !(options.create && change.observed)) continue;
-    let base: CoverageBase = before ?? { sourceKeys: [], sourceDigests: [], currentKeys: [], outdatedKeys: [], seoIssues: 0, seoTitleHash: null };
+    let base: CoverageBase = before ?? { sourceKeys: [], sourceDigests: [], sourceChars: [], currentKeys: [], outdatedKeys: [], seoIssues: 0, seoTitleHash: null };
     let syncedAt = before?.syncedAt ?? change.observed!.at;
     // A read older than the item's state (a scan page read before a save) never replaces it.
     if (change.observed && (!before || change.observed.at >= before.syncedAt)) {
@@ -270,8 +278,8 @@ export async function syncCoverageTx(
     // Drafts only count for fields that still have the original they were made for.
     const relevant = currentOverlay(base, overlay);
     const derived = deriveStates(resourceType, base, relevant);
-    if (before) addDeltas(deltas, before.resourceType, before.fieldStates, -1);
-    addDeltas(deltas, resourceType, derived.fieldStates, 1);
+    if (before) addDeltas(deltas, before.resourceType, before.fieldStates, before.sourceChars, -1);
+    addDeltas(deltas, resourceType, derived.fieldStates, base.sourceChars, 1);
     existing.set(change.resourceGid, { ...base, resourceGid: change.resourceGid, resourceType, parentGid: before?.parentGid ?? null, fieldStates: derived.fieldStates, syncedAt, seenAt });
     rows.push({
       resourceType,
@@ -279,6 +287,7 @@ export async function syncCoverageTx(
       parentGid: change.parentGid ?? before?.parentGid ?? null,
       sourceKeys: base.sourceKeys,
       sourceDigests: base.sourceDigests,
+      sourceChars: base.sourceChars,
       currentKeys: base.currentKeys,
       outdatedKeys: base.outdatedKeys,
       draftKeys: relevant.draftKeys,
@@ -303,16 +312,16 @@ export async function syncCoverageTx(
   const unique = [...new Map(rows.map((r) => [r.resourceGid as string, r])).values()];
   await tx.$executeRaw`
     INSERT INTO "CoverageItem" (
-      "shopId", "locale", "resourceType", "resourceGid", "parentGid", "sourceKeys", "sourceDigests", "currentKeys", "outdatedKeys",
+      "shopId", "locale", "resourceType", "resourceGid", "parentGid", "sourceKeys", "sourceDigests", "sourceChars", "currentKeys", "outdatedKeys",
       "draftKeys", "reviewKeys", "lastAttemptFailed", "failureCode", "fieldStates", "stateComplete", "stateReview",
       "stateDraft", "stateFailed", "stateOutdated", "stateMissing", "seoIssues", "seoTitleHash", "syncedAt", "seenAt", "updatedAt"
     )
-    SELECT ${shopId}::uuid, ${locale}, x."resourceType", x."resourceGid", x."parentGid", x."sourceKeys", x."sourceDigests", x."currentKeys",
+    SELECT ${shopId}::uuid, ${locale}, x."resourceType", x."resourceGid", x."parentGid", x."sourceKeys", x."sourceDigests", x."sourceChars", x."currentKeys",
       x."outdatedKeys", x."draftKeys", x."reviewKeys", x."lastAttemptFailed", x."failureCode", x."fieldStates",
       x."stateComplete", x."stateReview", x."stateDraft", x."stateFailed", x."stateOutdated", x."stateMissing",
       x."seoIssues", x."seoTitleHash", x."syncedAt", x."seenAt", now()
     FROM jsonb_to_recordset(${JSON.stringify(unique)}::jsonb) AS x(
-      "resourceType" text, "resourceGid" text, "parentGid" text, "sourceKeys" text[], "sourceDigests" text[], "currentKeys" text[],
+      "resourceType" text, "resourceGid" text, "parentGid" text, "sourceKeys" text[], "sourceDigests" text[], "sourceChars" integer[], "currentKeys" text[],
       "outdatedKeys" text[], "draftKeys" text[], "reviewKeys" text[], "lastAttemptFailed" boolean, "failureCode" text,
       "fieldStates" text[], "stateComplete" integer, "stateReview" integer, "stateDraft" integer, "stateFailed" integer,
       "stateOutdated" integer, "stateMissing" integer, "seoIssues" integer, "seoTitleHash" text,
@@ -320,7 +329,7 @@ export async function syncCoverageTx(
     )
     ON CONFLICT ("shopId", "locale", "resourceGid") DO UPDATE SET
       "resourceType" = EXCLUDED."resourceType", "parentGid" = EXCLUDED."parentGid", "sourceKeys" = EXCLUDED."sourceKeys",
-      "sourceDigests" = EXCLUDED."sourceDigests",
+      "sourceDigests" = EXCLUDED."sourceDigests", "sourceChars" = EXCLUDED."sourceChars",
       "currentKeys" = EXCLUDED."currentKeys", "outdatedKeys" = EXCLUDED."outdatedKeys", "draftKeys" = EXCLUDED."draftKeys",
       "reviewKeys" = EXCLUDED."reviewKeys", "lastAttemptFailed" = EXCLUDED."lastAttemptFailed",
       "failureCode" = EXCLUDED."failureCode", "fieldStates" = EXCLUDED."fieldStates",
@@ -431,10 +440,10 @@ export async function dropCoverageItemsTx(tx: TenantTx, shopId: string, locale: 
   await lock(tx, shopId, locale);
   const items = await tx.coverageItem.findMany({
     where: { shopId, locale, resourceGid: { in: [...gids] } },
-    select: { resourceType: true, fieldStates: true },
+    select: { resourceType: true, fieldStates: true, sourceChars: true },
   });
-  const deltas = new Map<DeltaKey, number>();
-  for (const i of items) addDeltas(deltas, i.resourceType, i.fieldStates, -1);
+  const deltas = new Map<DeltaKey, Delta>();
+  for (const i of items) addDeltas(deltas, i.resourceType, i.fieldStates, i.sourceChars, -1);
   await tx.coverageItem.deleteMany({ where: { shopId, locale, resourceGid: { in: [...gids] } } });
   await applyDeltas(tx, shopId, locale, deltas);
 }
@@ -501,10 +510,10 @@ export async function rebuildCountsTx(tx: TenantTx, shopId: string, locale: stri
   await lock(tx, shopId, locale);
   await tx.coverageCount.deleteMany({ where: { shopId, locale, resourceType } });
   await tx.$executeRaw`
-    INSERT INTO "CoverageCount" ("shopId", "locale", "resourceType", "fieldGroup", "state", "count")
-    SELECT ${shopId}::uuid, ${locale}, ${resourceType}, split_part(fs, ':', 1), split_part(fs, ':', 2), count(*)::integer
-    FROM "CoverageItem" i, unnest(i."fieldStates") AS fs
-    WHERE i."shopId" = ${shopId}::uuid AND i."locale" = ${locale} AND i."resourceType" = ${resourceType}
+    INSERT INTO "CoverageCount" ("shopId", "locale", "resourceType", "fieldGroup", "state", "count", "chars")
+    SELECT ${shopId}::uuid, ${locale}, ${resourceType}, split_part(f.fs, ':', 1), split_part(f.fs, ':', 2), count(*)::integer, COALESCE(sum(f.c), 0)::bigint
+    FROM "CoverageItem" i, unnest(i."fieldStates", i."sourceChars") AS f(fs, c)
+    WHERE i."shopId" = ${shopId}::uuid AND i."locale" = ${locale} AND i."resourceType" = ${resourceType} AND f.fs IS NOT NULL
     GROUP BY 4, 5`;
 }
 

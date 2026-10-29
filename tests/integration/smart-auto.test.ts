@@ -13,6 +13,7 @@ vi.hoisted(() => {
 
 import { PrismaClient } from "@prisma/client";
 import { createAutoItems, queueAutoTranslate, type AutoQueue } from "../../app/.server/jobs/auto-translate";
+import { sweepChangedContent } from "../../app/.server/jobs/auto-sweep";
 import { classifyError } from "../../app/.server/jobs/errors";
 import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
 import { forgetCurrentLocales } from "../../app/.server/locales/current-locales";
@@ -334,6 +335,29 @@ describe("webhooks and the periodic check", () => {
     // An excluded resource isn't checked.
     await addSmartExclusion({ shopId: shop.id, resourceGid: "gid://shopify/Product/2", actorId: "7" }, app);
     expect((await createAutoItems(app, { shopId: shop.id, resourceGid: "gid://shopify/Product/2", resourceType: "PRODUCT" }, deps.billingFor)).itemIds).toHaveLength(0);
+  });
+
+  it("the periodic check follows changes between checks in real-time mode only, from its last full check on", async () => {
+    const { shop, store, deps } = await setup();
+    store.addContent(1);
+    const sweepDeps = { prisma: app, adminFor: deps.adminFor, billingFor: deps.billingFor };
+    const now = new Date();
+    // A daily schedule reads everything at its time: nothing between checks.
+    await enabled(shop.id, daily(), now);
+    store.touch("gid://shopify/Page/1", new Date(now.getTime() + 60_000));
+    const scheduled = recordQueue();
+    expect(await sweepChangedContent(sweepDeps, scheduled.queue, new Date(now.getTime() + 5 * 60_000))).toMatchObject({ shops: 0, queued: 0 });
+    // Real time: the changed page is checked (by the same check a webhook queues), the position moves on.
+    const config = (await getSmartConfig(shop.id, app))!;
+    await saveSmartSettings({ shopId: shop.id, actorId: "7", value: daily({ mode: "realtime", times: [180] }), version: config.version, primaryLocale: "en", now }, app);
+    const live = recordQueue();
+    expect(await sweepChangedContent(sweepDeps, live.queue, new Date(now.getTime() + 5 * 60_000))).toMatchObject({ shops: 1, queued: 1 });
+    expect(live.added).toEqual([expect.objectContaining({ resourceGid: "gid://shopify/Page/1", resourceType: "PAGE" })]);
+    expect((await getShopSettings(shop.id, app)).autoSweptAt).not.toBeNull();
+    // Paused: nothing.
+    await pauseSmart({ shopId: shop.id, actorId: "7" }, app);
+    store.touch("gid://shopify/Page/1", new Date(now.getTime() + 6 * 60_000));
+    expect(await sweepChangedContent(sweepDeps, recordQueue().queue, new Date(now.getTime() + 10 * 60_000))).toMatchObject({ shops: 0, queued: 0 });
   });
 });
 

@@ -12,7 +12,10 @@ CREATE TYPE "SmartRunTrigger" AS ENUM ('SCHEDULED', 'MANUAL');
 CREATE TYPE "SmartRunStatus" AS ENUM ('QUEUED', 'WAITING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED');
 
 -- AlterTable
-ALTER TABLE "CoverageItem" ADD COLUMN     "pendingChars" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "CoverageCount" ADD COLUMN     "chars" BIGINT NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "CoverageItem" ADD COLUMN     "sourceChars" INTEGER[] DEFAULT ARRAY[]::INTEGER[];
 
 -- AlterTable
 ALTER TABLE "CoverageReport" ADD COLUMN     "smartRunId" UUID;
@@ -165,6 +168,9 @@ ALTER TABLE "SmartAutoExclusion" ADD CONSTRAINT "SmartAutoExclusion_resourceGid_
   CHECK ("resourceGid" ~ '^gid://shopify/[A-Za-z]+/[0-9]+$' AND "resourceType" ~ '^[A-Z_]{1,40}$');
 ALTER TABLE "UsageLedger" ADD CONSTRAINT "UsageLedger_origin_check"
   CHECK ("origin" IS NULL OR "origin" = 'smart');
+-- Lengths only (the estimate before anything is sent), never text.
+ALTER TABLE "CoverageItem" ADD CONSTRAINT "CoverageItem_sourceChars_check"
+  CHECK (0 <= ALL ("sourceChars"));
 
 -- Row-level security (fail closed), as for every tenant table.
 ALTER TABLE "SmartAutoConfig" ENABLE ROW LEVEL SECURITY;

@@ -620,9 +620,9 @@ model CoverageItem {
   seoIssues         Int      @default(0)
   /// sha256 prefix of the normalised translated SEO title (duplicates).
   seoTitleHash      String?
-  /// Characters of the machine-translatable fields that are missing or
-  /// outdated (estimates before anything is sent).
-  pendingChars      Int      @default(0)
+  /// Length of each of those originals, in the same order: what translating
+  /// a field would send (the estimate before anything is sent; no text).
+  sourceChars       Int[]    @default([])
   /// When the Shopify state the keys come from was read or written.
   syncedAt          DateTime @db.Timestamptz(3)
   /// When a scan or refresh last found the resource in Shopify.
@@ -647,6 +647,8 @@ model CoverageCount {
   fieldGroup   String
   state        String
   count        Int    @default(0)
+  /// Characters of the originals of those fields (see CoverageItem.sourceChars).
+  chars        BigInt @default(0)
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 

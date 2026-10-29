@@ -100,6 +100,8 @@ export async function saveSmartSettings(
         : await tx.smartAutoConfig.create({ data: { shopId: input.shopId, ...data, version: 1 } });
       // Also while paused: the tick records the skipped checks.
       await setDueHint(tx, input.shopId, config.enabled ? config.nextRunAt : null);
+      // Real time from now on: the periodic check follows changes made after this (earlier ones wait for the next full check).
+      if (enabled && v.mode === "realtime" && existing?.mode !== "realtime") await startFollowingChanges(tx, input.shopId, now);
       return config;
     },
     client,
@@ -152,9 +154,15 @@ export async function setSmartEnabled(
     if (settings.autoTranslateNew) {
       await setAutoTranslate({ shopId: input.shopId, enabled: false, locales: [], allowedLocales: [], actorId: input.actorId }, client);
     }
+    if (result.mode === "realtime") await withTenant(input.shopId, (tx) => startFollowingChanges(tx, input.shopId, now), client);
   }
   await audit(client, input.shopId, input.actorId, input.enabled ? "smart_auto.enabled" : "smart_auto.disabled");
   return { ok: true, config: result };
+}
+
+/** The periodic check's position (ShopSettings.autoSweptAt): changes after this are followed. */
+async function startFollowingChanges(tx: TenantTx, shopId: string, now: Date) {
+  await tx.shopSettings.updateMany({ where: { shopId }, data: { autoSweptAt: now } });
 }
 
 /** Cancels the shop's active smart runs and the smart jobs still queued or running. */
@@ -240,6 +248,9 @@ export async function smartPauseAfterStop(shopId: string, code: string, now = ne
       const config = await tx.smartAutoConfig.findUnique({ where: { shopId } });
       if (!config?.enabled) return false;
       const until = pauseLiftsAt(reason, now.getTime(), config.timeZone);
+      // A pause already in place that lasts at least as long stays (the merchant's own pause
+      // never turns into one that lifts by itself at midnight).
+      if (smartPaused(config, now) && (!config.pausedUntil || (until !== null && config.pausedUntil.getTime() >= until))) return false;
       await tx.smartAutoConfig.update({
         where: { shopId },
         data: { pausedAt: now, pauseReason: reason, pausedUntil: until === null ? null : new Date(until) },

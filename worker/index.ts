@@ -12,7 +12,7 @@ import { billingDeps } from "../app/.server/billing/billing";
 import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
-import { createQueues, createWorkers, requeueStalledDiscovery, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
+import { createQueues, createWorkers, enqueueCoveragePage, requeueStalledDiscovery, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
 import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
 import { createRedis, keyPrefix } from "../app/.server/queue/redis";
@@ -20,8 +20,12 @@ import { startHeartbeat } from "../app/.server/queue/heartbeat";
 import { TokenBucket } from "../app/.server/queue/rate-limiter";
 import { withShopifyTimeout } from "../app/.server/shopify/admin-timeout";
 import { purgeWebhookLog } from "../app/.server/webhooks/process-webhook";
+import { repairAllSmartRuns } from "../app/.server/smart/plan";
+import { smartTick } from "../app/.server/smart/runs";
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+/** Smart Auto-Translate: schedules are checked every minute (times are in whole minutes). */
+const SMART_TICK_MS = 60 * 1000;
 
 async function main() {
   const config = getConfig();
@@ -79,6 +83,8 @@ async function main() {
         if (discovering) logger.warn({ jobs: discovering }, "continued stalled job discovery");
         const reports = await requeueStalledReports(deps, queues);
         if (reports) logger.warn({ reports }, "continued stalled coverage reports");
+        const runs = await repairAllSmartRuns(prisma);
+        if (runs) logger.warn({ runs }, "finished smart runs whose measurement had ended");
       }
       const purged = await purgeWebhookLog(prisma);
       if (purged) logger.info({ purged }, "old webhook log entries deleted");
@@ -104,6 +110,33 @@ async function main() {
   const autoTimer = setInterval(autoSweep, AUTO_SWEEP_INTERVAL_MS);
   void autoSweep();
 
+  // Smart Auto-Translate: due schedules become runs. One worker per minute; a second one
+  // (a deploy overlap) would still start each occurrence once (unique per occurrence, per-shop lock).
+  const smartDeps = {
+    prisma,
+    adminFor: deps.adminFor,
+    billingFor: deps.billingFor,
+    aiAvailable: deps.provider !== null,
+    enqueueCoveragePage: (payload: Parameters<typeof enqueueCoveragePage>[1]) => enqueueCoveragePage(queues, payload),
+  };
+  let ticking = false;
+  const tick = async () => {
+    if (ticking) return;
+    ticking = true;
+    try {
+      const lock = await connection.set(`${prefix}:smart-tick-lock`, String(process.pid), "PX", SMART_TICK_MS - 5_000, "NX");
+      if (lock !== "OK") return;
+      const summary = await smartTick(smartDeps);
+      if (summary.started || summary.skipped || summary.failed) logger.info(summary, "smart auto-translate: schedules checked");
+    } catch (error) {
+      logger.error({ err: (error as Error).name }, "smart auto-translate tick failed");
+    } finally {
+      ticking = false;
+    }
+  };
+  const smartTimer = setInterval(tick, SMART_TICK_MS);
+  void tick();
+
   // Tells the web process (and GET /healthz/worker) that jobs are being processed.
   const heartbeat = startHeartbeat(connection, {
     prefix,
@@ -127,6 +160,7 @@ async function main() {
     heartbeat.stop();
     clearInterval(timer);
     clearInterval(autoTimer);
+    clearInterval(smartTimer);
     // Lets active jobs finish; unfinished ones are picked up again after restart.
     await workers.close();
     await queues.close();

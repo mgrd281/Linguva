@@ -17,6 +17,7 @@ import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, kindOfGid, RESOURCE_KINDS, type TranslatableKind } from "../../lib/resource-kinds";
 import { dropCoverageTypeTx, dropDeletedResource, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
+import { afterSmartScan, finishSmartScanTx, planSmartPage, writeSmartPlanTx } from "../smart/plan";
 
 /** Custom fields of each owner type ("PRODUCT_METAFIELD", …). */
 export const METAFIELD_COVERAGE_TYPES = METAFIELD_OWNER_TYPES.map((owner) => `${owner}_METAFIELD` as const);
@@ -59,6 +60,12 @@ export interface CoverageDeps {
   keyPrefix: string;
   shopifyLimiter?: Limiter;
   pageSize?: number;
+}
+
+/** What a page hands on after its commit. */
+export interface CoveragePageHooks {
+  /** Queues the translation items a Smart Auto-Translate run planned on the page. */
+  enqueueSmartItems?(shopId: string, itemIds: string[], position: number): Promise<void>;
 }
 
 export interface CoveragePagePayload {
@@ -156,8 +163,10 @@ async function throttle(deps: CoverageDeps, shopId: string) {
 /**
  * Scans one page and returns the next page to scan, or null when the report
  * is finished or this page was already processed (a repeated queue job).
+ * A Smart Auto-Translate run's report also plans translation for what the
+ * page read, in the page's transaction (smart/plan.ts).
  */
-export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePagePayload): Promise<CoveragePagePayload | null> {
+export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePagePayload, hooks: CoveragePageHooks = {}): Promise<CoveragePagePayload | null> {
   const report = await withTenant(
     payload.shopId,
     (tx) => tx.coverageReport.findFirst({ where: { id: payload.reportId, shopId: payload.shopId } }),
@@ -191,8 +200,11 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
   const nextIndex = more ? payload.segmentIndex : payload.segmentIndex + 1;
   const nextCursor = more ? (page as { endCursor: string }).endCursor : null;
   const finished = nextIndex >= report.segments.length;
+  // Read before the transaction: revisions and drafts of what the page found.
+  const plan =
+    page === "denied" ? null : await planSmartPage(deps.prisma, { shopId: payload.shopId, report, resourceType: segment.resourceType, locale: segment.locale, changes: page.changes });
 
-  return withTenant(
+  const result = await withTenant(
     payload.shopId,
     async (tx) => {
       // Advances only from the position this page was read at, so a repeated
@@ -238,10 +250,20 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
         await syncCoverageTx(tx, payload.shopId, segment.locale, page.changes, { create: true, seen: true });
         if (!more) await finishSegment(tx, payload.shopId, segment.locale, segment.resourceType, readAt);
       }
-      return finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: nextCursor };
+      const smartItems = plan ? await writeSmartPlanTx(tx, payload.shopId, plan) : { itemIds: [], position: 0 };
+      if (finished && report.smartRunId) await finishSmartScanTx(tx, payload.shopId, report.smartRunId);
+      const next = finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: nextCursor };
+      return { next, smartItems };
     },
     deps.prisma,
   );
+  if (!result) return null;
+  // After the commit; items left unqueued (Redis down) are queued again by the stalled-item repair.
+  if (result.smartItems.itemIds.length && hooks.enqueueSmartItems) {
+    await hooks.enqueueSmartItems(payload.shopId, result.smartItems.itemIds, result.smartItems.position);
+  }
+  if (finished && report.smartRunId) await afterSmartScan(deps.prisma, payload.shopId, report.smartRunId);
+  return result.next;
 }
 
 async function readPage(admin: Admin, resourceType: string, locale: string, cursor: string | null, pageSize: number, readAt: Date) {
@@ -281,18 +303,24 @@ async function finishSegment(tx: TenantTx, shopId: string, locale: string, resou
 }
 
 export async function failCoverageReport(shopId: string, reportId: string, errorCode: string, client: PrismaClient = defaultClient) {
-  await withTenant(
+  const smartRunId = await withTenant(
     shopId,
     async (tx) => {
-      await tx.coverageReport.updateMany({
+      const failed = await tx.coverageReport.updateMany({
         where: { id: reportId, shopId, status: { in: ACTIVE } },
         data: { status: "FAILED", errorCode, finishedAt: new Date() },
       });
       // The segment being read keeps its earlier items, marked as not fully scanned.
       await tx.coverageSegment.updateMany({ where: { shopId, reportId, status: "SCANNING" }, data: { status: "FAILED", errorCode } });
+      if (!failed.count) return null;
+      // A smart run's plan ends with its measurement: what it planned is still translated.
+      const report = await tx.coverageReport.findFirst({ where: { id: reportId, shopId }, select: { smartRunId: true } });
+      if (report?.smartRunId) await finishSmartScanTx(tx, shopId, report.smartRunId);
+      return report?.smartRunId ?? null;
     },
     client,
   );
+  if (smartRunId) await afterSmartScan(client, shopId, smartRunId);
 }
 
 
@@ -361,7 +389,7 @@ export async function skipCoverageSegment(
   payload: CoveragePagePayload,
   errorCode: string,
 ): Promise<CoveragePagePayload | null> {
-  return withTenant(
+  const result = await withTenant(
     payload.shopId,
     async (tx) => {
       const report = await tx.coverageReport.findFirst({ where: { id: payload.reportId, shopId: payload.shopId } });
@@ -387,8 +415,11 @@ export async function skipCoverageSegment(
           update: { status: "FAILED", reportId: report.id, errorCode },
         });
       }
-      return finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: null };
+      if (finished && report.smartRunId) await finishSmartScanTx(tx, payload.shopId, report.smartRunId);
+      return { next: finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: null }, smartRunId: finished ? report.smartRunId : null };
     },
     client,
   );
+  if (result?.smartRunId) await afterSmartScan(client, payload.shopId, result.smartRunId);
+  return result?.next ?? null;
 }

@@ -8,7 +8,9 @@
  * That check only translates missing or outdated fields, so content that
  * didn't really change costs no AI allowance. Changed pages, blog posts and
  * blogs are also read again for the coverage report (products and
- * collections are, after their webhooks).
+ * collections are, after their webhooks). With Smart Auto-Translate on,
+ * only its real-time mode is checked this way: a scheduled mode reads
+ * everything at its own times and translates nothing in between.
  *
  * Each shop is read through its own Admin API session and handled in its
  * own tenant context; a failure leaves its position unchanged, so the next
@@ -22,6 +24,7 @@ import { queueSweptCoverageRefresh, type CoverageRefreshQueue } from "../coverag
 import { changedSince, SWEPT_TYPES, type SweptType } from "../shopify/recent-changes";
 import { AccessDeniedError } from "../shopify/translations-api";
 import { withTenant } from "../tenancy/with-tenant";
+import { smartPaused } from "../smart/config";
 import { AUTO_GID, enqueueAutoCheck, type AutoQueue } from "./auto-translate";
 import { RateLimitedError } from "./errors";
 import type { JobDependencies } from "./processors";
@@ -63,13 +66,25 @@ export async function sweepChangedContent(
     // unchanged for the next run and never stops the shops after it.
     try {
       const settings = await getShopSettings(shop.id, deps.prisma);
-      if (!settings.autoTranslateNew || !settings.autoTranslateLocales.length || !hasCurrentAiConsent(settings)) continue;
-      // Waiting for a limit or the provider: the position stays, so the changes follow afterwards.
-      if (autoTranslatePaused(settings, now)) continue;
-      const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
-      if (billing?.configured && !billing.entitlements.bulk) continue;
-      // Turned on before this check existed: start from now.
-      const position = settings.autoSweptAt ?? new Date(now.getTime() - OVERLAP_MS);
+      const smart = await withTenant(shop.id, (tx) => tx.smartAutoConfig.findUnique({ where: { shopId: shop.id } }), deps.prisma);
+      let position: Date;
+      if (smart?.enabled) {
+        // The smart schedule replaces automatic translation; its real-time mode follows changes between checks.
+        if (smart.mode !== "realtime" || smartPaused(smart, now) || !hasCurrentAiConsent(settings)) continue;
+        const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
+        if (billing?.configured && !billing.entitlements.smartAuto) continue;
+        // Never before its last full check started (that one read everything).
+        const fromCheck = smart.lastRunAt ? new Date(smart.lastRunAt.getTime() - OVERLAP_MS) : null;
+        position = [settings.autoSweptAt, fromCheck].filter((d): d is Date => d !== null).sort((a, b) => b.getTime() - a.getTime())[0] ?? new Date(now.getTime() - OVERLAP_MS);
+      } else {
+        if (!settings.autoTranslateNew || !settings.autoTranslateLocales.length || !hasCurrentAiConsent(settings)) continue;
+        // Waiting for a limit or the provider: the position stays, so the changes follow afterwards.
+        if (autoTranslatePaused(settings, now)) continue;
+        const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
+        if (billing?.configured && !billing.entitlements.bulk) continue;
+        // Turned on before this check existed: start from now.
+        position = settings.autoSweptAt ?? new Date(now.getTime() - OVERLAP_MS);
+      }
       const since = position;
       const beforeRequest = async () => {
         if (!deps.shopifyLimiter || !deps.keyPrefix) return;
@@ -103,7 +118,7 @@ export async function sweepChangedContent(
         }
       }
       if (complete < everything) summary.catchingUp++;
-      await advance(shop.id, complete, deps.prisma);
+      await advance(shop.id, complete, deps.prisma, Boolean(smart?.enabled));
       summary.shops++;
     } catch (error) {
       summary.failed++;
@@ -114,12 +129,12 @@ export async function sweepChangedContent(
 }
 
 /** Moves the position forward only (turning it off and on again meanwhile set a later one). */
-async function advance(shopId: string, to: Date, client: PrismaClient) {
+async function advance(shopId: string, to: Date, client: PrismaClient, smart: boolean) {
   await withTenant(
     shopId,
     (tx) =>
       tx.shopSettings.updateMany({
-        where: { shopId, autoTranslateNew: true, OR: [{ autoSweptAt: null }, { autoSweptAt: { lt: to } }] },
+        where: { shopId, ...(smart ? {} : { autoTranslateNew: true }), OR: [{ autoSweptAt: null }, { autoSweptAt: { lt: to } }] },
         data: { autoSweptAt: to },
       }),
     client,

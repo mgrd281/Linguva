@@ -8,24 +8,18 @@
  * are written in the page's own transaction, so a repeated page never plans
  * twice and nothing read is left unplanned.
  */
-import type { CoverageReport, PrismaClient, SmartAutoConfig, SmartAutoRun } from "@prisma/client";
+import type { PrismaClient, SmartAutoConfig, SmartAutoRun } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { allowedTargetLocales } from "../billing/subscription";
 import { createCoverageReport, type CoveragePagePayload } from "../coverage/coverage";
-import type { CoverageChange } from "../coverage/items";
-import { completeIfDone } from "../jobs/bulk-jobs";
-import { planResourceWork } from "../jobs/needs-work";
 import { logger } from "../lib/logger";
 import { currentShopLocales } from "../locales/current-locales";
-import { pendingDraftDigests } from "../review/drafts";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
-import { isEditableAttachedField } from "../translation/attached-editor";
-import { latestRevisions } from "../translation/revisions";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import type { Entitlements } from "../../lib/plans";
-import { SMART_REQUESTED_BY, smartCoverageTypes, type SmartPauseReason } from "../../lib/smart-auto";
-import { excludedAmong, lockSmart, nextCheck, smartPaused } from "./config";
-import { finishSmartRunIfDone } from "./finish";
+import { SMART_REQUESTED_BY, type SmartPauseReason } from "../../lib/smart-auto";
+import { lockSmart, nextCheck, smartPaused } from "./config";
+import { repairSmartRuns } from "./plan";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -142,6 +136,8 @@ export async function smartTick(deps: SmartDeps, now = new Date()): Promise<Tick
 }
 
 async function tickShop(deps: SmartDeps, shop: { id: string; shopDomain: string }, now: Date) {
+  // A run whose measurement ended without finishing it would keep every later check waiting.
+  await repairSmartRuns(shop.id, deps.prisma, now);
   const facts = await shopFacts(deps, shop);
   const decision = await withTenant(
     shop.id,
@@ -192,8 +188,17 @@ async function tickShop(deps: SmartDeps, shop: { id: string; shopDomain: string 
         config = await tx.smartAutoConfig.update({ where: { shopId: shop.id }, data: { nextRunAt: nextCheck(config, now), lastRunAt: now } });
         await purgeOldRuns(tx, shop.id, now);
       }
-      const waiting = runId ? null : await tx.smartAutoRun.findFirst({ where: { shopId: shop.id, status: "WAITING" }, orderBy: { createdAt: "asc" }, select: { id: true } });
-      const recheck = waiting ? new Date(now.getTime() + WAITING_RECHECK_MS) : null;
+      // A run waiting for the merchant's measurement, or one whose start didn't get through
+      // (the process stopped right after creating it; a fresh Check now is left to its request).
+      const waiting = runId
+        ? null
+        : await tx.smartAutoRun.findFirst({
+            where: { shopId: shop.id, OR: [{ status: "WAITING" }, { status: "QUEUED", createdAt: { lt: new Date(now.getTime() - WAITING_RECHECK_MS) } }] },
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          });
+      const queued = runId || waiting ? null : await tx.smartAutoRun.findFirst({ where: { shopId: shop.id, status: "QUEUED" }, select: { id: true } });
+      const recheck = waiting || queued ? new Date(now.getTime() + WAITING_RECHECK_MS) : null;
       const next = config.nextRunAt && recheck ? (config.nextRunAt < recheck ? config.nextRunAt : recheck) : (config.nextRunAt ?? recheck);
       await setHint(tx, shop.id, next);
       return { runId, waitingId: waiting?.id ?? null, skipped, paused: newPause };
@@ -250,7 +255,9 @@ export async function startSmartRun(deps: SmartDeps, shopId: string, runId: stri
     },
     deps.prisma,
   );
-  if (started && created) await deps.enqueueCoveragePage({ shopId, reportId: report.id, segmentIndex: 0, cursor: null });
+  // Queued by whoever started the run (a repeated enqueue of the first page is a no-op by its job id;
+  // a report that was created but never queued is continued by the stalled-report repair).
+  if (started && (created || report.status === "QUEUED")) await deps.enqueueCoveragePage({ shopId, reportId: report.id, segmentIndex: 0, cursor: null });
   return started;
 }
 
@@ -295,174 +302,6 @@ export async function requestSmartRun(
   await deps.prisma.auditLog.createMany({ data: [{ shopId, actorType: "MERCHANT_USER", actorId: input.actorId, action: "smart_auto.run_now", metadata: { runId: result.runId } }] });
   const started = await startSmartRun(deps, shopId, result.runId, facts, now);
   return { status: started ? "started" : "waiting", runId: result.runId };
-}
-
-/** What one page of a smart measurement plans; written in the page's transaction (writeSmartPlanTx). */
-export interface SmartPagePlan {
-  runId: string;
-  resourceType: string;
-  locale: string;
-  checked: number;
-  excluded: number;
-  items: Array<{ resourceGid: string; fields: number; chars: number }>;
-}
-
-/**
- * Plans one page a smart measurement read, before its transaction (the
- * reads here may take a moment): which resources need work in the run's
- * scope, with the same rules as every job (current, protected, held and
- * removed fields are left alone). Null: not a smart report, or a run that
- * no longer plans (paused, turned off, finished).
- */
-export async function planSmartPage(
-  client: PrismaClient,
-  input: { shopId: string; report: Pick<CoverageReport, "smartRunId">; resourceType: string; locale: string; changes: readonly CoverageChange[]; now?: Date },
-): Promise<SmartPagePlan | null> {
-  if (!input.report.smartRunId) return null;
-  const runId = input.report.smartRunId;
-  const now = input.now ?? new Date();
-  const state = await withTenant(
-    input.shopId,
-    async (tx) => {
-      const [run, config] = await Promise.all([
-        tx.smartAutoRun.findFirst({ where: { id: runId, shopId: input.shopId } }),
-        tx.smartAutoConfig.findUnique({ where: { shopId: input.shopId } }),
-      ]);
-      if (!run || run.status !== "RUNNING" || !config?.enabled || smartPaused(config, now)) return null;
-      const gids = input.changes.flatMap((c) => [c.resourceGid, ...(c.parentGid ? [c.parentGid] : [])]);
-      const excluded = await excludedAmong(tx, input.shopId, gids);
-      const busy = await tx.translationJobItem.findMany({
-        where: {
-          shopId: input.shopId,
-          resourceGid: { in: input.changes.map((c) => c.resourceGid) },
-          status: { in: ["PENDING", "RUNNING"] },
-          job: { targetLocale: input.locale, OR: [{ smartRunId: null }, { smartRunId: { not: runId } }] },
-        },
-        select: { resourceGid: true },
-      });
-      return { run, excluded, busy: new Set(busy.map((b) => b.resourceGid)) };
-    },
-    client,
-  );
-  if (!state) return null;
-  const { run } = state;
-  const plan: SmartPagePlan = { runId, resourceType: input.resourceType, locale: input.locale, checked: input.changes.length, excluded: 0, items: [] };
-  if (!run.locales.includes(input.locale) || !smartCoverageTypes(run).includes(input.resourceType)) return plan;
-
-  const candidates = input.changes.filter((c) => {
-    const skip = state.excluded.has(c.resourceGid) || Boolean(c.parentGid && state.excluded.has(c.parentGid));
-    if (skip) plan.excluded++;
-    // Being translated by another job (a bulk job, or the previous run): left to it.
-    return !skip && !state.busy.has(c.resourceGid) && c.observed;
-  });
-  const gids = candidates.map((c) => c.resourceGid);
-  const [latest, pendingDrafts] = await Promise.all([
-    latestRevisions(input.shopId, gids, input.locale, client),
-    pendingDraftDigests(input.shopId, gids, input.locale, client),
-  ]);
-  // A coverage type that isn't one of the chosen content types: their images or custom fields.
-  const attached = !run.resourceTypes.includes(input.resourceType);
-  for (const change of candidates) {
-    const data = change.observed!.data;
-    const resource = {
-      resourceId: change.resourceGid,
-      // Images and custom fields: only the fields their editor translates.
-      content: attached ? data.content.filter((c) => isEditableAttachedField(c)) : data.content,
-      translations: data.translations,
-    };
-    const { fields } = planResourceWork(resource, {
-      latest,
-      pendingDrafts,
-      onlyGroups: { groups: run.fieldGroups, resourceType: input.resourceType },
-      keepOutdated: !run.replaceOutdatedMachine,
-    });
-    if (fields.length) {
-      plan.items.push({ resourceGid: change.resourceGid, fields: fields.length, chars: fields.reduce((n, f) => n + (f.value?.length ?? 0), 0) });
-    }
-  }
-  return plan;
-}
-
-/**
- * Writes a page's plan inside the page's transaction: the run's job for
- * this type and language (created once), an item per resource (unique per
- * job), and the run's counters. Returns the item ids to queue after the
- * commit; one left unqueued by a crash is re-queued by the stall repair.
- */
-export async function writeSmartPlanTx(tx: TenantTx, shopId: string, plan: SmartPagePlan, now = new Date()): Promise<string[]> {
-  const run = await tx.smartAutoRun.findFirst({ where: { id: plan.runId, shopId, status: "RUNNING" } });
-  if (!run) return [];
-  let itemIds: string[] = [];
-  let created = 0;
-  if (plan.items.length) {
-    const idempotencyKey = `smart:${run.id}:${plan.resourceType}:${plan.locale}`;
-    await tx.translationJob.createMany({
-      data: [
-        {
-          shopId,
-          resourceType: plan.resourceType,
-          targetLocale: plan.locale,
-          status: "RUNNING",
-          requestedBy: SMART_REQUESTED_BY,
-          idempotencyKey,
-          smartRunId: run.id,
-          publishMode: run.publishMode,
-          fieldGroups: run.fieldGroups,
-          replaceOutdatedMachine: run.replaceOutdatedMachine,
-          // Done when the run's measurement has read everything (finishSmartScanTx).
-          discoveryDone: false,
-          startedAt: now,
-        },
-      ],
-      skipDuplicates: true,
-    });
-    const job = await tx.translationJob.findUniqueOrThrow({ where: { shopId_idempotencyKey: { shopId, idempotencyKey } } });
-    const gids = plan.items.map((i) => i.resourceGid);
-    const inserted = await tx.translationJobItem.createMany({
-      data: gids.map((resourceGid) => ({ shopId, jobId: job.id, resourceGid })),
-      skipDuplicates: true,
-    });
-    created = inserted.count;
-    if (created) await tx.translationJob.update({ where: { id: job.id }, data: { totalItems: { increment: created } } });
-    const items = await tx.translationJobItem.findMany({
-      where: { shopId, jobId: job.id, resourceGid: { in: gids }, status: "PENDING", queueJobId: null },
-      select: { id: true },
-    });
-    itemIds = items.map((i) => i.id);
-  }
-  await tx.smartAutoRun.update({
-    where: { id: run.id },
-    data: {
-      resourcesChecked: { increment: plan.checked },
-      resourcesChanged: { increment: plan.items.length },
-      fieldsDetected: { increment: plan.items.reduce((n, i) => n + i.fields, 0) },
-      charsEstimated: { increment: plan.items.reduce((n, i) => n + i.chars, 0) },
-      itemsQueued: { increment: created },
-      excludedSkipped: { increment: plan.excluded },
-    },
-  });
-  return itemIds;
-}
-
-/**
- * The run's measurement has read everything (in the last page's
- * transaction): its jobs can complete once their items are done.
- */
-export async function finishSmartScanTx(tx: TenantTx, shopId: string, runId: string, now = new Date()) {
-  await tx.smartAutoRun.updateMany({ where: { id: runId, shopId, scanFinishedAt: null }, data: { scanFinishedAt: now } });
-  await tx.translationJob.updateMany({ where: { shopId, smartRunId: runId, discoveryDone: false }, data: { discoveryDone: true } });
-}
-
-/** After the commit of the last page (or a failed measurement): completes what is done. */
-export async function afterSmartScan(client: PrismaClient, shopId: string, runId: string) {
-  const jobs = await withTenant(
-    shopId,
-    (tx) => tx.translationJob.findMany({ where: { shopId, smartRunId: runId, status: { in: ["RUNNING", "DISCOVERING"] } }, select: { id: true } }),
-    client,
-  );
-  // Jobs whose items all finished during the measurement complete now.
-  for (const job of jobs) await completeIfDone(shopId, job.id, client);
-  await finishSmartRunIfDone(shopId, runId, client);
 }
 
 export type { SmartAutoRun };

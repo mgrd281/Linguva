@@ -10,7 +10,7 @@ import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "../tenancy/with-tenant";
 import { getOriginUsageSince } from "../usage/usage-ledger";
 import { upcomingOccurrences } from "../../lib/schedule";
-import { budgetWindows, checkSpec, SMART_REQUESTED_BY, smartCoverageTypes, smartStatus, type SmartStatus } from "../../lib/smart-auto";
+import { budgetWindows, checkSpec, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_REQUESTED_BY, smartCoverageTypes, smartStatus, type SmartStatus } from "../../lib/smart-auto";
 import { editorPathFor, kindOfGid } from "../../lib/resource-kinds";
 import { listSmartExclusions } from "./config";
 
@@ -43,14 +43,22 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
       const translating = await tx.translationJobItem.count({
         where: { shopId, status: { in: ["PENDING", "RUNNING"] }, job: { requestedBy: SMART_REQUESTED_BY, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } } },
       });
-      // Up to this many characters wait in the scope, from what the newest measurement and refreshes found.
-      const scope = config ?? { locales: [...context.allowed], resourceTypes: ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"], includeAttached: false };
+      // Up to this many characters wait in the scope (missing, failed and, when replaced, outdated
+      // fields of the chosen languages, types and field groups), from the newest measurement and refreshes.
+      const scope = config ?? { locales: [...context.allowed], resourceTypes: [...SMART_DEFAULT_TYPES], includeAttached: false, fieldGroups: [], replaceOutdatedMachine: true };
       const measured = await tx.coverageSegment.count({ where: { shopId, status: "SCANNED" } });
-      const pending = await tx.coverageItem.aggregate({
-        where: { shopId, locale: { in: scope.locales.filter((l) => context.allowed.includes(l)) }, resourceType: { in: smartCoverageTypes(scope) } },
-        _sum: { pendingChars: true },
+      const pending = await tx.coverageCount.aggregate({
+        where: {
+          shopId,
+          locale: { in: scope.locales.filter((l) => context.allowed.includes(l)) },
+          resourceType: { in: smartCoverageTypes(scope) },
+          // Handles (url) are never machine translated.
+          fieldGroup: { in: scope.fieldGroups.length ? scope.fieldGroups : [...SMART_FIELD_GROUPS] },
+          state: { in: scope.replaceOutdatedMachine ? ["missing", "failed", "outdated"] : ["missing", "failed"] },
+        },
+        _sum: { chars: true },
       });
-      return { config, runs, jobs, translating, measured: measured > 0, pendingChars: pending._sum.pendingChars ?? 0 };
+      return { config, runs, jobs, translating, measured: measured > 0, pendingChars: Number(pending._sum.chars ?? 0) };
     },
     client,
   );

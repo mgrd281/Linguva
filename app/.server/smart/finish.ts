@@ -19,13 +19,26 @@ export async function finishSmartRunIfDone(shopId: string, runId: string, client
       const open = await tx.translationJob.count({ where: { shopId, smartRunId: runId, status: { in: [...ACTIVE_JOB] } } });
       if (open > 0) return null;
       const report = run.coverageReportId ? await tx.coverageReport.findFirst({ where: { id: run.coverageReportId, shopId }, select: { status: true, errorCode: true } }) : null;
-      // A measurement that didn't finish can't vouch for everything being checked.
-      const failed = report?.status === "FAILED";
+      // A measurement that didn't finish (or is gone) can't vouch for everything being checked.
+      const failed = !report || report.status === "FAILED";
+      // Checked everything, but a job stopped (a budget, the plan's allowance, the provider): said as such.
+      const stopped = failed
+        ? null
+        : await tx.translationJob.findFirst({
+            where: { shopId, smartRunId: runId, status: "FAILED", errorCode: { not: null } },
+            orderBy: { finishedAt: "asc" },
+            select: { errorCode: true },
+          });
       const finished = await tx.smartAutoRun.updateMany({
         where: { id: runId, shopId, status: "RUNNING" },
-        data: { status: failed ? "FAILED" : "COMPLETED", errorCode: failed ? (report?.errorCode ?? "SCAN_FAILED") : null, finishedAt: now },
+        data: {
+          status: failed ? "FAILED" : "COMPLETED",
+          errorCode: failed ? (report?.errorCode ?? "SCAN_FAILED") : (stopped?.errorCode ?? null),
+          finishedAt: now,
+        },
       });
-      if (finished.count && !failed) await tx.smartAutoConfig.updateMany({ where: { shopId }, data: { lastSuccessAt: now } });
+      // "Last complete check": everything checked and everything it found handled.
+      if (finished.count && !failed && !stopped) await tx.smartAutoConfig.updateMany({ where: { shopId }, data: { lastSuccessAt: now } });
       return failed ? "FAILED" : "COMPLETED";
     },
     client,

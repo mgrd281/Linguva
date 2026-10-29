@@ -3,14 +3,43 @@ import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
 import type { SegmentPair } from "../memory/alignment";
 import { refreshCoverageOverlays } from "../coverage/items";
-import { withTenant } from "../tenancy/with-tenant";
+import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import { ResourceNotFoundError, saveResourceTranslations } from "../translation/product-translation-service";
+import { ANY_SOURCE } from "../jobs/needs-work";
 import { RESOURCE_KINDS } from "../../lib/resource-kinds";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const MAX_DRAFTS_PER_ACTION = 100;
+/** Drafts a person wrote (a CSV import): machine output never replaces them, and approving one records a manual translation. */
+const HUMAN_DRAFT_PROVIDERS = ["csv"];
+/** reviewedBy of a draft the checks refused (not a person's rejection). */
+export const CHECKS_REVIEWER = "system:check";
+
+export function isHumanDraft(provider: string | null | undefined): boolean {
+  return Boolean(provider && HUMAN_DRAFT_PROVIDERS.includes(provider));
+}
+
+/** The version of a draft a page showed; approving or rejecting it needs the same one. */
+export function draftToken(draft: { updatedAt: Date }): string {
+  return draft.updatedAt.getTime().toString(36);
+}
+
+/** Fields of these drafts that hold a person's draft waiting for review ("gid|locale|key"). */
+async function heldByPeople(tx: TenantTx, shopId: string, drafts: ReadonlyArray<{ resourceGid: string; locale: string; key: string }>) {
+  if (drafts.length === 0) return new Set<string>();
+  const rows = await tx.translationDraft.findMany({
+    where: {
+      shopId,
+      status: "PENDING",
+      provider: { in: HUMAN_DRAFT_PROVIDERS },
+      OR: drafts.map((d) => ({ resourceGid: d.resourceGid, locale: d.locale, key: d.key })),
+    },
+    select: { resourceGid: true, locale: true, key: true },
+  });
+  return new Set(rows.map((r) => `${r.resourceGid}|${r.locale}|${r.key}`));
+}
 
 export interface DraftInput {
   jobId: string | null;
@@ -33,8 +62,10 @@ export interface DraftInput {
 }
 
 /**
- * Saves machine translations for review. A newer draft for the same field
- * replaces the previous one, whatever its state.
+ * Saves translations for review (machine output, or a person's from a CSV
+ * import). A newer draft for the same field replaces the previous one,
+ * whatever its state, except that machine output never replaces a person's
+ * draft still waiting for review.
  */
 export async function saveDrafts(
   shopId: string,
@@ -42,10 +73,13 @@ export async function saveDrafts(
   client: PrismaClient = defaultClient,
 ) {
   if (drafts.length === 0) return 0;
-  await withTenant(
+  const saved = await withTenant(
     shopId,
     async (tx) => {
+      const held = await heldByPeople(tx, shopId, drafts.filter((d) => !isHumanDraft(d.provider)));
+      const written: DraftInput[] = [];
       for (const d of drafts) {
+        if (!isHumanDraft(d.provider) && held.has(`${d.resourceGid}|${d.locale}|${d.key}`)) continue;
         const data = {
           jobId: d.jobId,
           parentGid: d.parentGid ?? null,
@@ -69,23 +103,83 @@ export async function saveDrafts(
           create: { shopId, resourceGid: d.resourceGid, locale: d.locale, key: d.key, ...data },
           update: data,
         });
+        written.push(d);
       }
+      return written;
     },
     client,
   );
-  await refreshCoverageOverlays(shopId, drafts, client);
-  return drafts.length;
+  await refreshCoverageOverlays(shopId, saved, client);
+  return saved.length;
+}
+
+export type RejectedAttempt = Omit<DraftInput, "value" | "segmentPairs"> & { reason: string };
+
+/**
+ * Remembers fields whose machine translation the checks refused (numbers
+ * changed, a forbidden term, broken markup), for that source: a later check
+ * doesn't send the same text to the provider again until the original
+ * changes. Kept like a rejected draft (not on Review); a person's draft
+ * waiting for review stays as it is.
+ */
+export async function recordRejectedAttempts(
+  shopId: string,
+  attempts: readonly RejectedAttempt[],
+  client: PrismaClient = defaultClient,
+) {
+  if (attempts.length === 0) return 0;
+  const written = await withTenant(
+    shopId,
+    async (tx) => {
+      const held = await heldByPeople(tx, shopId, attempts);
+      const out: RejectedAttempt[] = [];
+      for (const a of attempts) {
+        if (held.has(`${a.resourceGid}|${a.locale}|${a.key}`)) continue;
+        const data = {
+          jobId: a.jobId,
+          parentGid: a.parentGid ?? null,
+          resourceTitle: a.resourceTitle,
+          sourceDigest: a.sourceDigest,
+          sourceValue: a.sourceValue,
+          value: "",
+          segmentPairs: Prisma.DbNull,
+          issues: [{ code: a.reason, severity: "error" }, ...a.issues] as Prisma.InputJsonValue,
+          provider: a.provider,
+          currentDigest: a.currentDigest ?? null,
+          valueType: a.valueType && /^[A-Z][A-Z_]{0,63}$/.test(a.valueType) ? a.valueType : null,
+          status: "REJECTED" as const,
+          reviewedAt: new Date(),
+          reviewedBy: CHECKS_REVIEWER,
+        };
+        await tx.translationDraft.upsert({
+          where: { shopId_resourceGid_locale_key: { shopId, resourceGid: a.resourceGid, locale: a.locale, key: a.key } },
+          create: { shopId, resourceGid: a.resourceGid, locale: a.locale, key: a.key, ...data },
+          update: data,
+        });
+        out.push(a);
+      }
+      return out;
+    },
+    client,
+  );
+  // It may have replaced an older draft of the field.
+  await refreshCoverageOverlays(shopId, written, client);
+  return written.length;
 }
 
 /**
  * Fields a bulk job must not translate again for the same source digest:
- * a draft is waiting for review, or the merchant rejected it.
+ * a draft is waiting for review, the merchant rejected it, or the checks
+ * refused it. A person's draft waiting for review holds its field whatever
+ * the source (ANY_SOURCE): the merchant decides about it first.
  */
 export async function pendingDraftDigests(
   shopId: string,
   resourceGids: readonly string[],
   locale: string,
   client: PrismaClient = defaultClient,
+  /** False: a field the checks refused is tried again (a translation the merchant started). */
+  options: { includeRefused?: boolean } = {},
 ): Promise<Map<string, string>> {
   if (resourceGids.length === 0) return new Map();
   const rows = await withTenant(
@@ -97,12 +191,15 @@ export async function pendingDraftDigests(
           locale,
           status: { in: ["PENDING", "REJECTED"] },
           resourceGid: { in: [...new Set(resourceGids)] },
+          ...(options.includeRefused === false ? { NOT: { status: "REJECTED", reviewedBy: CHECKS_REVIEWER } } : {}),
         },
-        select: { resourceGid: true, key: true, sourceDigest: true },
+        select: { resourceGid: true, key: true, sourceDigest: true, status: true, provider: true },
       }),
     client,
   );
-  return new Map(rows.map((r) => [`${r.resourceGid}|${r.key}`, r.sourceDigest]));
+  return new Map(
+    rows.map((r) => [`${r.resourceGid}|${r.key}`, r.status === "PENDING" && isHumanDraft(r.provider) ? ANY_SOURCE : r.sourceDigest]),
+  );
 }
 
 export async function listPendingDrafts(
@@ -255,23 +352,32 @@ export async function countPendingDrafts(shopId: string, client: PrismaClient = 
   );
 }
 
+/**
+ * Rejects pending drafts. With `tokens` (the versions a page showed), a
+ * draft that changed since, for example replaced by a newer translation,
+ * is left as it is.
+ */
 export async function rejectDrafts(
   shopId: string,
   draftIds: readonly string[],
   actorId: string | null,
   client: PrismaClient = defaultClient,
+  tokens?: ReadonlyMap<string, string>,
 ) {
   const ids = draftIds.filter((id) => UUID.test(id)).slice(0, MAX_DRAFTS_PER_ACTION);
   if (ids.length === 0) return 0;
   const rejected = await withTenant(
     shopId,
     async (tx) => {
-      const pending = await tx.translationDraft.findMany({
+      const found = await tx.translationDraft.findMany({
         where: { shopId, id: { in: ids }, status: "PENDING" },
-        select: { resourceGid: true, locale: true },
+        select: { id: true, resourceGid: true, locale: true, updatedAt: true },
       });
+      const pending = tokens ? found.filter((d) => tokens.get(d.id) === draftToken(d)) : found;
+      if (pending.length === 0) return { count: 0, pending };
+      // Only the versions read here: a draft replaced meanwhile stays pending.
       const result = await tx.translationDraft.updateMany({
-        where: { shopId, id: { in: ids }, status: "PENDING" },
+        where: { shopId, status: "PENDING", OR: pending.map((d) => ({ id: d.id, updatedAt: d.updatedAt })) },
         data: { status: "REJECTED", reviewedAt: new Date(), reviewedBy: actorId },
       });
       return { count: result.count, pending };
@@ -286,6 +392,8 @@ export interface ApprovalResult {
   published: number;
   stale: number;
   failed: number;
+  /** Changed since the page showed them (a newer translation replaced them): not approved. */
+  changed: number;
 }
 
 /**
@@ -300,18 +408,21 @@ export async function approveDrafts(
     actorId: string | null;
     draftIds: readonly string[];
     edits?: ReadonlyMap<string, string>;
+    /** The version of each draft the page showed (draftToken): one that changed since isn't approved. */
+    tokens?: ReadonlyMap<string, string>;
   },
   client: PrismaClient = defaultClient,
 ): Promise<ApprovalResult> {
   const ids = input.draftIds.filter((id) => UUID.test(id)).slice(0, MAX_DRAFTS_PER_ACTION);
-  const drafts = ids.length
+  const found = ids.length
     ? await withTenant(
         input.shopId,
         (tx) => tx.translationDraft.findMany({ where: { shopId: input.shopId, id: { in: ids }, status: "PENDING" } }),
         client,
       )
     : [];
-  const result: ApprovalResult = { published: 0, stale: 0, failed: 0 };
+  const drafts = input.tokens ? found.filter((d) => input.tokens!.get(d.id) === draftToken(d)) : found;
+  const result: ApprovalResult = { published: 0, stale: 0, failed: 0, changed: found.length - drafts.length };
 
   const byResource = new Map<string, typeof drafts>();
   for (const d of drafts) {
@@ -337,7 +448,8 @@ export async function approveDrafts(
               key: d.key,
               value: changed ? edited : d.value,
               digest: d.sourceDigest,
-              origin: changed ? ("MANUAL" as const) : ("AI" as const),
+              // Edited here, or written by a person (CSV import): a manual translation.
+              origin: changed || isHumanDraft(d.provider) ? ("MANUAL" as const) : ("AI" as const),
               provider: d.provider,
               approved: true,
               segmentPairs: changed ? undefined : ((d.segmentPairs as unknown as SegmentPair[] | null) ?? undefined),
@@ -364,8 +476,9 @@ export async function approveDrafts(
           else if (status === "STALE") result.stale++;
           else result.failed++;
           if (status) {
-            await tx.translationDraft.update({
-              where: { id: d.id },
+            // Only the version published here: a newer draft written meanwhile stays pending.
+            await tx.translationDraft.updateMany({
+              where: { id: d.id, shopId: input.shopId, status: "PENDING", updatedAt: d.updatedAt },
               data: { status, reviewedAt: new Date(), reviewedBy: input.actorId },
             });
           }

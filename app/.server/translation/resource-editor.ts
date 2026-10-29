@@ -130,7 +130,7 @@ export async function loadEditorData(ctx: EditorContext) {
   const revisions = await listRevisions(shopId, resourceId, target.locale);
   const history: Record<
     string,
-    Array<{ id: string; value: string; origin: string; approved: boolean; createdAt: string; restorable: boolean }>
+    Array<{ id: string; value: string; origin: string; approved: boolean; createdAt: string; restorable: boolean; removed: boolean }>
   > = {};
   for (const r of revisions) {
     const list = (history[r.key] ??= []);
@@ -142,7 +142,9 @@ export async function loadEditorData(ctx: EditorContext) {
       approved: r.approved,
       createdAt: r.createdAt.toISOString(),
       // Shopify only accepts translations of the current source text.
-      restorable: r.sourceDigest === digests.get(r.key) && r.value !== (translations.get(r.key)?.value ?? ""),
+      restorable: r.value !== "" && r.sourceDigest === digests.get(r.key) && r.value !== (translations.get(r.key)?.value ?? ""),
+      // The translation was removed (an empty revision).
+      removed: r.value === "",
     });
   }
 

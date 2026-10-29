@@ -126,6 +126,7 @@ export const en = {
   "editor.history.origin.aiApproved": "AI, approved",
   "editor.history.origin.ai": "AI",
   "editor.history.origin.manual": "Manual",
+  "editor.history.removed": "Translation removed by a person (not translated automatically again until the original changes)",
 
   "editor.attached.heading": "Images and custom fields",
   "editor.attached.unavailable": "Image alt text and custom fields couldn't be loaded. Reload the page to try again.",
@@ -289,6 +290,7 @@ export const de: Translation<typeof en> = {
   "editor.history.origin.aiApproved": "KI, freigegeben",
   "editor.history.origin.ai": "KI",
   "editor.history.origin.manual": "Manuell",
+  "editor.history.removed": "Übersetzung von einer Person entfernt (wird erst nach einer Änderung des Originals wieder automatisch übersetzt)",
 
   "editor.attached.heading": "Bilder und benutzerdefinierte Felder",
   "editor.attached.unavailable":
@@ -459,6 +461,7 @@ export const fr: Translation<typeof en> = {
   "editor.history.origin.aiApproved": "IA, approuvée",
   "editor.history.origin.ai": "IA",
   "editor.history.origin.manual": "Manuelle",
+  "editor.history.removed": "Traduction supprimée par une personne (pas de nouvelle traduction automatique tant que l'original ne change pas)",
 
   "editor.attached.heading": "Images et champs personnalisés",
   "editor.attached.unavailable":
@@ -626,6 +629,7 @@ export const es: Translation<typeof en> = {
   "editor.history.origin.aiApproved": "IA, aprobada",
   "editor.history.origin.ai": "IA",
   "editor.history.origin.manual": "Manual",
+  "editor.history.removed": "Traducción eliminada por una persona (no se vuelve a traducir automáticamente hasta que cambie el original)",
 
   "editor.attached.heading": "Imágenes y campos personalizados",
   "editor.attached.unavailable":

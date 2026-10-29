@@ -139,7 +139,7 @@ describe("review isolation", () => {
       { admin: storeOfB.asAdmin(), shopId: b.id, actorId: "attacker", draftIds: [draftOfA.id] },
       app,
     );
-    expect(result).toEqual({ published: 0, stale: 0, failed: 0 });
+    expect(result).toEqual({ published: 0, stale: 0, failed: 0, changed: 0 });
     expect(storeOfB.calls).toEqual([]);
     expect(await rejectDrafts(b.id, [draftOfA.id], "attacker", app)).toBe(0);
     expect((await listPendingDrafts(a.id, {}, app))[0]).toMatchObject({ id: draftOfA.id, status: "PENDING" });

@@ -39,6 +39,8 @@ const formatters = new Map<string, Intl.DateTimeFormat>();
 function formatter(timeZone: string): Intl.DateTimeFormat {
   let f = formatters.get(timeZone);
   if (!f) {
+    // Only validated zones get here, but the cache never grows without bound.
+    if (formatters.size >= 1000) formatters.clear();
     f = new Intl.DateTimeFormat("en-US", {
       timeZone,
       hourCycle: "h23",
@@ -54,15 +56,38 @@ function formatter(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
-/** A time zone Intl knows (IANA names and their aliases, "UTC"). */
-export function isTimeZone(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0 || value.length > 64) return false;
+/** "Area/Location" names and "UTC"; never an offset such as "+05:30" or an abbreviation such as "EST". */
+const ZONE_NAME = /^(?:UTC|[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)+)$/;
+let knownZones: Set<string> | null = null;
+
+/** Intl's IANA zones (in its own, partly older spelling) plus UTC, which the list leaves out. */
+function zoneList(): Set<string> {
+  if (!knownZones) knownZones = new Set([...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : []), "UTC"]);
+  return knownZones;
+}
+
+/**
+ * A time zone as it is stored: an IANA zone in Intl's spelling (also for
+ * "europe/berlin" or an alias such as "US/Eastern"), "UTC", or the shop's
+ * own zone exactly as Shopify names it ("Asia/Kolkata", which Intl spells
+ * "Asia/Calcutta"). Null for anything else, so a form can't store offsets,
+ * abbreviations or endless spellings of one zone.
+ */
+export function canonicalTimeZone(value: unknown, shopTimeZone?: string | null): string | null {
+  if (typeof value !== "string" || value.length > 64 || !ZONE_NAME.test(value)) return null;
+  let resolved: string;
   try {
-    formatter(value);
-    return true;
+    resolved = new Intl.DateTimeFormat("en-US", { timeZone: value }).resolvedOptions().timeZone;
   } catch {
-    return false;
+    return null;
   }
+  if (shopTimeZone && value === shopTimeZone) return value;
+  return zoneList().has(resolved) ? resolved : null;
+}
+
+/** A time zone in the form it is stored in (see canonicalTimeZone). */
+export function isTimeZone(value: unknown, shopTimeZone?: string | null): value is string {
+  return canonicalTimeZone(value, shopTimeZone) === value;
 }
 
 export interface WallClock {
@@ -179,33 +204,39 @@ export function formatTime(minuteOfDay: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-export type ScheduleProblem = "TIME_ZONE" | "TIMES" | "WEEKDAYS" | "TIMES_TOO_CLOSE" | "TOO_MANY_TIMES";
+export type ScheduleProblem = "MODE" | "TIME_ZONE" | "TIMES" | "WEEKDAYS" | "TIMES_TOO_CLOSE" | "TOO_MANY_TIMES";
 
 /**
  * A schedule as the merchant chose it, made consistent: daily runs every
  * day at one time, weekly on chosen days at one time, custom at up to
  * MAX_TIMES_PER_DAY times at least MIN_MINUTES_APART apart on chosen days.
- * Real-time and manual keep their time zone only.
+ * Real-time and manual keep their time zone only. Everything comes from a
+ * form, so nothing is trusted: an unknown mode or zone is refused, and the
+ * zone is stored in its canonical spelling.
  */
 export function normaliseSchedule(input: {
-  mode: ScheduleMode;
+  mode: unknown;
   timeZone: unknown;
   times: readonly unknown[];
   weekdays: readonly unknown[];
+  /** The shop's zone as Shopify names it, accepted in that spelling. */
+  shopTimeZone?: string | null;
 }): { ok: true; spec: ScheduleSpec } | { ok: false; problem: ScheduleProblem } {
-  if (!isTimeZone(input.timeZone)) return { ok: false, problem: "TIME_ZONE" };
-  const timeZone = input.timeZone;
-  if (!isTimed(input.mode)) return { ok: true, spec: { mode: input.mode, timeZone, times: [], weekdays: [] } };
+  if (!(SCHEDULE_MODES as readonly unknown[]).includes(input.mode)) return { ok: false, problem: "MODE" };
+  const mode = input.mode as ScheduleMode;
+  const timeZone = canonicalTimeZone(input.timeZone, input.shopTimeZone);
+  if (!timeZone) return { ok: false, problem: "TIME_ZONE" };
+  if (!isTimed(mode)) return { ok: true, spec: { mode, timeZone, times: [], weekdays: [] } };
   const times = [...new Set(input.times.map((t) => (typeof t === "number" && Number.isInteger(t) && t >= 0 && t < MINUTES_PER_DAY ? t : parseTime(t))))];
   if (!times.length || times.some((t) => t === null)) return { ok: false, problem: "TIMES" };
   const sorted = (times as number[]).sort((a, b) => a - b);
   const weekdays = [...new Set(input.weekdays.map(Number))].filter((d) => Number.isInteger(d) && d >= 1 && d <= 7).sort((a, b) => a - b);
-  if (input.mode === "daily") {
+  if (mode === "daily") {
     if (sorted.length !== 1) return { ok: false, problem: "TIMES" };
     return { ok: true, spec: { mode: "daily", timeZone, times: sorted, weekdays: [...WEEKDAYS] } };
   }
   if (!weekdays.length || weekdays.length !== new Set(input.weekdays.map(Number)).size) return { ok: false, problem: "WEEKDAYS" };
-  if (input.mode === "weekly") {
+  if (mode === "weekly") {
     if (sorted.length !== 1) return { ok: false, problem: "TIMES" };
     return { ok: true, spec: { mode: "weekly", timeZone, times: sorted, weekdays } };
   }

@@ -33,7 +33,8 @@ export async function restoreRevision(
   client: PrismaClient = defaultClient,
 ): Promise<RestoreResult> {
   const revision = await getRevision(input.shopId, input.revisionId, client);
-  if (!revision) return { status: "not_found" };
+  // A removal has nothing to restore.
+  if (!revision || !revision.value) return { status: "not_found" };
   if (input.resourceGid && revision.resourceGid !== input.resourceGid) return { status: "not_found" };
 
   const resource = await getTranslatableResource(input.admin, revision.resourceGid, revision.locale);
@@ -109,6 +110,28 @@ export async function removeTranslation(
 
   const result = await removeTranslations(input.admin, input.resourceGid, input.locale, [input.key]);
   if (result.userErrors.length) return { status: "failed", message: result.userErrors[0]!.message };
+  // The removal itself, by a person: automatic and bulk translation leave the field
+  // untranslated until its original changes (needs-work.ts).
+  await withTenant(
+    input.shopId,
+    (tx) =>
+      tx.translationRevision.createMany({
+        data: [
+          {
+            shopId: input.shopId,
+            resourceGid: input.resourceGid,
+            key: input.key,
+            locale: input.locale,
+            value: "",
+            sourceDigest: field.digest!,
+            origin: "MANUAL",
+            approved: true,
+            actorId: input.actorId,
+          },
+        ],
+      }),
+    client,
+  );
   await noteCoverageWrite({ shopId: input.shopId, locale: input.locale, resource: resource!, removed: [input.key] }, client);
   await client.auditLog.createMany({
     data: [

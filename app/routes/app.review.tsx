@@ -11,6 +11,7 @@ import { storedLocaleNames } from "../.server/locales/shop-locales";
 import {
   approveDrafts,
   countPendingDrafts,
+  draftToken,
   listDraftLocales,
   searchPendingDrafts,
   MAX_DRAFTS_PER_ACTION,
@@ -55,6 +56,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     isFirstPage: !q("after"),
     drafts: page.drafts.map((d) => ({
       id: d.id,
+      // The version shown: approving or rejecting needs it unchanged.
+      token: draftToken(d),
       // Images and custom fields are edited on their product's (or page's) editor.
       href: editorPathFor(d.parentGid ?? d.resourceGid, d.locale, d.resourceType),
       // Null: shown as "(untitled)" in the interface language.
@@ -84,9 +87,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const form = await request.formData();
   const intent = form.get("intent");
   const ids = form.getAll("draft").map(String).slice(0, MAX_DRAFTS_PER_ACTION);
+  // Each draft's version as the page showed it: one replaced since (a newer translation) is left alone.
+  const tokens = new Map<string, string>();
+  for (const id of ids) {
+    const token = form.get(`token:${id}`);
+    if (typeof token === "string") tokens.set(id, token);
+  }
 
   if (intent === "reject") {
-    return { kind: "rejected" as const, count: await rejectDrafts(shop.id, ids, actorId) };
+    const count = await rejectDrafts(shop.id, ids, actorId, undefined, tokens);
+    return { kind: "rejected" as const, count, changed: Math.max(0, ids.length - count) };
   }
   if (intent === "approve") {
     const edits = new Map<string, string>();
@@ -94,7 +104,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const value = form.get(`value:${id}`);
       if (typeof value === "string" && value.trim()) edits.set(id, value);
     }
-    const result = await approveDrafts({ admin, shopId: shop.id, actorId, draftIds: ids, edits });
+    const result = await approveDrafts({ admin, shopId: shop.id, actorId, draftIds: ids, edits, tokens });
     return { kind: "approved" as const, ...result };
   }
   return { kind: "error" as const };
@@ -110,9 +120,9 @@ export default function Review() {
   // Clean results are confirmed with a toast; partial ones stay on the page.
   useResultToast(
     result,
-    result?.kind === "approved" && !result.stale && !result.failed
+    result?.kind === "approved" && !result.stale && !result.failed && !result.changed
       ? t("review.saved.published", { count: result.published })
-      : result?.kind === "rejected"
+      : result?.kind === "rejected" && !result.changed
         ? t("review.rejected.body", { count: result.count })
         : null,
   );
@@ -157,16 +167,23 @@ export default function Review() {
         </s-paragraph>
       </s-section>
 
-      {result?.kind === "approved" && (result.stale || result.failed) ? (
+      {result?.kind === "approved" && (result.stale || result.failed || result.changed) ? (
         <s-banner tone="warning" heading={t("review.saved.heading")}>
           <s-paragraph>
             {[
               t("review.saved.published", { count: result.published }),
               result.stale ? t("review.saved.stale", { count: result.stale }) : null,
               result.failed ? t("review.saved.failed", { count: result.failed }) : null,
+              result.changed ? t("review.saved.changed", { count: result.changed }) : null,
             ]
               .filter(Boolean)
               .join(" · ")}
+          </s-paragraph>
+        </s-banner>
+      ) : result?.kind === "rejected" && result.changed ? (
+        <s-banner tone="warning" heading={t("review.saved.heading")}>
+          <s-paragraph>
+            {[t("review.rejected.body", { count: result.count }), t("review.saved.changed", { count: result.changed })].join(" · ")}
           </s-paragraph>
         </s-banner>
       ) : null}
@@ -245,6 +262,7 @@ export default function Review() {
               <s-section key={d.id} heading={`${title} · ${field} · ${language}`}>
                 <s-stack direction="block" gap="base">
                   <s-checkbox name="draft" value={d.id} label={t("review.draft.include")} defaultChecked />
+                  <input type="hidden" name={`token:${d.id}`} value={d.token} />
                   <s-query-container>
                     <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                       <s-stack direction="block" gap="small">

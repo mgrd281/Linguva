@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  canonicalTimeZone,
   formatTime,
   isTimeZone,
   nextOccurrence,
@@ -53,6 +54,22 @@ describe("local times in a time zone", () => {
     expect(isTimeZone("Mars/Olympus")).toBe(false);
     expect(isTimeZone("")).toBe(false);
     expect(isTimeZone(42)).toBe(false);
+    // Offsets and abbreviations aren't zones a merchant picks (and have no daylight saving of their own).
+    for (const value of ["+05:30", "-23:59", "GMT", "EST", "Europe/Berlin/", "Europe//Berlin", "x".repeat(65)]) {
+      expect(canonicalTimeZone(value), value).toBeNull();
+    }
+  });
+
+  it("stores one spelling per zone, and keeps the shop's own as Shopify names it", () => {
+    expect(canonicalTimeZone("eUrOpE/bErLiN")).toBe("Europe/Berlin");
+    expect(canonicalTimeZone("US/Eastern")).toBe("America/New_York");
+    expect(canonicalTimeZone("Etc/UTC")).toBe("UTC");
+    expect(isTimeZone("eUrOpE/bErLiN")).toBe(false);
+    // Shopify says Asia/Kolkata where Intl still says Asia/Calcutta: both mean the same zone.
+    expect(canonicalTimeZone("Asia/Kolkata", "Asia/Kolkata")).toBe("Asia/Kolkata");
+    expect(canonicalTimeZone("Asia/Kolkata")).toBe("Asia/Calcutta");
+    expect(canonicalTimeZone("asia/kolkata", "Asia/Kolkata")).toBe("Asia/Calcutta");
+    expect(offsetMinutes(at("2026-01-01T12:00:00Z"), "Asia/Calcutta")).toBe(330);
   });
 });
 
@@ -159,8 +176,16 @@ describe("the merchant's schedule", () => {
     expect(custom(["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "22:00"])).toMatchObject({ ok: false, problem: "TOO_MANY_TIMES" });
   });
 
-  it("refuses an unknown time zone, and keeps only the zone for real-time and manual", () => {
+  it("refuses an unknown mode or time zone, and keeps only the zone for real-time and manual", () => {
+    for (const mode of ["hourly", "", null, "DAILY"]) {
+      expect(normaliseSchedule({ mode, timeZone: "UTC", times: [], weekdays: [] }), String(mode)).toEqual({ ok: false, problem: "MODE" });
+    }
     expect(normaliseSchedule({ mode: "daily", timeZone: "Nowhere/City", times: ["23:00"], weekdays: [] })).toMatchObject({ ok: false, problem: "TIME_ZONE" });
+    expect(normaliseSchedule({ mode: "daily", timeZone: "+02:00", times: ["23:00"], weekdays: [] })).toMatchObject({ ok: false, problem: "TIME_ZONE" });
+    expect(normaliseSchedule({ mode: "realtime", timeZone: "europe/berlin", times: [], weekdays: [] })).toEqual({
+      ok: true,
+      spec: { mode: "realtime", timeZone: "Europe/Berlin", times: [], weekdays: [] },
+    });
     expect(normaliseSchedule({ mode: "manual", timeZone: "UTC", times: ["23:00"], weekdays: [1] })).toEqual({
       ok: true,
       spec: { mode: "manual", timeZone: "UTC", times: [], weekdays: [] },

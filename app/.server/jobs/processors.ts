@@ -19,7 +19,7 @@ import { completeTranslation, prepareTranslation } from "../translation/translat
 import { loadTranslationContext } from "../translation/translation-context";
 import { latestRevisions } from "../translation/revisions";
 import { recordMemoryUse } from "../memory/translation-memory";
-import { pendingDraftDigests, saveDrafts } from "../review/drafts";
+import { pendingDraftDigests, recordRejectedAttempts, saveDrafts } from "../review/drafts";
 import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
 import { AUTO_REQUESTED_BY, finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
@@ -69,6 +69,11 @@ async function throttle(deps: JobDependencies, shopId: string, cost: number) {
   if (!deps.shopifyLimiter) return;
   const wait = await deps.shopifyLimiter.take(shopKey(deps.keyPrefix, shopId, "rl", "shopify"), cost);
   if (wait > 0) throw new RateLimitedError(wait);
+}
+
+/** Started by the app itself (automatic translation), not by the merchant. */
+function isAutomaticJob(job: { requestedBy: string | null }): boolean {
+  return Boolean(job.requestedBy?.startsWith("system:"));
 }
 
 async function loadActiveShop(deps: JobDependencies, shopId: string) {
@@ -131,7 +136,8 @@ export async function runDiscoveryPage(
   const pageGids = page.resources.map((r) => r.resourceId);
   const [latest, pendingDrafts] = await Promise.all([
     latestRevisions(payload.shopId, pageGids, job.targetLocale, deps.prisma),
-    pendingDraftDigests(payload.shopId, pageGids, job.targetLocale, deps.prisma),
+    // As for each item: a translation the merchant starts tries refused fields again.
+    pendingDraftDigests(payload.shopId, pageGids, job.targetLocale, deps.prisma, { includeRefused: isAutomaticJob(job) }),
   ]);
   // With images and custom fields included, every item is checked: whether
   // they need work is only known after listing them (per item).
@@ -284,7 +290,22 @@ export async function processItem(
     (billing ? billing.entitlements.autoPublish : true);
   // Every run meters its provider calls under its own key: a retry, a re-queue or a later
   // check of the same item is a new call and counts against the limits again.
-  const run: RunContext = { deps, payload, attempt, runId: randomUUID(), jobId: job.id, targetLocale: job.targetLocale, overwriteProtected: job.overwriteProtected, settings, monthlyLimit, dailyLimit, autoPublish, admin, itemId: item.id };
+  const run: RunContext = {
+    deps,
+    payload,
+    attempt,
+    runId: randomUUID(),
+    jobId: job.id,
+    targetLocale: job.targetLocale,
+    overwriteProtected: job.overwriteProtected,
+    automatic: isAutomaticJob(job),
+    settings,
+    monthlyLimit,
+    dailyLimit,
+    autoPublish,
+    admin,
+    itemId: item.id,
+  };
 
   const parentTitle = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : null;
   const results: ResourceRunResult[] = [];
@@ -372,6 +393,7 @@ interface RunContext {
   jobId: string;
   targetLocale: string;
   overwriteProtected: boolean;
+  automatic: boolean;
   settings: Awaited<ReturnType<typeof getShopSettings>>;
   monthlyLimit: number;
   dailyLimit?: number;
@@ -414,7 +436,9 @@ async function translateOneResource(
   const empty: ResourceRunResult = { planned: 0, protectedSkipped: 0, drafted: 0, saved: 0, notSaved: 0, rejected: 0, conflict: false, translationChanged: false, charsBilled: 0, memoryHits: 0, charsSaved: 0 };
   const [latest, pendingDrafts] = await Promise.all([
     latestRevisions(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma),
-    pendingDraftDigests(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma),
+    // Automatic checks don't retry what the checks refused for the same original; a translation
+    // the merchant starts does (they may have changed the glossary meanwhile).
+    pendingDraftDigests(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma, { includeRefused: run.automatic }),
   ]);
   const { fields, protectedKeys } = planResourceWork(resource, {
     latest,
@@ -489,7 +513,28 @@ async function translateOneResource(
   const currentByKey = new Map(resource.translations.map((t) => [t.key, translationDigest(t.value)]));
   const currentOf = (key: string) => currentByKey.get(key) ?? translationDigest(null);
   const translated = result.outcomes.flatMap((o) => (o.status === "translated" ? [o] : []));
-  const rejected = result.outcomes.filter((o) => o.status === "rejected").length;
+  const refused = result.outcomes.flatMap((o) => (o.status === "rejected" ? [o] : []));
+  const rejected = refused.length;
+  // Remembered per source, so an unchanged original isn't sent (and billed) again by the next check.
+  await recordRejectedAttempts(
+    payload.shopId,
+    refused.map((o) => ({
+      jobId: run.jobId,
+      resourceGid: resource.resourceId,
+      parentGid: target.parentGid ?? null,
+      resourceTitle: target.title,
+      locale: run.targetLocale,
+      key: o.key,
+      sourceDigest: fieldByKey.get(o.key)!.digest!,
+      sourceValue: fieldByKey.get(o.key)!.value ?? "",
+      issues: o.issues,
+      provider: result.provider,
+      currentDigest: currentOf(o.key),
+      valueType: fieldByKey.get(o.key)!.type,
+      reason: o.reason,
+    })),
+    deps.prisma,
+  );
   const toPublish = run.autoPublish ? translated.filter((o) => o.issues.length === 0) : [];
   const toDraft = run.autoPublish ? translated.filter((o) => o.issues.length > 0) : translated;
 

@@ -590,15 +590,17 @@ export function ResourceTranslationEditor() {
                       <s-text color="subdued">
                         {i18n.dateTime(h.createdAt)}
                         {" · "}
-                        {h.origin === "EXTERNAL"
-                          ? t("editor.history.origin.external")
-                          : h.origin === "AI"
-                            ? h.approved
-                              ? t("editor.history.origin.aiApproved")
-                              : t("editor.history.origin.ai")
-                            : t("editor.history.origin.manual")}
+                        {h.removed
+                          ? t("editor.history.removed")
+                          : h.origin === "EXTERNAL"
+                            ? t("editor.history.origin.external")
+                            : h.origin === "AI"
+                              ? h.approved
+                                ? t("editor.history.origin.aiApproved")
+                                : t("editor.history.origin.ai")
+                              : t("editor.history.origin.manual")}
                       </s-text>
-                      <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
+                      {h.removed ? null : <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>}
                       {h.restorable ? (
                         <s-button
                           variant="tertiary"

@@ -1,6 +1,6 @@
 import type { TranslationRevision } from "@prisma/client";
 import { describe, expect, it } from "vitest";
-import { fieldsNeedingTranslation, planResourceWork } from "../../app/.server/jobs/needs-work";
+import { ANY_SOURCE, fieldsNeedingTranslation, planResourceWork } from "../../app/.server/jobs/needs-work";
 
 const GID = "gid://shopify/Product/1";
 const content = [
@@ -79,5 +79,23 @@ describe("planResourceWork", () => {
     const pendingDrafts = new Map([[`${GID}|body_html`, "d2"], [`${GID}|title`, "stale-digest"]]);
     const keys = fieldsNeedingTranslation(resource([]), { pendingDrafts }).map((f) => f.key);
     expect(keys).toEqual(["title", "meta_title"]);
+  });
+
+  it("leaves a field with a person's draft waiting for review, whatever its source", () => {
+    const pendingDrafts = new Map([[`${GID}|title`, ANY_SOURCE]]);
+    expect(fieldsNeedingTranslation(resource([]), { pendingDrafts }).map((f) => f.key)).toEqual(["body_html", "meta_title"]);
+  });
+
+  it("keeps a translation the merchant removed on purpose removed until the original changes", () => {
+    const removed = revision("title", "", { origin: "MANUAL", approved: true, sourceDigest: "d1" });
+    const latest = new Map([[`${GID}|title`, removed]]);
+    const plan = planResourceWork(resource([]), { latest });
+    expect(plan.fields.map((f) => f.key)).toEqual(["body_html", "meta_title"]);
+    expect(plan.protectedKeys).toEqual(["title"]);
+    // Removed for an earlier original: the new one is translated.
+    const earlier = new Map([[`${GID}|title`, { ...removed, sourceDigest: "older" }]]);
+    expect(fieldsNeedingTranslation(resource([]), { latest: earlier }).map((f) => f.key)).toEqual(["title", "body_html", "meta_title"]);
+    // Only with explicit permission to replace protected translations.
+    expect(fieldsNeedingTranslation(resource([]), { latest, overwriteProtected: true }).map((f) => f.key)).toEqual(["title", "body_html", "meta_title"]);
   });
 });

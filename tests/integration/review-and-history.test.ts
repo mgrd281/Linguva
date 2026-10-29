@@ -125,7 +125,7 @@ describe("bulk review (draft mode)", () => {
       },
       app,
     );
-    expect(result).toEqual({ published: 2, stale: 0, failed: 0 });
+    expect(result).toEqual({ published: 2, stale: 0, failed: 0, changed: 0 });
     expect(store.translationOf(P1, "de", "title")).toBe("Jacke Nummer 1 (geprüft)");
     expect(store.translationOf(P1, "de", "body_html")).toBe("<p>[de] Warm <b>jacket</b> number 1.</p>");
 
@@ -158,7 +158,7 @@ describe("bulk review (draft mode)", () => {
       { admin: store.asAdmin(), shopId: shop.id, actorId: null, draftIds: drafts.map((d) => d.id) },
       app,
     );
-    expect(result).toEqual({ published: 1, stale: 1, failed: 0 });
+    expect(result).toEqual({ published: 1, stale: 1, failed: 0, changed: 0 });
     expect(store.translationOf(P1, "de", "title")).toBeUndefined();
   });
 
@@ -173,7 +173,7 @@ describe("bulk review (draft mode)", () => {
     );
     const p1 = drafts.filter((d) => d.resourceGid === P1).length;
     expect(p1).toBeGreaterThan(0);
-    expect(result).toEqual({ published: drafts.length - p1, stale: p1, failed: 0 });
+    expect(result).toEqual({ published: drafts.length - p1, stale: p1, failed: 0, changed: 0 });
   });
 
   it("rejects drafts without publishing", async () => {

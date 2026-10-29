@@ -208,8 +208,9 @@ export async function enqueueCoverageRefresh(queue: Pick<Queues["coverage"], "ad
     delay: COVERAGE_REFRESH_DELAY_MS,
     attempts: 3,
     backoff: { type: "exponential", delay: 5_000, jitter: 0.5 },
+    // A kept failed job would make BullMQ drop every later refresh with the same id.
     removeOnComplete: true,
-    removeOnFail: { age: 86_400 },
+    removeOnFail: true,
   });
 }
 
@@ -230,13 +231,23 @@ export function createItemProcessor(deps: JobDependencies) {
     const log = logger.child({ queue: QUEUE_NAMES.items, queueJobId: job.id, shopId: payload.shopId, itemId: payload.itemId });
 
     try {
-      const outcome = await processItem(deps, payload, job.attemptsMade + 1);
+      const outcome = await processItem(deps, payload, job.attemptsMade + 1, job.id);
       log.info({ outcome: outcome.status }, "item processed");
       return outcome;
     } catch (error) {
       const decision = classifyError(error);
       switch (decision.kind) {
         case "rate-limited":
+          // Waiting isn't an attempt: the item shows as waiting, not running, until it runs again.
+          await withTenant(
+            payload.shopId,
+            (tx) =>
+              tx.translationJobItem.updateMany({
+                where: { id: payload.itemId, shopId: payload.shopId, status: "RUNNING", attempts: { gt: 0 } },
+                data: { status: "PENDING", attempts: { decrement: 1 } },
+              }),
+            deps.prisma,
+          );
           log.debug({ waitMs: decision.waitMs }, "item delayed by rate limit");
           return delay(job, token, decision.waitMs);
         case "job-stop": {
@@ -417,7 +428,7 @@ const LIVE_QUEUE_STATES = new Set(["waiting", "delayed", "active", "prioritized"
 /** A coverage report without progress for this long is checked for a lost queue job. */
 export const REPORT_STALL_MS = 10 * 60 * 1000;
 
-async function queueState(queue: Queues["coverage"], id: string): Promise<string> {
+async function queueState(queue: Pick<Queues["coverage"] | Queues["discovery"], "getJob">, id: string): Promise<string> {
   const job = await queue.getJob(id);
   return job ? await job.getState() : "missing";
 }
@@ -454,6 +465,43 @@ export async function requeueStalledReports(deps: JobDependencies, queues: Queue
       const states = await Promise.all(ids.map((id) => queueState(queues.coverage, id)));
       if (states.some((state) => LIVE_QUEUE_STATES.has(state))) continue;
       await enqueueCoveragePage(queues, payload, `r${window}`);
+      total++;
+    }
+  }
+  return total;
+}
+
+/**
+ * Continues bulk jobs whose discovery chain broke: queueing the first page
+ * failed after the job was created (Redis was down), or a discovery job
+ * stalled twice and BullMQ failed it without running it. Such a job would
+ * stay active forever and block new jobs for its type and language. A job
+ * still discovering that hasn't moved for REPORT_STALL_MS and has no live
+ * discovery job gets its current page queued again; a page always starts at
+ * the job's stored cursor, so a duplicate only repeats idempotent work.
+ * Iterates shops and enters each tenant separately.
+ */
+export async function requeueStalledDiscovery(deps: JobDependencies, queues: Queues, now = new Date()) {
+  const shops = await deps.prisma.shop.findMany({ where: { status: "ACTIVE" }, select: { id: true } });
+  const cutoff = new Date(now.getTime() - REPORT_STALL_MS);
+  const window = Math.floor(now.getTime() / REPORT_STALL_MS);
+  let total = 0;
+  for (const shop of shops) {
+    const jobs = await withTenant(
+      shop.id,
+      (tx) =>
+        tx.translationJob.findMany({
+          where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] }, discoveryDone: false, updatedAt: { lt: cutoff } },
+          select: { id: true, discoveryCursor: true },
+          take: 100,
+        }),
+      deps.prisma,
+    );
+    for (const job of jobs) {
+      const ids = [discoveryJobId(job.id, job.discoveryCursor), `discover_${job.id}_r${window}`, `discover_${job.id}_r${window - 1}`];
+      const states = await Promise.all(ids.map((id) => queueState(queues.discovery, id)));
+      if (states.some((state) => LIVE_QUEUE_STATES.has(state))) continue;
+      await enqueueDiscovery(queues, { shopId: shop.id, jobId: job.id }, job.discoveryCursor, `r${window}`);
       total++;
     }
   }

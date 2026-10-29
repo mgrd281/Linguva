@@ -145,15 +145,21 @@ export class DeepLProvider implements TranslationProvider {
   async translate(request: TranslationRequest, signal?: AbortSignal): Promise<TranslationResult> {
     const translations: string[] = [];
     let billedCharacters = 0;
-    for (const batch of batches(request.segments)) {
-      const result = await withRetry(() => this.call(batch, request, signal), {
-        retries: 3,
-        baseDelayMs: 500,
-        maxDelayMs: 8_000,
-        ...this.options.retry,
-      });
-      translations.push(...result.texts);
-      billedCharacters += result.billed;
+    try {
+      for (const batch of batches(request.segments)) {
+        const result = await withRetry(() => this.call(batch, request, signal), {
+          retries: 3,
+          baseDelayMs: 500,
+          maxDelayMs: 8_000,
+          ...this.options.retry,
+        });
+        translations.push(...result.texts);
+        billedCharacters += result.billed;
+      }
+    } catch (error) {
+      // Earlier batches were billed: the caller meters them rather than releasing everything.
+      if (billedCharacters > 0 && error instanceof TranslationProviderError) error.billedCharacters = billedCharacters;
+      throw error;
     }
     return { translations, billedCharacters, provider: this.id };
   }

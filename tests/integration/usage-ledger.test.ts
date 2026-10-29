@@ -47,9 +47,21 @@ describe("usage ledger", () => {
     await reserveUsage(input, app);
     await settleUsage(r, 900, app);
     await settleUsage(r, 900, app);
+    // Once settled, a release (an error after the provider call) doesn't undo billed usage.
     await releaseUsage(r, app);
     await releaseUsage(r, app);
-    expect(await getMonthlyUsage(s.id, undefined, app)).toBe(-100);
+    expect(await getMonthlyUsage(s.id, undefined, app)).toBe(900);
+  });
+
+  it("releases an unsettled reservation once, and keeps a settled one even without a difference", async () => {
+    const s = await shop();
+    const failed = await reserveUsage({ shopId: s.id, key: "failed", chars: 700, limit: 5000, provider: "deepl" }, app);
+    await releaseUsage(failed, app);
+    await releaseUsage(failed, app);
+    const exact = await reserveUsage({ shopId: s.id, key: "exact", chars: 300, limit: 5000, provider: "deepl" }, app);
+    await settleUsage(exact, 300, app);
+    await releaseUsage(exact, app);
+    expect(await getMonthlyUsage(s.id, undefined, app)).toBe(300);
   });
 
   it("rejects reservations over the limit", async () => {

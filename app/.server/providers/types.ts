@@ -34,6 +34,13 @@ export type ProviderErrorKind =
   | "invalid"; // rejected request (unsupported language, bad input)
 
 export class TranslationProviderError extends Error {
+  /**
+   * Characters the provider already billed for earlier parts of the same
+   * request (DeepL sends long texts in batches): the caller meters them
+   * instead of releasing the whole reservation.
+   */
+  billedCharacters?: number;
+
   constructor(
     readonly provider: string,
     readonly kind: ProviderErrorKind,
@@ -44,4 +51,9 @@ export class TranslationProviderError extends Error {
     super(`${provider} ${kind}: ${message}`);
     this.name = "TranslationProviderError";
   }
+}
+
+/** What a failed provider call still billed (earlier batches), or 0. */
+export function billedBeforeFailure(error: unknown): number {
+  return error instanceof TranslationProviderError ? (error.billedCharacters ?? 0) : 0;
 }

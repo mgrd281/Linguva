@@ -163,7 +163,8 @@ describe("automatic translation webhooks", () => {
     expect(q.added[0]!.opts.jobId).toBe(q.added[1]!.opts.jobId);
     expect(q.added[0]!.opts.jobId).not.toBe(q.added[2]!.opts.jobId);
     expect(String(q.added[0]!.opts.jobId)).not.toContain(":");
-    expect(q.added[0]!.opts).toMatchObject({ delay: AUTO_TRANSLATE_DELAY_MS, removeOnComplete: true });
+    // A failed check is removed too: a kept one would make BullMQ drop every later check with its id.
+    expect(q.added[0]!.opts).toMatchObject({ delay: AUTO_TRANSLATE_DELAY_MS, removeOnComplete: true, removeOnFail: true });
   });
 
   it("ignore other topics, ids that don't match the topic, and unknown or uninstalled shops", async () => {

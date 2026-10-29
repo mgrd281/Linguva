@@ -98,9 +98,10 @@ export async function enqueueAutoCheck(queue: AutoQueue, payload: AutoTranslateP
     delay: AUTO_TRANSLATE_DELAY_MS,
     attempts: 5,
     backoff: { type: "exponential", delay: 5_000, jitter: 0.5 },
-    // Removed when done, so the next save can queue a new check.
+    // Removed when done or failed (the failure is logged), so the next save can queue a new
+    // check: a kept job would make BullMQ drop every later check with the same id.
     removeOnComplete: true,
-    removeOnFail: { age: 14 * 86_400 },
+    removeOnFail: true,
   });
 }
 

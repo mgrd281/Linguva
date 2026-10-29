@@ -289,7 +289,6 @@ export interface ItemResult {
   errorCode?: string | null;
   fieldsTranslated?: number;
   fieldsRejected?: number;
-  charsBilled?: number;
   memoryHits?: number;
   charsSaved?: number;
   protectedSkipped?: number;
@@ -318,7 +317,6 @@ export async function finishItem(
           errorCode: result.errorCode ?? null,
           fieldsTranslated: result.fieldsTranslated ?? 0,
           fieldsRejected: result.fieldsRejected ?? 0,
-          charsBilled: result.charsBilled ?? 0,
           finishedAt: new Date(),
         },
       });
@@ -334,7 +332,6 @@ export async function finishItem(
         where: { id: item.jobId },
         data: {
           ...counter,
-          charsBilled: { increment: result.charsBilled ?? 0 },
           memoryHits: { increment: result.memoryHits ?? 0 },
           charsSaved: { increment: result.charsSaved ?? 0 },
           protectedSkipped: { increment: result.protectedSkipped ?? 0 },
@@ -349,6 +346,29 @@ export async function finishItem(
   // Coverage shows the attempt (failed, or drafts made) right away.
   await refreshCoverageOverlays(shopId, [finished], client);
   return true;
+}
+
+/**
+ * Adds what a provider call billed to the item and its job as soon as it is
+ * billed (recordBilled is called after every settled call, also one that
+ * fails later), so both totals equal the usage ledger.
+ */
+export async function recordBilled(
+  shopId: string,
+  itemId: string,
+  jobId: string,
+  chars: number,
+  client: PrismaClient = defaultClient,
+) {
+  if (chars <= 0) return;
+  await withTenant(
+    shopId,
+    async (tx) => {
+      await tx.translationJobItem.updateMany({ where: { id: itemId, shopId }, data: { charsBilled: { increment: chars } } });
+      await tx.translationJob.updateMany({ where: { id: jobId, shopId }, data: { charsBilled: { increment: chars } } });
+    },
+    client,
+  );
 }
 
 /** Stops a job because of a condition that affects all its items. */

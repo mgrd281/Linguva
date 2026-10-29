@@ -174,14 +174,17 @@ export async function reserveUsage(
   return existing ?? { shopId: input.shopId, key: input.key, period, day, chars: input.chars, provider: input.provider };
 }
 
-/** Records actual usage: the difference to the reservation is adjusted. */
+/**
+ * Records actual usage: the difference to the reservation is adjusted. The
+ * settle row is written even without a difference, so a later release of the
+ * same reservation (an error after the provider call) can't undo billed usage.
+ */
 export async function settleUsage(
   reservation: Reservation,
   actualChars: number,
   client: PrismaClient = defaultClient,
 ): Promise<void> {
   const delta = actualChars - reservation.chars;
-  if (delta === 0) return;
   await withTenant(
     reservation.shopId,
     async (tx) => {
@@ -193,13 +196,13 @@ export async function settleUsage(
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:settle`,
       });
-      if (inserted) await addPlatformChars(tx, reservation.day, delta, null);
+      if (inserted && delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
     },
     client,
   );
 }
 
-/** Returns reserved characters when the provider call failed. */
+/** Returns reserved characters when the provider call failed. Does nothing once the reservation is settled. */
 export async function releaseUsage(
   reservation: Reservation,
   client: PrismaClient = defaultClient,
@@ -207,6 +210,11 @@ export async function releaseUsage(
   await withTenant(
     reservation.shopId,
     async (tx) => {
+      const settled = await tx.usageLedger.findUnique({
+        where: { shopId_idempotencyKey: { shopId: reservation.shopId, idempotencyKey: `${reservation.key}:settle` } },
+        select: { id: true },
+      });
+      if (settled) return;
       const inserted = await insertOnce(tx, {
         shopId: reservation.shopId,
         periodKey: reservation.period,

@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import type { TranslationProvider } from "../providers/types";
+import { billedBeforeFailure, type TranslationProvider } from "../providers/types";
 import { shopKey } from "../queue/redis";
 import {
   getTranslatableResource,
@@ -21,7 +22,7 @@ import { recordMemoryUse } from "../memory/translation-memory";
 import { pendingDraftDigests, saveDrafts } from "../review/drafts";
 import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
-import { finishItem, isBulkResourceType, stopJob, completeIfDone } from "./bulk-jobs";
+import { finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
 import { listAttachedResources } from "../shopify/attached-resources";
@@ -41,7 +42,10 @@ export interface JobDependencies {
   adminFor(shopDomain: string): Promise<Admin>;
   provider: TranslationProvider | null;
   monthlyLimit: number;
-  /** Optional daily caps (shop and platform), see aiUsageLimits. */
+  /**
+   * Optional daily caps: the shop's (AI_DAILY_CHAR_LIMIT; per shop never above
+   * its monthly allowance, as on every page) and the platform's.
+   */
   dailyLimit?: number;
   platformDailyLimit?: number;
   /**
@@ -195,6 +199,8 @@ export async function processItem(
   deps: JobDependencies,
   payload: ItemPayload,
   attempt: number,
+  /** The queue job carrying the item; a stale duplicate (an older round) doesn't claim it. */
+  queueJobId?: string,
 ): Promise<ItemOutcome> {
   const item = await withTenant(
     payload.shopId,
@@ -226,15 +232,23 @@ export async function processItem(
   // Rate limit before claiming, so a delayed item isn't counted as running.
   // Images and custom fields need about three times the Admin API calls.
   await throttle(deps, payload.shopId, job.includeAttached ? ITEM_SHOPIFY_COST * 3 : ITEM_SHOPIFY_COST);
-  await withTenant(
+  // Only the queue job that currently carries the item claims it, and only while it isn't
+  // finished: two deliveries (a re-queue in two workers) never translate it twice.
+  const claimed = await withTenant(
     payload.shopId,
     (tx) =>
       tx.translationJobItem.updateMany({
-        where: { id: item.id, shopId: payload.shopId },
+        where: {
+          id: item.id,
+          shopId: payload.shopId,
+          status: { in: ["PENDING", "RUNNING", "FAILED"] },
+          ...(queueJobId ? { OR: [{ queueJobId: null }, { queueJobId }] } : {}),
+        },
         data: { status: "RUNNING", attempts: { increment: 1 } },
       }),
     deps.prisma,
   );
+  if (claimed.count === 0) return { status: "discarded", reason: "NOT_CLAIMED" };
 
   const settings = await getShopSettings(payload.shopId, deps.prisma);
   if (!hasCurrentAiConsent(settings)) throw new JobStopError("CONSENT_REQUIRED");
@@ -242,6 +256,7 @@ export async function processItem(
   const billing = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
   if (billing && !billing.entitlements.bulk) throw new JobStopError("PLAN_REQUIRED");
   const monthlyLimit = billing?.configured ? billing.entitlements.monthlyChars : deps.monthlyLimit;
+  const dailyLimit = deps.dailyLimit === undefined ? undefined : Math.min(deps.dailyLimit, monthlyLimit);
 
   const admin = await deps.adminFor(shop.shopDomain);
   const resource = await getTranslatableResource(admin, item.resourceGid, job.targetLocale);
@@ -257,7 +272,9 @@ export async function processItem(
     job.publishMode === "AUTO_PUBLISH" &&
     settings.bulkPublishMode === "AUTO_PUBLISH" &&
     (billing ? billing.entitlements.autoPublish : true);
-  const run: RunContext = { deps, payload, attempt, jobId: job.id, targetLocale: job.targetLocale, overwriteProtected: job.overwriteProtected, settings, monthlyLimit, autoPublish, admin, itemId: item.id };
+  // Every run meters its provider calls under its own key: a retry, a re-queue or a later
+  // check of the same item is a new call and counts against the limits again.
+  const run: RunContext = { deps, payload, attempt, runId: randomUUID(), jobId: job.id, targetLocale: job.targetLocale, overwriteProtected: job.overwriteProtected, settings, monthlyLimit, dailyLimit, autoPublish, admin, itemId: item.id };
 
   const parentTitle = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : null;
   const results: ResourceRunResult[] = [];
@@ -326,7 +343,6 @@ export async function processItem(
       errorCode,
       fieldsTranslated: done,
       fieldsRejected: rejected + notSaved,
-      charsBilled: sum((r) => r.charsBilled),
       memoryHits: sum((r) => r.memoryHits),
       charsSaved: sum((r) => r.charsSaved),
       protectedSkipped,
@@ -340,12 +356,15 @@ interface RunContext {
   deps: JobDependencies;
   payload: ItemPayload;
   attempt: number;
+  /** Unique per run of the item: part of every reservation key. */
+  runId: string;
   itemId: string;
   jobId: string;
   targetLocale: string;
   overwriteProtected: boolean;
   settings: Awaited<ReturnType<typeof getShopSettings>>;
   monthlyLimit: number;
+  dailyLimit?: number;
   autoPublish: boolean;
   admin: Admin;
 }
@@ -407,19 +426,19 @@ async function translateOneResource(
   );
   const prepared = await prepareTranslation({ fields, protect: context.glossary.protect, memory: context.memory });
 
-  // One reservation per resource and attempt, for what the provider will
-  // actually be sent: a retried attempt is billed separately and a failed
-  // one released.
+  // One reservation per resource and run, for what the provider will
+  // actually be sent: every run is billed separately and a failed call
+  // released (what earlier DeepL batches billed stays counted).
   const reservation = prepared.providerChars
     ? await reserveUsage(
         {
           shopId: payload.shopId,
           key: target.parentGid
-            ? `job-item:${run.itemId}:${run.attempt}:${resource.resourceId}`
-            : `job-item:${run.itemId}:${run.attempt}`,
+            ? `job-item:${run.itemId}:${run.runId}:${resource.resourceId}`
+            : `job-item:${run.itemId}:${run.runId}`,
           chars: prepared.providerChars,
           limit: run.monthlyLimit,
-          dailyLimit: deps.dailyLimit,
+          dailyLimit: run.dailyLimit,
           platformDailyLimit: deps.platformDailyLimit,
           provider: deps.provider!.id,
         },
@@ -438,10 +457,21 @@ async function translateOneResource(
       formality: formalityFor(run.settings, run.targetLocale),
     });
   } catch (error) {
-    if (reservation) await releaseUsage(reservation, deps.prisma);
+    if (reservation) {
+      const billed = billedBeforeFailure(error);
+      if (billed > 0) {
+        await settleUsage(reservation, billed, deps.prisma);
+        await recordBilled(payload.shopId, run.itemId, run.jobId, billed, deps.prisma);
+      } else {
+        await releaseUsage(reservation, deps.prisma);
+      }
+    }
     throw error;
   }
   if (reservation) await settleUsage(reservation, result.billedCharacters, deps.prisma);
+  // Counted on the item and job as soon as the provider billed it: their totals match the
+  // ledger also when publishing fails afterwards and the item runs again.
+  await recordBilled(payload.shopId, run.itemId, run.jobId, result.billedCharacters, deps.prisma);
   await recordMemoryUse(payload.shopId, result.memoryEntryIds, deps.prisma);
 
   const fieldByKey = new Map(fields.map((f) => [f.key, f]));

@@ -12,7 +12,7 @@ import { billingDeps } from "../app/.server/billing/billing";
 import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
-import { createQueues, createWorkers, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
+import { createQueues, createWorkers, requeueStalledDiscovery, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
 import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
 import { createRedis, keyPrefix } from "../app/.server/queue/redis";
@@ -47,7 +47,8 @@ async function main() {
       withShopifyTimeout((await unauthenticated.admin(shopDomain)).admin, config.SHOPIFY_TIMEOUT_MS, "worker"),
     provider: getTranslationProvider(),
     monthlyLimit: limits.limit,
-    dailyLimit: limits.dailyLimit,
+    // Per shop the daily cap is never above its plan's monthly allowance (processItem), as on every page.
+    dailyLimit: config.AI_DAILY_CHAR_LIMIT,
     platformDailyLimit: limits.platformDailyLimit,
     // The plan (cached Partner API state); billing off: unmetered.
     billingFor: async (shopId) => {
@@ -68,11 +69,14 @@ async function main() {
 
   const sweep = async () => {
     try {
-      const requeued = await requeueStalledItems(deps, queues);
-      if (requeued) logger.warn({ requeued }, "re-enqueued stalled items");
-      // One worker at a time (a separate worker and an embedded one, or a deploy overlap).
+      // One worker at a time (a separate worker and an embedded one, or a deploy overlap):
+      // two sweeps would queue the same orphaned item twice.
       const lock = await connection.set(`${prefix}:coverage-requeue-lock`, String(process.pid), "PX", SWEEP_INTERVAL_MS - 60_000, "NX");
       if (lock === "OK") {
+        const requeued = await requeueStalledItems(deps, queues);
+        if (requeued) logger.warn({ requeued }, "re-enqueued stalled items");
+        const discovering = await requeueStalledDiscovery(deps, queues);
+        if (discovering) logger.warn({ jobs: discovering }, "continued stalled job discovery");
         const reports = await requeueStalledReports(deps, queues);
         if (reports) logger.warn({ reports }, "continued stalled coverage reports");
       }

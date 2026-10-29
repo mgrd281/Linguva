@@ -77,6 +77,81 @@ describe("database posture", () => {
     expect(await checkDatabasePosture(app)).toEqual([]);
   });
 
+  // What a migration could do by mistake, done here as the owner and undone afterwards.
+  const posture = async () => (await checkDatabasePosture(app)).map((i) => `${i.code} ${i.detail}`).sort();
+  const tenantPolicy = (table: string) =>
+    `CREATE POLICY tenant_isolation ON "${table}" USING ("shopId" = NULLIF(current_setting('app.shop_id', true), '')::uuid)
+     WITH CHECK ("shopId" = NULLIF(current_setting('app.shop_id', true), '')::uuid)`;
+
+  it("flags table privileges beyond reading and writing rows, on any table", async () => {
+    // TRUNCATE ignores row-level security: one statement would empty every shop's settings.
+    const grants = [
+      `GRANT TRUNCATE ON "ShopSettings" TO linguva_app`,
+      `GRANT REFERENCES ("id") ON "Shop" TO linguva_app`,
+      `GRANT TRIGGER ON "PrivacyRequest" TO linguva_app`,
+    ];
+    try {
+      for (const sql of grants) await ownerDb.$executeRawUnsafe(sql);
+      expect(await posture()).toEqual([
+        "RUNTIME_TABLE_PRIVILEGE PrivacyRequest: TRIGGER",
+        "RUNTIME_TABLE_PRIVILEGE Shop: REFERENCES",
+        "RUNTIME_TABLE_PRIVILEGE ShopSettings: TRUNCATE",
+      ]);
+    } finally {
+      for (const sql of grants) await ownerDb.$executeRawUnsafe(sql.replace(/^GRANT/, "REVOKE").replace(" TO ", " FROM "));
+    }
+    expect(await checkDatabasePosture(app)).toEqual([]);
+  });
+
+  it("flags views the runtime role can read unless they run with the reader's rights", async () => {
+    await twoShopsWithMemory();
+    try {
+      // Owned by the owner, who isn't forced on TranslationMemory (§5c): every shop's rows, without a tenant.
+      await ownerDb.$executeRawUnsafe(`CREATE VIEW "ProbeMemory" AS SELECT "shopId", "targetText" FROM "TranslationMemory"`);
+      await ownerDb.$executeRawUnsafe(`CREATE MATERIALIZED VIEW "ProbeMemoryCount" AS SELECT "shopId", count(*) AS n FROM "TranslationMemory" GROUP BY 1`);
+      expect(await posture()).toEqual([]);
+      await ownerDb.$executeRawUnsafe(`GRANT SELECT ON "ProbeMemory", "ProbeMemoryCount" TO linguva_app`);
+      expect(await app.$queryRawUnsafe<unknown[]>(`SELECT DISTINCT "shopId" FROM "ProbeMemory"`)).toHaveLength(2);
+      expect(await posture()).toEqual(["RUNTIME_READS_MATERIALIZED_VIEW ProbeMemoryCount", "VIEW_NOT_SECURITY_INVOKER ProbeMemory"]);
+      // With the reader's rights, row-level security applies again.
+      await ownerDb.$executeRawUnsafe(`ALTER VIEW "ProbeMemory" SET (security_invoker = on)`);
+      expect(await app.$queryRawUnsafe<unknown[]>(`SELECT DISTINCT "shopId" FROM "ProbeMemory"`)).toHaveLength(0);
+      expect(await posture()).toEqual(["RUNTIME_READS_MATERIALIZED_VIEW ProbeMemoryCount"]);
+    } finally {
+      await ownerDb.$executeRawUnsafe(`DROP VIEW IF EXISTS "ProbeMemory"`);
+      await ownerDb.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS "ProbeMemoryCount"`);
+    }
+    expect(await checkDatabasePosture(app)).toEqual([]);
+  });
+
+  it("checks a partitioned tenant table like any other", async () => {
+    try {
+      await ownerDb.$executeRawUnsafe(
+        `CREATE TABLE "ProbeRun" ("shopId" UUID NOT NULL REFERENCES "Shop"("id") ON DELETE CASCADE, "at" DATE NOT NULL) PARTITION BY RANGE ("at")`,
+      );
+      expect(await posture()).toEqual(["TENANT_TABLE_NOT_FORCED ProbeRun", "TENANT_TABLE_WITHOUT_RLS ProbeRun", "UNEXPECTED_POLICY_COUNT ProbeRun: 0"]);
+    } finally {
+      await ownerDb.$executeRawUnsafe(`DROP TABLE IF EXISTS "ProbeRun"`);
+    }
+    expect(await checkDatabasePosture(app)).toEqual([]);
+  });
+
+  it("flags a tenant table shop/redact wouldn't erase (no foreign key to Shop with ON DELETE CASCADE)", async () => {
+    try {
+      await ownerDb.$executeRawUnsafe(`CREATE TABLE "ProbeNoKey" ("shopId" UUID NOT NULL)`);
+      await ownerDb.$executeRawUnsafe(`CREATE TABLE "ProbeSetNull" ("shopId" UUID REFERENCES "Shop"("id") ON DELETE SET NULL)`);
+      for (const table of ["ProbeNoKey", "ProbeSetNull"]) {
+        await ownerDb.$executeRawUnsafe(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`);
+        await ownerDb.$executeRawUnsafe(`ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY`);
+        await ownerDb.$executeRawUnsafe(tenantPolicy(table));
+      }
+      expect(await posture()).toEqual(["TENANT_TABLE_WITHOUT_SHOP_CASCADE ProbeNoKey", "TENANT_TABLE_WITHOUT_SHOP_CASCADE ProbeSetNull"]);
+    } finally {
+      await ownerDb.$executeRawUnsafe(`DROP TABLE IF EXISTS "ProbeNoKey", "ProbeSetNull"`);
+    }
+    expect(await checkDatabasePosture(app)).toEqual([]);
+  });
+
   it("detects a privileged connection (the check isn't vacuous)", async () => {
     const codes = (await checkDatabasePosture(ownerDb)).map((i) => i.code);
     expect(codes).toContain("RUNTIME_OWNS_TABLE");

@@ -1,8 +1,10 @@
 /**
  * Checks the database security posture the app relies on: the runtime role
- * can't bypass or change row-level security, every tenant table is under
- * RLS, and the only SECURITY DEFINER function is the reviewed one, owned by
- * an ordinary role with a fixed search path. Run as the runtime role.
+ * can't bypass or change row-level security, every tenant table (partitioned
+ * ones too) is under RLS and goes with its shop, no view reads tables with
+ * its owner's rights, and the only SECURITY DEFINER functions are the
+ * reviewed ones, owned by an ordinary role with a fixed search path. Run as
+ * the runtime role.
  */
 import type { PrismaClient } from "@prisma/client";
 
@@ -60,13 +62,25 @@ export async function checkDatabasePosture(client: PrismaClient): Promise<Postur
     SELECT has_schema_privilege(current_user, 'public', 'CREATE') AS "create"`;
   if (schema?.create) add("RUNTIME_CAN_CREATE_IN_PUBLIC", me.name);
 
-  const tables = await client.$queryRaw<Array<{ relname: string; rls: boolean; force: boolean; tenant: boolean; policies: number }>>`
+  // Plain and partitioned tables ('p': a partition's own settings apply when it is queried directly).
+  const tables = await client.$queryRaw<
+    Array<{ relname: string; rls: boolean; force: boolean; tenant: boolean; policies: number; cascade: boolean; truncate: boolean; references: boolean; trigger: boolean }>
+  >`
     SELECT c.relname, c.relrowsecurity AS rls, c.relforcerowsecurity AS force,
            EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'shopId' AND NOT a.attisdropped) AS tenant,
-           (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+           (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+           EXISTS (SELECT 1 FROM pg_constraint k JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'shopId' AND NOT a.attisdropped
+                   WHERE k.conrelid = c.oid AND k.contype = 'f' AND k.conkey = ARRAY[a.attnum] AND k.confrelid = s.oid AND k.confdeltype = 'c') AS "cascade",
+           has_table_privilege(current_user, c.oid, 'TRUNCATE') AS "truncate",
+           has_any_column_privilege(current_user, c.oid, 'REFERENCES') AS "references",
+           has_table_privilege(current_user, c.oid, 'TRIGGER') AS "trigger"
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public' AND c.relkind = 'r'`;
+    LEFT JOIN pg_class s ON s.relnamespace = n.oid AND s.relname = 'Shop' AND s.relkind = 'r'
+    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`;
   for (const t of tables) {
+    // On any table: TRUNCATE ignores row-level security; REFERENCES and TRIGGER attach constraints or code to it.
+    const extra = [t.truncate && "TRUNCATE", t.references && "REFERENCES", t.trigger && "TRIGGER"].filter(Boolean);
+    if (extra.length) add("RUNTIME_TABLE_PRIVILEGE", `${t.relname}: ${extra.join(", ")}`);
     if ((GLOBAL_TABLES as readonly string[]).includes(t.relname)) continue;
     if (!t.tenant) {
       add("UNCLASSIFIED_TABLE", t.relname);
@@ -75,6 +89,21 @@ export async function checkDatabasePosture(client: PrismaClient): Promise<Postur
     if (!t.rls) add("TENANT_TABLE_WITHOUT_RLS", t.relname);
     if (!t.force && !(NOT_FORCED_TABLES as readonly string[]).includes(t.relname)) add("TENANT_TABLE_NOT_FORCED", t.relname);
     if (t.policies !== 1) add("UNEXPECTED_POLICY_COUNT", `${t.relname}: ${t.policies}`);
+    // shop/redact deletes the Shop row; a tenant row without this cascade would outlive it.
+    if (!t.cascade) add("TENANT_TABLE_WITHOUT_SHOP_CASCADE", t.relname);
+  }
+
+  // A view runs with its owner's rights unless it is security_invoker, and the owner isn't forced on
+  // NOT_FORCED_TABLES; a materialized view holds what its owner read. Views of extensions aren't the app's.
+  const views = await client.$queryRaw<Array<{ relname: string; materialized: boolean; invoker: boolean }>>`
+    SELECT c.relname, c.relkind = 'm' AS materialized,
+           COALESCE((SELECT o.option_value::boolean FROM pg_options_to_table(c.reloptions) o WHERE o.option_name = 'security_invoker'), false) AS invoker
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm') AND has_any_column_privilege(current_user, c.oid, 'SELECT')
+      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e')`;
+  for (const v of views) {
+    if (v.materialized) add("RUNTIME_READS_MATERIALIZED_VIEW", v.relname);
+    else if (!v.invoker) add("VIEW_NOT_SECURITY_INVOKER", v.relname);
   }
 
   for (const table of READ_ONLY_TABLES) {

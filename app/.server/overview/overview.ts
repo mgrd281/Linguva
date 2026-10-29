@@ -11,8 +11,10 @@ import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { countPendingDrafts } from "../review/drafts";
 import { loadCoverageSummary } from "../coverage/summary";
-import { headlineByLocale } from "../../lib/coverage-view";
+import { COVERAGE_TYPES } from "../coverage/coverage";
+import { headlineByLocale, measuredLocales as wholeLocales, unreadableTypes } from "../../lib/coverage-view";
 import { addCounts, emptyCounts, HEADLINE_EXCLUDED_TYPES, totalOf } from "../../lib/coverage-rules";
+import { CONTENT_TYPES, isContentType } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage } from "../usage/usage-ledger";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
@@ -73,9 +75,10 @@ export async function loadOverview(
   const consent = hasCurrentAiConsent(settings);
   const firstTarget = targets[0]?.locale;
 
-  // Percentages only from the newest completed measurement, for the languages it covered:
-  // a first measurement under way has read only some types, so its numbers would mislead.
-  const measuredLocales = new Set(coverage.lastCompleted?.locales ?? []);
+  // Percentages only from the newest completed measurement, for the languages it covered and
+  // still has every type of: a first measurement under way has read only some types, and a
+  // language published since (or whose rows went with it) has none, so their numbers would mislead.
+  const measuredLocales = wholeLocales(coverage.lastCompleted, coverage.segments, COVERAGE_TYPES);
   const headline = headlineByLocale(coverage.counts);
   // A store with live translations (measured, made anywhere) is past its first translation.
   const liveTranslations = [...measuredLocales].some((locale) => (headline.get(locale)?.complete ?? 0) > 0);
@@ -148,12 +151,19 @@ export async function loadOverview(
       published: l.published,
       measured,
       partial: measured && unread.has(l.locale),
+      // Types the figures count that Linguva can't read (no access): never "fully translated" then.
+      unchecked: measured ? unreadableTypes(coverage.segments, { locales: [l.locale], types: COVERAGE_TYPES }).length : 0,
       percent: tally?.percent ?? null,
       counts: tally?.counts ?? null,
       complete: tally?.complete ?? 0,
       total: tally?.total ?? 0,
     };
   });
+  // Content types of the published languages Linguva has no access to, and where access is allowed
+  // (a content type's page asks for its scope).
+  const deniedTypes = unreadableTypes(coverage.segments, { locales: targets.filter((l) => l.published).map((l) => l.locale), types: COVERAGE_TYPES });
+  const accessType = deniedTypes.find(isContentType);
+  const unreadable = deniedTypes.length ? { types: deniedTypes.length, href: accessType ? `/app/content/${CONTENT_TYPES[accessType].slug}` : null } : null;
   // The store's share: every counted field of the measured published languages (as on the Coverage page).
   const shared = progress.filter((l) => l.published && l.measured && l.total > 0);
   const sum = emptyCounts();
@@ -187,6 +197,7 @@ export async function loadOverview(
     jobsAvailable,
     measuredLocales: [...measuredLocales],
     progress,
+    unreadable,
     countries: countries && "rows" in countries ? countries : null,
     remainingLocales: locales.remainingEnabled,
   });
@@ -201,6 +212,7 @@ export async function loadOverview(
     checklist,
     progress,
     storeShare,
+    unreadable,
     measuredAt: coverage.lastCompleted?.finishedAt ?? null,
     measurement,
     next,

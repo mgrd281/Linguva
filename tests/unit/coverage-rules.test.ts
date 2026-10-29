@@ -104,6 +104,9 @@ describe("percentages", () => {
     expect(coveragePercent(999, 1000)).toBe(99);
     expect(coveragePercent(1000, 1000)).toBe(100);
     expect(coveragePercent(1, 3)).toBe(33);
+    // Exact integer shares never lose a point to floating point.
+    expect(coveragePercent(29, 100)).toBe(29);
+    expect(coveragePercent(57, 100)).toBe(57);
     expect(percentText(1, 1000)).toBe("<1");
     expect(percentText(0, 1000)).toBe("0");
   });

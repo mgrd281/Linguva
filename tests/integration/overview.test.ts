@@ -219,6 +219,26 @@ describe("percentages from completed measurements only", () => {
     expect(segment).toMatchObject({ status: "FAILED", errorCode: "STALLED" });
   });
 
+  it("never says all caught up while content types can't be read (no access), and says how many", async () => {
+    const { store, shop, deps } = await measuredStore();
+    // Everything readable is translated; menus and metaobjects need scopes the store didn't grant.
+    for (let i = 1; i <= 6; i++) {
+      store.translate(`gid://shopify/Product/${i}`, "de", "title", `Jacke ${i}`);
+      store.translate(`gid://shopify/Product/${i}`, "de", "body_html", `<p>Warme Jacke ${i}.</p>`);
+    }
+    store.deniedTypes.add("MENU");
+    store.deniedTypes.add("METAOBJECT");
+    const { report } = await start(shop.id, "denied");
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    const overview = await loadOverview(store.asAdmin(), shop, app, { aiAvailable: false });
+    // 100 % of what could be read, but menus and metaobjects were never checked.
+    expect(overview.storeShare).toMatchObject({ complete: 12, total: 12 });
+    expect(overview.progress[0]).toMatchObject({ locale: "de", measured: true, partial: false, unchecked: 2 });
+    expect(overview.unreadable).toEqual({ types: 2, href: "/app/content/menus" });
+    expect(overview.next).toEqual({ id: "access", types: 2, href: "/app/content/menus" });
+  });
+
   it("counts translations already live in the store (made anywhere) as past the first translation", async () => {
     const { store, shop, deps } = await measuredStore();
     store.translate("gid://shopify/Product/1", "de", "title", "Produkt 1 Jacke");

@@ -34,7 +34,7 @@ export const en = {
   "editor.aiError.CONSENT_REQUIRED": "Allow AI processing below before translating with AI.",
   "editor.aiError.QUOTA_EXCEEDED": "This month's AI translation allowance is used up.",
   "editor.aiError.DAILY_LIMIT": "Today's AI translation allowance is used up. It resets at midnight UTC.",
-  "editor.aiError.PLATFORM_LIMIT": "AI translation is paused for today because of high demand. Please try again tomorrow.",
+  "editor.aiError.PLATFORM_LIMIT": "The app's AI translation limit for today is reached. It resets at midnight UTC.",
   "editor.aiError.REQUEST_TOO_LARGE": "This is too much text for one request. Translate fewer fields at a time, or use bulk translation.",
   "editor.aiError.PLAN_LANGUAGE": "Your plan doesn't include AI translation into this language. Change your plan under Plan, or translate by hand.",
   "editor.aiError.RATE_LIMITED_USER": "You're translating very quickly. Please wait a moment and try again.",
@@ -193,7 +193,7 @@ export const de: Translation<typeof en> = {
   "editor.aiError.CONSENT_REQUIRED": "Erlaube zuerst die KI-Verarbeitung, bevor du mit KI übersetzt.",
   "editor.aiError.QUOTA_EXCEEDED": "Das KI-Kontingent dieses Monats ist aufgebraucht.",
   "editor.aiError.DAILY_LIMIT": "Das KI-Kontingent für heute ist aufgebraucht. Es wird um Mitternacht UTC zurückgesetzt.",
-  "editor.aiError.PLATFORM_LIMIT": "KI-Übersetzung ist heute wegen hoher Nachfrage pausiert. Bitte versuche es morgen noch einmal.",
+  "editor.aiError.PLATFORM_LIMIT": "Das Tageslimit der App für KI-Übersetzungen ist erreicht. Es wird um Mitternacht UTC zurückgesetzt.",
   "editor.aiError.REQUEST_TOO_LARGE":
     "Das ist zu viel Text für eine Anfrage. Übersetze weniger Felder auf einmal oder nutze die Massenübersetzung.",
   "editor.aiError.PLAN_LANGUAGE":
@@ -359,8 +359,7 @@ export const fr: Translation<typeof en> = {
   "editor.aiError.CONSENT_REQUIRED": "Autorisez le traitement par IA ci-dessous avant de traduire avec l'IA.",
   "editor.aiError.QUOTA_EXCEEDED": "Le quota d'IA de ce mois-ci est épuisé.",
   "editor.aiError.DAILY_LIMIT": "Le quota d'IA d'aujourd'hui est épuisé. Il est réinitialisé à minuit UTC.",
-  "editor.aiError.PLATFORM_LIMIT":
-    "La traduction par IA est suspendue pour aujourd'hui en raison d'une forte demande. Veuillez réessayer demain.",
+  "editor.aiError.PLATFORM_LIMIT": "La limite quotidienne de traduction IA de l'application est atteinte. Elle est réinitialisée à minuit UTC.",
   "editor.aiError.REQUEST_TOO_LARGE":
     "Il y a trop de texte pour une seule requête. Traduisez moins de champs à la fois ou utilisez la traduction groupée.",
   "editor.aiError.PLAN_LANGUAGE":
@@ -530,7 +529,7 @@ export const es: Translation<typeof en> = {
   "editor.aiError.CONSENT_REQUIRED": "Antes de traducir con IA, permite el procesamiento con IA más abajo.",
   "editor.aiError.QUOTA_EXCEEDED": "Se agotó la cuota de IA de este mes.",
   "editor.aiError.DAILY_LIMIT": "Se agotó la cuota de IA de hoy. Se restablece a medianoche UTC.",
-  "editor.aiError.PLATFORM_LIMIT": "La traducción con IA está en pausa por hoy debido a la alta demanda. Vuelve a intentarlo mañana.",
+  "editor.aiError.PLATFORM_LIMIT": "Se alcanzó el límite diario de traducción con IA de la aplicación. Se restablece a medianoche UTC.",
   "editor.aiError.REQUEST_TOO_LARGE":
     "Hay demasiado texto para una sola solicitud. Traduce menos campos a la vez o usa la traducción masiva.",
   "editor.aiError.PLAN_LANGUAGE":

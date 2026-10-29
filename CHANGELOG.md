@@ -80,6 +80,9 @@
 - Review text search through a reviewed definer function and a trigram index: 207 → 12.5 ms at 50,000 drafts (migration 20261030110000).
 - Launch preparation: competitive analysis (Langify, Transcy), App Store listing draft in English and German with 8 screenshots of the real app, a 30-day launch plan and the list of owner decisions (docs).
 
+### Changed
+- The app-wide daily AI limit no longer reads "paused because of high demand": the message names the app's daily limit and when it resets (midnight UTC).
+
 ### Security
 - HTTP security headers on every page and data response (nosniff, Referrer-Policy, Permissions-Policy, `base-uri` and `object-src` in the CSP, HSTS in production over HTTPS). Pages requested without a shop parameter had no framing protection; they can now only be framed by the Shopify admin.
 - CI fails on high or critical advisories in production dependencies (`pnpm audit --prod`), with one reviewed, documented exception (SECURITY_MODEL.md §5f).

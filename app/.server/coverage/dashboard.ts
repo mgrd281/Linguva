@@ -19,10 +19,10 @@ import { withTenant } from "../tenancy/with-tenant";
 import { jobProgress } from "../../lib/job-display";
 import { reliableEta } from "../../lib/eta";
 import {
-  editorPathFor,
   IMAGE_COVERAGE_TYPES,
   isContentType,
   isImageCoverageType,
+  itemEditorPath,
   kindOfGid,
   numericId,
   RESOURCE_KINDS,
@@ -36,8 +36,7 @@ import { translatableByIds } from "../shopify/attached-resources";
 import { isSearchableType, searchIds } from "../shopify/search-ids";
 import { COVERAGE_TYPES, segmentOf, STALE_REPORT_MS } from "./coverage";
 import { listCoverageItems, loadCoverageSummary, type ItemStateFilter } from "./summary";
-import { excludedAmong } from "../smart/config";
-import { loadSmartCoverageNote, smartContext, waitsForSmartCheck } from "../smart/panel";
+import { loadSmartCoverageNote, smartBadge, smartContext, smartWorkOn } from "../smart/panel";
 
 /** Types with a title of their own (images and custom fields are named by their text or owner). */
 function kindOfAny(type: string): TranslatableKind | null {
@@ -315,40 +314,16 @@ export async function loadCoverageItemsPage(request: Request) {
         title: i.parentGid && ownerType ? titleOf(i.parentGid, ownerType) : titleOf(i.resourceGid, i.resourceType),
         reference: numericId(i.resourceGid),
         // Images and custom fields are edited on their owner's page.
-        href: i.parentGid ? editorPathFor(i.parentGid, locale) : isImageCoverageType(i.resourceType) ? null : editorPathFor(i.resourceGid, locale, i.resourceType),
+        href: itemEditorPath(i, locale),
         counts: i.counts,
         fields: i.fields,
         lastAttemptFailed: i.lastAttemptFailed,
         failureCode: i.failureCode,
         syncedAt: i.syncedAt,
-        smart: work
-          ? work.translating.has(i.resourceGid)
-            ? ("translating" as const)
-            : work.excluded.has(i.resourceGid) || Boolean(i.parentGid && work.excluded.has(i.parentGid))
-              ? ("excluded" as const)
-              : smart!.nextCheck && waitsForSmartCheck(smart!, { locale, resourceType: i.resourceType, fields: i.fields })
-                ? ("waiting" as const)
-                : null
-          : null,
+        smart: work ? smartBadge(work, smart!, { ...i, locale }) : null,
       };
     }),
     smartNextCheck: smart?.nextCheck ?? null,
     smartZone: smart?.zone ?? null,
   };
-}
-
-/** The listed items the smart schedule translates now or leaves alone (one query each, for the page shown). */
-async function smartWorkOn(shopId: string, locale: string, items: ReadonlyArray<{ resourceGid: string; parentGid: string | null }>) {
-  const gids = items.map((i) => i.resourceGid);
-  const owners = items.flatMap((i) => (i.parentGid ? [i.parentGid] : []));
-  return withTenant(shopId, async (tx) => {
-    const [active, excluded] = await Promise.all([
-      tx.translationJobItem.findMany({
-        where: { shopId, resourceGid: { in: gids }, status: { in: ["PENDING", "RUNNING"] }, job: { targetLocale: locale, status: { in: [...ACTIVE_JOBS] } } },
-        select: { resourceGid: true },
-      }),
-      excludedAmong(tx, shopId, [...gids, ...owners]),
-    ]);
-    return { translating: new Set(active.map((a) => a.resourceGid)), excluded };
-  });
 }

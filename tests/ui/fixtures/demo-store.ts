@@ -131,7 +131,7 @@ export function buildDemoStore(): FakeShopifyStore {
     "body_html",
     "<p>A light, <strong>waterproof</strong> shell with taped seams and a hood that fits over a helmet.</p><ul><li>2 chest pockets</li><li>Packs into its own pocket</li><li>New: recycled fabric</li></ul>",
   );
-  store.addImage(P(1), "Grey merino wool sweater, front view");
+  store.addImage(P(1), "Grey merino wool sweater, front view", "sweater");
   store.addMetafield(P(1), { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Wash at 30 °C on a wool cycle. Dry flat." });
   return store;
 }

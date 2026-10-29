@@ -82,7 +82,7 @@ Coverage stores field keys, states, counts, resource ids, a 32-character hash of
 
 ## 9. Measured performance (local, PostgreSQL 16)
 
-50,000 products × 3 languages (150,000 items): dashboard summary 170 ms, a page of items behind a number ≤ 11 ms (20 pages deep), item update after a save 22 ms (`tests/performance/coverage-scale.perf.test.ts`). Not yet measured against a real Shopify store: scan duration depends on Shopify's rate limits (one page of 50 items, or 10 custom field owners, per request).
+50,000 products × 3 languages (150,000 items): dashboard summary 170 ms, a page of items behind a number ≤ 11 ms (20 pages deep), item update after a save 22 ms; a language's page 193 ms (mostly the summary), its previews 67 ms, a category's list ≤ 156 ms per page (20 pages deep; counts per state and the page each compute every item's state) (`tests/performance/coverage-scale.perf.test.ts`). Not yet measured against a real Shopify store: scan duration depends on Shopify's rate limits (one page of 50 items, or 10 custom field owners, per request).
 
 ## 10. What each type gets
 

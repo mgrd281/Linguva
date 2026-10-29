@@ -63,7 +63,7 @@ export const UI_SHOPS = {
       store.updateSource("gid://shopify/Product/2", "body_html", "<p>Very warm <b>jacket</b> number 2.</p>");
       store.setField("gid://shopify/Product/1", "meta_title", "Warm winter jacket for cold days");
       store.setField("gid://shopify/Product/1", "meta_description", "A warm jacket with two pockets, made for long winter walks in the cold.");
-      store.addImage("gid://shopify/Product/1", "Red wool jacket, front view");
+      store.addImage("gid://shopify/Product/1", "Red wool jacket, front view", "jacket");
       store.addMetafield("gid://shopify/Product/1", { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Hand wash cold." });
       // Lists and links, translated item by item.
       store.addMetafield("gid://shopify/Product/14", {

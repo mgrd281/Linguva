@@ -11,6 +11,7 @@
 | Database, Redis | **Real**: PostgreSQL with row-level security (runtime role), Redis |
 | Polaris web components | **Real**: `polaris.js` from Shopify's CDN |
 | Shopify Admin API, token exchange, Partner API | **Simulated** by `tests/ui/server/preload.ts`, loaded with `node --import` into the test server only. Any other request to a Shopify host is refused, so the tests can't reach a real store |
+| Store images (Shopify's CDN) | **Simulated**: the simulated stores' images point at the test server, whose preload answers `/__fixtures/img/<name>.svg` with small drawings (`tests/support/fixture-images.ts`; `addImage(parent, alt, picture)` picks one) before the app sees the request. The app adds Shopify's `width` parameter as it does for real images |
 | App Bridge | **Stub** (`tests/ui/helpers.ts`). The real script redirects to the admin outside its iframe. Like App Bridge, the stub adds the session token to the app's requests and records `shopify.loading()` and toasts. The navigation (`s-app-nav`), which the admin renders outside the app, is hidden |
 | AI | Mock provider (`[de] …` pseudo-translations) |
 

@@ -5,7 +5,7 @@
  */
 import type { CoverageSegmentStatus, Prisma, PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
-import { withTenant } from "../tenancy/with-tenant";
+import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import { loadCounts, type CountRow } from "./items";
 import { FIELD_STATES, type FieldGroup, type FieldState } from "../../lib/coverage-rules";
 
@@ -52,19 +52,71 @@ export interface CoverageSummary {
 /** Types with an SEO title of their own (search engine listing). */
 const SEO_TYPES = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE"];
 
+/** What a page needs to say how far a language is: the kept counts and the scan state, without reading items. */
+export type CoverageState = Pick<CoverageSummary, "report" | "lastCompleted" | "segments" | "counts">;
+
+/** The newest report, the newest completed one and every segment (read in the caller's transaction). */
+async function readScanState(tx: TenantTx, shopId: string): Promise<Omit<CoverageState, "counts">> {
+  const [report, completed, segments] = await Promise.all([
+    tx.coverageReport.findFirst({ where: { shopId }, orderBy: { createdAt: "desc" } }),
+    tx.coverageReport.findFirst({
+      where: { shopId, status: "COMPLETED" },
+      orderBy: { createdAt: "desc" },
+      select: { finishedAt: true, updatedAt: true, segments: true },
+    }),
+    tx.coverageSegment.findMany({ where: { shopId } }),
+  ]);
+  // Segments are "TYPE|locale". A report under way marks every segment it reaches with its id
+  // (being read, skipped, no access): one of its segments with another id is still ahead of it.
+  // Decided from the rows alone, so a page saved between the two reads can't make them disagree.
+  const running = report?.status === "QUEUED" || report?.status === "RUNNING" ? report : null;
+  const covers = new Set(running?.segments ?? []);
+  return {
+    report: report
+      ? {
+          id: report.id,
+          status: report.status,
+          errorCode: report.errorCode,
+          segments: report.segments,
+          segmentIndex: report.segmentIndex,
+          resourcesScanned: report.resourcesScanned,
+          createdAt: report.createdAt.toISOString(),
+          updatedAt: report.updatedAt.toISOString(),
+          startedAt: report.startedAt?.toISOString() ?? null,
+          finishedAt: report.finishedAt?.toISOString() ?? null,
+        }
+      : null,
+    lastCompleted: completed
+      ? {
+          finishedAt: (completed.finishedAt ?? completed.updatedAt).toISOString(),
+          // Segments are "TYPE|locale".
+          locales: [...new Set(completed.segments.map((s) => s.slice(s.indexOf("|") + 1)))],
+        }
+      : null,
+    segments: segments.map((s) => ({
+      locale: s.locale,
+      resourceType: s.resourceType,
+      status: s.status,
+      scannedAt: s.scannedAt?.toISOString() ?? null,
+      errorCode: s.errorCode,
+      ahead: running !== null && s.reportId !== running.id && covers.has(`${s.resourceType}|${s.locale}`),
+    })),
+  };
+}
+
+/** The counts and the scan state, without the summary's reads over every item (a category's list). */
+export async function loadCoverageState(shopId: string, client: PrismaClient = defaultClient): Promise<CoverageState> {
+  const counts = await loadCounts(shopId, client);
+  return { ...(await withTenant(shopId, (tx) => readScanState(tx, shopId), client)), counts };
+}
+
 export async function loadCoverageSummary(shopId: string, client: PrismaClient = defaultClient): Promise<CoverageSummary> {
   const counts = await loadCounts(shopId, client);
   return withTenant(
     shopId,
     async (tx) => {
-      const [report, completed, segments, items, issues, dupes, missingTitle] = await Promise.all([
-        tx.coverageReport.findFirst({ where: { shopId }, orderBy: { createdAt: "desc" } }),
-        tx.coverageReport.findFirst({
-          where: { shopId, status: "COMPLETED" },
-          orderBy: { createdAt: "desc" },
-          select: { finishedAt: true, updatedAt: true, segments: true },
-        }),
-        tx.coverageSegment.findMany({ where: { shopId } }),
+      const [state, items, issues, dupes, missingTitle] = await Promise.all([
+        readScanState(tx, shopId),
         tx.coverageItem.groupBy({ by: ["locale", "resourceType"], where: { shopId, NOT: { sourceKeys: { isEmpty: true } } }, _count: { _all: true } }),
         tx.coverageItem.groupBy({ by: ["locale", "resourceType"], where: { shopId, seoIssues: { gt: 0 } }, _sum: { seoIssues: true } }),
         tx.$queryRaw<Array<{ locale: string; count: number }>>`
@@ -79,41 +131,8 @@ export async function loadCoverageSummary(shopId: string, client: PrismaClient =
             AND NOT ('meta_title' = ANY("sourceKeys"))
           GROUP BY "locale", "resourceType"`,
       ]);
-      // Segments are "TYPE|locale". A report under way marks every segment it reaches with its id
-      // (being read, skipped, no access): one of its segments with another id is still ahead of it.
-      // Decided from the rows alone, so a page saved between the two reads can't make them disagree.
-      const running = report?.status === "QUEUED" || report?.status === "RUNNING" ? report : null;
-      const covers = new Set(running?.segments ?? []);
       return {
-        report: report
-          ? {
-              id: report.id,
-              status: report.status,
-              errorCode: report.errorCode,
-              segments: report.segments,
-              segmentIndex: report.segmentIndex,
-              resourcesScanned: report.resourcesScanned,
-              createdAt: report.createdAt.toISOString(),
-              updatedAt: report.updatedAt.toISOString(),
-              startedAt: report.startedAt?.toISOString() ?? null,
-              finishedAt: report.finishedAt?.toISOString() ?? null,
-            }
-          : null,
-        lastCompleted: completed
-          ? {
-              finishedAt: (completed.finishedAt ?? completed.updatedAt).toISOString(),
-              // Segments are "TYPE|locale".
-              locales: [...new Set(completed.segments.map((s) => s.slice(s.indexOf("|") + 1)))],
-            }
-          : null,
-        segments: segments.map((s) => ({
-          locale: s.locale,
-          resourceType: s.resourceType,
-          status: s.status,
-          scannedAt: s.scannedAt?.toISOString() ?? null,
-          errorCode: s.errorCode,
-          ahead: running !== null && s.reportId !== running.id && covers.has(`${s.resourceType}|${s.locale}`),
-        })),
+        ...state,
         counts,
         items: items.map((i) => ({ locale: i.locale, resourceType: i.resourceType, count: i._count._all })),
         seo: {

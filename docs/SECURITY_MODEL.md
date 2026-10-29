@@ -200,6 +200,15 @@ Development-only tools (not shipped, not run on user input) also have advisories
 
 **Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 
+## 5o. Database change review: automatic translation pauses at limits (migration 20261101090000)
+
+| Change | Review |
+|---|---|
+| `ShopSettings.autoPausedUntil TIMESTAMPTZ NULL`, `ShopSettings.autoPauseReason TEXT NULL` (CHECK: an upper-case code of at most 40 characters) | A time and a reason code (for example `DAILY_LIMIT`), no merchant content. Written by the worker when an automatic job stops at a limit or for a missing provider, and cleared when the merchant turns automatic translation on or off. Read by the webhook handler, the automatic check and the periodic sweep, which do nothing until the time passes. |
+| `TranslationJobItem.startedAt TIMESTAMPTZ NULL` | When the item's last run started reading the resource. A time only; written when a run claims the item, read by the automatic check to tell whether a change came after that read. |
+| Row-level security | Unchanged: `ShopSettings` and `TranslationJobItem` keep `ENABLE` + `FORCE ROW LEVEL SECURITY` and their `tenant_isolation` policies; the worker writes them per shop through `withTenant`. No new grants, functions or roles. |
+| Cross-tenant risk | None added: the pause is set from the stopped job's own shop (the queue payload's tenant, re-read under RLS). |
+
 ## 5n. Hosted stages: staging isolation and release guard (no database change)
 
 Hosting on Railway (docs/RAILWAY_STAGING.md) adds configuration guards, one public route and a container image; no migration.

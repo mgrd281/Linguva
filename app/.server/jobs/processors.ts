@@ -22,7 +22,7 @@ import { recordMemoryUse } from "../memory/translation-memory";
 import { pendingDraftDigests, saveDrafts } from "../review/drafts";
 import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
-import { finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
+import { AUTO_REQUESTED_BY, finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
 import { listAttachedResources } from "../shopify/attached-resources";
@@ -244,7 +244,7 @@ export async function processItem(
           status: { in: ["PENDING", "RUNNING", "FAILED"] },
           ...(queueJobId ? { OR: [{ queueJobId: null }, { queueJobId }] } : {}),
         },
-        data: { status: "RUNNING", attempts: { increment: 1 } },
+        data: { status: "RUNNING", attempts: { increment: 1 }, startedAt: new Date() },
       }),
     deps.prisma,
   );
@@ -255,6 +255,11 @@ export async function processItem(
   // Plans can change while a job runs: check before every item.
   const billing = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
   if (billing && !billing.entitlements.bulk) throw new JobStopError("PLAN_REQUIRED");
+  // An item queued by automatic translation runs only while it is on for this language.
+  if (job.requestedBy === AUTO_REQUESTED_BY && (!settings.autoTranslateNew || !settings.autoTranslateLocales.includes(job.targetLocale))) {
+    await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: "AUTO_OFF" }, deps.prisma);
+    return { status: "CANCELLED", errorCode: "AUTO_OFF" };
+  }
   const monthlyLimit = billing?.configured ? billing.entitlements.monthlyChars : deps.monthlyLimit;
   const dailyLimit = deps.dailyLimit === undefined ? undefined : Math.min(deps.dailyLimit, monthlyLimit);
 
@@ -263,6 +268,11 @@ export async function processItem(
   if (!resource) {
     await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "RESOURCE_GONE" }, deps.prisma);
     return { status: "SKIPPED", errorCode: "RESOURCE_GONE" };
+  }
+  // The language became the store's primary language: there is nothing to translate into.
+  if (sourceLocaleOf(resource) === job.targetLocale) {
+    await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "SAME_LANGUAGE" }, deps.prisma);
+    return { status: "SKIPPED", errorCode: "SAME_LANGUAGE" };
   }
   // Publishing needs automatic publishing on the job AND still on in the
   // shop's settings: switching back to review stops running jobs publishing.

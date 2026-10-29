@@ -166,7 +166,8 @@ export async function getBillingStatus(
 
 /**
  * The target languages a plan covers: the first N additional languages in
- * the order Shopify lists them (the merchant can reorder languages in Shopify).
+ * the order the app lists them (`summarizeLocales`: by language name), so
+ * the editor, bulk jobs, coverage and automatic translation pick the same ones.
  */
 export function allowedTargetLocales(entitlements: Entitlements, targets: readonly string[]): string[] {
   return targets.slice(0, entitlements.maxTargetLocales);

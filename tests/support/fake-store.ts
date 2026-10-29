@@ -220,7 +220,7 @@ export class FakeShopifyStore {
     }
     const recent = /^LinguvaRecent(Products|Collections|Pages|Articles|Blogs)$/.exec(name);
     if (recent) {
-      // Newest first by updatedAt (blogs: filtered by updated_at:>'…' instead).
+      // Filtered by updated_at:>'…'; oldest first by updatedAt unless reversed (blogs: Shopify's default order).
       const resourceType = { Products: "PRODUCT", Collections: "COLLECTION", Pages: "PAGE", Articles: "ARTICLE", Blogs: "BLOG" }[recent[1]!]!;
       if (this.deniedTypes.has(resourceType)) {
         if (this.throwsLikeLibrary) {
@@ -230,8 +230,11 @@ export class FakeShopifyStore {
       }
       const changedAt = (gid: string) => this.updatedAt.get(gid) ?? new Date("2026-01-01T00:00:00Z");
       let all = [...this.products.keys()].filter((gid) => gid.startsWith(`gid://shopify/${gidTypeOf(resourceType)}/`));
-      // Blogs keep Shopify's default order (by id); the others are sorted by UPDATED_AT, reversed.
-      if (resourceType !== "BLOG") all.sort((a, b) => changedAt(b).getTime() - changedAt(a).getTime());
+      // Blogs keep Shopify's default order (by id); the others are sorted by UPDATED_AT.
+      if (resourceType !== "BLOG") {
+        all.sort((a, b) => changedAt(a).getTime() - changedAt(b).getTime());
+        if (vars.reverse) all.reverse();
+      }
       const after = /^updated_at:>'(.+)'$/.exec(String(vars.query ?? ""));
       if (after) all = all.filter((gid) => changedAt(gid) > new Date(after[1]!));
       const start = vars.after ? Number(vars.after) : 0;

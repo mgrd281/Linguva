@@ -22,7 +22,9 @@ import type { PrismaClient } from "@prisma/client";
 import type { JobsOptions } from "bullmq";
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
-import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { allowedTargetLocales } from "../billing/subscription";
+import type { CurrentLocales } from "../locales/current-locales";
+import { autoTranslatePaused, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { withTenant } from "../tenancy/with-tenant";
 import type { SweptType } from "../shopify/recent-changes";
 import { ACTIVE_JOB_STATUSES, AUTO_REQUESTED_BY } from "./bulk-jobs";
@@ -37,7 +39,17 @@ export interface AutoTranslatePayload {
   shopId: string;
   resourceGid: string;
   resourceType: SweptType;
+  /** When Shopify last updated the resource (webhook or sweep): a check finished after it has nothing new. */
+  changedAt?: string;
 }
+
+/**
+ * A check that started at least this long after a change has read it.
+ * Shopify's `updated_at` has whole seconds and clocks differ a little, so a
+ * change just before a check started is checked again; that re-read costs no
+ * AI allowance when nothing turns out missing or outdated.
+ */
+const READ_AFTER_CHANGE_MS = 5_000;
 
 /** The queue's add (a BullMQ Queue in production). */
 export interface AutoQueue {
@@ -73,20 +85,25 @@ function topicKey(topic: string) {
 export async function queueAutoTranslate(
   input: { shopDomain: string; topic: string; payload: unknown },
   deps: { queue: AutoQueue | null; prisma?: PrismaClient },
-): Promise<"queued" | "off" | "ignored"> {
+): Promise<"queued" | "off" | "paused" | "ignored"> {
   const resourceType = TOPICS[topicKey(input.topic)];
-  const gid = (input.payload as { admin_graphql_api_id?: unknown } | null)?.admin_graphql_api_id;
+  const body = input.payload as { admin_graphql_api_id?: unknown; updated_at?: unknown } | null;
+  const gid = body?.admin_graphql_api_id;
   if (!resourceType || typeof gid !== "string" || !AUTO_GID[resourceType].test(gid)) return "ignored";
+  const updated = typeof body?.updated_at === "string" ? new Date(body.updated_at) : null;
+  const changedAt = updated && !Number.isNaN(updated.getTime()) ? updated.toISOString() : undefined;
   const client = deps.prisma ?? defaultClient;
   const shop = await client.shop.findUnique({ where: { shopDomain: input.shopDomain } });
   if (!shop || shop.status !== "ACTIVE") return "ignored";
   const settings = await getShopSettings(shop.id, client);
   if (!settings.autoTranslateNew || settings.autoTranslateLocales.length === 0) return "off";
+  // A limit or the missing provider stopped it: the periodic check picks the change up afterwards.
+  if (autoTranslatePaused(settings)) return "paused";
   if (!deps.queue) {
     logger.warn({ shopId: shop.id }, "automatic translation on, but background jobs aren't configured");
     return "ignored";
   }
-  await enqueueAutoCheck(deps.queue, { shopId: shop.id, resourceGid: gid, resourceType });
+  await enqueueAutoCheck(deps.queue, { shopId: shop.id, resourceGid: gid, resourceType, ...(changedAt ? { changedAt } : {}) });
   return "queued";
 }
 
@@ -118,18 +135,27 @@ export async function createAutoItems(
   client: PrismaClient,
   payload: AutoTranslatePayload,
   billingFor?: JobDependencies["billingFor"],
+  /** The shop's languages now (currentShopLocales); without it the stored choice is trusted. */
+  localesFor?: (shopId: string) => Promise<CurrentLocales>,
 ): Promise<{ itemIds: string[]; reused: string[]; busy: boolean }> {
   const none = { itemIds: [], reused: [], busy: false };
   const shop = await client.shop.findUnique({ where: { id: payload.shopId } });
   if (!shop || shop.status !== "ACTIVE") return none;
   // Settings, consent and plan are read again: they may have changed since the webhook.
   const settings = await getShopSettings(payload.shopId, client);
-  if (!settings.autoTranslateNew || !hasCurrentAiConsent(settings)) return none;
+  if (!settings.autoTranslateNew || !hasCurrentAiConsent(settings) || autoTranslatePaused(settings)) return none;
   const billing = billingFor ? await billingFor(payload.shopId) : null;
   if (billing?.configured && !billing.entitlements.bulk) return none;
 
+  // Only languages the shop still has (not one that became primary), within the plan's limit.
+  let locales = settings.autoTranslateLocales;
+  if (localesFor) {
+    const current = await localesFor(payload.shopId);
+    const allowed = billing ? allowedTargetLocales(billing.entitlements, current.targets) : current.targets;
+    locales = locales.filter((l) => allowed.includes(l));
+  }
   const result = { itemIds: [] as string[], reused: [] as string[], busy: false };
-  for (const locale of settings.autoTranslateLocales) {
+  for (const locale of locales) {
     const item = await autoItem(client, payload, locale);
     if (item === "busy") result.busy = true;
     else if (item?.reused) result.reused.push(item.itemId);
@@ -179,8 +205,12 @@ async function autoItem(client: PrismaClient, payload: AutoTranslatePayload, loc
       }
       const existing = await tx.translationJobItem.findFirst({ where: { jobId: job.id, resourceGid: payload.resourceGid } });
       if (existing) {
-        // Still waiting or running: it reads the latest text when it runs.
-        if (existing.status === "PENDING" || existing.status === "RUNNING") return null;
+        // Still waiting: it reads the latest text when it runs.
+        if (existing.status === "PENDING") return null;
+        // Running: it may have read the text before this change, so check again a little later.
+        if (existing.status === "RUNNING") return "busy" as const;
+        // Its last run read the resource after this change (the webhook's check, then the sweep): nothing new.
+        if (payload.changedAt && existing.startedAt && existing.startedAt.getTime() >= Date.parse(payload.changedAt) + READ_AFTER_CHANGE_MS) return null;
         await tx.translationJobItem.update({ where: { id: existing.id }, data: { status: "PENDING", errorCode: null, finishedAt: null } });
         // The item is counted again when it finishes.
         await tx.translationJob.update({

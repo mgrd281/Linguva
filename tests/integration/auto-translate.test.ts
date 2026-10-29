@@ -20,11 +20,13 @@ import {
   type AutoTranslatePayload,
 } from "../../app/.server/jobs/auto-translate";
 import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
-import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
-import { createQueues, createWorkers, type Queues, type WorkerSet } from "../../app/.server/jobs/queues";
+import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
+import { createItemProcessor, createQueues, createWorkers, type Queues, type WorkerSet } from "../../app/.server/jobs/queues";
+import type { CurrentLocales } from "../../app/.server/locales/current-locales";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { searchPendingDrafts } from "../../app/.server/review/drafts";
-import { setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
+import { getShopSettings, setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
+import { reserveUsage } from "../../app/.server/usage/usage-ledger";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
@@ -154,10 +156,12 @@ describe("automatic translation webhooks", () => {
     expect(await queueAutoTranslate(webhook("PRODUCTS_UPDATE", P1), { queue: q.queue, prisma: app })).toBe("queued");
     expect(await queueAutoTranslate(webhook("products/create", P1), { queue: q.queue, prisma: app })).toBe("queued");
     expect(await queueAutoTranslate(webhook("COLLECTIONS_UPDATE", C1), { queue: q.queue, prisma: app })).toBe("queued");
+    // The webhook's update time comes along: a check that already read a later state skips it.
+    const changedAt = "2026-10-27T10:00:00.000Z";
     expect(q.added.map((a) => a.data)).toEqual([
-      { shopId: shop.id, resourceGid: P1, resourceType: "PRODUCT" },
-      { shopId: shop.id, resourceGid: P1, resourceType: "PRODUCT" },
-      { shopId: shop.id, resourceGid: C1, resourceType: "COLLECTION" },
+      { shopId: shop.id, resourceGid: P1, resourceType: "PRODUCT", changedAt },
+      { shopId: shop.id, resourceGid: P1, resourceType: "PRODUCT", changedAt },
+      { shopId: shop.id, resourceGid: C1, resourceType: "COLLECTION", changedAt },
     ]);
     // Saves in a row share one queue job id (BullMQ ignores the repeats until it ran).
     expect(q.added[0]!.opts.jobId).toBe(q.added[1]!.opts.jobId);
@@ -291,6 +295,100 @@ describe("automatic translation checks", () => {
     // Row-level security: B's tenant sees none of A's automatic jobs or items.
     const seen = await withTenant(b.shop.id, async (tx) => [await tx.translationJob.count(), await tx.translationJobItem.count()], app);
     expect(seen).toEqual([0, 0]);
+  });
+});
+
+describe("automatic translation follows the shop and its plan", () => {
+  const P = { resourceGid: P1, resourceType: "PRODUCT" as const };
+  const languages = (targets: string[], primary = "en"): (() => Promise<CurrentLocales>) => async () => ({ primary, targets, fresh: true });
+  const plan = (maxTargetLocales: number) => async () => ({ configured: true, entitlements: { ...PLANS.business, maxTargetLocales } });
+  const itemLocales = async (shopId: string, ids: string[]) =>
+    (await withTenant(shopId, (tx) => tx.translationJobItem.findMany({ where: { id: { in: ids } }, include: { job: true } }), app)).map((i) => i.job.targetLocale).sort();
+
+  it("translates only the languages the plan includes, in Shopify's order", async () => {
+    const { shop } = await setup();
+    await setAutoTranslate({ shopId: shop.id, enabled: true, locales: ["de", "fr", "it"], allowedLocales: ["de", "fr", "it"], actorId: "7" }, app);
+    const result = await createAutoItems(app, { shopId: shop.id, ...P }, plan(1), languages(["de", "fr", "it"]));
+    expect(await itemLocales(shop.id, result.itemIds)).toEqual(["de"]);
+  });
+
+  it("skips a language deleted in Shopify or now the primary one", async () => {
+    const { shop } = await setup();
+    await setAutoTranslate({ shopId: shop.id, enabled: true, locales: ["de", "fr"], allowedLocales: ["de", "fr"], actorId: "7" }, app);
+    // German became the primary language: only French is still a target.
+    const result = await createAutoItems(app, { shopId: shop.id, ...P }, plan(20), languages(["fr"], "de"));
+    expect(await itemLocales(shop.id, result.itemIds)).toEqual(["fr"]);
+  });
+
+  it("never translates into the resource's own language", async () => {
+    const { shop, deps } = await setup();
+    const { job } = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "en", requestedBy: "1", idempotencyKey: "same" }, app);
+    const page = await runDiscoveryPage(deps, { shopId: shop.id, jobId: job.id });
+    expect(await processItem(deps, { shopId: shop.id, itemId: page.itemIds[0]! }, 1)).toEqual({ status: "SKIPPED", errorCode: "SAME_LANGUAGE" });
+  });
+
+  it("stops what is already queued when it is turned off, or for a language no longer chosen", async () => {
+    const { shop, deps } = await setup();
+    await setAutoTranslate({ shopId: shop.id, enabled: true, locales: ["de", "fr"], allowedLocales: ["de", "fr"], actorId: "7" }, app);
+    const queued = await createAutoItems(app, { shopId: shop.id, ...P });
+    expect(queued.itemIds).toHaveLength(2);
+    // French dropped: its job stops, German's stays.
+    await setAutoTranslate({ shopId: shop.id, enabled: true, locales: ["de"], allowedLocales: ["de", "fr"], actorId: "7" }, app);
+    const byLocale = Object.fromEntries((await jobs(shop.id)).map((j) => [j.targetLocale, j]));
+    expect(byLocale.fr).toMatchObject({ status: "CANCELLED", errorCode: "AUTO_OFF" });
+    expect(byLocale.de!.status).toBe("RUNNING");
+    // Off: nothing queued is translated any more.
+    await setAutoTranslate({ shopId: shop.id, enabled: false, locales: [], allowedLocales: ["de"], actorId: "7" }, app);
+    for (const itemId of queued.itemIds) expect(await processItem(deps, { shopId: shop.id, itemId }, 1)).toMatchObject({ status: "CANCELLED", errorCode: "AUTO_OFF" });
+    expect(await searchPendingDrafts(shop.id, {}, app)).toMatchObject({ drafts: [] });
+  });
+
+  it("pauses at a limit instead of failing a job for every change, and continues when turned on again", async () => {
+    const { shop, store, deps } = await setup();
+    const first = await createAutoItems(app, { shopId: shop.id, ...P });
+    // The month's allowance is all but used up (the item alone would fit): the queue's job-stop path.
+    await reserveUsage({ shopId: shop.id, key: "earlier-work", chars: 990, limit: 1000, provider: "mock" }, app);
+    const processor = createItemProcessor({ ...deps, monthlyLimit: 1000 });
+    const job = { data: { shopId: shop.id, itemId: first.itemIds[0]! }, id: first.itemIds[0]!, attemptsMade: 0, opts: { attempts: 5 } };
+    await expect(processor(job as never)).rejects.toThrow("QUOTA_EXCEEDED");
+    const settings = await getShopSettings(shop.id, app);
+    expect(settings.autoPauseReason).toBe("QUOTA_EXCEEDED");
+    expect(settings.autoPausedUntil!.getTime()).toBeGreaterThan(Date.now());
+    // Further changes create no new failing job meanwhile.
+    store.updateSource(P1, "title", "Changed while paused");
+    const q = fakeQueue();
+    expect(await queueAutoTranslate(webhook("PRODUCTS_UPDATE", P1), { queue: q.queue, prisma: app })).toBe("paused");
+    expect(await createAutoItems(app, { shopId: shop.id, ...P })).toEqual({ itemIds: [], reused: [], busy: false });
+    expect(await jobs(shop.id)).toHaveLength(1);
+    // A new choice by the merchant lifts the pause.
+    await setAutoTranslate({ shopId: shop.id, enabled: true, locales: ["de"], allowedLocales: ["de"], actorId: "7" }, app);
+    expect((await getShopSettings(shop.id, app)).autoPausedUntil).toBeNull();
+  });
+
+  it("doesn't check a change again that a later check already read", async () => {
+    const { shop, deps } = await setup();
+    const before = new Date(Date.now() - 60_000).toISOString();
+    await check(deps, { shopId: shop.id, ...P, changedAt: before });
+    // The sweep reports the same change after the webhook's check ran: nothing to do, the outcome stays.
+    expect(await createAutoItems(app, { shopId: shop.id, ...P, changedAt: before })).toEqual({ itemIds: [], reused: [], busy: false });
+    const [item] = await withTenant(shop.id, (tx) => tx.translationJobItem.findMany(), app);
+    expect(item).toMatchObject({ status: "SUCCEEDED", errorCode: "DRAFTED" });
+    // Shopify's times have whole seconds and clocks differ a little: a change just before the check started is checked again.
+    const close = new Date(item!.startedAt!.getTime() - 1_000).toISOString();
+    await check(deps, { shopId: shop.id, ...P, changedAt: close });
+    const [again] = await withTenant(shop.id, (tx) => tx.translationJobItem.findMany(), app);
+    expect(again!.startedAt!.getTime()).toBeGreaterThan(item!.startedAt!.getTime());
+    // A later change is checked again.
+    const later = new Date(Date.now() + 60_000).toISOString();
+    expect((await createAutoItems(app, { shopId: shop.id, ...P, changedAt: later })).reused).toHaveLength(1);
+  });
+
+  it("isn't taken over by a narrower bulk job, which would drop its other fields", async () => {
+    const { shop } = await setup();
+    await createAutoItems(app, { shopId: shop.id, ...P });
+    const [auto] = await jobs(shop.id);
+    const seo = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: "seo-only", fieldScope: "SEO" }, app);
+    expect(seo).toMatchObject({ created: false, job: { id: auto!.id, fieldScope: "ALL", requestedBy: AUTO_REQUESTED_BY } });
   });
 });
 

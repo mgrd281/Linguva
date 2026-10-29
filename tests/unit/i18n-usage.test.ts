@@ -48,6 +48,7 @@ const DYNAMIC = [
   "markets.countries.state.",
   "markets.countries.reason.",
   "overview.countries.status.",
+  "settings.auto.paused.",
 ];
 
 describe("interface texts", () => {

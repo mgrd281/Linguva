@@ -8,9 +8,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getConfig } from "../.server/lib/config";
 import { ProgressBar } from "../components/ProgressBar";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
+import { allowedTargetLocales } from "../.server/billing/subscription";
 import { getTranslationProvider } from "../.server/providers";
 import {
   AI_STORE_CONTEXT_MAX,
+  autoTranslatePaused,
   ConfirmationRequiredError,
   formalityFor,
   getShopSettings,
@@ -27,6 +29,7 @@ import { requireShop } from "../.server/shopify/require-shop";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 import { useResultToast } from "../components/app-bridge";
 import { useI18n } from "../i18n/react";
+import { languageList } from "../lib/name-lists";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -56,6 +59,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Needs AI, background jobs and a plan that includes bulk translation.
       available: getTranslationProvider() !== null && getQueues() !== null,
       planIncludes: billing.entitlements.bulk,
+      // The plan's languages: the first ones in the order listed here, as for bulk jobs and the editor.
+      allowedLocales: allowedTargetLocales(
+        billing.entitlements,
+        locales.locales.filter((l) => !l.primary).map((l) => l.locale),
+      ),
+      paused: autoTranslatePaused(settings)
+        ? { until: settings.autoPausedUntil!.toISOString(), reason: settings.autoPauseReason ?? "PROVIDER" }
+        : null,
     },
     aiAvailable: getTranslationProvider() !== null,
     period: periodKey(),
@@ -97,20 +108,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   if (intent === "auto") {
     const enabled = form.get("enabled") === "true";
+    const billing = await shopBilling(admin, shop);
     if (enabled) {
       if (!hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "CONSENT_REQUIRED" };
-      if (!(await shopBilling(admin, shop)).entitlements.bulk) return { ok: false, error: "PLAN_BULK" };
+      if (!billing.entitlements.bulk) return { ok: false, error: "PLAN_BULK" };
     }
     const locales = await fetchAndSyncShopLocales(admin, shop.id);
-    const result = await setAutoTranslate({
-      shopId: shop.id,
-      enabled,
-      // s-choice-list submits its selected values as one comma-separated value.
-      locales: form.getAll("locale").flatMap((v) => String(v).split(",")).map((v) => v.trim()).filter(Boolean),
-      allowedLocales: locales.locales.filter((l) => !l.primary).map((l) => l.locale),
-      actorId,
-    });
-    if (enabled && !result.enabled) return { ok: false, error: "NO_LANGUAGE" };
+    const targets = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
+    const allowed = allowedTargetLocales(billing.entitlements, targets);
+    // s-choice-list submits its selected values as one comma-separated value.
+    const chosen = form.getAll("locale").flatMap((v) => String(v).split(",")).map((v) => v.trim()).filter(Boolean);
+    // Checked before anything is written: a refused choice changes nothing.
+    if (enabled) {
+      if (chosen.some((l) => targets.includes(l) && !allowed.includes(l))) return { ok: false, error: "PLAN_LANGUAGE" };
+      if (!chosen.some((l) => allowed.includes(l))) return { ok: false, error: "NO_LANGUAGE" };
+    }
+    const result = await setAutoTranslate({ shopId: shop.id, enabled, locales: chosen, allowedLocales: allowed, actorId });
     return { ok: true, saved: "auto" as const, autoEnabled: result.enabled };
   }
   if (intent === "reuse-memory") {
@@ -126,7 +139,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Settings() {
   const data = useLoaderData<typeof loader>();
-  const { t, date, month, number, language } = useI18n();
+  const i18n = useI18n();
+  const { t, date, dateTime, month, number, language } = i18n;
   const fetcher = useFetcher<typeof action>();
   const modeFetcher = useFetcher<typeof action>();
   const memoryFetcher = useFetcher<typeof action>();
@@ -143,6 +157,14 @@ export default function Settings() {
         : t("settings.auto.savedOff")
       : null,
   );
+  // The languages automatic translation really translates into: chosen and in the plan.
+  const autoLanguages = data.style.languages
+    .filter((l) => data.auto.locales.includes(l.locale) && data.auto.allowedLocales.includes(l.locale))
+    .map((l) => language(l.locale, l.name))
+    .sort((a, b) => a.localeCompare(b));
+  const outsidePlan = data.style.languages
+    .filter((l) => !data.auto.allowedLocales.includes(l.locale))
+    .map((l) => language(l.locale, l.name));
   const busy = fetcher.state !== "idle";
   const percent = data.limit ? Math.min(100, Math.round((data.used / data.limit) * 100)) : 0;
 
@@ -275,40 +297,84 @@ export default function Settings() {
           {data.auto.enabled ? (
             <s-paragraph>
               <s-badge tone="success">{t("common.state.on")}</s-badge>{" "}
-              {data.style.languages
-                .filter((l) => data.auto.locales.includes(l.locale))
-                .map((l) => language(l.locale, l.name))
-                .join(", ")}
+              {autoLanguages.length ? languageList(i18n, autoLanguages, Infinity) : t("settings.auto.noActiveLanguages")}
             </s-paragraph>
           ) : (
             <s-paragraph>
               <s-badge>{t("common.state.off")}</s-badge> {t("settings.auto.offBody")}
             </s-paragraph>
           )}
-          {!data.auto.available ? (
-            <s-banner tone="info" heading={t("settings.auto.unavailable.heading")}>
-              <s-paragraph>{t("settings.auto.unavailable.body")}</s-paragraph>
-            </s-banner>
-          ) : !data.auto.planIncludes ? (
-            <s-banner tone="info" heading={t("settings.auto.planHeading")}>
+          {data.auto.enabled && data.auto.paused ? (
+            <s-banner tone="warning" heading={t("settings.auto.paused.heading")}>
               <s-paragraph>
-                <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
+                {t(
+                  `settings.auto.paused.${["DAILY_LIMIT", "PLATFORM_LIMIT", "QUOTA_EXCEEDED"].includes(data.auto.paused.reason) ? data.auto.paused.reason : "PROVIDER"}` as "settings.auto.paused.PROVIDER",
+                  { date: dateTime(data.auto.paused.until) },
+                )}
               </s-paragraph>
             </s-banner>
+          ) : null}
+          {/* Consent withdrawn while it was on: nothing is sent until it is allowed again. */}
+          {data.auto.enabled && !data.consent ? (
+            <s-banner tone="warning" heading={t("settings.auto.waitingConsent.heading")}>
+              <s-paragraph>{t("settings.auto.waitingConsent.body")}</s-paragraph>
+            </s-banner>
+          ) : null}
+          {!data.auto.available || !data.auto.planIncludes ? (
+            <s-stack direction="block" gap="small">
+              {!data.auto.available ? (
+                <s-banner tone="info" heading={t("settings.auto.unavailable.heading")}>
+                  <s-paragraph>{t("settings.auto.unavailable.body")}</s-paragraph>
+                </s-banner>
+              ) : (
+                <s-banner tone="info" heading={t("settings.auto.planHeading")}>
+                  <s-paragraph>
+                    <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
+                  </s-paragraph>
+                </s-banner>
+              )}
+              {/* Still on from before (a downgrade, AI removed): it can always be turned off. */}
+              {data.auto.enabled ? (
+                <s-stack direction="inline">
+                  <s-button type="button" onClick={() => autoFetcher.submit({ intent: "auto", enabled: "false" }, { method: "post" })}>
+                    {t("settings.auto.turnOff")}
+                  </s-button>
+                </s-stack>
+              ) : null}
+            </s-stack>
           ) : data.style.languages.length === 0 ? (
-            <s-paragraph>{t("settings.auto.noLanguages")}</s-paragraph>
+            <s-stack direction="block" gap="small">
+              <s-paragraph>{t("settings.auto.noLanguages")}</s-paragraph>
+              {/* Every language removed in Shopify while it was on: it can still be turned off. */}
+              {data.auto.enabled ? (
+                <s-stack direction="inline">
+                  <s-button type="button" onClick={() => autoFetcher.submit({ intent: "auto", enabled: "false" }, { method: "post" })}>
+                    {t("settings.auto.turnOff")}
+                  </s-button>
+                </s-stack>
+              ) : null}
+            </s-stack>
           ) : (
             <autoFetcher.Form method="post">
               <input type="hidden" name="intent" value="auto" />
               <input type="hidden" name="enabled" value="true" />
               <s-stack direction="block" gap="small">
                 <s-choice-list name="locale" label={t("settings.auto.languages")} multiple>
-                  {data.style.languages.map((l) => (
-                    <s-choice key={l.locale} value={l.locale} defaultSelected={data.auto.locales.includes(l.locale)}>
-                      {language(l.locale, l.name)}
-                    </s-choice>
-                  ))}
+                  {data.style.languages
+                    .filter((l) => data.auto.allowedLocales.includes(l.locale))
+                    .map((l) => (
+                      <s-choice key={l.locale} value={l.locale} defaultSelected={data.auto.locales.includes(l.locale)}>
+                        {language(l.locale, l.name)}
+                      </s-choice>
+                    ))}
                 </s-choice-list>
+                {/* Named in a sentence rather than as disabled choices: those can't be focused, and their text is faint. */}
+                {outsidePlan.length ? (
+                  <s-paragraph>
+                    {t("settings.auto.outsidePlan", { languages: languageList(i18n, outsidePlan, Infinity), count: outsidePlan.length })}{" "}
+                    <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
+                  </s-paragraph>
+                ) : null}
                 <s-stack direction="inline" gap="small">
                   <s-button type="submit" variant="secondary" {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
                     {data.auto.enabled ? t("settings.auto.saveLanguages") : t("settings.auto.turnOn")}
@@ -332,6 +398,12 @@ export default function Settings() {
           ) : autoError === "NO_LANGUAGE" ? (
             <s-banner tone="critical" heading={t("settings.auto.noLanguage.heading")}>
               <s-paragraph>{t("settings.auto.noLanguage.body")}</s-paragraph>
+            </s-banner>
+          ) : autoError === "PLAN_LANGUAGE" ? (
+            <s-banner tone="info" heading={t("settings.auto.planLanguage.heading")}>
+              <s-paragraph>
+                {t("settings.auto.planLanguage.body")} <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
+              </s-paragraph>
             </s-banner>
           ) : autoError === "PLAN_BULK" ? (
             <s-banner tone="info" heading={t("settings.auto.planHeading")}>

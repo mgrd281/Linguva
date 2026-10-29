@@ -238,6 +238,31 @@ export const UI_SHOPS = {
     slowTranslationsMs: 20_000,
     build: () => new FakeShopifyStore(3),
   },
+  autoLimits: {
+    // Starter (three additional languages) with four: Spanish is outside the plan.
+    // Automatic translation was turned on for German and Spanish, and today's AI allowance ran out.
+    domain: "ui-autolimits.myshopify.com",
+    gid: "gid://shopify/Shop/91015",
+    name: "Limits Store",
+    locales: [
+      en,
+      de,
+      { locale: "fr", name: "French", primary: false, published: true },
+      { locale: "it", name: "Italian", primary: false, published: true },
+      { locale: "es", name: "Spanish", primary: false, published: true },
+    ],
+    plan: "starter",
+    build: () => new FakeShopifyStore(3),
+  },
+  downgraded: {
+    // Automatic translation turned on under a paid plan; the store is now on Free (no bulk translation).
+    domain: "ui-downgraded.myshopify.com",
+    gid: "gid://shopify/Shop/91016",
+    name: "Downgraded Store",
+    locales: [en, de],
+    plan: null,
+    build: () => new FakeShopifyStore(3),
+  },
   fresh: {
     // Never seeded: installs through token exchange in the test.
     domain: "ui-fresh.myshopify.com",

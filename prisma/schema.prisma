@@ -104,6 +104,10 @@ model ShopSettings {
   /// Content changed after this time is checked by the periodic sweep
   /// (pages, blog posts, blogs, missed webhooks). Set when turned on.
   autoSweptAt               DateTime?       @db.Timestamptz(3)
+  /// A limit or the provider blocked automatic translation: no checks until
+  /// then (the sweep keeps its position, so the changes follow afterwards).
+  autoPausedUntil           DateTime?       @db.Timestamptz(3)
+  autoPauseReason           String?
   protectManualEdits        Boolean         @default(true)
   reviewRequired            Boolean         @default(true)
   aiDataProcessingConsentAt DateTime?       @db.Timestamptz(3)
@@ -369,6 +373,8 @@ model TranslationJobItem {
   charsBilled      Int                      @default(0)
   createdAt        DateTime                 @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime                 @updatedAt @db.Timestamptz(3)
+  /// When the last run started reading the resource (automatic checks compare it with the change).
+  startedAt        DateTime?                @db.Timestamptz(3)
   finishedAt       DateTime?                @db.Timestamptz(3)
 
   shop Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)

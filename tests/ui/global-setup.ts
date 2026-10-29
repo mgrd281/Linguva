@@ -37,7 +37,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "autoLimits", "downgraded"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -61,6 +61,15 @@ export default async function globalSetup() {
     await saveDrafts(ids.demo!, demoDrafts(), app);
     await upsertTerms(ids.demo!, DEMO_GLOSSARY, {}, app);
     await setAutoTranslate({ shopId: ids.demo!, enabled: true, locales: ["de", "fr"], allowedLocales: ["de", "fr", "es"], actorId: null }, app);
+
+    // Automatic translation on for a language outside the plan, paused at today's allowance.
+    await setAutoTranslate({ shopId: ids.autoLimits!, enabled: true, locales: ["de", "es"], allowedLocales: ["de", "es"], actorId: null }, app);
+    await owner.$transaction([
+      owner.$executeRaw`SELECT set_config('app.shop_id', ${ids.autoLimits!}, true)`,
+      owner.$executeRaw`UPDATE "ShopSettings" SET "autoPausedUntil" = now() + interval '6 hours', "autoPauseReason" = 'DAILY_LIMIT' WHERE "shopId" = ${ids.autoLimits!}::uuid`,
+    ]);
+    // Turned on under a paid plan, before the store moved to Free.
+    await setAutoTranslate({ shopId: ids.downgraded!, enabled: true, locales: ["de"], allowedLocales: ["de"], actorId: null }, app);
 
     // A German job with custom fields: a list of links waits on Review.
     const fieldsStore = UI_SHOPS.customFields.build();

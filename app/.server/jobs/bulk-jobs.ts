@@ -92,9 +92,11 @@ export async function createBulkJob(
       });
       const fieldScope = input.fieldScope ?? "ALL";
       const includeAttached = Boolean(input.includeAttached) && fieldScope === "ALL" && ATTACHED_BULK_TYPES.has(input.resourceType);
-      if (active?.requestedBy === AUTO_REQUESTED_BY) {
+      if (active?.requestedBy === AUTO_REQUESTED_BY && fieldScope === "ALL") {
         // An automatic job holds a few changed resources: it becomes the
-        // requested bulk job (its items stay, discovery adds the rest).
+        // requested bulk job (its items stay, discovery adds the rest). Not
+        // for a narrower job (search listings only): its pending items would
+        // lose their other fields; the automatic job finishes first.
         const job = await tx.translationJob.update({
           where: { id: active.id },
           data: {

@@ -13,7 +13,9 @@ import { z } from "zod";
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import { withTenant } from "../tenancy/with-tenant";
-import { finishItem, stopJob } from "./bulk-jobs";
+import { AUTO_REQUESTED_BY, finishItem, stopJob } from "./bulk-jobs";
+import { autoPauseAfterStop } from "../settings/shop-settings";
+import { currentShopLocales } from "../locales/current-locales";
 import { classifyError } from "./errors";
 import {
   processItem,
@@ -72,6 +74,7 @@ const autoPayloadSchema = z
     shopId: uuid,
     resourceGid: z.string().max(100),
     resourceType: z.enum(SWEPT_TYPES),
+    changedAt: z.string().datetime().optional(),
   })
   .strict()
   .refine((p) => AUTO_GID[p.resourceType].test(p.resourceGid));
@@ -253,12 +256,14 @@ export function createItemProcessor(deps: JobDependencies) {
         case "job-stop": {
           const item = await withTenant(
             payload.shopId,
-            (tx) => tx.translationJobItem.findFirst({ where: { id: payload.itemId, shopId: payload.shopId } }),
+            (tx) => tx.translationJobItem.findFirst({ where: { id: payload.itemId, shopId: payload.shopId }, include: { job: { select: { requestedBy: true } } } }),
             deps.prisma,
           );
           if (item) {
             await stopJob(payload.shopId, item.jobId, decision.code, deps.prisma);
             await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: decision.code }, deps.prisma);
+            // Automatic translation waits for the limit or the provider instead of failing again on every change.
+            if (item.job.requestedBy === AUTO_REQUESTED_BY) await autoPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma);
           }
           log.warn({ code: decision.code }, "job stopped");
           throw new UnrecoverableError(decision.code);
@@ -359,13 +364,19 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
  * Automatic translation check of one changed resource: creates its items
  * (one per chosen language) and puts them on the item queue.
  */
+/** The Admin API client of a shop, by its id (Shop is the tenant root, outside row-level security). */
+async function adminForShop(deps: JobDependencies, shopId: string) {
+  const shop = await deps.prisma.shop.findUniqueOrThrow({ where: { id: shopId }, select: { shopDomain: true } });
+  return deps.adminFor(shop.shopDomain);
+}
+
 export function createAutoProcessor(deps: JobDependencies, queues: Queues) {
   return async (job: Job<AutoTranslatePayload>, token?: string) => {
     const parsed = autoPayloadSchema.safeParse(job.data);
     if (!parsed.success) throw new UnrecoverableError("INVALID_PAYLOAD");
     const payload = parsed.data;
     const log = logger.child({ queue: QUEUE_NAMES.auto, queueJobId: job.id, shopId: payload.shopId });
-    const result = await createAutoItems(deps.prisma, payload, deps.billingFor);
+    const result = await createAutoItems(deps.prisma, payload, deps.billingFor, (shopId) => currentShopLocales(shopId, () => adminForShop(deps, shopId), deps.prisma));
     await enqueueItems(queues, payload.shopId, result.itemIds, undefined, deps.prisma);
     // A finished item checked again needs a fresh queue job id.
     await enqueueItems(queues, payload.shopId, result.reused, `auto${Date.now()}`, deps.prisma);

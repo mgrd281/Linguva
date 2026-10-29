@@ -14,52 +14,86 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { logger } from "../lib/logger";
-import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { shopKey } from "../queue/redis";
+import { autoTranslatePaused, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { changedSince, SWEPT_TYPES } from "../shopify/recent-changes";
 import { AccessDeniedError } from "../shopify/translations-api";
 import { withTenant } from "../tenancy/with-tenant";
 import { AUTO_GID, enqueueAutoCheck, type AutoQueue } from "./auto-translate";
+import { RateLimitedError } from "./errors";
 import type { JobDependencies } from "./processors";
 
 export const AUTO_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
-/** Changes per type and shop one run queues; more are left to "Translate all" (logged). */
+/**
+ * Changes per type and shop one run queues. More are read oldest first and
+ * the position moves only up to the last one queued, so the next run goes on
+ * from there: nothing is dropped (catching up after a large import takes a
+ * few runs).
+ */
 export const MAX_CHANGES_PER_TYPE = 500;
-/** Reads a little before the last run, so a save during it isn't missed (the queue merges repeats). */
+/**
+ * A run that got everything moves the position to a little before its start,
+ * so the next run reads that time again (clock differences to Shopify; the
+ * queue merges repeats). A run that stopped at the limit moves it exactly to
+ * the last second it got completely.
+ */
 const OVERLAP_MS = 2 * 60 * 1000;
+/** Admin API cost of one listing request, taken from the shop's Shopify budget like every other request. */
+const LIST_COST = 10;
 
 export async function sweepChangedContent(
-  deps: Pick<JobDependencies, "prisma" | "adminFor" | "billingFor">,
+  deps: Pick<JobDependencies, "prisma" | "adminFor" | "billingFor"> & Partial<Pick<JobDependencies, "shopifyLimiter" | "keyPrefix">>,
   queue: AutoQueue,
   now = new Date(),
+  maxPerType = MAX_CHANGES_PER_TYPE,
 ) {
-  const summary = { shops: 0, queued: 0, failed: 0 };
+  const summary = { shops: 0, queued: 0, failed: 0, catchingUp: 0 };
   const shops = await deps.prisma.shop.findMany({ where: { status: "ACTIVE" }, select: { id: true, shopDomain: true } });
   for (const shop of shops) {
-    const settings = await getShopSettings(shop.id, deps.prisma);
-    if (!settings.autoTranslateNew || !settings.autoTranslateLocales.length || !hasCurrentAiConsent(settings)) continue;
-    const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
-    if (billing?.configured && !billing.entitlements.bulk) continue;
-    // Turned on before this check existed: start from now.
-    const since = new Date((settings.autoSweptAt ?? now).getTime() - OVERLAP_MS);
+    // Each shop on its own: a failure (also reading its settings or plan) leaves its position
+    // unchanged for the next run and never stops the shops after it.
     try {
+      const settings = await getShopSettings(shop.id, deps.prisma);
+      if (!settings.autoTranslateNew || !settings.autoTranslateLocales.length || !hasCurrentAiConsent(settings)) continue;
+      // Waiting for a limit or the provider: the position stays, so the changes follow afterwards.
+      if (autoTranslatePaused(settings, now)) continue;
+      const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
+      if (billing?.configured && !billing.entitlements.bulk) continue;
+      // Turned on before this check existed: start from now.
+      const position = settings.autoSweptAt ?? new Date(now.getTime() - OVERLAP_MS);
+      const since = position;
+      const beforeRequest = async () => {
+        if (!deps.shopifyLimiter || !deps.keyPrefix) return;
+        const wait = await deps.shopifyLimiter.take(shopKey(deps.keyPrefix, shop.id, "rl", "shopify"), LIST_COST);
+        if (wait > 0) throw new RateLimitedError(wait);
+      };
       const admin = await deps.adminFor(shop.shopDomain);
+      // Up to when every change was queued; a capped type holds it back.
+      const everything = new Date(now.getTime() - OVERLAP_MS);
+      let complete = everything;
       for (const resourceType of SWEPT_TYPES) {
         let found: Awaited<ReturnType<typeof changedSince>>;
         try {
-          found = await changedSince(admin, resourceType, since, MAX_CHANGES_PER_TYPE);
+          found = await changedSince(admin, resourceType, since, maxPerType, beforeRequest);
         } catch (error) {
           // A scope the shop didn't grant: nothing of that type can be translated anyway.
           if (error instanceof AccessDeniedError) continue;
           throw error;
         }
-        if (found.capped) logger.warn({ shopId: shop.id, resourceType, max: MAX_CHANGES_PER_TYPE }, "more changes than one automatic check covers");
-        for (const resourceGid of found.ids) {
-          if (!AUTO_GID[resourceType].test(resourceGid)) continue;
-          await enqueueAutoCheck(queue, { shopId: shop.id, resourceGid, resourceType });
+        for (const change of found.changes) {
+          if (!AUTO_GID[resourceType].test(change.id)) continue;
+          await enqueueAutoCheck(queue, { shopId: shop.id, resourceGid: change.id, resourceType, changedAt: new Date(change.updatedAt).toISOString() });
           summary.queued++;
         }
+        if (found.capped) {
+          // Blogs can't be read in update order: their position stays until a run gets them all.
+          const through = found.through ?? position;
+          if (through < complete) complete = through;
+          logger.info({ shopId: shop.id, resourceType, max: maxPerType }, "automatic translation catching up: more changes follow in the next run");
+        }
       }
-      await advance(shop.id, now, deps.prisma);
+      if (complete < everything) summary.catchingUp++;
+      await advance(shop.id, complete, deps.prisma);
       summary.shops++;
     } catch (error) {
       summary.failed++;

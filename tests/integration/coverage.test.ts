@@ -300,6 +300,8 @@ describe("coverage scan", () => {
     // It reads the products, then skips the collections too: it won't come back to them.
     const collections = await runCoveragePage(deps, { shopId: shop.id, reportId: second.report.id, segmentIndex: 0, cursor: null });
     expect(collections).toMatchObject({ segmentIndex: 1 });
+    // At its position but not started yet: still ahead.
+    expect((await page()).de).toEqual({ type: "COLLECTION", message: "coverage.next.unreadScanning" });
     expect(await skipCoverageSegment(app, collections!, "SHOPIFY_QUERY_ERROR")).toMatchObject({ segmentIndex: 2 });
     expect((await page()).de).toEqual({ type: "COLLECTION", message: "coverage.next.unreadAfterScan" });
   });

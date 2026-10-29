@@ -75,13 +75,20 @@ export { tally };
  * The first type the last scan didn't finish reading, among the given
  * languages: skipped after errors (FAILED), or left half read by a scan that
  * stopped (SCANNING while none is under way). Types the figures don't count
- * aside. The selected language first, then the languages' and types' order.
+ * aside. While a scan runs, one that needs another scan comes before one it
+ * reads again by itself (ahead); then the selected language, then the
+ * languages' and types' order.
  */
-export function unreadSegment<S extends { locale: string; resourceType: string; status: string }>(
+export function unreadSegment<S extends { locale: string; resourceType: string; status: string; ahead?: boolean }>(
   segments: readonly S[],
   options: { locales: readonly string[]; types: readonly string[]; selected: string | null; scanning: boolean },
 ): S | null {
-  const rank = (s: S) => [s.locale === options.selected ? 0 : 1, options.locales.indexOf(s.locale), options.types.indexOf(s.resourceType)];
+  const rank = (s: S) => [
+    options.scanning && s.ahead ? 1 : 0,
+    s.locale === options.selected ? 0 : 1,
+    options.locales.indexOf(s.locale),
+    options.types.indexOf(s.resourceType),
+  ];
   const unread = segments.filter(
     (s) =>
       options.locales.includes(s.locale) &&
@@ -91,7 +98,7 @@ export function unreadSegment<S extends { locale: string; resourceType: string; 
   return (
     unread.sort((a, b) => {
       const [x, y] = [rank(a), rank(b)];
-      return x[0]! - y[0]! || x[1]! - y[1]! || x[2]! - y[2]!;
+      return x[0]! - y[0]! || x[1]! - y[1]! || x[2]! - y[2]! || x[3]! - y[3]!;
     })[0] ?? null
   );
 }

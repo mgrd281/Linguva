@@ -15,7 +15,7 @@ import { CoverageMeter, itemsHref, percentLabel } from "../components/Coverage";
 import { CountryStatusBar } from "../components/CountryStatus";
 import type { MissingReason } from "../lib/country-coverage";
 import type { I18n, MessageKey } from "../i18n/i18n";
-import { gapEntry, gapLine, languageList, upperFirst } from "../lib/name-lists";
+import { gapEntry, gapLine, inParentheses, languageList, upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -293,7 +293,7 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
     return (
       <s-section heading={t("overview.languages.heading")}>
         <s-stack direction="block" gap="base">
-          <s-paragraph>{t("overview.languages.onlyPrimary", { primary: primaryName(data, i18n) })}</s-paragraph>
+          <s-paragraph>{t("overview.languages.onlyPrimary", { primary: inParentheses(primaryName(data, i18n)) })}</s-paragraph>
           {manage}
         </s-stack>
       </s-section>

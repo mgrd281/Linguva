@@ -79,9 +79,11 @@ export async function loadCoverageSummary(shopId: string, client: PrismaClient =
             AND NOT ('meta_title' = ANY("sourceKeys"))
           GROUP BY "locale", "resourceType"`,
       ]);
-      // Segments are "TYPE|locale"; a report under way reads from its position on.
-      const active = report?.status === "QUEUED" || report?.status === "RUNNING";
-      const ahead = new Set(report && active ? report.segments.slice(report.segmentIndex) : []);
+      // Segments are "TYPE|locale". A report under way marks every segment it reaches with its id
+      // (being read, skipped, no access): one of its segments with another id is still ahead of it.
+      // Decided from the rows alone, so a page saved between the two reads can't make them disagree.
+      const running = report?.status === "QUEUED" || report?.status === "RUNNING" ? report : null;
+      const covers = new Set(running?.segments ?? []);
       return {
         report: report
           ? {
@@ -110,7 +112,7 @@ export async function loadCoverageSummary(shopId: string, client: PrismaClient =
           status: s.status,
           scannedAt: s.scannedAt?.toISOString() ?? null,
           errorCode: s.errorCode,
-          ahead: ahead.has(`${s.resourceType}|${s.locale}`),
+          ahead: running !== null && s.reportId !== running.id && covers.has(`${s.resourceType}|${s.locale}`),
         })),
         counts,
         items: items.map((i) => ({ locale: i.locale, resourceType: i.resourceType, count: i._count._all })),

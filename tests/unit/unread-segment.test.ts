@@ -29,6 +29,13 @@ describe("unread segment", () => {
     expect(unreadSegment(rows, options)).toMatchObject({ locale: "fr", resourceType: "PRODUCT" });
     expect(unreadSegment(rows, { ...options, selected: "ar" })).toMatchObject({ locale: "ar" });
   });
+
+  it("while a scan runs, names what needs another scan before what it reads again by itself", () => {
+    const rows = [{ ...seg("de", "PRODUCT", "FAILED"), ahead: true }, { ...seg("ar", "COLLECTION", "FAILED"), ahead: false }];
+    expect(unreadSegment(rows, { ...options, selected: "de", scanning: true })).toMatchObject({ locale: "ar" });
+    // Without a scan under way, nothing reads it by itself: the usual order.
+    expect(unreadSegment(rows, { ...options, selected: "de" })).toMatchObject({ locale: "de" });
+  });
 });
 
 describe("what the page says about it", () => {
@@ -52,5 +59,7 @@ describe("what the page says about it", () => {
       "Nicht vollständig gelesen: Seiten (Französisch). Die Zahlen sind vielleicht älter oder unvollständig; prüfe den Shop erneut, sobald die laufende Prüfung fertig ist.",
     );
     expect(translator("fr").t("coverage.next.unreadScanning", { type: "Pages", language: "allemand" })).toMatch(/ait relu ces contenus\.$/);
+    expect(translator("en").t("coverage.next.unreadScanning", { type: "Pages", language: "German" })).toMatch(/The figures may .* has read this content again\.$/);
+    expect(translator("es").t("coverage.next.unreadScanning", { type: "Páginas", language: "alemán" })).toMatch(/vuelva a leer este contenido\.$/);
   });
 });

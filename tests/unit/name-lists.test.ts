@@ -29,6 +29,12 @@ describe("languages inside a sentence", () => {
     expect(inParentheses("Französisch")).toBe("Französisch");
   });
 
+  it("puts several languages with unread content after a colon in French", () => {
+    const partial = (names: string[]) => fr.t("overview.languages.partial", { languages: languageList(fr, names), count: names.length });
+    expect(partial(["tchèque"])).toMatch(/^Lors de la dernière mesure, certains contenus en tchèque n'ont pas pu être lus ;/);
+    expect(partial(["tchèque", "polonais"])).toMatch(/n'ont pas pu être lus dans ces langues : tchèque et polonais ;/);
+  });
+
   it("capitalises only where a name starts a link or label", () => {
     expect(fr.language("da")).toBe("danois");
     expect(upperFirst(fr.language("da"))).toBe("Danois");

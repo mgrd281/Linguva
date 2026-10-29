@@ -1,6 +1,6 @@
 # Security Model
 
-Status: **Phase 0 — proposal and threat model.** Controls listed here aren't implemented yet. Each control becomes "implemented" only when its test in `tests/security/` passes.
+Status: the controls below are implemented and tested where a test is named (`tests/security/`, `tests/integration/`, `tests/unit/`), unless marked **planned**. The admin control center (§6) is planned only.
 
 ## 1. Trust boundaries
 
@@ -10,27 +10,31 @@ Status: **Phase 0 — proposal and threat model.** Controls listed here aren't i
 | Shopify webhooks | Only after HMAC | `authenticate.webhook` (HMAC-SHA256 over the raw body). Invalid → 401 |
 | Shopify Admin API responses | Yes (TLS) | — |
 | AI provider responses | **No** | Treated as untrusted text: sanitized and validated before storage or publication |
-| Admin control center users | After auth + MFA + RBAC | Separate session, separate DB role |
+| Operators | Yes (owner database role) | Command-line tools (`pnpm ops:complimentary`, `pnpm preflight`) run on the operator's machine with `MIGRATION_DATABASE_URL`; no admin UI (planned, §6) |
 | Workers | Yes, but re-authorize | Re-check Shop status + entitlement from the DB on every job |
+
+Every loader and action of an app or webhook route authenticates itself, through `requireShop`, `webhookAction` (the HMAC check) or a reviewed delegate that calls `requireShop`: React Router runs a child route's action without its parent's loader, so the layout's check never covers an action. `tests/security/structure.test.ts` parses each route module with the TypeScript compiler and requires the call in each exported loader and action itself (not elsewhere in the file, not in a nested function, imported from where it is defined); only the reviewed public routes (landing page, login form, health checks) are exempt.
 
 ## 2. Multi-tenant controls
 
-1. **Shop resolution:** `shopId` comes only from `session.shop` (verified token) → `Shop.myshopifyDomain` lookup. Request params never select a tenant.
-2. **Scoped queries:** all tenant data access goes through repositories that take a `TenantContext`. Raw `prisma.*` on tenant tables is banned by an ESLint `no-restricted-syntax` rule outside `server/tenancy`.
+1. **Shop resolution:** `shopId` comes only from `session.shop` (verified token) → `Shop.shopDomain` lookup. Request params never select a tenant.
+2. **Scoped queries:** tenant data is read and written inside `withTenant(shopId, fn)` (`app/.server/tenancy/with-tenant.ts`): one transaction with `app.shop_id` set transaction-locally, refusing anything but a UUID. There is no lint rule; row-level security is the enforcement: a query outside `withTenant` has no tenant and returns nothing, and a write fails (`tests/integration/rls.test.ts`, run as the runtime role).
 3. **RLS:** fail-closed policies (see DATABASE_SCHEMA.md §3).
-4. **Object references:** every ID from the client (job ID, entry ID) is looked up with `WHERE id = $1 AND shopId = ctx.shopId`. A miss returns 404, never 403, so existence doesn't leak.
-5. **Caches/queues:** Redis keys are prefixed `lv:{env}:shop:{shopId}:…`. Job payloads carry `shopId`, and the worker asserts that it matches the loaded rows.
+4. **Object references:** every ID from the client (job, draft, revision) is looked up with `WHERE id = $1 AND shopId = <verified shop>`, under RLS. Another shop's id finds nothing: a page answers 404 (never 403, so existence doesn't leak), an action leaves it alone.
+5. **Caches/queues:** per-shop Redis keys (rate limits) are built by `shopKey()` as `lv:{env}:shop:{shopId}:…`, which refuses anything but a shop UUID. Queue jobs (BullMQ, prefix `lv:{env}`) carry ids only, checked by strict schemas (`INVALID_PAYLOAD` otherwise); the worker reloads every row with `where {id, shopId}` inside `withTenant(payload.shopId)` and takes the shop's domain from the database (`tests/security/bulk-jobs-security.test.ts`).
 6. **Translation memory:** every query filters `shopId` first. There is no global memory. Cross-merchant sharing is out of scope unless explicitly authorized later.
-7. **Rate limits:** per-shop limits on mutating endpoints (Redis sliding window). Per-shop job concurrency caps.
+7. **Rate limits:** per staff member and per shop for AI translation and memory suggestions (Redis token buckets, §5a). Background jobs share a per-shop Shopify Admin API budget (token bucket, `SHOPIFY_JOB_BUCKET_SIZE`); worker concurrency (`WORKER_CONCURRENCY`) is global, not per shop. Other actions have no request limit: they need the shop's session token and cost no provider money.
 
 ## 3. Secrets and tokens
 
-- Secrets come from environment variables only (Railway variables). `.env` is git-ignored, and `.env.example` contains names only.
-- Config is validated at boot (zod). The app refuses to start if a secret is missing or `TOKEN_ENCRYPTION_KEY` is weak.
-- Shopify access/refresh tokens are encrypted with AES-256-GCM, with a random 96-bit IV and a key ID (`kid`) prefix for rotation. Decryption happens only in `server/shopify/client.ts`.
-- Rotation: support two active keys (`TOKEN_ENCRYPTION_KEYS=kid1:…,kid2:…`). A re-encryption job migrates data to the newest key.
-- AI provider keys never reach the browser or the database.
-- CI runs secret scanning (gitleaks) and `pnpm audit` / Dependabot.
+- Secrets come from environment variables only (Railway variables). `.env` is git-ignored, and `.env.example` contains names and local development defaults only.
+- Config is validated at boot (zod). The app refuses to start if a secret is missing or `TOKEN_ENCRYPTION_KEYS` is weak; error messages name the variable, never its value (`tests/unit/config.test.ts`). `DEEPL_API_URL` must be an https address: the API key and merchant text go to it.
+- Shopify access/refresh tokens are encrypted with AES-256-GCM, with a random 96-bit IV and a key ID (`kid`) prefix for rotation. Encryption and decryption happen in `EncryptedSessionStorage` (`app/.server/shopify/encrypted-session-storage.ts`), which wraps the Prisma session storage.
+- Rotation: `TOKEN_ENCRYPTION_KEYS=kid1:…,kid2:…`; the first key encrypts, all of them decrypt. There is no re-encryption job: a session is encrypted with the active key whenever the library stores it (token exchange, refresh of an expiring offline token). One whose key was removed is treated as missing, and the next app open exchanges a new token.
+- AI provider keys never reach the browser or the database. The internal AI cost rate reaches only the owner's complimentary stores (the Plan page's estimate; `tests/integration/complimentary.test.ts`).
+- The owner role's database URL (`MIGRATION_DATABASE_URL`) is used by the pre-deploy migration and the operator tools only; the web process drops it from its environment at start (§5n).
+- Logs: pino with a redaction list for credentials (access, refresh, id and session tokens, keys, secrets, passwords, `Authorization` and cookie headers in both spellings, Shopify's access token header), at the top level and up to two levels down (`tests/unit/logger.test.ts`). Unexpected request errors are logged with name and code; the message only for the app's own errors, whose messages are built from codes and numbers (a Prisma validation error repeats the failed call's arguments, merchant text included).
+- CI runs secret scanning (gitleaks) and `pnpm audit --prod --audit-level high` (§5f). There is no Dependabot configuration.
 
 ## 4. Output safety (XSS)
 
@@ -42,9 +46,13 @@ Status: **Phase 0 — proposal and threat model.** Controls listed here aren't i
 ## 5. Webhooks
 
 - HMAC is verified before parsing. Invalid → 401 (required by Shopify for compliance topics).
-- Duplicate suppression: `unique(webhookId)` on `WebhookEvent`. A duplicate gets a 200 and is not processed again.
-- Replay window: reject events whose `X-Shopify-Triggered-At` is older than a configurable window (the default must allow Shopify retries, which can take up to ~48h — **ASSUMPTION, verify**). Duplicates are still caught by the ID check.
-- Handlers only persist and enqueue. They respond within a few hundred ms.
+- Duplicate suppression: `unique(webhookId)` on `WebhookEvent`. A duplicate gets a 200 and is not processed again; a failed or stale attempt may be retried.
+- **Replays: no time window.** The HMAC covers only the body; neither `X-Shopify-Webhook-Id` nor `X-Shopify-Triggered-At` is signed, so a captured delivery can be sent again with a new id, and a window on an unsigned header couldn't stop that. The handlers' own state checks are the control:
+  - `shop/redact` erases only a shop that is uninstalled (or already gone), deciding under a lock on its `Shop` row. For an installed shop it deletes nothing, records the request as `RECEIVED` with resolution `SHOP_ACTIVE_NOT_DELETED` and logs a warning with the webhook and shop ids, for the operator to check: a replay, or an uninstall that never reached the app (then the data has to be erased by hand). Tested by replaying a genuine delivery's body and HMAC with a new id after a reinstall (`tests/integration/webhooks.test.ts`).
+  - A replayed `customers/*` request only records the evidence again; a content webhook only queues a check of the shop's own resource.
+  - A replayed `app/uninstalled` marks the shop uninstalled, deletes its sessions and cancels its running jobs; the next app open reinstalls it through token exchange. An interruption (cancelled jobs have to be started again), no data is deleted.
+  - Residual: a replayed `shop/redact` while the shop is uninstalled erases its data before Shopify's own (48 hours after the uninstall), so a reinstall within those hours starts empty.
+- Handlers only persist and enqueue, and respond within a few hundred ms; `shop/redact` deletes the shop's rows in the request itself (one transaction, longer for a large shop).
 - The delivery log keeps finished entries for 14 days (`purgeWebhookLog`, run by the worker's sweep): long enough for Shopify's retries, short enough that frequent product webhooks don't grow the table. It stores topic, shop domain and a payload hash, never the payload.
 
 ## 5c. RLS and indexes: the fuzzy search function
@@ -63,16 +71,19 @@ PostgreSQL evaluates a query's own conditions after the RLS policy unless they a
 `checkDatabasePosture()` (`app/.server/lib/db-posture.ts`) runs once per process in the web app, the webhook handlers and the worker, as the runtime role. It checks that the runtime role:
 
 - isn't superuser, BYPASSRLS or CREATEROLE;
-- owns no tables;
-- can't create objects in `public`.
+- owns no tables or views;
+- can't create objects in `public`;
+- has no TRUNCATE (it ignores row-level security), REFERENCES or TRIGGER privilege on any table (`RUNTIME_TABLE_PRIVILEGE`);
+- can read no view that runs with its owner's rights (`VIEW_NOT_SECURITY_INVOKER`: the owner isn't forced on `TranslationMemory` and `TranslationDraft`) and no materialized view (`RUNTIME_READS_MATERIALIZED_VIEW`: it holds what its owner read). Views of an extension (for example `pg_stat_statements`) aren't counted.
 
 It also checks that:
 
-- every tenant table has RLS with exactly the reviewed policy, and FORCE (except `TranslationMemory`);
-- the only SECURITY DEFINER function is the reviewed one, with the required `search_path`, a non-privileged owner and no PUBLIC execute;
+- every tenant table, plain or partitioned, has RLS with exactly the reviewed policy, and FORCE (except `TranslationMemory` and `TranslationDraft`, §5c and §5l); a table in `public` without `shopId` must be one of the reviewed global tables;
+- every tenant table has a foreign key on `shopId` to `Shop` with `ON DELETE CASCADE`, so `shop/redact` erases it (`TENANT_TABLE_WITHOUT_SHOP_CASCADE`);
+- the only SECURITY DEFINER functions are the two reviewed ones (§5c, §5l), each unchanged since its review (definition hash), with the required `search_path`, a non-privileged owner and no PUBLIC execute;
 - the runtime role can't write `ComplimentaryAccess` (free access is granted only by the operator tool with the owner role, BILLING_DESIGN §4).
 
-In production a failed check makes requests and jobs fail instead of running with weakened isolation.
+In production a failed check makes requests and jobs fail instead of running with weakened isolation. `tests/security/postgres-privileges.test.ts` makes each mistake as the owner (a TRUNCATE grant, a view over `TranslationMemory` that shows every shop's rows, a partitioned tenant table without RLS, a tenant table without the cascade), asserts the finding and undoes it.
 
 Grants of the runtime role on global tables: `AuditLog` insert only (no read); `Shop`, `Session`, `WebhookEvent`, `PrivacyRequest` read/write (they hold no merchant content; access is by verified shop domain or webhook id).
 
@@ -198,7 +209,13 @@ Development-only tools (not shipped, not run on user input) also have advisories
 | Index `TranslationJobItem(shopId, resourceGid)` | No data change; finds the latest attempt per resource for "failed" |
 | Writers | The scan worker, the webhook refresh (resource GID from the verified webhook, checked against `Product`/`Collection`), and the app after its own writes; all through `withTenant`, serialised per shop and language by an advisory lock so count changes never interleave |
 
-**Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
+**Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists, and that statements able to weaken isolation appear only in the migrations reviewed for them:
+
+- `SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, `ALTER POLICY`, `CREATE`/`ALTER ROLE`;
+- grants beyond reading and writing rows: `GRANT ALL`, `TRUNCATE`, `REFERENCES` or `TRIGGER` in a grant, a role granted to a role, grants `ON ALL TABLES IN SCHEMA`, `WITH GRANT OPTION`, `ALTER DEFAULT PRIVILEGES`;
+- views and materialized views, partitioned and inheriting tables (`PARTITION BY`/`OF`, `ATTACH PARTITION`, `INHERITS`), `CREATE SCHEMA` and `OWNER TO`.
+
+A policy may only be created together with its table (a second permissive policy on an existing table would be ORed with `tenant_isolation`; only `20261027090700`, which added the first policies, does otherwise), and a new table with `shopId` (`IF NOT EXISTS` included) gets RLS, FORCE and exactly the `tenant_isolation` policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 
 ## 5o. Database change review: automatic translation pauses at limits (migration 20261101090000)
 
@@ -217,12 +234,15 @@ Hosting on Railway (docs/RAILWAY_STAGING.md) adds configuration guards, one publ
 - **No accidental production release.** On Railway, `LINGUVA_STAGE` must be set and equal the environment's name; `production` also needs `LINGUVA_PRODUCTION_APPROVED=yes`, set by the owner for an approved release. Both web and worker validate this at start and exit otherwise.
 - **`/healthz`**: public, read-only `SELECT 1` as the runtime role, answers only `{"status":"ok"}` or 503; no shop, no error details, `Cache-Control: no-store`.
 - **`/healthz/worker`**: public, reads one Redis key (the worker's heartbeat: start time, mode, pid, commit, provider name; no secrets, no shop data); answers only `{"status":"ok"}` (200) or the state word (503), `Cache-Control: no-store`. At most one read is in flight per process (requests share it, 500 ms limit), so requests during a Redis outage whose connects hang can't pile up commands in the web process.
-- **Worker inside the web container (production, RAILWAY_STAGING.md §8b)**: a child process of the web process with the web's variables minus `MIGRATION_DATABASE_URL` (the owner role stays with the pre-deploy step); it runs its own database posture check (§5d) and refuses to process jobs if the check fails; tenant isolation is unchanged (every job enters its shop's tenant context).
+- **Worker inside the web container (production, RAILWAY_STAGING.md §8b)**: a child process of the web process with the web's variables, which no longer include `MIGRATION_DATABASE_URL` (below; the child's copy drops it again); it runs its own database posture check (§5d) and refuses to process jobs if the check fails; tenant isolation is unchanged (every job enters its shop's tenant context).
 - **Image**: runs as the unprivileged `node` user; production dependencies only; `.env*`, `.git` and `.shopify` never enter the build context. Migrations run as the owner role in a pre-deploy step; the runtime role has no DDL (hosted roles: `scripts/db/hosted-roles.sql`, passwords from the shell environment, never in files).
+- **Owner role's URL in the web service**: Railway runs the pre-deploy command with the service's variables, so `MIGRATION_DATABASE_URL` has to be a variable of `web`. The migrations run in their own process before the server starts (`node scripts/migrate.mjs`); nothing in the server uses the variable, so the web process deletes it from its environment at start, before it starts the worker (`app/entry.server.tsx`, `tests/unit/deploy-config.test.ts`, `tests/unit/embedded-worker.test.ts`). No request, log line or child process then holds it, and `tests/security/structure.test.ts` keeps app and worker code from using it. Residual: the container's start environment (`/proc/<pid>/environ` of the web process, readable by the `node` user) still contains it, so a file-read or code-execution flaw in the web process could find it. Removing it from `web` altogether would need migrations from a separate service or from the operator's machine.
 
 Evidence: `tests/unit/staging-config.test.ts`, `tests/integration/webhooks.test.ts` (staging cases), `tests/integration/healthz.test.ts`, `tests/integration/worker-health.test.ts`, `tests/unit/embedded-worker.test.ts`, `tests/unit/deploy-config.test.ts`, `scripts/ci/image-check.sh` (CI: image built, migrated, started in staging mode, smoke-checked; started in production mode with the worker inside, worker killed and restarted, clean stop).
 
-## 6. Admin control center
+## 6. Admin control center (planned, not built)
+
+There is no admin UI. Operators use the command-line tools with the owner role on their own machine (complimentary access: BILLING_DESIGN §4, audited). When an admin control center is built, it follows this plan:
 
 - Separate deployment and domain. Email + password (argon2id) **plus mandatory TOTP/WebAuthn**.
 - RBAC roles: OWNER, SUPPORT, FINANCE, READONLY.
@@ -233,20 +253,20 @@ Evidence: `tests/unit/staging-config.test.ts`, `tests/integration/webhooks.test.
 
 | # | Threat | Vector | Mitigation | Severity |
 |---|---|---|---|---|
-| T1 | Cross-tenant data access (IDOR) | Tampered job/entry ID in API call | Tenant-scoped repos, RLS, 404 on miss, IDOR test suite | Critical |
-| T2 | Session forgery | Forged ID token / stolen cookie | Library token validation, short-lived ID tokens, no custom auth | Critical |
-| T3 | Webhook forgery / replay | Unsigned POST, replayed payload | HMAC, webhookId uniqueness, timestamp window | High |
-| T4 | Token theft from DB dump/backup | DB compromise | AES-GCM encryption at rest, backup encryption, key outside DB | High |
+| T1 | Cross-tenant data access (IDOR) | Tampered job/draft ID in API call | `withTenant` + forced RLS (fail closed), `where {id, shopId}`, 404 on miss, IDOR tests (`tests/security/`) | Critical |
+| T2 | Session forgery | Forged ID token | Library token validation, short-lived ID tokens, no cookies and no custom auth; every loader and action authenticates itself (§1) | Critical |
+| T3 | Webhook forgery / replay | Unsigned POST, replayed payload | HMAC over the body, webhookId uniqueness, state checks in the handlers (`shop/redact` erases only an uninstalled shop, §5) | High |
+| T4 | Token theft from DB dump/backup | DB compromise | AES-256-GCM token encryption with the key outside the DB: dumps and backups hold ciphertext only | High |
 | T5 | Stored XSS via AI output | Malicious/hallucinated HTML in translation | Structure-preserving translation + sanitizer + subset check | High |
 | T6 | Prompt injection via merchant content | Product text instructing the LLM | Text treated as data, delimited, output-validated; LLM gets no tools; output can only replace text nodes | Medium |
-| T7 | Quota/billing abuse | Parallel requests racing quota | Reservation in the same transaction as job creation (`SELECT … FOR UPDATE` on the period balance) | High |
-| T8 | Entitlement escalation | Client sets plan flag | Entitlements resolved server-side only. OWNER grants need admin approval and audit | High |
-| T9 | Admin account takeover | Phishing / password reuse | MFA mandatory, separate domain, rate-limited login, alerts on login | High |
+| T7 | Quota/billing abuse | Parallel requests racing quota | Usage reserved under a per-shop advisory lock, checked against the monthly, daily and platform limits in the same transaction (§5a, concurrency-tested) | High |
+| T8 | Entitlement escalation | Client sets plan flag | Entitlements resolved server-side only, checked in the actions that use them and again in the worker (bulk translation and automatic publishing, per item); complimentary access needs the server allowlist and an operator grant written with the owner role (the runtime role can't write it, §5d), audited | High |
+| T9 | Admin account takeover | Phishing / password reuse | No admin UI yet (§6): operator tools need the owner role's credentials on the operator's machine. Planned: MFA, separate domain, rate-limited login, alerts on login | High |
 | T10 | Worker processes job for uninstalled/redacted shop | Stale queue | Worker re-checks Shop.status. Uninstall cancels queued jobs | Medium |
 | T11 | Translation loop | Our write triggers `products/update`, which triggers re-translation | Compare source digest/hash, ignore if unchanged; ignore events attributable to translation-only changes; debounce | Medium |
 | T12 | Sensitive data sent to AI provider | Merchant content includes personal data | No customer scopes; consent recorded in ShopSettings; DPA per provider; EU-region endpoints where available | Medium (legal review) |
 | T13 | Dependency compromise | Malicious npm package | Lockfile, pinned versions, audit in CI, minimal deps | Medium |
-| T14 | Log leakage | Logging translated text or tokens | Structured logger with redaction allow-list; no request bodies logged | Medium |
+| T14 | Log leakage | Logging translated text or tokens | Structured logger with a tested redaction list; request errors keep name and code, and the message only of the app's own errors (§3); call sites log ids and codes; no request bodies logged | Medium |
 
 ## 8. Items flagged for qualified review
 

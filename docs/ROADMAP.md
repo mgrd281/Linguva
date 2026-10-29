@@ -79,7 +79,7 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | ID | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
 | R1 | Provider cost exceeds plan revenue on large catalogs | High | High | Cost estimate before jobs, caps, TM, overage meter, measure real chars/product |
-| R2 | Cross-tenant leak through a missed scope | Medium | Critical | RLS fail-closed + lint rule + IDOR tests |
+| R2 | Cross-tenant leak through a missed scope | Medium | Critical | RLS fail-closed (forced, checked at start by the posture check) + migration review + IDOR tests |
 | R3 | Shopify API changes (quarterly) | High | Medium | Pin `apiVersion`, typed ops via codegen, upgrade every quarter, CI schema check |
 | R4 | Expiring offline tokens mandatory 2027-01-01 | Certain | High | Use the template with `expiringOfflineAccessTokens: true` from day one |
 | R5 | Bulk discovery of translatable resources not bulk-eligible | Medium | Medium | Fall back to paginated discovery with a throttle. Test early in M4 |

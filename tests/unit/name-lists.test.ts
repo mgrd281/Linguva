@@ -35,6 +35,9 @@ describe("gap lines", () => {
 
   it("says which countries a language would reach, without nested parentheses", () => {
     expect(gapEntry(en, "Italian", [{ code: "IT", name: "Italy" }, { code: "CH", name: "Switzerland" }])).toBe("Italian (Italy, Switzerland)");
+    // A national language whose name merely contains the country's keeps it.
+    expect(gapEntry(en, "Bulgarian", [{ code: "BG", name: "Bulgaria" }])).toBe("Bulgarian (Bulgaria)");
+    expect(gapEntry(de, "Italienisch", [{ code: "IT", name: "Italy" }])).toBe("Italienisch (Italien)");
     // A name that already names its only country; one that doesn't still gets it, after a colon.
     expect(gapEntry(de, de.language("pt-BR"), [{ code: "BR", name: "Brazil" }])).toBe("Portugiesisch (Brasilien)");
     expect(gapEntry(de, de.language("pt-BR"), [{ code: "PT", name: "Portugal" }])).toBe("Portugiesisch (Brasilien): Portugal");
@@ -44,12 +47,18 @@ describe("gap lines", () => {
     expect(gapEntry(es, "inglés", [{ code: "HK", name: "Hong Kong" }])).toBe(`inglés: ${es.country("HK")}`);
   });
 
-  it("names at most GAP_SHOWN languages, with semicolons once an entry has a colon", () => {
+  it("names at most GAP_SHOWN languages, with semicolons once a shown entry has a colon", () => {
     const entries = Array.from({ length: GAP_SHOWN + 2 }, (_, i) => `L${i}`);
     expect(gapLine(de, entries)).toBe(`${entries.slice(0, GAP_SHOWN).join(", ")} und 2 weitere`);
     expect(gapLine(de, entries.slice(0, 3))).toBe("L0, L1, L2");
     expect(gapLine(de, ["Italienisch (Italien, Schweiz)", "Norwegisch (Bokmål): Norwegen", "Polnisch (Polen)"])).toBe(
       "Italienisch (Italien, Schweiz); Norwegisch (Bokmål): Norwegen; Polnisch (Polen)",
     );
+    // The rest is counted in languages, apart from the last entry's countries; French spaces the semicolon.
+    const colonLast = [...entries.slice(0, GAP_SHOWN - 1), "Norwegisch (Bokmål): Norwegen", "L10", "L11"];
+    expect(gapLine(de, colonLast)).toBe(`${colonLast.slice(0, GAP_SHOWN).join("; ")}; und 2 weitere Sprachen`);
+    expect(gapLine(fr, ["chinois (Taïwan) : Taïwan", "bulgare (Bulgarie)"])).toBe("chinois (Taïwan) : Taïwan ; bulgare (Bulgarie)");
+    // An entry hidden behind "and N more" doesn't decide the separator.
+    expect(gapLine(de, [...entries.slice(0, GAP_SHOWN), "Norwegisch (Bokmål): Norwegen"])).toBe(`${entries.slice(0, GAP_SHOWN).join(", ")} und 1 weitere`);
   });
 });

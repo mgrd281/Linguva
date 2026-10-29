@@ -8,7 +8,7 @@ import type { I18n } from "../i18n/i18n";
 import { hasMessage, kindLabel, kindPlural } from "../i18n/labels";
 import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar, StateLegend, StateSummary } from "../components/Coverage";
 import { ProgressBar } from "../components/ProgressBar";
-import { byFieldGroup, byType, headlineByLocale, storeWide, type Tally } from "../lib/coverage-view";
+import { byFieldGroup, byType, headlineByLocale, storeWide, unreadSegment, type Tally } from "../lib/coverage-view";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES, type FieldState } from "../lib/coverage-rules";
 import { localeFlag } from "../lib/flags";
 import { CONTENT_TYPES, isContentType, RESOURCE_KINDS, type ResourceKind } from "../lib/resource-kinds";
@@ -53,12 +53,10 @@ function nextStep(data: Data, i18n: I18n, scanning: boolean): { text: string; hr
   }
   if (!best) {
     // Content the last scan didn't finish reading may be untranslated: say so instead of "all done".
-    const unread = data.segments.find(
-      (s) => shown.includes(s.locale) && !Object.hasOwn(HEADLINE_EXCLUDED_TYPES, s.resourceType) && (s.status === "FAILED" || (s.status === "SCANNING" && !scanning)),
-    );
-    return unread
-      ? { kind: "unread", text: i18n.t("coverage.next.unread", { type: kindLabel(i18n, unread.resourceType), language: name(unread.locale) }), href: "" }
-      : null;
+    const unread = unreadSegment(data.segments, { locales: shown, types: data.coverageTypes, selected: data.selected, scanning });
+    const vars = unread ? { type: kindLabel(i18n, unread.resourceType), language: name(unread.locale) } : null;
+    // While a scan runs, its button is disabled: it reads the type again by itself.
+    return vars ? { kind: "unread", text: i18n.t(scanning ? "coverage.next.unreadScanning" : "coverage.next.unread", vars), href: "" } : null;
   }
   const vars = { count: best.n, type: kindLabel(i18n, best.type), language: name(best.locale) };
   return best.state === "failed"

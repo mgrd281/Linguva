@@ -240,9 +240,26 @@ describe("coverage scan", () => {
   it("stops when the app is uninstalled", async () => {
     const { shop, deps } = await setup(8, 0);
     const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "u" }, app);
+    // Half-way through the products (two pages of four): that type is being read.
+    const next = await runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null });
+    expect(next).toMatchObject({ segmentIndex: 0 });
     await markShopUninstalled(shop.shopDomain, app);
     expect(await reportRow(shop.id, report.id)).toMatchObject({ status: "FAILED", errorCode: "SHOP_UNINSTALLED" });
-    expect(await runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null })).toBeNull();
+    // It stays "not fully read" instead of "being read" forever.
+    const segment = await withTenant(shop.id, (tx) => tx.coverageSegment.findFirst({ where: { locale: "de", resourceType: "PRODUCT" } }), app);
+    expect(segment).toMatchObject({ status: "FAILED", errorCode: "SHOP_UNINSTALLED" });
+    expect(await runCoveragePage(deps, next!)).toBeNull();
+  });
+
+  it("settles types an earlier measurement left half read when a new one starts", async () => {
+    const { shop, deps } = await setup(8, 0);
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "o1" }, app);
+    await runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null });
+    // The report itself is gone (failed elsewhere) but its half-read type is still marked as being read.
+    await withTenant(shop.id, (tx) => tx.coverageReport.update({ where: { id: report.id }, data: { status: "FAILED" } }), app);
+    await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "o2" }, app);
+    const segment = await withTenant(shop.id, (tx) => tx.coverageSegment.findFirst({ where: { locale: "de", resourceType: "PRODUCT" } }), app);
+    expect(segment).toMatchObject({ status: "FAILED", errorCode: "STALLED" });
   });
 });
 

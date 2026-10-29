@@ -8,13 +8,15 @@ import type { CountryCoverage } from "./country-coverage";
 
 /** A gap line names at most this many languages; the Markets page has them all. */
 export const GAP_SHOWN = 10;
+/** Countries named per language in a gap line. */
+const COUNTRIES_SHOWN = 3;
 
 export function upperFirst(text: string): string {
   return text ? text[0]!.toLocaleUpperCase() + text.slice(1) : text;
 }
 
 /** Countries inside parentheses: "Italy, Switzerland and 2 more". */
-export function countryList(i18n: I18n, names: readonly string[], shown = 3): string {
+export function countryList(i18n: I18n, names: readonly string[], shown = COUNTRIES_SHOWN): string {
   const list = names.slice(0, shown).join(", ");
   return names.length > shown ? i18n.t("overview.countries.missing.more", { list, count: names.length - shown }) : list;
 }
@@ -27,21 +29,28 @@ export function languageList(i18n: I18n, names: readonly string[], shown = 3): s
 
 /**
  * "Bulgarian (Bulgaria)", "Italian (Italy, Switzerland)": the language and the
- * countries it would reach. A name that already names its only country needs
- * none ("Portuguese (Brazil)"); with parentheses in the name or a country
- * name, the countries follow a colon ("Portuguese (Brazil): Portugal").
+ * countries it would reach. A regional name that says its only country in
+ * parentheses needs none ("Portuguese (Brazil)"); with parentheses in the
+ * name or a shown country name, the countries follow a colon ("Portuguese
+ * (Brazil): Portugal").
  */
 export function gapEntry(i18n: I18n, name: string, countries: readonly Pick<CountryCoverage, "code" | "name">[]): string {
   const names = countries.map((c) => i18n.country(c.code, c.name));
-  if (names.length === 1 && name.includes(names[0]!)) return name;
+  if (names.length === 1 && name.includes(`(${names[0]})`)) return name;
   const list = countryList(i18n, names);
-  return name.includes("(") || names.some((n) => n.includes("(")) ? i18n.t("overview.countries.gap.entry", { language: name, countries: list }) : `${name} (${list})`;
+  const nested = name.includes("(") || names.slice(0, COUNTRIES_SHOWN).some((n) => n.includes("("));
+  return nested ? i18n.t("overview.countries.gap.entry", { language: name, countries: list }) : `${name} (${list})`;
 }
 
-/** The entries of one gap line: at most GAP_SHOWN, then "and N more"; semicolons once an entry has a colon. */
+/**
+ * The entries of one gap line: at most GAP_SHOWN, then "and N more". An entry
+ * with a colon runs into the next after a comma: such lines use semicolons,
+ * and the rest is counted in languages.
+ */
 export function gapLine(i18n: I18n, entries: readonly string[]): string {
-  const separator = entries.some((e) => e.includes(":")) ? "; " : ", ";
-  return entries.length > GAP_SHOWN
-    ? i18n.t("overview.languages.more", { list: entries.slice(0, GAP_SHOWN).join(separator), count: entries.length - GAP_SHOWN })
-    : entries.join(separator);
+  const shown = entries.slice(0, GAP_SHOWN);
+  const open = shown.some((e) => e.includes(":"));
+  const list = shown.join(open ? i18n.t("overview.countries.gap.separator") : ", ");
+  if (entries.length <= GAP_SHOWN) return list;
+  return i18n.t(open ? "overview.languages.moreSeparate" : "overview.languages.more", { list, count: entries.length - GAP_SHOWN });
 }

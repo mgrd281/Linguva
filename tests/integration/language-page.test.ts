@@ -161,7 +161,8 @@ describe("the language page", () => {
     expect(category(page, "navigation").tally).toMatchObject({ complete: 1, total: 3 });
     // Things of several kinds have no item count; things nobody has none either.
     expect(category(page, "navigation").items).toBeNull();
-    expect(category(page, "metaobjects")).toMatchObject({ items: 0, tally: { total: 0 } });
+    expect(category(page, "metaobjects")).toMatchObject({ items: 0, tally: { total: 0 }, textTypes: [] });
+    expect(category(page, "products").textTypes).toEqual(["PRODUCT"]);
     expect(category(page, "blog").items).toBe(2);
     expect(category(page, "images").items).toBe(2);
     expect(page.steps).toEqual({ open: page.headline!.counts.missing + page.headline!.counts.outdated + page.headline!.counts.failed, waiting: 2, live: page.headline!.complete });
@@ -191,9 +192,9 @@ describe("the language page", () => {
     // What "Translate" would do: open products, their texts, and the characters of their originals.
     const fields = (gid: string, keys: string[]) => store.products.get(gid)!.filter((f) => keys.includes(f.key));
     const chars = [...fields(P(5), ["body_html"]), ...[6, 7, 8, 9, 10, 11, 12].flatMap((i) => fields(P(i), ["title", "body_html"]))].reduce((total, f) => total + f.value.length, 0);
-    expect(category(page, "products").bulk).toEqual({ types: ["PRODUCT"], texts: { missing: 12, outdated: 1, failed: 2 }, items: 8, chars });
+    expect(category(page, "products").bulk).toEqual({ types: ["PRODUCT"], texts: { missing: 12, outdated: 1, failed: 2 }, items: 8, chars, attached: true });
     // Shop & checkout: the store's listing, never the legal texts (one by one).
-    expect(category(page, "checkout").bulk).toMatchObject({ types: ["SHOP"], texts: { missing: 2, outdated: 0, failed: 0 }, items: null });
+    expect(category(page, "checkout").bulk).toMatchObject({ types: ["SHOP"], texts: { missing: 2, outdated: 0, failed: 0 }, items: null, attached: false });
     expect(category(page, "checkout").tally.counts.missing).toBe(3);
     // Image descriptions and custom fields are never translated in bulk.
     expect(category(page, "images").bulk).toBeNull();

@@ -19,6 +19,9 @@ export const STATE_COLOURS: Record<FieldState, string> = {
 /** Empty part of every bar (Polaris' subdued surface). */
 export const TRACK_COLOUR = "#ebebeb";
 
+/** A card's own surface (Polaris' base background), for marks drawn over pictures. */
+export const SURFACE_COLOUR = "#ffffff";
+
 /**
  * Drafts and translations waiting for review aren't live yet: striped, so a
  * bar full of drafts never looks like a complete one.

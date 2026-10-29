@@ -4,6 +4,7 @@
  * reliable remaining time, and the actions (scan, translate gaps).
  */
 import { randomUUID } from "node:crypto";
+import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { redirect } from "react-router";
 import { requireShop } from "../shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
@@ -194,20 +195,40 @@ export async function loadCoverageDashboard(request: Request) {
 
 export type CoverageActionResult = { ok: true } | { error: string };
 
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{8,80}$/;
+
+/**
+ * Starts measuring every additional language of the store (intent "run" of
+ * the Coverage page, the Overview and a language page). A repeated key
+ * starts nothing twice.
+ */
+export async function startMeasurement(
+  admin: Pick<AdminApiContext, "graphql">,
+  shop: { id: string },
+  input: { idempotencyKey: string; requestedBy: string | null },
+): Promise<CoverageActionResult> {
+  if (!IDEMPOTENCY_KEY.test(input.idempotencyKey)) return { error: "INVALID_REQUEST" };
+  const locales = (await fetchAndSyncShopLocales(admin, shop.id)).locales.filter((l) => !l.primary);
+  if (!locales.length) return { error: "NO_LANGUAGES" };
+  try {
+    await startCoverageReport({ shopId: shop.id, locales: locales.map((l) => l.locale), requestedBy: input.requestedBy, idempotencyKey: input.idempotencyKey });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof BackgroundJobsUnavailableError) return { error: "JOBS_UNAVAILABLE" };
+    throw error;
+  }
+}
+
 /** Scan, or translate the gaps of one language and type (all fields or SEO only). */
 export async function coverageAction(request: Request): Promise<CoverageActionResult | Response> {
   const { admin, shop, actorId } = await requireShop(request);
   const form = await request.formData();
   const idempotencyKey = String(form.get("idempotencyKey") ?? "");
-  if (!/^[A-Za-z0-9-]{8,80}$/.test(idempotencyKey)) return { error: "INVALID_REQUEST" };
+  if (!IDEMPOTENCY_KEY.test(idempotencyKey)) return { error: "INVALID_REQUEST" };
+  if (form.get("intent") === "run") return startMeasurement(admin, shop, { idempotencyKey, requestedBy: actorId });
   const locales = (await fetchAndSyncShopLocales(admin, shop.id)).locales.filter((l) => !l.primary);
   try {
     const intent = form.get("intent");
-    if (intent === "run") {
-      if (!locales.length) return { error: "NO_LANGUAGES" };
-      await startCoverageReport({ shopId: shop.id, locales: locales.map((l) => l.locale), requestedBy: actorId, idempotencyKey });
-      return { ok: true };
-    }
     if (intent === "translate") {
       const locale = String(form.get("locale") ?? "");
       const target = bulkTargetOf(String(form.get("resourceType") ?? ""));

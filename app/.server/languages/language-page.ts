@@ -38,7 +38,7 @@ import { getMonthlyUsage } from "../usage/usage-ledger";
 import { getQueues } from "../queue/client";
 import { getTranslationProvider } from "../providers";
 import { BackgroundJobsUnavailableError, startBulkJob } from "../jobs/start-job";
-import { ACTIVE_JOB_STATUSES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
+import { ACTIVE_JOB_STATUSES, ATTACHED_BULK_TYPES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
 import { translatableByIds } from "../shopify/attached-resources";
 import { PREVIEW_NODE_TYPES, readPreviewNodes, type PreviewNode } from "../shopify/preview-nodes";
 import { isSearchableType, searchIds, type SearchableType } from "../shopify/search-ids";
@@ -280,6 +280,8 @@ export interface BulkEstimate {
   items: number | null;
   /** Characters of those originals, what the AI is sent at most; null when some were read before their lengths were kept. */
   chars: number | null;
+  /** Its jobs can also translate the image descriptions and custom fields of those items (the confirm dialog's includeAttached). */
+  attached: boolean;
 }
 
 /** Items with texts to translate, and those of them read before the lengths of their originals were kept. */
@@ -334,6 +336,7 @@ async function bulkEstimates(
           texts: openTexts(rows, locale, own),
           items: counted > 0 ? counted : null,
           chars: own.some((type) => (items.get(type)?.unsized ?? 0) > 0) ? null : own.reduce((n, type) => n + (chars.get(type) ?? 0), 0),
+          attached: own.some((type) => ATTACHED_BULK_TYPES.has(type)),
         },
       ];
     }),
@@ -418,11 +421,14 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
     const types = CATEGORIES[id].itemTypes as readonly string[];
     return types.length ? summary.items.filter((i) => i.locale === locale && types.includes(i.resourceType)).reduce((n, i) => n + i.count, 0) : null;
   };
+  const counted = (type: string) => summary.counts.some((r) => r.locale === locale && r.resourceType === type && countsInHeadline(type, r.fieldGroup) && r.count > 0);
   const categories = CATEGORY_IDS.map((id) => ({
     id,
     tier: tierOf(id),
     href: categoryPath(locale, id),
     tally: tallies[id],
+    /** Its types with counted texts (Shop & checkout names subscriptions and legal texts only when it has them). */
+    textTypes: (CATEGORIES[id].types as readonly string[]).filter(counted),
     state: categoryState(summary.segments, locale, id, { scanning }),
     /** Things its texts belong to (48 products); null for a category of several kinds (its description says what). */
     items: itemCount(id),

@@ -12,6 +12,7 @@ import * as editor from "./editor";
 import * as glossary from "./glossary";
 import * as jobs from "./jobs";
 import * as landing from "./landing";
+import * as language from "./language";
 import * as languages from "./languages";
 import * as markets from "./markets";
 import * as memory from "./memory";
@@ -33,6 +34,7 @@ export const NAMESPACES = {
   glossary,
   jobs,
   landing,
+  language,
   languages,
   markets,
   memory,
@@ -53,6 +55,7 @@ const en = {
   ...glossary.en,
   ...jobs.en,
   ...landing.en,
+  ...language.en,
   ...languages.en,
   ...markets.en,
   ...memory.en,
@@ -75,6 +78,7 @@ const de: Record<MessageKey, Message> = {
   ...glossary.de,
   ...jobs.de,
   ...landing.de,
+  ...language.de,
   ...languages.de,
   ...markets.de,
   ...memory.de,
@@ -95,6 +99,7 @@ const fr: Record<MessageKey, Message> = {
   ...glossary.fr,
   ...jobs.fr,
   ...landing.fr,
+  ...language.fr,
   ...languages.fr,
   ...markets.fr,
   ...memory.fr,
@@ -115,6 +120,7 @@ const es: Record<MessageKey, Message> = {
   ...glossary.es,
   ...jobs.es,
   ...landing.es,
+  ...language.es,
   ...languages.es,
   ...markets.es,
   ...memory.es,

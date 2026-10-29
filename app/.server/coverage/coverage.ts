@@ -79,7 +79,14 @@ export function segmentOf(report: Pick<CoverageReport, "segments">, index: numbe
  * one (one report at a time per shop) or the one this request already made.
  */
 export async function createCoverageReport(
-  input: { shopId: string; locales: readonly string[]; requestedBy: string | null; idempotencyKey: string },
+  input: {
+    shopId: string;
+    locales: readonly string[];
+    requestedBy: string | null;
+    idempotencyKey: string;
+    /** Smart Auto-Translate: the run this measurement plans translation for. */
+    smartRunId?: string | null;
+  },
   client: PrismaClient = defaultClient,
 ): Promise<{ report: CoverageReport; created: boolean }> {
   const locales = [...new Set(input.locales)].filter((l) => /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l));
@@ -113,6 +120,7 @@ export async function createCoverageReport(
           shopId: input.shopId,
           requestedBy: input.requestedBy,
           idempotencyKey: input.idempotencyKey,
+          smartRunId: input.smartRunId ?? null,
           segments: COVERAGE_TYPES.flatMap((type) => locales.map((l) => `${type}|${l}`)),
         },
       });

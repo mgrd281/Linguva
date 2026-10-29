@@ -18,18 +18,24 @@ export interface Entitlements {
   glossary: boolean;
   /** Automatic publishing of bulk results. */
   autoPublish: boolean;
+  /** Smart Auto-Translate: scheduled full checks with scope, budgets and activity (Business). */
+  smartAuto: boolean;
 }
 
 export const PLANS = {
-  free: { plan: "free", monthlyChars: 20_000, maxTargetLocales: 1, bulk: false, glossary: false, autoPublish: false },
-  starter: { plan: "starter", monthlyChars: 300_000, maxTargetLocales: 3, bulk: true, glossary: false, autoPublish: false },
-  pro: { plan: "pro", monthlyChars: 1_200_000, maxTargetLocales: 10, bulk: true, glossary: true, autoPublish: true },
-  business: { plan: "business", monthlyChars: 4_000_000, maxTargetLocales: 20, bulk: true, glossary: true, autoPublish: true },
+  free: { plan: "free", monthlyChars: 20_000, maxTargetLocales: 1, bulk: false, glossary: false, autoPublish: false, smartAuto: false },
+  starter: { plan: "starter", monthlyChars: 300_000, maxTargetLocales: 3, bulk: true, glossary: false, autoPublish: false, smartAuto: false },
+  pro: { plan: "pro", monthlyChars: 1_200_000, maxTargetLocales: 10, bulk: true, glossary: true, autoPublish: true, smartAuto: false },
+  business: { plan: "business", monthlyChars: 4_000_000, maxTargetLocales: 20, bulk: true, glossary: true, autoPublish: true, smartAuto: true },
 } as const satisfies Record<string, Entitlements>;
 
 export type PlanHandle = keyof typeof PLANS;
 
-/** Everything enabled, for when billing isn't configured (development, before launch). */
+/**
+ * Everything enabled, for when billing isn't configured (development, before
+ * launch), Smart Auto-Translate included; complimentary access gets the
+ * Business entitlements too (complimentary.ts).
+ */
 export const UNMETERED: Entitlements = { ...PLANS.business, plan: "unmetered" };
 
 /**

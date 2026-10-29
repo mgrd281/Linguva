@@ -52,6 +52,10 @@ model Shop {
   status         ShopStatus @default(ACTIVE)
   installedAt    DateTime   @default(now()) @db.Timestamptz(3)
   uninstalledAt  DateTime?  @db.Timestamptz(3)
+  /// When the shop's next scheduled Smart Auto-Translate check is due: an
+  /// index for the worker's tick only (outside row-level security, writable
+  /// by the runtime role); SmartAutoConfig.nextRunAt is the source of truth.
+  smartNextRunAt DateTime?  @db.Timestamptz(3)
   createdAt      DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
 
@@ -73,6 +77,11 @@ model Shop {
   coverageSegments CoverageSegment[]
   complimentary    ComplimentaryAccess?
   subscription     ShopSubscription?
+  smartConfig      SmartAutoConfig?
+  smartRuns        SmartAutoRun[]
+  smartExclusions  SmartAutoExclusion[]
+
+  @@index([smartNextRunAt])
 }
 
 enum InstallationEventType {
@@ -274,6 +283,8 @@ model UsageLedger {
   chars          Int
   provider       String?
   idempotencyKey String
+  /// "smart" for Smart Auto-Translate (its budgets sum these rows); null otherwise.
+  origin         String?
   createdAt      DateTime  @default(now()) @db.Timestamptz(3)
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -317,44 +328,54 @@ enum JobFieldScope {
 }
 
 model TranslationJob {
-  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  shopId             String               @db.Uuid
-  resourceType       String
-  targetLocale       String
-  status             TranslationJobStatus @default(PENDING)
-  requestedBy        String?
-  idempotencyKey     String
-  discoveryCursor    String?
-  discoveryDone      Boolean              @default(false)
-  totalItems         Int                  @default(0)
-  succeededItems     Int                  @default(0)
-  skippedItems       Int                  @default(0)
-  failedItems        Int                  @default(0)
-  charsBilled        Int                  @default(0)
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId                 String               @db.Uuid
+  resourceType           String
+  targetLocale           String
+  status                 TranslationJobStatus @default(PENDING)
+  requestedBy            String?
+  idempotencyKey         String
+  discoveryCursor        String?
+  discoveryDone          Boolean              @default(false)
+  totalItems             Int                  @default(0)
+  succeededItems         Int                  @default(0)
+  skippedItems           Int                  @default(0)
+  failedItems            Int                  @default(0)
+  charsBilled            Int                  @default(0)
   // Snapshot of the shop's publish mode when the job was created.
-  publishMode        BulkPublishMode      @default(DRAFT)
+  publishMode            BulkPublishMode      @default(DRAFT)
   // Explicit permission to replace manual or approved translations.
-  overwriteProtected Boolean              @default(false)
+  overwriteProtected     Boolean              @default(false)
   // Which fields the job translates (ALL, or only search engine listings).
-  fieldScope         JobFieldScope        @default(ALL)
+  fieldScope             JobFieldScope        @default(ALL)
   // Also image alt text and custom fields of each item (checks every item).
-  includeAttached    Boolean              @default(false)
-  memoryHits         Int                  @default(0)
-  charsSaved         Int                  @default(0)
-  protectedSkipped   Int                  @default(0)
-  errorCode          String?
-  cancelRequestedAt  DateTime?            @db.Timestamptz(3)
-  createdAt          DateTime             @default(now()) @db.Timestamptz(3)
-  startedAt          DateTime?            @db.Timestamptz(3)
-  finishedAt         DateTime?            @db.Timestamptz(3)
-  updatedAt          DateTime             @updatedAt @db.Timestamptz(3)
+  includeAttached        Boolean              @default(false)
+  /// Smart Auto-Translate: the run that created the job (null for real-time
+  /// checks and every other job).
+  smartRunId             String?              @db.Uuid
+  /// Field groups to translate (coverage-rules.ts); empty: all.
+  fieldGroups            String[]             @default([])
+  /// False: outdated translations stay as they are, also Linguva's own
+  /// unreviewed machine output (Smart Auto-Translate option).
+  replaceOutdatedMachine Boolean              @default(true)
+  memoryHits             Int                  @default(0)
+  charsSaved             Int                  @default(0)
+  protectedSkipped       Int                  @default(0)
+  errorCode              String?
+  cancelRequestedAt      DateTime?            @db.Timestamptz(3)
+  createdAt              DateTime             @default(now()) @db.Timestamptz(3)
+  startedAt              DateTime?            @db.Timestamptz(3)
+  finishedAt             DateTime?            @db.Timestamptz(3)
+  updatedAt              DateTime             @updatedAt @db.Timestamptz(3)
 
-  shop  Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  items TranslationJobItem[]
+  shop     Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  smartRun SmartAutoRun?        @relation(fields: [smartRunId], references: [id], onDelete: SetNull)
+  items    TranslationJobItem[]
 
   @@unique([shopId, idempotencyKey])
   @@index([shopId, createdAt])
   @@index([shopId, status])
+  @@index([smartRunId])
 }
 
 // One resource of a job. Its id is also the queue job id (idempotent enqueue).
@@ -530,6 +551,8 @@ model CoverageReport {
   status           CoverageReportStatus @default(QUEUED)
   requestedBy      String?
   idempotencyKey   String
+  /// Smart Auto-Translate: the run this measurement plans translation for.
+  smartRunId       String?              @db.Uuid
   /// Scan order: "RESOURCE_TYPE|locale" pairs.
   segments         String[]
   segmentIndex     Int                  @default(0)
@@ -591,6 +614,9 @@ model CoverageItem {
   seoIssues         Int      @default(0)
   /// sha256 prefix of the normalised translated SEO title (duplicates).
   seoTitleHash      String?
+  /// Characters of the machine-translatable fields that are missing or
+  /// outdated (estimates before anything is sent).
+  pendingChars      Int      @default(0)
   /// When the Shopify state the keys come from was read or written.
   syncedAt          DateTime @db.Timestamptz(3)
   /// When a scan or refresh last found the resource in Shopify.
@@ -678,4 +704,121 @@ model ComplimentaryAccess {
   revokeReason     String?
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+/// Smart Auto-Translate (Business): when the store is checked and what is
+/// translated. One row per shop; ids, codes, times and counts only.
+model SmartAutoConfig {
+  shopId                 String          @id @db.Uuid
+  enabled                Boolean         @default(false)
+  /// realtime, daily, weekly, custom or manual (app/lib/schedule.ts).
+  mode                   String          @default("daily")
+  /// IANA time zone of the check times, canonical spelling.
+  timeZone               String          @default("UTC")
+  /// Minutes after local midnight, ascending (real-time: the daily full check).
+  times                  Int[]           @default([180])
+  /// ISO weekdays, 1 Monday … 7 Sunday.
+  weekdays               Int[]           @default([1, 2, 3, 4, 5, 6, 7])
+  locales                String[]        @default([])
+  resourceTypes          String[]        @default(["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"])
+  /// Field groups to translate (coverage-rules.ts); empty: all but URL handles.
+  fieldGroups            String[]        @default([])
+  /// Also image alt text and custom fields.
+  includeAttached        Boolean         @default(false)
+  /// DRAFT (results wait in Review) unless automatic publishing was confirmed.
+  publishMode            BulkPublishMode @default(DRAFT)
+  publishConfirmedAt     DateTime?       @db.Timestamptz(3)
+  publishConfirmedBy     String?
+  replaceOutdatedMachine Boolean         @default(true)
+  /// Characters per local day and month for Smart Auto-Translate (null: only the plan's limits).
+  dailyBudget            Int?
+  monthlyBudget          Int?
+  pausedAt               DateTime?       @db.Timestamptz(3)
+  pauseReason            String?
+  /// A budget or limit pause lifts by itself then.
+  pausedUntil            DateTime?       @db.Timestamptz(3)
+  nextRunAt              DateTime?       @db.Timestamptz(3)
+  lastRunAt              DateTime?       @db.Timestamptz(3)
+  lastSuccessAt          DateTime?       @db.Timestamptz(3)
+  /// The shop's primary language when the scope was saved: a change pauses.
+  primaryLocale          String?
+  /// Optimistic concurrency of the settings form.
+  version                Int             @default(0)
+  updatedBy              String?
+  createdAt              DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime        @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+enum SmartRunTrigger {
+  SCHEDULED
+  MANUAL
+}
+
+enum SmartRunStatus {
+  QUEUED
+  // A measurement the merchant started is running; this run starts after it.
+  WAITING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  SKIPPED
+}
+
+/// One Smart Auto-Translate check: a full measurement that plans
+/// translation of what changed, with its scope and counters (activity).
+model SmartAutoRun {
+  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId                 String          @db.Uuid
+  trigger                SmartRunTrigger
+  /// The scheduled check time this run is for: one run per occurrence.
+  occurrenceAt           DateTime?       @db.Timestamptz(3)
+  /// Check now: the form's key, one run per click.
+  idempotencyKey         String?
+  status                 SmartRunStatus  @default(QUEUED)
+  /// Why it was skipped or failed (an upper-case code).
+  errorCode              String?
+  requestedBy            String?
+  // The scope when the run was created.
+  locales                String[]
+  resourceTypes          String[]
+  fieldGroups            String[]
+  includeAttached        Boolean         @default(false)
+  publishMode            BulkPublishMode @default(DRAFT)
+  replaceOutdatedMachine Boolean         @default(true)
+  coverageReportId       String?         @db.Uuid
+  resourcesChecked       Int             @default(0)
+  resourcesChanged       Int             @default(0)
+  fieldsDetected         Int             @default(0)
+  charsEstimated         Int             @default(0)
+  itemsQueued            Int             @default(0)
+  excludedSkipped        Int             @default(0)
+  createdAt              DateTime        @default(now()) @db.Timestamptz(3)
+  startedAt              DateTime?       @db.Timestamptz(3)
+  scanFinishedAt         DateTime?       @db.Timestamptz(3)
+  finishedAt             DateTime?       @db.Timestamptz(3)
+  updatedAt              DateTime        @updatedAt @db.Timestamptz(3)
+
+  shop Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  jobs TranslationJob[]
+
+  @@unique([shopId, occurrenceAt])
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, createdAt])
+  @@index([shopId, status])
+}
+
+/// Resources Smart Auto-Translate leaves alone.
+model SmartAutoExclusion {
+  shopId       String   @db.Uuid
+  resourceGid  String
+  resourceType String
+  createdBy    String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@id([shopId, resourceGid])
 }

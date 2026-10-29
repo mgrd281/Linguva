@@ -21,7 +21,9 @@ import { latestRevisions } from "../translation/revisions";
 import { recordMemoryUse } from "../memory/translation-memory";
 import { pendingDraftDigests, recordRejectedAttempts, saveDrafts } from "../review/drafts";
 import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
-import { releaseUsage, reserveUsage, settleUsage } from "../usage/usage-ledger";
+import { releaseUsage, reserveUsage, settleUsage, type UsageBudget } from "../usage/usage-ledger";
+import { smartPaused } from "../smart/config";
+import { budgetWindows, SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { AUTO_REQUESTED_BY, finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
@@ -266,6 +268,40 @@ export async function processItem(
     await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: "AUTO_OFF" }, deps.prisma);
     return { status: "CANCELLED", errorCode: "AUTO_OFF" };
   }
+  // Smart Auto-Translate: its plan, settings, languages and exclusions are checked again for every item.
+  let smart: { budget: UsageBudget; publish: boolean } | null = null;
+  if (job.requestedBy === SMART_REQUESTED_BY) {
+    if (billing && !billing.entitlements.smartAuto) throw new JobStopError("PLAN_SMART");
+    const state = await withTenant(
+      payload.shopId,
+      async (tx) => ({
+        config: await tx.smartAutoConfig.findUnique({ where: { shopId: payload.shopId } }),
+        excluded: await tx.smartAutoExclusion.findUnique({ where: { shopId_resourceGid: { shopId: payload.shopId, resourceGid: item.resourceGid } } }),
+      }),
+      deps.prisma,
+    );
+    const config = state.config;
+    const stop = !config?.enabled ? "SMART_OFF" : smartPaused(config) ? "PAUSED" : !config.locales.includes(job.targetLocale) ? "AUTO_OFF" : null;
+    if (stop) {
+      await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: stop }, deps.prisma);
+      return { status: "CANCELLED", errorCode: stop };
+    }
+    if (state.excluded) {
+      await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "EXCLUDED" }, deps.prisma);
+      return { status: "SKIPPED", errorCode: "EXCLUDED" };
+    }
+    // Its usage is counted as its own (the activity shows it) and kept within the merchant's budgets.
+    const windows = budgetWindows(Date.now(), config!.timeZone);
+    smart = {
+      budget: {
+        origin: "smart",
+        ...(config!.dailyBudget ? { daily: { limit: config!.dailyBudget, since: new Date(windows.daySince) } } : {}),
+        ...(config!.monthlyBudget ? { monthly: { limit: config!.monthlyBudget, since: new Date(windows.monthSince) } } : {}),
+      },
+      // Publishing only while the smart settings still say so, as confirmed by the merchant.
+      publish: config!.publishMode === "AUTO_PUBLISH" && Boolean(config!.publishConfirmedAt),
+    };
+  }
   const monthlyLimit = billing?.configured ? billing.entitlements.monthlyChars : deps.monthlyLimit;
   const dailyLimit = deps.dailyLimit === undefined ? undefined : Math.min(deps.dailyLimit, monthlyLimit);
 
@@ -286,7 +322,7 @@ export async function processItem(
   // wait in Review.
   const autoPublish =
     job.publishMode === "AUTO_PUBLISH" &&
-    settings.bulkPublishMode === "AUTO_PUBLISH" &&
+    (smart ? smart.publish : settings.bulkPublishMode === "AUTO_PUBLISH") &&
     (billing ? billing.entitlements.autoPublish : true);
   // Every run meters its provider calls under its own key: a retry, a re-queue or a later
   // check of the same item is a new call and counts against the limits again.
@@ -299,6 +335,9 @@ export async function processItem(
     targetLocale: job.targetLocale,
     overwriteProtected: job.overwriteProtected,
     automatic: isAutomaticJob(job),
+    fieldGroups: job.fieldGroups,
+    keepOutdated: !job.replaceOutdatedMachine,
+    ...(smart ? { budget: smart.budget } : {}),
     settings,
     monthlyLimit,
     dailyLimit,
@@ -309,8 +348,11 @@ export async function processItem(
 
   const parentTitle = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : null;
   const results: ResourceRunResult[] = [];
+  // A smart check's items can be an image or a custom field of their own: only the fields their editor translates.
+  const ownResource = isBulkResourceType(job.resourceType) ? resource : { ...resource, content: resource.content.filter((c) => isEditableAttachedField(c)) };
   const own = await translateOneResource(run, {
-    resource,
+    resource: ownResource,
+    coverageType: job.resourceType,
     title: resource.content.find((c) => c.key === "title")?.value ?? null,
     context: providerContext(resource.resourceId, parentTitle, job.resourceType),
     onlyKeys: scopeKeys(job.fieldScope),
@@ -327,6 +369,8 @@ export async function processItem(
       results.push(
         await translateOneResource(run, {
           resource: editable,
+          // Their field groups: alt text, or a custom field's value.
+          coverageType: a.kind === "IMAGE" ? "MEDIA_IMAGE" : "PRODUCT_METAFIELD",
           parentGid: item.resourceGid,
           title: parentTitle ? `${parentTitle} · ${label}` : label,
           context: parentTitle
@@ -394,6 +438,12 @@ interface RunContext {
   targetLocale: string;
   overwriteProtected: boolean;
   automatic: boolean;
+  /** Field groups the job translates (empty: all). */
+  fieldGroups: readonly string[];
+  /** Outdated translations stay as they are (Smart Auto-Translate option). */
+  keepOutdated: boolean;
+  /** Smart Auto-Translate: its usage origin and budgets. */
+  budget?: UsageBudget;
   settings: Awaited<ReturnType<typeof getShopSettings>>;
   monthlyLimit: number;
   dailyLimit?: number;
@@ -425,6 +475,8 @@ async function translateOneResource(
   run: RunContext,
   target: {
     resource: TranslatableResourceData;
+    /** The coverage type its field groups are counted under. */
+    coverageType: string;
     parentGid?: string;
     title: string | null;
     context: string | undefined;
@@ -445,6 +497,8 @@ async function translateOneResource(
     pendingDrafts,
     overwriteProtected: run.overwriteProtected,
     ...(target.onlyKeys ? { onlyKeys: target.onlyKeys } : {}),
+    ...(run.fieldGroups.length ? { onlyGroups: { groups: run.fieldGroups, resourceType: target.coverageType } } : {}),
+    keepOutdated: run.keepOutdated,
   });
   if (fields.length === 0) return { ...empty, protectedSkipped: protectedKeys.length };
 
@@ -475,6 +529,7 @@ async function translateOneResource(
           dailyLimit: run.dailyLimit,
           platformDailyLimit: deps.platformDailyLimit,
           provider: deps.provider!.id,
+          ...(run.budget ? { budget: run.budget } : {}),
         },
         deps.prisma,
       )

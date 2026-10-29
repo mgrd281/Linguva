@@ -53,7 +53,7 @@ describe("owner complimentary access", () => {
       configured: true,
       state: "COMPLIMENTARY",
       mustChoosePlan: false,
-      entitlements: { plan: "complimentary", monthlyChars: 3_000_000, bulk: true, glossary: true, autoPublish: true, maxTargetLocales: 20 },
+      entitlements: { plan: "complimentary", monthlyChars: 3_000_000, bulk: true, glossary: true, autoPublish: true, smartAuto: true, maxTargetLocales: 20 },
     });
   });
 

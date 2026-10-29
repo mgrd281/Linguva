@@ -147,7 +147,7 @@ describe("usage metering of job items", () => {
     const { job } = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: "daily" }, app);
     const page = await runDiscoveryPage(deps, { shopId: shop.id, jobId: job.id });
     // The environment's daily cap (high) doesn't lift the plan's monthly allowance (low).
-    const plan = { configured: true, entitlements: { plan: "starter", monthlyChars: 10, maxTargetLocales: 3, bulk: true, glossary: false, autoPublish: false } };
+    const plan = { configured: true, entitlements: { plan: "starter", monthlyChars: 10, maxTargetLocales: 3, bulk: true, glossary: false, autoPublish: false, smartAuto: false } };
     const limited: JobDependencies = { ...deps, dailyLimit: 1_000_000, billingFor: async () => plan };
     await expect(processItem(limited, { shopId: shop.id, itemId: page.itemIds[0]! }, 1)).rejects.toMatchObject({ name: "QuotaExceededError", limit: 10 });
     // Without an environment cap, the plan's allowance alone applies (no hidden 20,000 a day).

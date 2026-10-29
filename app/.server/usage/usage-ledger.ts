@@ -4,9 +4,29 @@ import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 
 /**
  * monthly: the shop's monthly allowance; daily: the shop's daily cap;
- * platform: the cap on AI characters across all shops per day (our cost).
+ * platform: the cap on AI characters across all shops per day (our cost);
+ * smartDaily/smartMonthly: the merchant's Smart Auto-Translate budgets.
  */
-export type QuotaScope = "monthly" | "daily" | "platform";
+export type QuotaScope = "monthly" | "daily" | "platform" | "smartDaily" | "smartMonthly";
+
+/** The code a stop at each limit reports (job outcomes, editor messages). */
+export const QUOTA_CODES: Record<QuotaScope, string> = {
+  monthly: "QUOTA_EXCEEDED",
+  daily: "DAILY_LIMIT",
+  platform: "PLATFORM_LIMIT",
+  smartDaily: "SMART_BUDGET_DAILY",
+  smartMonthly: "SMART_BUDGET_MONTHLY",
+};
+
+/** Where usage came from: "smart" for Smart Auto-Translate (its budgets sum these). */
+export type UsageOrigin = "smart";
+
+/** A merchant's own budget on top of the plan's limits, in their time zone's day and month. */
+export interface UsageBudget {
+  origin: UsageOrigin;
+  daily?: { limit: number; since: Date };
+  monthly?: { limit: number; since: Date };
+}
 
 export class QuotaExceededError extends Error {
   constructor(
@@ -52,6 +72,19 @@ async function addPlatformChars(tx: TenantTx, day: string, chars: number, cap: n
   return updated === 1;
 }
 
+async function sumOriginSince(tx: TenantTx, shopId: string, origin: UsageOrigin, since: Date): Promise<number> {
+  const result = await tx.usageLedger.aggregate({
+    where: { shopId, origin, createdAt: { gte: since } },
+    _sum: { chars: true },
+  });
+  return result._sum.chars ?? 0;
+}
+
+/** Characters Smart Auto-Translate used since a time (the start of a budget window). */
+export async function getOriginUsageSince(shopId: string, origin: UsageOrigin, since: Date, client: PrismaClient = defaultClient): Promise<number> {
+  return withTenant(shopId, (tx) => sumOriginSince(tx, shopId, origin, since), client);
+}
+
 async function platformChars(tx: TenantTx, day: string): Promise<number> {
   const rows = await tx.$queryRaw<Array<{ chars: bigint }>>`SELECT "chars" FROM "PlatformUsageDay" WHERE "day" = ${day}::date`;
   return Number(rows[0]?.chars ?? 0);
@@ -93,6 +126,8 @@ export interface Reservation {
   day: string;
   chars: number;
   provider: string;
+  /** Copied to the settle and release rows, so a budget sums the net usage. */
+  origin?: UsageOrigin;
 }
 
 /** Shop daily usage (UTC day), for display. */
@@ -119,6 +154,8 @@ export async function reserveUsage(
     dailyLimit?: number;
     /** Optional cap across all shops per UTC day. */
     platformDailyLimit?: number;
+    /** Smart Auto-Translate: its origin and the merchant's budgets. */
+    budget?: UsageBudget;
   },
   client: PrismaClient = defaultClient,
 ): Promise<Reservation> {
@@ -141,6 +178,7 @@ export async function reserveUsage(
           day: dayKey(already.createdAt),
           chars: already.chars,
           provider: already.provider ?? input.provider,
+          ...(already.origin ? { origin: already.origin as UsageOrigin } : {}),
         };
       }
       const used = await sumChars(tx, input.shopId, period);
@@ -152,6 +190,16 @@ export async function reserveUsage(
         if (today + input.chars > input.dailyLimit) {
           throw new QuotaExceededError(today, input.chars, input.dailyLimit, "daily");
         }
+      }
+      // The merchant's own Smart Auto-Translate budgets (local day and month), on top of the plan's limits.
+      const budget = input.budget;
+      if (budget?.daily) {
+        const used = await sumOriginSince(tx, input.shopId, budget.origin, budget.daily.since);
+        if (used + input.chars > budget.daily.limit) throw new QuotaExceededError(used, input.chars, budget.daily.limit, "smartDaily");
+      }
+      if (budget?.monthly) {
+        const used = await sumOriginSince(tx, input.shopId, budget.origin, budget.monthly.since);
+        if (used + input.chars > budget.monthly.limit) throw new QuotaExceededError(used, input.chars, budget.monthly.limit, "smartMonthly");
       }
       // Same transaction: a refused shop reservation never counts globally.
       if (!(await addPlatformChars(tx, day, input.chars, input.platformDailyLimit ?? null))) {
@@ -165,13 +213,24 @@ export async function reserveUsage(
           chars: input.chars,
           provider: input.provider,
           idempotencyKey: input.key,
+          origin: input.budget?.origin ?? null,
         },
       });
       return null;
     },
     client,
   );
-  return existing ?? { shopId: input.shopId, key: input.key, period, day, chars: input.chars, provider: input.provider };
+  return (
+    existing ?? {
+      shopId: input.shopId,
+      key: input.key,
+      period,
+      day,
+      chars: input.chars,
+      provider: input.provider,
+      ...(input.budget ? { origin: input.budget.origin } : {}),
+    }
+  );
 }
 
 /**
@@ -195,6 +254,7 @@ export async function settleUsage(
         chars: delta,
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:settle`,
+        origin: reservation.origin ?? null,
       });
       if (inserted && delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
     },
@@ -222,6 +282,7 @@ export async function releaseUsage(
         chars: -reservation.chars,
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:release`,
+        origin: reservation.origin ?? null,
       });
       if (inserted) await addPlatformChars(tx, reservation.day, -reservation.chars, null);
     },

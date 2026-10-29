@@ -85,6 +85,7 @@ function statusFrom(row: ShopSubscription | null, deps: BillingDeps, stale: bool
     bulk: resolved.bulk,
     glossary: resolved.glossary,
     autoPublish: resolved.autoPublish,
+    smartAuto: resolved.smartAuto,
   };
   return { configured: true, state: "ACTIVE", entitlements, subscription: row, stale, mustChoosePlan: false };
 }

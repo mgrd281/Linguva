@@ -16,6 +16,10 @@
  *
  * Linguva's own translations don't change a resource's source text, so if
  * they cause an update webhook, its check finds nothing to do (no AI cost).
+ *
+ * Smart Auto-Translate (Business) in real-time mode uses the same checks
+ * with its own scope, exclusions, pause and publishing (requestedBy
+ * system:smart); in its scheduled modes the checks queue nothing paid.
  */
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
@@ -25,7 +29,10 @@ import { logger } from "../lib/logger";
 import { allowedTargetLocales } from "../billing/subscription";
 import type { CurrentLocales } from "../locales/current-locales";
 import { autoTranslatePaused, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { smartPaused } from "../smart/config";
 import { withTenant } from "../tenancy/with-tenant";
+import { startOfLocalDay } from "../../lib/schedule";
+import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import type { SweptType } from "../shopify/recent-changes";
 import { ACTIVE_JOB_STATUSES, AUTO_REQUESTED_BY } from "./bulk-jobs";
 
@@ -96,9 +103,16 @@ export async function queueAutoTranslate(
   const shop = await client.shop.findUnique({ where: { shopDomain: input.shopDomain } });
   if (!shop || shop.status !== "ACTIVE") return "ignored";
   const settings = await getShopSettings(shop.id, client);
-  if (!settings.autoTranslateNew || settings.autoTranslateLocales.length === 0) return "off";
-  // A limit or the missing provider stopped it: the periodic check picks the change up afterwards.
-  if (autoTranslatePaused(settings)) return "paused";
+  const smart = await withTenant(shop.id, (tx) => tx.smartAutoConfig.findUnique({ where: { shopId: shop.id } }), client);
+  if (smart?.enabled) {
+    // The smart schedule decides: real-time translates soon, the scheduled modes wait for their check.
+    if (smart.mode !== "realtime") return "off";
+    if (smartPaused(smart)) return "paused";
+  } else {
+    if (!settings.autoTranslateNew || settings.autoTranslateLocales.length === 0) return "off";
+    // A limit or the missing provider stopped it: the periodic check picks the change up afterwards.
+    if (autoTranslatePaused(settings)) return "paused";
+  }
   if (!deps.queue) {
     logger.warn({ shopId: shop.id }, "automatic translation on, but background jobs aren't configured");
     return "ignored";
@@ -131,6 +145,62 @@ export async function enqueueAutoCheck(queue: AutoQueue, payload: AutoTranslateP
  * (search engine listings only, or replacing protected translations); the
  * check waits for it instead of adding the item to it.
  */
+/** The rules a check follows: basic automatic translation, or the smart schedule in real-time mode. */
+interface AutoProfile {
+  requestedBy: string;
+  locales: readonly string[];
+  publishMode: "DRAFT" | "AUTO_PUBLISH";
+  fieldGroups: string[];
+  includeAttached: boolean;
+  replaceOutdatedMachine: boolean;
+  /** Its automatic jobs are grouped per day in this time zone. */
+  timeZone: string;
+}
+
+async function autoProfile(
+  client: PrismaClient,
+  payload: AutoTranslatePayload,
+  settings: Awaited<ReturnType<typeof getShopSettings>>,
+  billing: Awaited<ReturnType<NonNullable<JobDependencies["billingFor"]>>> | null,
+): Promise<AutoProfile | null> {
+  const smart = await withTenant(
+    payload.shopId,
+    async (tx) => {
+      const config = await tx.smartAutoConfig.findUnique({ where: { shopId: payload.shopId } });
+      const excluded = config?.enabled ? await tx.smartAutoExclusion.findUnique({ where: { shopId_resourceGid: { shopId: payload.shopId, resourceGid: payload.resourceGid } } }) : null;
+      return config ? { config, excluded: Boolean(excluded) } : null;
+    },
+    client,
+  );
+  if (smart?.config.enabled) {
+    const c = smart.config;
+    // Scheduled modes translate at their checks only; the plan, a pause and exclusions are checked again here.
+    if (c.mode !== "realtime" || smartPaused(c) || smart.excluded) return null;
+    if (billing && !billing.entitlements.smartAuto) return null;
+    if (!c.resourceTypes.includes(payload.resourceType)) return null;
+    return {
+      requestedBy: SMART_REQUESTED_BY,
+      locales: c.locales,
+      publishMode: c.publishMode === "AUTO_PUBLISH" && c.publishConfirmedAt ? "AUTO_PUBLISH" : "DRAFT",
+      fieldGroups: c.fieldGroups,
+      includeAttached: c.includeAttached,
+      replaceOutdatedMachine: c.replaceOutdatedMachine,
+      timeZone: c.timeZone,
+    };
+  }
+  if (!settings.autoTranslateNew || autoTranslatePaused(settings)) return null;
+  return {
+    requestedBy: AUTO_REQUESTED_BY,
+    locales: settings.autoTranslateLocales,
+    // Draft unless the merchant explicitly enabled automatic publishing.
+    publishMode: settings.bulkPublishMode,
+    fieldGroups: [],
+    includeAttached: false,
+    replaceOutdatedMachine: true,
+    timeZone: "UTC",
+  };
+}
+
 export async function createAutoItems(
   client: PrismaClient,
   payload: AutoTranslatePayload,
@@ -143,12 +213,14 @@ export async function createAutoItems(
   if (!shop || shop.status !== "ACTIVE") return none;
   // Settings, consent and plan are read again: they may have changed since the webhook.
   const settings = await getShopSettings(payload.shopId, client);
-  if (!settings.autoTranslateNew || !hasCurrentAiConsent(settings) || autoTranslatePaused(settings)) return none;
+  if (!hasCurrentAiConsent(settings)) return none;
   const billing = billingFor ? await billingFor(payload.shopId) : null;
   if (billing?.configured && !billing.entitlements.bulk) return none;
+  const profile = await autoProfile(client, payload, settings, billing);
+  if (!profile) return none;
 
   // Only languages the shop still has (not one that became primary), within the plan's limit.
-  let locales = settings.autoTranslateLocales;
+  let locales = profile.locales;
   if (localesFor) {
     const current = await localesFor(payload.shopId);
     const allowed = billing ? allowedTargetLocales(billing.entitlements, current.targets) : current.targets;
@@ -156,7 +228,7 @@ export async function createAutoItems(
   }
   const result = { itemIds: [] as string[], reused: [] as string[], busy: false };
   for (const locale of locales) {
-    const item = await autoItem(client, payload, locale);
+    const item = await autoItem(client, payload, locale, profile);
     if (item === "busy") result.busy = true;
     else if (item?.reused) result.reused.push(item.itemId);
     else if (item) result.itemIds.push(item.itemId);
@@ -164,11 +236,7 @@ export async function createAutoItems(
   return result;
 }
 
-function startOfUtcDay(now: Date) {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-async function autoItem(client: PrismaClient, payload: AutoTranslatePayload, locale: string) {
+async function autoItem(client: PrismaClient, payload: AutoTranslatePayload, locale: string, profile: AutoProfile) {
   return withTenant(
     payload.shopId,
     async (tx) => {
@@ -181,22 +249,30 @@ async function autoItem(client: PrismaClient, payload: AutoTranslatePayload, loc
       if (!job) {
         // One automatic job per day, type and language keeps the job list readable.
         const today = await tx.translationJob.findFirst({
-          where: { ...scope, requestedBy: AUTO_REQUESTED_BY, status: "COMPLETED", createdAt: { gte: startOfUtcDay(new Date()) } },
+          where: {
+            ...scope,
+            requestedBy: profile.requestedBy,
+            smartRunId: null,
+            status: "COMPLETED",
+            createdAt: { gte: new Date(startOfLocalDay(Date.now(), profile.timeZone)) },
+          },
           orderBy: { createdAt: "desc" },
         });
-        const settings = await tx.shopSettings.findUnique({ where: { shopId: payload.shopId } });
+        // The rules as they are now (a later check may follow changed settings).
+        const options = {
+          publishMode: profile.publishMode,
+          fieldGroups: profile.fieldGroups,
+          includeAttached: profile.includeAttached,
+          replaceOutdatedMachine: profile.replaceOutdatedMachine,
+        };
         job = today
-          ? await tx.translationJob.update({
-              where: { id: today.id },
-              data: { status: "RUNNING", finishedAt: null, publishMode: settings?.bulkPublishMode ?? "DRAFT" },
-            })
+          ? await tx.translationJob.update({ where: { id: today.id }, data: { status: "RUNNING", finishedAt: null, ...options } })
           : await tx.translationJob.create({
               data: {
                 ...scope,
-                requestedBy: AUTO_REQUESTED_BY,
+                requestedBy: profile.requestedBy,
                 idempotencyKey: `auto-${randomUUID()}`,
-                // Draft unless the merchant explicitly enabled automatic publishing.
-                publishMode: settings?.bulkPublishMode ?? "DRAFT",
+                ...options,
                 status: "RUNNING",
                 startedAt: new Date(),
                 discoveryDone: true,

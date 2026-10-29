@@ -14,7 +14,7 @@ import { requireShop } from "../shopify/require-shop";
 import { getTranslatableResource } from "../shopify/translations-api";
 import { fuzzyMatches } from "../memory/translation-memory";
 import { resolveGlossary } from "../glossary/glossary";
-import { getDailyUsage, getMonthlyUsage, QuotaExceededError } from "../usage/usage-ledger";
+import { getDailyUsage, getMonthlyUsage, QUOTA_CODES, QuotaExceededError } from "../usage/usage-ledger";
 import { getRequestLimiter, RequestRateLimitedError } from "../usage/request-limits";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { allowedTargetLocales, type BillingStatus } from "../billing/subscription";
@@ -244,7 +244,7 @@ function aiErrorCode(error: unknown): string | undefined {
   if (error instanceof AiConsentRequiredError) return "CONSENT_REQUIRED";
   if (error instanceof AiRequestTooLargeError) return "REQUEST_TOO_LARGE";
   if (error instanceof QuotaExceededError) {
-    return { monthly: "QUOTA_EXCEEDED", daily: "DAILY_LIMIT", platform: "PLATFORM_LIMIT" }[error.scope];
+    return QUOTA_CODES[error.scope];
   }
   if (error instanceof TranslationProviderError) return `PROVIDER_${error.kind.toUpperCase()}`;
   return undefined;

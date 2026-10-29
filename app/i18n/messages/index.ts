@@ -4,6 +4,7 @@
  * that no key is defined twice.
  */
 import type { Message } from "./define";
+import * as automatic from "./automatic";
 import * as common from "./common";
 import * as content from "./content";
 import * as coverage from "./coverage";
@@ -24,6 +25,7 @@ import * as transfer from "./transfer";
 export type { Message };
 
 export const NAMESPACES = {
+  automatic,
   common,
   content,
   coverage,
@@ -43,6 +45,7 @@ export const NAMESPACES = {
 } as const;
 
 const en = {
+  ...automatic.en,
   ...common.en,
   ...content.en,
   ...coverage.en,
@@ -64,6 +67,7 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const de: Record<MessageKey, Message> = {
+  ...automatic.de,
   ...common.de,
   ...content.de,
   ...coverage.de,
@@ -83,6 +87,7 @@ const de: Record<MessageKey, Message> = {
 };
 
 const fr: Record<MessageKey, Message> = {
+  ...automatic.fr,
   ...common.fr,
   ...content.fr,
   ...coverage.fr,
@@ -102,6 +107,7 @@ const fr: Record<MessageKey, Message> = {
 };
 
 const es: Record<MessageKey, Message> = {
+  ...automatic.es,
   ...common.es,
   ...content.es,
   ...coverage.es,

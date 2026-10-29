@@ -81,6 +81,27 @@ export function formatDateTime(locale: AppLocale, value: string | Date): string 
   return `${new Intl.DateTimeFormat(INTL_LOCALE[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(date)} UTC`;
 }
 
+/**
+ * Date and time in a time zone ("Thu, Oct 29, 23:00"): scheduled checks are
+ * shown in the schedule's zone. The zone is explicit, so the server and the
+ * browser render the same text.
+ */
+export function formatDateTimeIn(locale: AppLocale, value: string | Date | number, timeZone: string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  try {
+    return new Intl.DateTimeFormat(INTL_LOCALE[locale], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone }).format(date);
+  } catch {
+    return formatDateTime(locale, date);
+  }
+}
+
+/** A weekday's name, ISO numbering (1 Monday … 7 Sunday). */
+export function formatWeekday(locale: AppLocale, isoWeekday: number, style: "long" | "short" = "long"): string {
+  // 5 January 2026 is a Monday.
+  return new Intl.DateTimeFormat(INTL_LOCALE[locale], { weekday: style, timeZone: "UTC" }).format(new Date(Date.UTC(2026, 0, 4 + isoWeekday)));
+}
+
 /** "October 2026" for a "2026-10" period. */
 export function formatMonth(locale: AppLocale, period: string): string {
   const date = new Date(`${period}-01T00:00:00Z`);
@@ -151,6 +172,8 @@ export function translator(locale: AppLocale) {
     number: (value: number) => formatNumber(locale, value),
     date: (value: string | Date, style?: "medium" | "long") => formatDate(locale, value, style),
     dateTime: (value: string | Date) => formatDateTime(locale, value),
+    dateTimeIn: (value: string | Date | number, timeZone: string) => formatDateTimeIn(locale, value, timeZone),
+    weekday: (isoWeekday: number, style?: "long" | "short") => formatWeekday(locale, isoWeekday, style),
     month: (period: string) => formatMonth(locale, period),
     language: (code: string, shopifyName?: string | null) => languageName(locale, code, shopifyName),
     country: (code: string, shopifyName?: string | null) => countryName(locale, code, shopifyName),

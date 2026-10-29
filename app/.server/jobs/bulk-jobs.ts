@@ -5,6 +5,7 @@ import type {
 } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { refreshCoverageOverlays } from "../coverage/items";
+import { finishSmartRunIfDone } from "../smart/finish";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 
 export const ACTIVE_JOB_STATUSES = ["PENDING", "DISCOVERING", "RUNNING"] as const;
@@ -339,14 +340,16 @@ export async function finishItem(
           protectedSkipped: { increment: result.protectedSkipped ?? 0 },
         },
       });
-      await maybeComplete(tx, job);
-      return { resourceGid: item.resourceGid, locale: job.targetLocale };
+      const after = await maybeComplete(tx, job);
+      return { resourceGid: item.resourceGid, locale: job.targetLocale, smartRunId: after.status === "COMPLETED" ? after.smartRunId : null };
     },
     client,
   );
   if (!finished) return false;
   // Coverage shows the attempt (failed, or drafts made) right away.
   await refreshCoverageOverlays(shopId, [finished], client);
+  // The last job of a smart run finished: the run may be done.
+  if (finished.smartRunId) await finishSmartRunIfDone(shopId, finished.smartRunId, client);
   return true;
 }
 
@@ -380,15 +383,19 @@ export async function stopJob(
   errorCode: string,
   client: PrismaClient = defaultClient,
 ) {
-  await withTenant(
+  const smartRunId = await withTenant(
     shopId,
-    (tx) =>
-      tx.translationJob.updateMany({
+    async (tx) => {
+      const stopped = await tx.translationJob.updateMany({
         where: { id: jobId, shopId, status: { in: [...ACTIVE_JOB_STATUSES] } },
         data: { status: "FAILED", errorCode, finishedAt: new Date() },
-      }),
+      });
+      if (!stopped.count) return null;
+      return (await tx.translationJob.findFirst({ where: { id: jobId, shopId }, select: { smartRunId: true } }))?.smartRunId ?? null;
+    },
     client,
   );
+  if (smartRunId) await finishSmartRunIfDone(shopId, smartRunId, client);
 }
 
 export async function cancelJob(

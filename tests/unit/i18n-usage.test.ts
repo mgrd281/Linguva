@@ -20,6 +20,11 @@ const CODE = sources(ROOT).join("\n");
 
 // Keys built from a code at runtime (`${prefix}${code}`); the prefix must appear in the code too.
 const DYNAMIC = [
+  "automatic.mode.",
+  "automatic.activity.trigger.",
+  "automatic.activity.status.",
+  "automatic.activity.reason.",
+  "automatic.error.",
   "common.kind.",
   "common.group.",
   "common.field.",

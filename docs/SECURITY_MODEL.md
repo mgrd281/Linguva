@@ -200,6 +200,19 @@ Development-only tools (not shipped, not run on user input) also have advisories
 
 **Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
 
+## 5p. Database change review: Smart Auto-Translate (migration 20261105090000)
+
+| Change | Review |
+|---|---|
+| `SmartAutoConfig` (one row per shop): enabled, schedule (mode, time zone, times, weekdays), scope (languages, content types, field groups, images and custom fields), publish mode with who confirmed automatic publishing and when, the outdated-machine choice, daily and monthly budgets, pause (time, reason, until), next/last run, the primary-language snapshot, a form version | Codes, times, numbers and language codes; no merchant content. CHECK constraints refuse what the form validation refuses too: an unknown mode, a zone that isn't an IANA name, more than 6 times or values outside 0–1439, weekdays outside 1–7, malformed language codes, types or field groups, budgets outside 1–100,000,000, non-code pause reasons. |
+| `SmartAutoRun` (activity): trigger, the occurrence it is for, the Check now key, status, error code, the scope snapshot, the coverage report id, counters | Ids, codes, counts and times only. One run per scheduled occurrence (`UNIQUE (shopId, occurrenceAt)`) and per Check now click (`UNIQUE (shopId, idempotencyKey)`, key format checked); run creation is serialised per shop with an advisory lock, which also keeps one run active per shop. |
+| `SmartAutoExclusion`: resource GID, its type, who added it | Shopify ids only (format checked). |
+| Row-level security | All three tables: `ENABLE` + `FORCE ROW LEVEL SECURITY` and the one `tenant_isolation` policy on `app.shop_id`, FKs to `Shop` `ON DELETE CASCADE` (shop/redact removes them). Grants inside the role guard: `SELECT, INSERT, UPDATE` on the config (never deleted by the app), plus `DELETE` on runs (purged per shop after 90 days under `withTenant`) and exclusions (the merchant removes them). No `TRUNCATE`, functions, views or new roles. |
+| `TranslationJob.smartRunId` (FK to `SmartAutoRun` `ON DELETE SET NULL`), `.fieldGroups`, `.replaceOutdatedMachine` | Inherit the job's RLS. The run id is only set from a run read under the same tenant; the FK itself isn't tenant-scoped (RLS doesn't apply to FK checks), so a forged id is never taken from a request or payload. |
+| `CoverageReport.smartRunId`, `CoverageItem.pendingChars`, `UsageLedger.origin` (CHECK: null or `smart`) | Inherit their tables' RLS. A run id, a character count and an origin code; no merchant content. Smart budgets sum the shop's own ledger rows under its tenant. |
+| `Shop.smartNextRunAt` (indexed) | A global due index for the worker's tick, outside RLS like the rest of `Shop`, which the runtime role can update. It is only a hint: the tick re-reads the configuration under the shop's tenant before doing anything, and writes the hint only for the tenant it holds. |
+| Cross-tenant risk | None added: every read and write of the new rows goes through `withTenant`; queue payloads carry ids only and are re-read under their tenant. |
+
 ## 5o. Database change review: automatic translation pauses at limits (migration 20261101090000)
 
 | Change | Review |

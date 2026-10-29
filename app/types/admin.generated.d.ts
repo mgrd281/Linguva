@@ -204,6 +204,11 @@ export type LinguvaSearchBlogsQueryVariables = AdminTypes.Exact<{
 
 export type LinguvaSearchBlogsQuery = { blogs: { nodes: Array<Pick<AdminTypes.Blog, 'id'>> } };
 
+export type LinguvaShopTimeZoneQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
+
+
+export type LinguvaShopTimeZoneQuery = { shop: Pick<AdminTypes.Shop, 'ianaTimezone'> };
+
 export type LinguvaTranslatableResourcesQueryVariables = AdminTypes.Exact<{
   resourceType: AdminTypes.TranslatableResourceType;
   first: AdminTypes.Scalars['Int']['input'];
@@ -338,6 +343,7 @@ interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaSearchPages($query: String!) {\n    pages(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchPagesQuery, variables: LinguvaSearchPagesQueryVariables},
   "#graphql\n  query LinguvaSearchArticles($query: String!) {\n    articles(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchArticlesQuery, variables: LinguvaSearchArticlesQueryVariables},
   "#graphql\n  query LinguvaSearchBlogs($query: String!) {\n    blogs(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchBlogsQuery, variables: LinguvaSearchBlogsQueryVariables},
+  "#graphql\n  query LinguvaShopTimeZone {\n    shop {\n      ianaTimezone\n    }\n  }\n": {return: LinguvaShopTimeZoneQuery, variables: LinguvaShopTimeZoneQueryVariables},
   "#graphql\n  query LinguvaTranslatableResources(\n    $resourceType: TranslatableResourceType!\n    $first: Int!\n    $after: String\n    $locale: String!\n  ) {\n    translatableResources(resourceType: $resourceType, first: $first, after: $after) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourcesQuery, variables: LinguvaTranslatableResourcesQueryVariables},
   "#graphql\n  query LinguvaTranslatableResource($resourceId: ID!, $locale: String!) {\n    translatableResource(resourceId: $resourceId) {\n      resourceId\n      translatableContent {\n        key\n        value\n        digest\n        locale\n        type\n      }\n      translations(locale: $locale) {\n        key\n        value\n        outdated\n        updatedAt\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourceQuery, variables: LinguvaTranslatableResourceQueryVariables},
   "#graphql\n  query LinguvaProbeTranslatable($resourceType: TranslatableResourceType!) {\n    translatableResources(resourceType: $resourceType, first: 1) {\n      nodes {\n        resourceId\n      }\n    }\n  }\n": {return: LinguvaProbeTranslatableQuery, variables: LinguvaProbeTranslatableQueryVariables},

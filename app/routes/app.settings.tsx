@@ -28,6 +28,8 @@ import { getQueues } from "../.server/queue/client";
 import { requireShop } from "../.server/shopify/require-shop";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 import { useResultToast } from "../components/app-bridge";
+import { SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
+import { loadSmartPanel } from "../.server/smart/panel";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 
@@ -40,7 +42,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
   // The same allowance as the Overview, editor and Plan page (the plan's, when billing is on).
   const limits = aiLimitsFor(getConfig(), billing);
+  const targets = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
+  // The smart schedule (Business): its state and preview; other plans see what it would add.
+  const smart = billing.entitlements.smartAuto
+    ? await loadSmartPanel(shop.id, {
+        entitled: true,
+        consent: hasCurrentAiConsent(settings),
+        available: getTranslationProvider() !== null && getQueues() !== null,
+        allowed: allowedTargetLocales(billing.entitlements, targets),
+        shopTimeZone: null,
+      })
+    : null;
   return {
+    // One Check now per page view (a double click is one check).
+    smartCheckKey: crypto.randomUUID(),
+    smart: smart
+      ? {
+          status: smart.status,
+          zone: smart.zone,
+          config: smart.config,
+          nextChecks: smart.nextChecks,
+          lastSuccessAt: smart.lastSuccessAt,
+          lastRun: smart.lastRun,
+          translating: smart.translating,
+          estimate: smart.estimate,
+        }
+      : null,
     style: {
       languages: locales.locales
         .filter((l) => !l.primary)
@@ -146,6 +173,13 @@ export default function Settings() {
   const memoryFetcher = useFetcher<typeof action>();
   const styleFetcher = useFetcher<typeof action>();
   const autoFetcher = useFetcher<typeof action>();
+  // The smart schedule's actions go to its page's action, which checks the plan again.
+  const smartFetcher = useFetcher<{ ok: boolean; done?: string; count?: number; error?: string }>();
+  const smartAct = (intent: string, extra: Record<string, string> = {}) =>
+    smartFetcher.submit({ intent, ...extra }, { method: "post", action: "/app/settings/automatic" });
+  useResultToast(smartFetcher.data, smartToast(t, smartFetcher.data));
+  const smartBusy = smartFetcher.state !== "idle";
+  const languageNames = new Map(data.style.languages.map((l) => [l.locale, language(l.locale, l.name)]));
   const autoError = autoFetcher.data && "error" in autoFetcher.data ? autoFetcher.data.error : null;
   // Saved settings are confirmed with a toast; problems stay on the page.
   useResultToast(styleFetcher.data, styleFetcher.data && "saved" in styleFetcher.data ? t("settings.style.saved") : null);
@@ -289,11 +323,57 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      {data.smart ? (
+        <s-section heading={t("automatic.name")}>
+          <s-stack direction="block" gap="base">
+            <s-stack direction="inline" gap="small" alignItems="center">
+              <SmartStateBadge status={data.smart.status} />
+              <s-badge tone="info">{t("automatic.business")}</s-badge>
+            </s-stack>
+            <s-paragraph>{t("automatic.card.body")}</s-paragraph>
+            <SmartStateBanner status={data.smart.status} zone={data.smart.zone} />
+            {data.smart.config ? <SmartPreview data={data.smart} languageNames={languageNames} /> : null}
+            <s-stack direction="inline" gap="small">
+              {!data.smart.config ? (
+                <s-button variant="primary" href="/app/settings/automatic">
+                  {t("automatic.action.setUp")}
+                </s-button>
+              ) : data.smart.status.state === "off" ? (
+                <>
+                  <s-button variant="primary" onClick={() => smartAct("turn-on")} {...(smartBusy ? { loading: true } : {})}>
+                    {t("automatic.action.turnOn")}
+                  </s-button>
+                  <s-button href="/app/settings/automatic">{t("automatic.action.options")}</s-button>
+                </>
+              ) : (
+                <>
+                  <s-button
+                    variant="primary"
+                    disabled={data.smart.status.state !== "on"}
+                    onClick={() => smartAct("check-now", { key: data.smartCheckKey })}
+                    {...(smartBusy ? { loading: true } : {})}
+                  >
+                    {t("automatic.action.checkNow")}
+                  </s-button>
+                  {data.smart.status.state === "paused" ? (
+                    <s-button onClick={() => smartAct("resume")}>{t("automatic.action.resume")}</s-button>
+                  ) : (
+                    <s-button onClick={() => smartAct("pause")}>{t("automatic.action.pause")}</s-button>
+                  )}
+                  <s-button href="/app/settings/automatic">{t("automatic.action.options")}</s-button>
+                </>
+              )}
+            </s-stack>
+          </s-stack>
+        </s-section>
+      ) : null}
+
       <s-section heading={t("settings.auto.heading")}>
         <s-stack direction="block" gap="base">
           <s-paragraph>
             {data.publishMode === "AUTO_PUBLISH" ? t("settings.auto.bodyAutoPublish") : t("settings.auto.bodyReview")}
           </s-paragraph>
+          {data.smart ? <s-text color="subdued">{t("automatic.basic.replaced")}</s-text> : null}
           {data.auto.enabled ? (
             <s-paragraph>
               <s-badge tone="success">{t("common.state.on")}</s-badge>{" "}
@@ -414,6 +494,20 @@ export default function Settings() {
           ) : null}
         </s-stack>
       </s-section>
+
+      {data.smart ? null : (
+        <s-section heading={t("automatic.upsell.heading")}>
+          <s-stack direction="block" gap="small">
+            <s-stack direction="inline" gap="small" alignItems="center">
+              <s-badge tone="info">{t("automatic.business")}</s-badge>
+            </s-stack>
+            <s-paragraph>{t("automatic.upsell.body")}</s-paragraph>
+            <s-stack direction="inline">
+              <s-button href="/app/plan">{t("automatic.upsell.cta")}</s-button>
+            </s-stack>
+          </s-stack>
+        </s-section>
+      )}
 
       <s-section heading={t("common.nav.memory")}>
         <s-stack direction="block" gap="base">

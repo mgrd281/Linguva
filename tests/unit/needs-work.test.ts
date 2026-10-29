@@ -86,6 +86,16 @@ describe("planResourceWork", () => {
     expect(fieldsNeedingTranslation(resource([]), { pendingDrafts }).map((f) => f.key)).toEqual(["body_html", "meta_title"]);
   });
 
+  it("limits the work to chosen field groups, and can leave outdated translations as they are", () => {
+    const outdated = resource([{ key: "title", value: "Jacke", outdated: true }]);
+    const latest = new Map([[`${GID}|title`, revision("title", "Jacke")]]);
+    expect(fieldsNeedingTranslation(outdated, { latest, onlyGroups: { groups: ["title", "seo_title"], resourceType: "PRODUCT" } }).map((f) => f.key)).toEqual(["title", "meta_title"]);
+    // Kept even though it is Linguva's own unreviewed machine output, which is otherwise refreshed.
+    expect(fieldsNeedingTranslation(outdated, { latest, keepOutdated: true }).map((f) => f.key)).toEqual(["body_html", "meta_title"]);
+    // No groups chosen: all of them.
+    expect(fieldsNeedingTranslation(outdated, { latest, onlyGroups: { groups: [], resourceType: "PRODUCT" } }).map((f) => f.key)).toEqual(["title", "body_html", "meta_title"]);
+  });
+
   it("keeps a translation the merchant removed on purpose removed until the original changes", () => {
     const removed = revision("title", "", { origin: "MANUAL", approved: true, sourceDigest: "d1" });
     const latest = new Map([[`${GID}|title`, removed]]);

@@ -56,6 +56,8 @@ export class FakeShopifyStore {
   /** All resources by GID (products and collections). */
   readonly products = new Map<string, Field[]>();
   readonly translations = new Map<string, { value: string; digest: string }>();
+  /** The store's time zone (Settings → General). */
+  timeZone = "Europe/Berlin";
   /** Product media (MediaImage GIDs; null = a video or 3D model). */
   readonly media = new Map<string, Array<{ id: string; url: string } | null>>();
   /** Nested image resources of collections and articles, by parent. */
@@ -308,6 +310,7 @@ export class FakeShopifyStore {
       });
     }
     if (name === "LinguvaShopLocales") return Response.json({ data: { shopLocales: this.locales } });
+    if (name === "LinguvaShopTimeZone") return Response.json({ data: { shop: { ianaTimezone: this.timeZone } } });
     if (name === "LinguvaProductMedia") {
       const gid = String(vars.id);
       if (!this.products.has(gid)) return Response.json({ data: { product: null } });

@@ -48,7 +48,13 @@ describe("every way to write to a store is known and reviewed", () => {
   });
 
   it("the app sends no other Shopify mutations", () => {
-    const mutations = APP.flatMap((f) => [...f.text.matchAll(/mutation\s+(\w+)\s*\(/g)].map((m) => `${f.path}: ${m[1]}`));
+    // Any operation: named or anonymous, with or without variables (for example one that would
+    // change the store's primary language, which Linguva never does).
+    const MUTATION = /\bmutation\b\s*(\w*)\s*[({]/g;
+    for (const probe of ["mutation LinguvaX { shopLocaleUpdate }", "mutation { shopLocaleUpdate }", "mutation LinguvaY($a: ID!) {"]) {
+      expect([...probe.matchAll(MUTATION)]).toHaveLength(1);
+    }
+    const mutations = APP.flatMap((f) => [...f.text.matchAll(MUTATION)].map((m) => `${f.path}: ${m[1] || "(anonymous)"}`));
     expect(mutations.sort()).toEqual([
       "app/.server/shopify/translations-api.ts: LinguvaTranslationsRegister",
       "app/.server/shopify/translations-api.ts: LinguvaTranslationsRemove",

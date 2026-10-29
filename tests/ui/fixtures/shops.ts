@@ -317,10 +317,13 @@ export function shopByDomain(domain: string): UiShop | undefined {
   return Object.values(UI_SHOPS).find((s) => s.domain === domain);
 }
 
+// Another port (UI_PORT) lets two checkouts run their UI tests at the same time.
+const UI_PORT = Number(process.env.UI_PORT ?? 4317);
+
 export const UI_ENV = {
   apiKey: "ui-test-api-key",
   // A fixed, test-only secret: session tokens in the tests are signed with it.
   apiSecret: "ui-test-api-secret-not-used-anywhere-else",
-  appUrl: "http://localhost:4317",
-  port: 4317,
+  appUrl: `http://localhost:${UI_PORT}`,
+  port: UI_PORT,
 } as const;

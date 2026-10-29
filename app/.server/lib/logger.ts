@@ -6,7 +6,7 @@ import pino from "pino";
  */
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
-  base: { service: "linguva-web" },
+  base: { service: process.env.LOG_SERVICE ?? "linguva-web" },
   redact: {
     paths: [
       "accessToken",

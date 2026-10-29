@@ -1,6 +1,6 @@
 # Roadmap, Risks and Decisions
 
-Status as of 2026-10-27: **M1 and M2 implemented and tested (locally and in GitHub CI). M3 and the interactive part of M4 are implemented and tested against a simulated Admin API, but not yet verified on a real dev store.**
+Status as of 2026-10-27: **All features listed in FEATURE_STATUS.md are implemented and tested locally (and in GitHub CI) against simulated Shopify, Partner and DeepL APIs, real PostgreSQL and real Redis. Nothing is verified on a real Shopify store yet: no development store is connected. FEATURE_STATUS.md is the single source of truth for feature states; the table below is the history of the work.**
 
 ## 1. Progress checklist
 
@@ -24,9 +24,39 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M4 | Usage ledger with quota reservation (advisory lock, idempotent) | Implemented, Tested (incl. concurrency) |
 | M4 | Products list (coverage per locale) and product translation editor: AI drafts, review, digest-checked publish, revisions, audit log | Implemented, Tested against a simulated Admin API. **Blocked on a dev store** for verification |
 | M4 | AI data-processing consent (versioned, audited) and Settings page | Implemented, Tested |
-| M4 | Background jobs (BullMQ worker) for bulk translation | Planned (next) |
+| M4 | Bulk translation worker: BullMQ queues (discovery + items), idempotent enqueue, exponential backoff with jitter, dead-letter state, per-shop Redis token bucket, job stop conditions, cancel/retry/resume, stalled-item sweeper, graceful shutdown | Implemented, Tested (integration with real Redis + BullMQ, security suite). **Not yet verified on a dev store** |
+| M4 | Mock translation provider (refused in production) and DeepL Free readiness (`:fx` endpoint, `/v2/usage` check) | Implemented, Tested. DeepL not verified against the live API |
+| M4 | Jobs pages (list, progress, failed products, cancel, retry) and "translate all" on Products | Implemented. Blocked on a dev store for verification |
+| M5 | Translation memory: per shop, segment level, exact (hash) and fuzzy (pg_trgm) matches, APPROVED vs MACHINE entries (approved never downgraded), market-specific entries, reuse before any provider call, in-request de-duplication, Memory page | Implemented, Tested (unit, integration, security) |
+| M5 | Glossary: never translate / always translate as / never use, per language and market, CSV import (all-or-nothing, line errors) and formula-safe export, Glossary page | Implemented, Tested |
+| M5 | Bulk review: draft mode by default, Review page (edit, approve, reject), stale detection, automatic publishing only after explicit confirmation (recorded) | Implemented, Tested. UI not yet verified on a dev store |
+| M5 | Protection of manual/approved translations (and translations made outside Linguva) from bulk jobs unless explicitly allowed | Implemented, Tested |
+| M5 | Revision history per field, previous Shopify value kept as EXTERNAL revision, restore while the source is unchanged | Implemented, Tested. **Rollback after a source change isn't possible (Shopify accepts translations only for the current source digest)** |
+| M5 | DeepL glossary API, TMX import/export, market-scoped publishing in jobs | Planned |
+| M4 | Collections: list with coverage, editor (shared with products), bulk jobs (`resourceType` COLLECTION) | Implemented, Tested (fake store). Not yet Verified |
+| M3 | Guarded live contract tests (`pnpm test:live`): dev-store gate (`plan.partnerDevelopment`), deny list, fixture-only writes with cleanup, mock provider; operations schema-validated in CI | Implemented; guard unit-tested. **Not run: no dev store connected (Blocked on owner)** |
+| M7 | AI cost limits: daily cap per shop, platform-wide daily cap, per-request size cap, per-user and per-shop request rate limits (Redis) | Implemented, Tested (integration with real Redis/PostgreSQL incl. concurrency, security suite) |
+| M5 | Draft protection: publishing only while automatic publishing is still enabled; flagged results always go to Review | Implemented, Tested (security suite, mutation-checked) |
+| M6 | SEO and Markets plan (SEO_ARCHITECTURE.md) | Written |
+| M5 | Jobs and Review: keyset pagination, filters and search | Implemented, Tested (integration incl. 20,000 drafts, cross-shop cursor) |
+| M8 | Security review of the fuzzy search definer function and database privileges (SECURITY_REVIEW_MEMORY_FUZZY.md): hardened search path, superuser guard, runtime posture check (fail closed in production), AuditLog insert-only, adversarial tests with three roles, mutation-checked | Implemented, Tested (security suite in CI) |
+| M8 | Fuzzy memory search at 100,000 entries: shop + trigram index via a hardened SECURITY DEFINER function | Implemented, Tested (performance suite in CI, security suite) |
+| M6 | SEO S2: URL handle suggestions, format check, confirmation before changing a published handle | Implemented, Tested (unit, integration, mutation-checked) |
+| M5 | Remove a translation from the editor (kept in history, restorable) | Implemented, Tested |
+| M4 | Pages, blog posts and blogs (PAGE, ARTICLE, BLOG): list, editor, bulk, review, coverage | Implemented, Tested (fake store). GID format to be confirmed by the live read test |
+| M6 | Coverage report (SEO S5): background scan per language and type, counts by field group, SEO findings, duplicate SEO titles, worst items, "translate gaps" / "SEO only" actions | Implemented, Tested (unit, integration incl. BullMQ worker, security: isolation and no stored text; mutation-checked). Not verified on a dev store |
+| M6 | SEO S1: SEO title/description checks (width-based limits, untranslated), editor "Search engine listing" with live counters and result preview, "SEO fields only" AI and bulk jobs | Implemented, Tested (unit, integration, mutation-checked). Not verified on a dev store |
+| M7 | Shopify App Pricing: entitlements, Partner API subscription check with cache, plan selection redirect, welcome link, gating | Implemented, Tested (simulated Partner API). Not verified |
+| M6 | Image alt text and text metafields in the editor | Implemented, Tested (fake store, security tests). Not verified |
+| M6 | Read-only Markets page (optional scope `read_markets`) | Implemented, Tested (unit). Not verified |
+| M8 | Review guard for SECURITY DEFINER changes; CI checks for hidden files and orphan test files | Implemented, Tested |
+| M7 | Owner complimentary access (allowlist + operator grant, metered, audited) | Implemented, Tested (unit, integration, security, UI) |
+| M3 | Shopify CLI readiness (app config, .env in development, preflight) | Implemented; dev server start checked. Blocked on `config:link` (owner) |
+| M8 | Playwright UI tests (production build, simulated Shopify, axe, phone layout); UX error/empty/loading states | Implemented, Tested (CI) |
+| — | Beta readiness review (BETA_READINESS.md) | Done: blockers need the owner |
 | — | CI on GitHub | Implemented, green on the first push |
-| — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, SEO_ARCHITECTURE, DEPLOYMENT, TEST_PLAN | Planned |
+| — | SEO_ARCHITECTURE, DEV_STORE_SETUP | Written |
+| — | PRODUCT_REQUIREMENTS, PRIVACY_COMPLIANCE, DEPLOYMENT, TEST_PLAN | Planned |
 
 ## 2. Milestones
 
@@ -74,12 +104,41 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | D-07 | Partner organization: which one owns the app; who creates the dev store | Owner creates; credentials go only into env vars |
 | D-08 | Push/PR policy: may Claude push to the feature branch `claude/gallant-pasteur-8opy75` and open draft PRs, or only commit locally? | Allow pushes to the feature branch + draft PRs (no merge) |
 
-## 5. Next task (proposed, not started)
+## 5. Verification status (what is actually proven)
 
-**M1-T1: Scaffold the app from the official Shopify React Router template, without any Shopify credentials.**
+| Area | Unit/integration (local + CI) | Security suite | Real dev store |
+|---|---|---|---|
+| Install, sessions, token encryption, webhooks, compliance | Yes | Yes | No |
+| Languages page (`shopLocales`) | Yes (fake) | — | No |
+| Products and collections: list, editor, publish with digest check | Yes (fake) | Yes | No |
+| Translation memory (exact, fuzzy), glossary | Yes | Yes | No |
+| Bulk jobs, drafts, review, approve/reject | Yes (fake + real Redis/BullMQ) | Yes | No |
+| Protection of existing translations, EXTERNAL history, restore | Yes (fake) | Yes | No (live test prepared) |
+| Shopify error codes and `outdated` behaviour assumed by the fakes | Schema only | — | No (live test prepared) |
+| DeepL | Stubbed HTTP only | — | No key configured |
+| SEO checks, handles, coverage report | Yes (fake) | Yes (coverage) | No |
+| Image alt text, text metafields | Yes (fake) | Yes | No (live test prepared) |
+| Markets page (read-only) | Yes (fake) | — | No (live read test prepared) |
+| Shopify App Pricing | Yes (simulated Partner API) | — | No |
 
-- Steps: `npx @shopify/cli@4.9.4 app init --template=reactRouter` (exact template flag verified at run time) into the repo root, without linking a Partner app (`client_id` left empty). Switch to pnpm. Add TypeScript strict, ESLint, Vitest with one smoke test, `docker-compose.yml` (Postgres + Redis, local only), `.env.example`, and a CI workflow.
-- Files: `package.json`, `app/**`, `shopify.app.toml` (no secrets), `prisma/schema.prisma` (template Session model only), `vitest.config.ts`, `docker-compose.yml`, `.github/workflows/ci.yml`, `.env.example`.
-- Risks: the CLI may require Partner login for some init flows. If so, use the public template repository at a pinned tag instead.
-- Validation: `pnpm install && pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
-- Not included: no Partner app linking, no store access, no deployment.
+## 6. Open issues
+
+| ID | Issue | Severity | Plan |
+|---|---|---|---|
+| O1 | Dev store connected 2026-10-28 (linguva-test-lab); checks not yet run | High | Owner runs DEV_STORE_VERIFICATION.md (`pnpm test:live` with `LIVE_USE_APP_SESSION=yes`, then the manual checklist) |
+| O2 | ~~Fuzzy memory search slow at scale~~ | Fixed | Under RLS no index could serve the trigram operator (not LEAKPROOF), so every search scanned the shop's whole memory (446 ms at 100k). Now a hardened SECURITY DEFINER function uses a shop + trigram GIN index: median 37 ms, p95 49 ms, recall 10/10 at 100,000 entries (performance test in CI) |
+| O3 | ~~No per-user rate limit on interactive AI endpoints~~ | Fixed | Request limits per user and shop, daily and platform caps (SECURITY_MODEL §5a) |
+| O4 | Images and metafields are in the editor only (not in bulk jobs or the coverage report); market-specific translations are missing. (Metaobjects, menus, theme content and all other content types are done.) | Medium | Images and metafields in bulk: next; markets after live verification |
+| O10 | CODEOWNERS only blocks merges when branch protection requires code owner review on `main` | Medium | Owner: enable "Require review from Code Owners" in the branch protection rule |
+| O5 | ~~Deleting a translation from the UI isn't supported~~ | Fixed | Editor "Remove translation" (two-step), removed value kept as a revision, audit entry |
+| O6 | ~~No pagination on Review and Jobs~~ | Fixed | Keyset pagination, filters (status, language, type, field group, warnings) and search (wildcards escaped) |
+| O9 | Search on Review (ILIKE) can't use an index under RLS either | Low | Fine at 20,000 drafts (tested). Revisit with the same function approach if shops exceed ~100k pending drafts |
+| O7 | Rollback after a source change is impossible (Shopify accepts only the current digest) | By design | Shown in the UI |
+| O8 | The repository is public | Medium | Owner: consider making it private; set `main` as default branch and protect it |
+
+## 7. Next steps
+
+1. Owner: link the app and connect a development store (SHOPIFY_CLI_SETUP.md), then run DEV_STORE_TEST_PLAN.md (live tests first). Log the results there. The blockers are listed in BETA_READINESS.md.
+2. Fix whatever the live run shows before building anything new; update FEATURE_STATUS.md to "Verified on Shopify" only for cases that passed.
+3. Owner decisions for the beta: plan prices and limits (BILLING_DESIGN §2), AI provider key and budget, hosting.
+4. Then: images and metafields in bulk jobs and coverage, market-specific translations, automation on product updates.

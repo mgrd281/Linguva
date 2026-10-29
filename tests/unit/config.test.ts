@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getConfig } from "../../app/.server/lib/config";
+import { aiUsageLimits, getConfig } from "../../app/.server/lib/config";
 
 const valid = {
   DATABASE_URL: "postgresql://u:p@localhost:5432/db",
@@ -31,5 +31,67 @@ describe("getConfig", () => {
         TOKEN_ENCRYPTION_KEYS: valid.TOKEN_ENCRYPTION_KEYS,
       } as NodeJS.ProcessEnv),
     ).toThrow(/DATABASE_URL/);
+  });
+});
+
+describe("getConfig: background jobs and providers", () => {
+  it("refuses the mock provider in production", () => {
+    expect(() =>
+      getConfig({ ...valid, NODE_ENV: "production", TRANSLATION_PROVIDER: "mock" } as NodeJS.ProcessEnv),
+    ).toThrow(/TRANSLATION_PROVIDER/);
+  });
+
+  it("allows the mock provider in development and applies job defaults", () => {
+    const config = getConfig({ ...valid, TRANSLATION_PROVIDER: "mock" } as NodeJS.ProcessEnv);
+    expect(config.TRANSLATION_PROVIDER).toBe("mock");
+    expect(config.WORKER_CONCURRENCY).toBe(5);
+    expect(config.SHOPIFY_JOB_RESTORE_PER_SECOND).toBe(80);
+  });
+});
+
+describe("getConfig: AI cost limits", () => {
+  it("requires Redis in production so rate limits are shared", () => {
+    expect(() => getConfig({ ...valid, NODE_ENV: "production" } as NodeJS.ProcessEnv)).toThrow(/REDIS_URL/);
+    expect(() =>
+      getConfig({ ...valid, NODE_ENV: "production", REDIS_URL: "redis://localhost:6379" } as NodeJS.ProcessEnv),
+    ).not.toThrow();
+  });
+
+  it("never lets the daily cap exceed the monthly allowance", () => {
+    const base = getConfig({ ...valid } as NodeJS.ProcessEnv);
+    expect(aiUsageLimits(base)).toEqual({ limit: 20_000, dailyLimit: 20_000, platformDailyLimit: 100_000 });
+    const custom = getConfig({ ...valid, AI_MONTHLY_CHAR_LIMIT: "5000", AI_DAILY_CHAR_LIMIT: "9000" } as NodeJS.ProcessEnv);
+    expect(aiUsageLimits(custom).dailyLimit).toBe(5000);
+    expect(() => getConfig({ ...valid, AI_USER_REQUESTS_PER_MINUTE: "0" } as NodeJS.ProcessEnv)).toThrow(
+      /AI_USER_REQUESTS_PER_MINUTE/,
+    );
+  });
+});
+
+describe("getConfig: values pasted into a hosting dashboard", () => {
+  it("trims a DeepL key, drops quotes and treats an empty one as not set", () => {
+    expect(getConfig({ ...valid, DEEPL_API_KEY: "  abc-123:fx\n" } as NodeJS.ProcessEnv).DEEPL_API_KEY).toBe("abc-123:fx");
+    expect(getConfig({ ...valid, DEEPL_API_KEY: '"abc-123:fx"' } as NodeJS.ProcessEnv).DEEPL_API_KEY).toBe("abc-123:fx");
+    expect(getConfig({ ...valid, DEEPL_API_KEY: "" } as NodeJS.ProcessEnv).DEEPL_API_KEY).toBeUndefined();
+    expect(getConfig({ ...valid, DEEPL_API_KEY: "   " } as NodeJS.ProcessEnv).DEEPL_API_KEY).toBeUndefined();
+  });
+
+  it("accepts DeepL's address with /v2 or a trailing slash (the client adds /v2)", () => {
+    for (const url of ["https://api-free.deepl.com", "https://api-free.deepl.com/", "https://api-free.deepl.com/v2", "https://api-free.deepl.com/v2/ "]) {
+      expect(getConfig({ ...valid, DEEPL_API_URL: url } as NodeJS.ProcessEnv).DEEPL_API_URL).toBe("https://api-free.deepl.com");
+    }
+    expect(getConfig({ ...valid, DEEPL_API_URL: "" } as NodeJS.ProcessEnv).DEEPL_API_URL).toBeUndefined();
+  });
+
+  it("reads character limits with thousands separators, never 450.000 as 450", () => {
+    for (const value of ["450000", "450.000", "450,000", "450 000", " 450000 "]) {
+      expect(getConfig({ ...valid, AI_MONTHLY_CHAR_LIMIT: value } as NodeJS.ProcessEnv).AI_MONTHLY_CHAR_LIMIT).toBe(450_000);
+    }
+    const config = getConfig({ ...valid, AI_DAILY_CHAR_LIMIT: "100.000", AI_PLATFORM_DAILY_CHAR_LIMIT: "1.200.000" } as NodeJS.ProcessEnv);
+    expect([config.AI_DAILY_CHAR_LIMIT, config.AI_PLATFORM_DAILY_CHAR_LIMIT]).toEqual([100_000, 1_200_000]);
+    // Empty: the default.
+    expect(getConfig({ ...valid, AI_MONTHLY_CHAR_LIMIT: "" } as NodeJS.ProcessEnv).AI_MONTHLY_CHAR_LIMIT).toBe(20_000);
+    // Ambiguous: refused with the variable's name, not guessed.
+    expect(() => getConfig({ ...valid, AI_MONTHLY_CHAR_LIMIT: "1.5" } as NodeJS.ProcessEnv)).toThrow(/AI_MONTHLY_CHAR_LIMIT/);
   });
 });

@@ -72,3 +72,30 @@ describe("shop lifecycle", () => {
     expect(rows.map((r) => [r.locale, r.published])).toEqual([["de", true], ["fr", true]]);
   });
 });
+
+describe("concurrent installs", () => {
+  // On first open, Shopify loads the app document and its loaders run in
+  // parallel: each authenticates and records the shop at the same time.
+  it("records a shop once when several requests install it at the same time", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        upsertInstalledShop({ shopDomain: DOMAIN, ...(i % 2 ? { shopifyShopGid: "gid://shopify/Shop/5" } : {}) }, app),
+      ),
+    );
+    expect(new Set(results.map((r) => r.shop.id)).size).toBe(1);
+    expect(results.filter((r) => r.event === "INSTALLED")).toHaveLength(1);
+    const shop = await app.shop.findUniqueOrThrow({ where: { shopDomain: DOMAIN } });
+    expect(shop.shopifyShopGid).toBe("gid://shopify/Shop/5");
+    expect(await withTenant(shop.id, (tx) => tx.shopInstallation.count(), app)).toBe(1);
+    expect(await withTenant(shop.id, (tx) => tx.shopSettings.count(), app)).toBe(1);
+  });
+
+  it("records a reinstall once under concurrency", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    await markShopUninstalled(DOMAIN, app);
+    const results = await Promise.all(Array.from({ length: 4 }, () => upsertInstalledShop({ shopDomain: DOMAIN }, app)));
+    expect(results.filter((r) => r.event === "REINSTALLED")).toHaveLength(1);
+    expect(await withTenant(shop.id, (tx) => tx.shopInstallation.count({ where: { event: "REINSTALLED" } }), app)).toBe(1);
+    expect((await app.shop.findUniqueOrThrow({ where: { id: shop.id } })).status).toBe("ACTIVE");
+  });
+});

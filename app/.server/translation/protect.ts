@@ -5,8 +5,13 @@
  */
 
 export interface ProtectOptions {
-  /** Terms copied verbatim (glossary PROTECT rules, brand names). */
+  /** Terms copied verbatim (glossary DO_NOT_TRANSLATE rules, brand names). */
   protectedTerms?: ReadonlyArray<{ term: string; caseSensitive?: boolean }>;
+  /**
+   * Terms replaced by a fixed translation (glossary PREFERRED rules). The
+   * provider only sees an opaque code, so it can't alter the wording.
+   */
+  replacements?: ReadonlyArray<{ term: string; caseSensitive?: boolean; value: string }>;
   /** Extra patterns, for example SKU formats. Must not be sticky/global. */
   patterns?: ReadonlyArray<RegExp>;
 }
@@ -15,6 +20,8 @@ export interface ProtectedSpan {
   start: number;
   end: number;
   value: string;
+  /** What the span renders as in the translation (defaults to `value`). */
+  replacement?: string;
 }
 
 const BUILT_IN: ReadonlyArray<RegExp> = [
@@ -68,8 +75,16 @@ export function findProtectedSpans(
       .filter((t) => t.term.trim().length > 0)
       .map((t) => termPattern(t.term, t.caseSensitive ?? true)),
   ];
-  const candidates = patterns
-    .flatMap((p) => allMatches(text, p))
+  const replacementSpans = (options.replacements ?? [])
+    .filter((r) => r.term.trim().length > 0)
+    .flatMap((r) =>
+      allMatches(text, termPattern(r.term, r.caseSensitive ?? false)).map((span) => ({
+        ...span,
+        replacement: r.value,
+      })),
+    );
+  // Longest match wins at the same position, so "KARINEX Pro" beats "Pro".
+  const candidates = [...patterns.flatMap((p) => allMatches(text, p)), ...replacementSpans]
     .sort((a, b) => a.start - b.start || b.end - a.end);
 
   const result: ProtectedSpan[] = [];

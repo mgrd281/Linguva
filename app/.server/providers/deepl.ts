@@ -66,6 +66,16 @@ function parseRetryAfter(header: string | null): number | undefined {
   return Number.isFinite(seconds) ? seconds * 1000 : undefined;
 }
 
+/** Target languages per API host, read from DeepL (GET /v2/languages) and kept for a day. */
+const LANGUAGE_CACHE_MS = 24 * 60 * 60 * 1000;
+const languageCache = new Map<string, { at: number; codes: Set<string> }>();
+
+/** Whether DeepL's list of target codes covers a Shopify locale (exact variant, or the base language). Pure. */
+export function deeplSupports(codes: ReadonlySet<string>, locale: string): boolean {
+  const code = deeplTargetLang(locale);
+  return codes.has(code) || codes.has(code.split("-")[0]!);
+}
+
 export class DeepLProvider implements TranslationProvider {
   readonly id = "deepl";
   private readonly baseUrl: string;
@@ -77,6 +87,59 @@ export class DeepLProvider implements TranslationProvider {
       options.baseUrl ??
       (options.apiKey.endsWith(":fx") ? "https://api-free.deepl.com" : "https://api.deepl.com");
     this.fetchImpl = options.fetch ?? fetch;
+  }
+
+  /**
+   * Account usage (GET /v2/usage). Used to verify a key and to show the
+   * remaining provider quota to the operator.
+   */
+  async getUsage(): Promise<{ characterCount: number; characterLimit: number }> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/v2/usage`, {
+        headers: { Authorization: `DeepL-Auth-Key ${this.options.apiKey}` },
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? 30_000),
+      });
+    } catch (error) {
+      throw new TranslationProviderError(this.id, "retryable", `network error: ${(error as Error).name}`);
+    }
+    if (!response.ok) {
+      throw new TranslationProviderError(
+        this.id,
+        response.status === 401 || response.status === 403 ? "auth" : "retryable",
+        `HTTP ${response.status}`,
+        response.status,
+      );
+    }
+    const body = (await response.json()) as { character_count?: number; character_limit?: number };
+    return { characterCount: body.character_count ?? 0, characterLimit: body.character_limit ?? 0 };
+  }
+
+  /** DeepL's current target languages (GET /v2/languages?type=target), cached per host for a day. */
+  async targetLanguages(now = Date.now()): Promise<Set<string>> {
+    const cached = languageCache.get(this.baseUrl);
+    if (cached && now - cached.at < LANGUAGE_CACHE_MS) return cached.codes;
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/v2/languages?type=target`, {
+        headers: { Authorization: `DeepL-Auth-Key ${this.options.apiKey}` },
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? 30_000),
+      });
+    } catch (error) {
+      throw new TranslationProviderError(this.id, "retryable", `network error: ${(error as Error).name}`);
+    }
+    if (!response.ok) {
+      throw new TranslationProviderError(this.id, response.status === 401 || response.status === 403 ? "auth" : "retryable", `HTTP ${response.status}`, response.status);
+    }
+    const body = (await response.json()) as Array<{ language?: string }>;
+    const codes = new Set(body.map((l) => (l.language ?? "").toUpperCase()).filter(Boolean));
+    languageCache.set(this.baseUrl, { at: now, codes });
+    return codes;
+  }
+
+  async targetSupport(locales: readonly string[]): Promise<Map<string, boolean>> {
+    const codes = await this.targetLanguages();
+    return new Map(locales.map((l) => [l, deeplSupports(codes, l)]));
   }
 
   async translate(request: TranslationRequest, signal?: AbortSignal): Promise<TranslationResult> {
@@ -115,6 +178,8 @@ export class DeepLProvider implements TranslationProvider {
           ignore_tags: ["x"],
           show_billed_characters: true,
           ...(request.context ? { context: request.context } : {}),
+          // prefer_*: falls back to the default for languages without formal/informal forms.
+          ...(request.formality ? { formality: `prefer_${request.formality}` } : {}),
         }),
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });

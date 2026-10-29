@@ -1,4 +1,4 @@
--- Local/CI only. Creates the two database roles Linguva expects:
+-- Local/CI only. Creates the database roles Linguva expects (plus a test-only probe role):
 --   linguva_owner : owns the schema and runs migrations
 --   linguva_app   : runtime role (DML only, subject to row-level security)
 -- Passwords here are for local development and CI containers only.
@@ -10,6 +10,11 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'linguva_app') THEN
     CREATE ROLE linguva_app LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'linguva_app_dev';
+  END IF;
+  -- Tests only: a role with no grants, to prove that privileges (not just
+  -- RLS) keep other database users away from tenant data.
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'linguva_probe') THEN
+    CREATE ROLE linguva_probe LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'linguva_probe_dev';
   END IF;
 END
 $$;

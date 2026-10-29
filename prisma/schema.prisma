@@ -55,12 +55,24 @@ model Shop {
   createdAt      DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
 
-  installations ShopInstallation[]
-  settings      ShopSettings?
-  locales       ShopLocale[]
-  auditLogs     AuditLog[]
-  revisions     TranslationRevision[]
-  usage         UsageLedger[]
+  installations    ShopInstallation[]
+  settings         ShopSettings?
+  locales          ShopLocale[]
+  auditLogs        AuditLog[]
+  revisions        TranslationRevision[]
+  usage            UsageLedger[]
+  jobs             TranslationJob[]
+  jobItems         TranslationJobItem[]
+  memory           TranslationMemory[]
+  glossaries       Glossary[]
+  glossaryTerms    GlossaryTerm[]
+  drafts           TranslationDraft[]
+  coverageReports  CoverageReport[]
+  coverageItems    CoverageItem[]
+  coverageCounts   CoverageCount[]
+  coverageSegments CoverageSegment[]
+  complimentary    ComplimentaryAccess?
+  subscription     ShopSubscription?
 }
 
 enum InstallationEventType {
@@ -83,14 +95,34 @@ model ShopInstallation {
 }
 
 model ShopSettings {
-  shopId                    String    @id @db.Uuid
-  autoTranslateNew          Boolean   @default(false)
-  protectManualEdits        Boolean   @default(true)
-  reviewRequired            Boolean   @default(true)
-  aiDataProcessingConsentAt DateTime? @db.Timestamptz(3)
+  shopId                    String          @id @db.Uuid
+  /// Automatic translation of new and changed products, collections,
+  /// pages, blog posts and blogs (webhooks and a periodic check), into the
+  /// languages in autoTranslateLocales.
+  autoTranslateNew          Boolean         @default(false)
+  autoTranslateLocales      String[]        @default([])
+  /// Content changed after this time is checked by the periodic sweep
+  /// (pages, blog posts, blogs, missed webhooks). Set when turned on.
+  autoSweptAt               DateTime?       @db.Timestamptz(3)
+  protectManualEdits        Boolean         @default(true)
+  reviewRequired            Boolean         @default(true)
+  aiDataProcessingConsentAt DateTime?       @db.Timestamptz(3)
   consentVersion            String?
-  createdAt                 DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt                 DateTime  @updatedAt @db.Timestamptz(3)
+  // Bulk results go to review (DRAFT) unless the merchant explicitly turned
+  // on automatic publishing; who and when is recorded.
+  bulkPublishMode           BulkPublishMode @default(DRAFT)
+  autoPublishEnabledAt      DateTime?       @db.Timestamptz(3)
+  autoPublishEnabledBy      String?
+  // Reuse unreviewed (machine) memory entries for exact matches.
+  reuseMachineMemory        Boolean         @default(true)
+  /// Form of address per target language: { "de": "less" } (informal "du"),
+  /// "more" (formal "Sie"); missing = the provider's default.
+  formalityByLocale         Json            @default("{}")
+  /// What the store sells and how it speaks; guides AI word choice (not
+  /// translated, not billed by DeepL). Max. 300 characters.
+  aiStoreContext            String?
+  createdAt                 DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime        @updatedAt @db.Timestamptz(3)
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
@@ -193,22 +225,29 @@ model PrivacyRequest {
 enum TranslationOrigin {
   AI
   MANUAL
+  // A translation that existed in Shopify before Linguva overwrote it.
+  EXTERNAL
 }
 
 // History of every translation Linguva wrote to Shopify. Enables review of
 // changes and rollback while the source is unchanged.
 model TranslationRevision {
-  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  shopId       String            @db.Uuid
-  resourceGid  String
-  key          String
-  locale       String
-  marketGid    String?
-  value        String
-  sourceDigest String
-  origin       TranslationOrigin
-  provider     String?
-  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId         String            @db.Uuid
+  resourceGid    String
+  key            String
+  locale         String
+  marketGid      String?
+  value          String
+  sourceDigest   String
+  origin         TranslationOrigin
+  provider       String?
+  // True when a person wrote or approved this value (protected from bulk
+  // overwrites); false for unreviewed machine output.
+  approved       Boolean           @default(false)
+  actorId        String?
+  restoredFromId String?           @db.Uuid
+  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
@@ -237,4 +276,400 @@ model UsageLedger {
 
   @@unique([shopId, idempotencyKey])
   @@index([shopId, periodKey])
+  @@index([shopId, createdAt])
+}
+
+/// AI characters across all shops per UTC day: the platform's cost safety
+/// cap. Holds no tenant data, so it isn't under row-level security.
+model PlatformUsageDay {
+  day       DateTime @id @db.Date
+  chars     BigInt   @default(0)
+  updatedAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+enum TranslationJobStatus {
+  PENDING
+  DISCOVERING
+  RUNNING
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum TranslationJobItemStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  SKIPPED
+  FAILED
+  DEAD
+  CANCELLED
+}
+
+// A bulk translation run for one resource type into one target locale.
+enum JobFieldScope {
+  ALL
+  SEO
+}
+
+model TranslationJob {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId             String               @db.Uuid
+  resourceType       String
+  targetLocale       String
+  status             TranslationJobStatus @default(PENDING)
+  requestedBy        String?
+  idempotencyKey     String
+  discoveryCursor    String?
+  discoveryDone      Boolean              @default(false)
+  totalItems         Int                  @default(0)
+  succeededItems     Int                  @default(0)
+  skippedItems       Int                  @default(0)
+  failedItems        Int                  @default(0)
+  charsBilled        Int                  @default(0)
+  // Snapshot of the shop's publish mode when the job was created.
+  publishMode        BulkPublishMode      @default(DRAFT)
+  // Explicit permission to replace manual or approved translations.
+  overwriteProtected Boolean              @default(false)
+  // Which fields the job translates (ALL, or only search engine listings).
+  fieldScope         JobFieldScope        @default(ALL)
+  // Also image alt text and custom fields of each item (checks every item).
+  includeAttached    Boolean              @default(false)
+  memoryHits         Int                  @default(0)
+  charsSaved         Int                  @default(0)
+  protectedSkipped   Int                  @default(0)
+  errorCode          String?
+  cancelRequestedAt  DateTime?            @db.Timestamptz(3)
+  createdAt          DateTime             @default(now()) @db.Timestamptz(3)
+  startedAt          DateTime?            @db.Timestamptz(3)
+  finishedAt         DateTime?            @db.Timestamptz(3)
+  updatedAt          DateTime             @updatedAt @db.Timestamptz(3)
+
+  shop  Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items TranslationJobItem[]
+
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, createdAt])
+  @@index([shopId, status])
+}
+
+// One resource of a job. Its id is also the queue job id (idempotent enqueue).
+model TranslationJobItem {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId           String                   @db.Uuid
+  jobId            String                   @db.Uuid
+  resourceGid      String
+  // Id of the queue job that currently carries this item (sweeper check).
+  queueJobId       String?
+  status           TranslationJobItemStatus @default(PENDING)
+  attempts         Int                      @default(0)
+  errorCode        String?
+  fieldsTranslated Int                      @default(0)
+  fieldsRejected   Int                      @default(0)
+  charsBilled      Int                      @default(0)
+  createdAt        DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime                 @updatedAt @db.Timestamptz(3)
+  finishedAt       DateTime?                @db.Timestamptz(3)
+
+  shop Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  job  TranslationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, resourceGid])
+  @@index([jobId, status])
+  @@index([shopId, status])
+  @@index([shopId, resourceGid])
+}
+
+enum BulkPublishMode {
+  DRAFT
+  AUTO_PUBLISH
+}
+
+enum MemoryStatus {
+  // Written or approved by a person.
+  APPROVED
+  // Machine output published without review.
+  MACHINE
+}
+
+// Segment-level translation memory, private to each shop. `market` is ""
+// for entries valid in all markets.
+model TranslationMemory {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId       String       @db.Uuid
+  sourceLocale String
+  targetLocale String
+  market       String       @default("")
+  sourceHash   String
+  sourceText   String
+  targetText   String
+  status       MemoryStatus
+  useCount     Int          @default(0)
+  lastUsedAt   DateTime?    @db.Timestamptz(3)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, sourceLocale, targetLocale, market, sourceHash])
+  @@index([shopId, sourceLocale, targetLocale, market])
+  // Fuzzy matches: shop + trigram GIN index (btree_gin, pg_trgm), used by
+  // the linguva_memory_fuzzy() function (see its migration).
+  @@index([shopId(ops: raw("uuid_ops")), sourceText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+model Glossary {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId    String   @db.Uuid
+  name      String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  shop  Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  terms GlossaryTerm[]
+
+  @@unique([shopId, name])
+}
+
+enum GlossaryRule {
+  // Keep the term exactly as written (brands, product names, SKUs).
+  DO_NOT_TRANSLATE
+  // Always translate the term with `translation`.
+  PREFERRED
+  // `term` is a target-language wording that must never appear.
+  FORBIDDEN
+}
+
+// `targetLocale` and `market` are "" when the term applies to all.
+model GlossaryTerm {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId        String       @db.Uuid
+  glossaryId    String       @db.Uuid
+  rule          GlossaryRule
+  term          String
+  translation   String?
+  targetLocale  String       @default("")
+  market        String       @default("")
+  caseSensitive Boolean      @default(false)
+  notes         String?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  glossary Glossary @relation(fields: [glossaryId], references: [id], onDelete: Cascade)
+
+  @@unique([glossaryId, rule, term, targetLocale, market])
+  @@index([shopId, targetLocale])
+}
+
+enum DraftStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+  STALE
+}
+
+// A machine translation waiting for the merchant's review. The source
+// snapshot is kept so the review screen doesn't need a Shopify call per row.
+model TranslationDraft {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId        String      @db.Uuid
+  jobId         String?     @db.Uuid
+  resourceGid   String
+  // For image alt text and custom fields: the product, collection, page or
+  // blog post they belong to (editor links and type filters on Review).
+  parentGid     String?
+  resourceTitle String?
+  locale        String
+  key           String
+  sourceDigest  String
+  sourceValue   String
+  value         String
+  // The translation this draft replaces (translationDigest), checked again
+  // when it is approved; NULL for drafts made before the check existed.
+  currentDigest String?
+  // Shopify's content type of the field (LINK, RICH_TEXT_FIELD, …), for
+  // display on Review; publishing checks the type Shopify reports then.
+  valueType     String?
+  // Aligned segment pairs, stored in memory when the draft is approved.
+  segmentPairs  Json?
+  issues        Json?
+  provider      String?
+  status        DraftStatus @default(PENDING)
+  reviewedAt    DateTime?   @db.Timestamptz(3)
+  reviewedBy    String?
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, resourceGid, locale, key])
+  @@index([shopId, status, locale])
+  @@index([shopId, jobId, status])
+}
+
+enum CoverageReportStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+/// One coverage scan of a shop's content across its languages; the results
+/// are kept in CoverageItem, CoverageCount and CoverageSegment.
+model CoverageReport {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId           String               @db.Uuid
+  status           CoverageReportStatus @default(QUEUED)
+  requestedBy      String?
+  idempotencyKey   String
+  /// Scan order: "RESOURCE_TYPE|locale" pairs.
+  segments         String[]
+  segmentIndex     Int                  @default(0)
+  cursor           String?
+  pagesScanned     Int                  @default(0)
+  resourcesScanned Int                  @default(0)
+  errorCode        String?
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  startedAt        DateTime?            @db.Timestamptz(3)
+  finishedAt       DateTime?            @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, createdAt])
+}
+
+enum CoverageSegmentStatus {
+  SCANNING
+  SCANNED
+  // The app lacks the optional access scope for the type.
+  DENIED
+  FAILED
+}
+
+/// Live translation state of one resource in one language: field keys,
+/// states and counts, never merchant text (docs/COVERAGE_RULES.md). Kept up to
+/// date by scans and after every write, draft and job item.
+model CoverageItem {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId            String   @db.Uuid
+  locale            String
+  /// TranslatableResourceType, or "<OWNER>_METAFIELD" for custom fields.
+  resourceType      String
+  resourceGid       String
+  /// The product, collection, page or post an image or custom field belongs to.
+  parentGid         String?
+  /// Keys whose original has text (only these are counted).
+  sourceKeys        String[]
+  /// Keys with a live translation that isn't outdated.
+  currentKeys       String[]
+  outdatedKeys      String[]
+  /// Keys with a pending AI draft, and those whose draft has quality notes.
+  draftKeys         String[]
+  reviewKeys        String[]
+  /// The resource's last translation attempt in a job failed.
+  lastAttemptFailed Boolean  @default(false)
+  failureCode       String?
+  /// "group:state" per counted field (coverage-rules.ts).
+  fieldStates       String[]
+  stateComplete     Int      @default(0)
+  stateReview       Int      @default(0)
+  stateDraft        Int      @default(0)
+  stateFailed       Int      @default(0)
+  stateOutdated     Int      @default(0)
+  stateMissing      Int      @default(0)
+  /// Translated SEO fields with a finding (length, missing keyword…).
+  seoIssues         Int      @default(0)
+  /// sha256 prefix of the normalised translated SEO title (duplicates).
+  seoTitleHash      String?
+  /// When the Shopify state the keys come from was read or written.
+  syncedAt          DateTime @db.Timestamptz(3)
+  /// When a scan or refresh last found the resource in Shopify.
+  seenAt            DateTime @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, locale, resourceGid])
+  @@index([shopId, locale, resourceType, id])
+  @@index([shopId, resourceGid])
+}
+
+/// Number of fields per language, type, field group and state; maintained
+/// with every item change and rebuilt from the items after each scan.
+model CoverageCount {
+  shopId       String @db.Uuid
+  locale       String
+  resourceType String
+  fieldGroup   String
+  state        String
+  count        Int    @default(0)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@id([shopId, locale, resourceType, fieldGroup, state])
+}
+
+/// Scan state of one language and type ("not scanned" when there is no row).
+model CoverageSegment {
+  shopId       String                @db.Uuid
+  locale       String
+  resourceType String
+  status       CoverageSegmentStatus
+  reportId     String?               @db.Uuid
+  startedAt    DateTime?             @db.Timestamptz(3)
+  scannedAt    DateTime?             @db.Timestamptz(3)
+  errorCode    String?
+  updatedAt    DateTime              @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@id([shopId, locale, resourceType])
+}
+
+enum SubscriptionState {
+  ACTIVE
+  NONE
+}
+
+/// Cache of the shop's Shopify App Pricing subscription (Partner API). Shopify
+/// is authoritative; this only avoids a Partner API call per request.
+model ShopSubscription {
+  shopId             String            @id @db.Uuid
+  state              SubscriptionState
+  planHandle         String?
+  pendingPlanHandle  String?
+  billingPeriod      String?
+  trialEndsAt        DateTime?         @db.Timestamptz(3)
+  cancelAtEndOfCycle Boolean           @default(false)
+  currentPeriodEnd   DateTime?         @db.Timestamptz(3)
+  checkedAt          DateTime          @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+/// Owner complimentary access (docs/BILLING_DESIGN.md §4): all features
+/// without a subscription, for the operator's own stores. Written only by
+/// the operator tool with the owner role; the runtime role can only read
+/// it. It applies only while the shop's Shopify GID is also listed in
+/// COMPLIMENTARY_SHOP_GIDS.
+model ComplimentaryAccess {
+  shopId           String    @id @db.Uuid
+  /// Must equal Shop.shopifyShopGid (from Shopify, not from user input).
+  shopifyShopGid   String
+  reason           String
+  grantedBy        String
+  /// AI characters per month (the cost cap for this shop).
+  monthlyCharLimit Int
+  grantedAt        DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt        DateTime? @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+  revokedBy        String?
+  revokeReason     String?
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }

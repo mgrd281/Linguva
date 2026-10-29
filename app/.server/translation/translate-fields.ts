@@ -1,4 +1,6 @@
+import { isWrongScript } from "../../lib/scripts";
 import type { TranslationProvider } from "../providers/types";
+import type { SegmentPair } from "../memory/alignment";
 import {
   segmentHtml,
   segmentPlainText,
@@ -6,6 +8,17 @@ import {
 } from "./html-segmenter";
 import type { ProtectOptions } from "./protect";
 import { markupToPlainText, SegmentStructureError } from "./segment-markup";
+import { markupToRichText, richTextToMarkup, richTextToPreviewHtml, RichTextError, sameRichTextStructure } from "./rich-text";
+import {
+  sameStructuredShape,
+  segmentStructuredText,
+  STRUCTURED_TEXT_TYPES,
+  structuredHasBlankItem,
+  structuredReadableText,
+  StructuredTextError,
+} from "./structured-text";
+import { formalityMismatch } from "./formality-check";
+import { checkSeoField, plainText } from "../../lib/seo";
 import {
   hasBlockingIssue,
   validateTranslation,
@@ -20,12 +33,23 @@ export interface SourceField {
 }
 
 export type FieldOutcome =
-  | { key: string; status: "translated"; value: string; issues: ValidationIssue[] }
+  | {
+      key: string;
+      status: "translated";
+      value: string;
+      issues: ValidationIssue[];
+      /** Source/target segment pairs, for translation memory. */
+      segmentPairs?: SegmentPair[];
+      /** Segments of this field that came from translation memory. */
+      fromMemory?: number;
+    }
   | { key: string; status: "rejected"; reason: string; issues: ValidationIssue[] }
   | { key: string; status: "skipped"; reason: "EMPTY" | "NOT_TRANSLATABLE" | "MANUAL_ONLY" };
 
 // LocalizableContentType values handled by the engine.
 const HTML_TYPES = new Set(["HTML", "INLINE_RICH_TEXT"]);
+// Shopify rich text (JSON), translated through its markup (rich-text.ts).
+const RICH_TEXT_TYPE = "RICH_TEXT_FIELD";
 const PLAIN_TYPES = new Set(["SINGLE_LINE_TEXT_FIELD", "MULTI_LINE_TEXT_FIELD", "STRING"]);
 // URL handles change storefront URLs and redirects; only merchants set them.
 const MANUAL_ONLY_KEYS = new Set(["handle"]);
@@ -33,45 +57,108 @@ const MANUAL_ONLY_KEYS = new Set(["handle"]);
 export function isMachineTranslatable(field: SourceField): boolean {
   return (
     !MANUAL_ONLY_KEYS.has(field.key) &&
-    (HTML_TYPES.has(field.type) || PLAIN_TYPES.has(field.type))
+    (HTML_TYPES.has(field.type) || PLAIN_TYPES.has(field.type) || field.type === RICH_TEXT_TYPE || STRUCTURED_TEXT_TYPES.has(field.type))
   );
 }
 
-function segment(field: SourceField, protect: ProtectOptions): SegmentedDocument {
+/** True when a list or link (of the original's shape) leaves an item of the original untranslated. */
+export function leavesItemUntranslated(field: SourceField, value: string): boolean {
+  return STRUCTURED_TEXT_TYPES.has(field.type) && structuredHasBlankItem(field.type, value, field.value ?? "");
+}
+
+/**
+ * False when a value for rich text, a list or a link lost the source's
+ * structure, number of items or link addresses (other types: always true).
+ * Checked before anything is written to Shopify, whatever a form posted.
+ */
+export function keepsSourceStructure(field: SourceField, value: string): boolean {
+  if (field.type === RICH_TEXT_TYPE) return sameRichTextStructure(value, field.value ?? "");
+  if (STRUCTURED_TEXT_TYPES.has(field.type)) return sameStructuredShape(field.type, value, field.value ?? "");
+  return true;
+}
+
+export function segmentField(field: SourceField, protect: ProtectOptions = {}): SegmentedDocument {
+  if (field.type === RICH_TEXT_TYPE) return segmentRichText(field.value ?? "", protect);
+  // Lists of texts and links: only the texts, the JSON around them stays.
+  if (STRUCTURED_TEXT_TYPES.has(field.type)) return segmentStructuredText(field.type, field.value ?? "", protect);
   return HTML_TYPES.has(field.type)
     ? segmentHtml(field.value ?? "", protect)
     : segmentPlainText(field.value ?? "", protect);
+}
+
+/**
+ * Rich text: its markup is segmented like HTML; rendering turns the
+ * translation back into JSON and rejects any change of structure or links.
+ * Throws RichTextError for documents with unknown parts (not translated).
+ */
+function segmentRichText(json: string, protect: ProtectOptions): SegmentedDocument {
+  const doc = segmentHtml(richTextToMarkup(json), protect);
+  return {
+    segments: doc.segments,
+    render(translations) {
+      try {
+        return markupToRichText(doc.render(translations), json);
+      } catch (error) {
+        if (error instanceof RichTextError) throw new SegmentStructureError("MISSING_CODE", error.message);
+        throw error;
+      }
+    },
+  };
+}
+
+/** The readable text of a field value, for checks (rich text JSON → its words). */
+function readableText(type: string, value: string): string {
+  if (STRUCTURED_TEXT_TYPES.has(type)) return structuredReadableText(type, value);
+  if (type !== RICH_TEXT_TYPE) return plainText(value);
+  try {
+    return plainText(richTextToPreviewHtml(value));
+  } catch {
+    return "";
+  }
 }
 
 /** Characters that a translation of these fields would send to a provider. */
 export function estimateCharacters(fields: readonly SourceField[], protect: ProtectOptions = {}) {
   return fields
     .filter((f) => f.value && isMachineTranslatable(f))
-    .flatMap((f) => segment(f, protect).segments)
+    .flatMap((f) => segmentField(f, protect).segments)
     .reduce((sum, s) => sum + s.source.length, 0);
 }
 
-export interface TranslateFieldsInput {
-  provider: TranslationProvider;
-  fields: readonly SourceField[];
-  sourceLocale: string;
-  targetLocale: string;
-  protect?: ProtectOptions;
-  glossary?: readonly GlossaryRule[];
-  context?: string;
-  signal?: AbortSignal;
+/** Looks up exact translation-memory matches for segment sources. */
+export interface MemoryLookup {
+  lookup(sources: readonly string[]): Promise<Map<string, { target: string; id: string }>>;
+}
+
+export interface PreparedTranslation {
+  outcomes: FieldOutcome[];
+  work: Array<{ field: SourceField; doc: SegmentedDocument }>;
+  fieldOrder: Map<string, number>;
+  /** Targets already known from memory, by source segment. */
+  fromMemory: Map<string, string>;
+  /** Sources that render as-is (only protected spans and replacements). */
+  fixed: Set<string>;
+  memoryEntryIds: string[];
+  /** Unique source segments that still need a provider. */
+  pending: string[];
+  /** Characters the provider would be sent. */
+  providerChars: number;
+  /** Characters saved by memory hits and de-duplication. */
+  charsSaved: number;
 }
 
 /**
- * Translates resource fields in one provider round-trip and validates each
- * result. A field is only "translated" if its structure is intact and no
- * blocking issue was found; otherwise it is "rejected" and must not be
- * published.
+ * Segments the fields and resolves what translation memory already knows.
+ * Identical segments are sent to the provider only once.
  */
-export async function translateFields(input: TranslateFieldsInput) {
+export async function prepareTranslation(input: {
+  fields: readonly SourceField[];
+  protect?: ProtectOptions;
+  memory?: MemoryLookup;
+}): Promise<PreparedTranslation> {
   const protect = input.protect ?? {};
   const outcomes: FieldOutcome[] = [];
-  const work: Array<{ field: SourceField; doc: SegmentedDocument }> = [];
+  const work: PreparedTranslation["work"] = [];
 
   for (const field of input.fields) {
     if (!field.value || !field.value.trim()) {
@@ -81,7 +168,16 @@ export async function translateFields(input: TranslateFieldsInput) {
     } else if (!isMachineTranslatable(field)) {
       outcomes.push({ key: field.key, status: "skipped", reason: "NOT_TRANSLATABLE" });
     } else {
-      const doc = segment(field, protect);
+      let doc: SegmentedDocument;
+      try {
+        doc = segmentField(field, protect);
+      } catch (error) {
+        // Rich text with parts Linguva doesn't know, or a list or link of
+        // an unexpected shape: left to Shopify's editor.
+        if (!(error instanceof RichTextError) && !(error instanceof StructuredTextError)) throw error;
+        outcomes.push({ key: field.key, status: "skipped", reason: "NOT_TRANSLATABLE" });
+        continue;
+      }
       if (doc.segments.length === 0) {
         outcomes.push({ key: field.key, status: "skipped", reason: "NOT_TRANSLATABLE" });
       } else {
@@ -90,28 +186,83 @@ export async function translateFields(input: TranslateFieldsInput) {
     }
   }
 
-  const sources = work.flatMap((w) => w.doc.segments.map((s) => s.source));
-  if (sources.length === 0) return { outcomes, billedCharacters: 0, provider: input.provider.id };
+  // Segments made only of protected spans and glossary replacements render
+  // from their own source.
+  const fixed = new Set(work.flatMap((w) => w.doc.segments.filter((s) => s.fixed).map((s) => s.source)));
+  const all = work.flatMap((w) => w.doc.segments.filter((s) => !s.fixed).map((s) => s.source));
+  const unique = [...new Set(all)];
+  const hits = input.memory && unique.length ? await input.memory.lookup(unique) : new Map();
+  const fromMemory = new Map<string, string>();
+  for (const [source, hit] of hits) fromMemory.set(source, hit.target);
+  const pending = unique.filter((s) => !fromMemory.has(s));
+  const totalChars = all.reduce((sum, s) => sum + s.length, 0);
+  const providerChars = pending.reduce((sum, s) => sum + s.length, 0);
 
-  const result = await input.provider.translate(
-    {
-      segments: sources,
-      sourceLocale: input.sourceLocale,
-      targetLocale: input.targetLocale,
-      context: input.context,
-    },
-    input.signal,
-  );
+  return {
+    outcomes,
+    work,
+    fieldOrder: new Map(input.fields.map((f, i) => [f.key, i])),
+    fromMemory,
+    fixed,
+    memoryEntryIds: [...hits.values()].map((h) => h.id),
+    pending,
+    providerChars,
+    charsSaved: totalChars - providerChars,
+  };
+}
 
-  let cursor = 0;
-  for (const { field, doc } of work) {
-    const targets = new Map<string, string>();
+export interface CompleteTranslationInput {
+  provider: TranslationProvider;
+  sourceLocale: string;
+  targetLocale: string;
+  glossary?: readonly GlossaryRule[];
+  context?: string;
+  formality?: "more" | "less";
+  signal?: AbortSignal;
+}
+
+/**
+ * Translates what memory didn't cover in one provider round-trip and
+ * validates every field. A field is only "translated" if its structure is
+ * intact and no blocking issue was found; otherwise it is "rejected" and
+ * must not be published.
+ */
+export async function completeTranslation(prepared: PreparedTranslation, input: CompleteTranslationInput) {
+  const outcomes = [...prepared.outcomes];
+  const targets = new Map(prepared.fromMemory);
+  for (const source of prepared.fixed) targets.set(source, source);
+  let billedCharacters = 0;
+  let provider = input.provider.id;
+
+  if (prepared.pending.length) {
+    const result = await input.provider.translate(
+      {
+        segments: prepared.pending,
+        sourceLocale: input.sourceLocale,
+        targetLocale: input.targetLocale,
+        context: input.context,
+        ...(input.formality ? { formality: input.formality } : {}),
+      },
+      input.signal,
+    );
+    prepared.pending.forEach((source, i) => targets.set(source, result.translations[i] ?? ""));
+    billedCharacters = result.billedCharacters;
+    provider = result.provider;
+  }
+
+  for (const { field, doc } of prepared.work) {
+    const segmentTargets = new Map<string, string>();
+    const pairs: SegmentPair[] = [];
     const issues: ValidationIssue[] = [];
     let structureError: string | null = null;
+    let memorySegments = 0;
 
     for (const seg of doc.segments) {
-      const target = result.translations[cursor++] ?? "";
-      targets.set(seg.id, target);
+      const target = targets.get(seg.source) ?? "";
+      if (prepared.fromMemory.has(seg.source)) memorySegments++;
+      segmentTargets.set(seg.id, target);
+      // Glossary-only segments aren't worth remembering.
+      if (!seg.fixed) pairs.push({ source: seg.source, target });
       try {
         issues.push(
           ...validateTranslation({
@@ -128,9 +279,26 @@ export async function translateFields(input: TranslateFieldsInput) {
 
     if (!structureError) {
       try {
-        const value = doc.render(targets);
+        const value = doc.render(segmentTargets);
+        // Search engine titles and descriptions: length and "untranslated" warnings.
+        issues.push(...checkSeoField(field.key, field.value ?? "", value));
+        // A result mostly outside the target language's script is likely wrong.
+        // (Mostly product names or codes can also trigger it: a warning, the merchant decides.)
+        if (isWrongScript(input.targetLocale, readableText(field.type, value))) {
+          issues.push({ code: "WRONG_SCRIPT", severity: "warning" });
+        }
+        // The merchant's chosen form of address ("Sie" or "du"); memory reuse can bring the other one.
+        const mismatch = input.formality ? formalityMismatch(input.targetLocale, input.formality, readableText(field.type, value)) : null;
+        if (mismatch) issues.push({ code: "FORMALITY_MISMATCH", severity: "warning", detail: mismatch });
         if (!hasBlockingIssue(issues)) {
-          outcomes.push({ key: field.key, status: "translated", value, issues });
+          outcomes.push({
+            key: field.key,
+            status: "translated",
+            value,
+            issues,
+            segmentPairs: pairs,
+            fromMemory: memorySegments,
+          });
           continue;
         }
       } catch (error) {
@@ -146,7 +314,25 @@ export async function translateFields(input: TranslateFieldsInput) {
     });
   }
 
-  const order = new Map(input.fields.map((f, i) => [f.key, i]));
-  outcomes.sort((a, b) => order.get(a.key)! - order.get(b.key)!);
-  return { outcomes, billedCharacters: result.billedCharacters, provider: result.provider };
+  outcomes.sort((a, b) => prepared.fieldOrder.get(a.key)! - prepared.fieldOrder.get(b.key)!);
+  return {
+    outcomes,
+    billedCharacters,
+    provider,
+    memoryHits: prepared.fromMemory.size,
+    charsSaved: prepared.charsSaved,
+    memoryEntryIds: prepared.memoryEntryIds,
+  };
+}
+
+export interface TranslateFieldsInput extends CompleteTranslationInput {
+  fields: readonly SourceField[];
+  protect?: ProtectOptions;
+  memory?: MemoryLookup;
+}
+
+/** prepareTranslation + completeTranslation in one call. */
+export async function translateFields(input: TranslateFieldsInput) {
+  const prepared = await prepareTranslation(input);
+  return completeTranslation(prepared, input);
 }

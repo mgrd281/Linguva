@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Background jobs without a worker service: in production the web process runs the worker as a supervised child process (restarted with backoff, stopped with SIGTERM, never taking the web down); `LINGUVA_EMBEDDED_WORKER` switches it. Worker heartbeat in Redis and `GET /healthz/worker`; `pnpm ops:smoke --expect-worker`. Coverage measurements whose page chain broke (a redeploy between saving a page and queueing the next, a lost first job) continue by themselves.
+- Configuration accepts values as pasted into a hosting dashboard: a DeepL key with spaces, line breaks or quotes, an empty key (AI off instead of a failed start), DeepL's address with `/v2`, and character limits with thousands separators (`450.000` is 450,000, never 450).
 - App scaffold from the official Shopify React Router template (Admin API 2026-10, expiring offline tokens), switched to pnpm and PostgreSQL.
 - Prisma schema and migrations for shops, sessions, settings, locales, installation history, webhook delivery log, audit log and privacy requests.
 - PostgreSQL row-level security on tenant tables with `withTenant()`, separate owner (migrations) and runtime database roles, append-only audit log.
@@ -19,7 +21,106 @@
 - Usage ledger with per-shop monthly quota, concurrency-safe reservations and idempotent settlement.
 - Products page with translation coverage per language, and a product translation editor with AI drafts, review, digest-checked publishing to Shopify, revision history and audit log.
 - Versioned AI data-processing consent and a Settings page.
+- Bulk translation worker (BullMQ 6.3, Redis): paginated discovery that only creates work for missing or outdated fields, item processing with digest-checked publishing, idempotent enqueue (queue job id = item id), exponential backoff with jitter, dead-letter state after the last attempt, job-wide stop conditions (quota, consent, provider or shop auth), cancel, retry and resume, stalled-item sweeper, graceful shutdown.
+- Per-shop Admin API rate limiting with an atomic Redis token bucket; throttled work is delayed without spending retry attempts.
+- Mock translation provider for development and tests (refused in production) and DeepL usage check (`GET /v2/usage`).
+- Jobs pages (list, live progress, failed products, cancel, retry) and "Translate all" on the Products page.
+- Security test suite: cross-tenant payloads, job access across shops, payload validation, no secrets or content in Redis, malicious provider output in bulk jobs.
+- Translation memory per shop: segment-level exact matches (whitespace-insensitive hash), fuzzy suggestions with pg_trgm, APPROVED and MACHINE entries (approved entries are never downgraded), market-specific entries, reuse before any provider call so repeated text costs nothing, de-duplication of identical segments within a request, Memory page (search, approve, delete).
+- Alignment of a person's translation with its source segment by segment (tag/attribute signatures), so manual translations feed the memory.
+- Glossary: never translate, always translate as (enforced through opaque codes the provider can't change), never use (blocks the result); scoped by language and market; CSV import with per-line validation (all or nothing, 1 MB, 5,000 terms) and formula-safe export; Glossary page.
+- Bulk review: jobs create drafts by default; Review page to edit, approve and publish, or reject; drafts go stale when the source changes; automatic publishing only after explicit, recorded confirmation in Settings.
+- Protection of translations written or approved by a person, or made outside Linguva, from bulk jobs unless the merchant explicitly allows replacing them.
+- Revision history with approval flag and actor; the previous Shopify value is kept as an EXTERNAL revision before overwriting; restore of earlier versions while the source is unchanged; History panel in the product editor; "Fill from memory" suggestions.
+- Job statistics for memory reuse, characters saved and protected translations kept.
+- Collections: list with coverage, translation editor and bulk jobs, sharing the product code paths; Collections navigation entry.
+- Guarded live contract tests for a Shopify development store (`pnpm test:live`, never in CI) with a dev-store gate, deny list, fixture-only writes and cleanup; setup guide `docs/DEV_STORE_SETUP.md`.
+- SEO and Markets architecture plan (`docs/SEO_ARCHITECTURE.md`).
+- AI cost limits: daily cap per shop, platform-wide daily cap, maximum characters per interactive request, and request rate limits per staff member and per shop (Redis token buckets). Usage today is shown in the editor and Settings.
+- SEO: checks for SEO titles and descriptions (length by display width, incl. CJK; unchanged from the source), a "Search engine listing" section in the editor with live counters and a search result preview, "Translate SEO fields only" in the editor, and SEO-only bulk jobs. Readable names for quality warnings in the editor and Review.
+- Translation coverage report: a background scan of products and collections per language (no AI, no writes) with translated/outdated/missing counts by content, SEO and URL handles, SEO findings, duplicate SEO titles, items with the most gaps, and buttons to translate the gaps or only SEO fields.
+- Jobs and Review: pagination, filters (status, language, content type, field group, only with warnings) and search on Review.
+- Performance test suite (`pnpm test:performance`, in CI): fuzzy memory search with 100,000 entries.
+- Online store pages, blog posts and blogs: lists with coverage, editor, bulk jobs, review filters and the coverage report, sharing the product code paths.
+- URL handles per language: suggestion from the translated title, format check, and a required confirmation before changing a published handle.
+- "Remove translation" in the editor; the removed value stays in the history and can be restored.
+- Shopify App Pricing: plan entitlements (characters, languages, bulk, glossary, automatic publishing), subscription check through the Partner API with a 6-hour cache that never locks out a paying shop when the API fails, redirect to Shopify's plan selection page only for a verified "no subscription", welcome link and Plan page, enforcement in the editor, bulk jobs, settings, glossary and worker. The app creates no charges.
+- Image alt text (product, collection and blog post images) and text metafields that Shopify marks translatable, in a new "Images and custom fields" section of the editor: AI drafts for missing or outdated values, publishing with digest checks and history.
+- Read-only Markets page with the optional `read_markets` scope (asked for only when the page is opened): languages, addresses and published state per market, and checks for unpublished or unreachable languages.
+- `docs/FEATURE_STATUS.md` (Implemented / Tested Locally / Verified on Shopify) and `docs/DEV_STORE_TEST_PLAN.md`.
+- Owner complimentary access for the operator's own stores: every feature without a subscription when the store's Shopify GID is in `COMPLIMENTARY_SHOP_GIDS` and the operator tool (`pnpm ops:complimentary`, owner database role) granted it; AI usage stays metered with an internal cost estimate; audited.
+- Shopify CLI readiness: complete `shopify.app.toml`, `.env` loading in development, `pnpm preflight`, `pnpm worker:dev`, docs/SHOPIFY_CLI_SETUP.md.
+- Playwright UI tests (`pnpm test:ui`, in CI) of the production build with real authentication and Polaris against a simulated Shopify: pages, empty, error and loading states, accessibility (axe WCAG 2.1 AA), phone layout.
+- Clear error pages with "Try again" on every page, the admin loading bar during navigation, page title, empty catalog state.
+- docs/BETA_READINESS.md.
+- Every Shopify content type that can be translated (30 of 30; was 8): store search listing, policies, menus and links, filters, product options, subscription plans, metaobjects, theme content, shipping and payment methods, notification templates, packing slip. "All content" overview with optional, read-only permissions asked for on the page; one list and editor for all; search and pages for theme content; bulk jobs for the safe types; Liquid kept unchanged.
+- Overview for beginners and daily use: a 5-step "Get started" checklist from the store's real state, translation progress per language, items needing attention, AI usage with warnings from 80 %. Navigation reduced from 15 to 12 entries.
+- Translation style: form of address per language (formal, informal, automatic; DeepL `formality` with a safe fallback) and a short store description sent as context with every AI translation.
+- Quality warning for results mostly outside the target language's script (e.g. Latin text for Arabic); such results always go to Review.
+- Editor: right-to-left languages are typed right to left with the language set on the fields; a question before leaving the page with unpublished changes.
+- Performance tests for a large shop (50,000 drafts, 5,000 jobs, a 5,000-product bulk job) and page response times; docs/PERFORMANCE.md.
+- docs/QUALITY_AUDIT.md: criteria, evidence and scores per area, with an improvement plan.
+- Rendered HTML previews (server-side allowlist sanitiser and sandboxed frames) and original next to translation in the editor and on Review.
+- Design pass across all pages (screenshot review on desktop and phone): field actions under the translation, consistent side-by-side layouts, filters in rows, languages chosen by name in the glossary and memory, readable metafield names, a Linguva start page.
+- Time limit on every Shopify Admin API call (`SHOPIFY_TIMEOUT_MS`, default 15 s) with a clear page in the app and retries in the worker; logging of unexpected server errors.
+- Keyboard, slow-network, timeout and screenshot-comparison browser tests (`pnpm test:visual:update` to accept intended changes).
+- Image alt text and custom fields in bulk jobs (option per job) and image alt text in the coverage report.
+- Rich text custom fields: translated with their structure and links kept; rendered preview in the editor and on Review.
+- Automatic translation of new and changed products and collections (Settings, per language, off by default): webhooks `products/create|update` and `collections/create|update` with `include_fields`, a debounced queue (`translation-auto`), items through the normal item queue, "Automatic" jobs (one per day, type and language), a bulk job started meanwhile takes the automatic job over with the merchant's settings.
+- Webhook delivery log retention (14 days, deleted by the worker's sweep).
+- App interface in German and English, following the admin user's language; numbers, dates (UTC) and language names per language.
+- Job report: results grouped by reason, start/end/duration and remaining time, a support reference, and a CSV download of every item.
+- Quality check for the chosen form of address (German Sie/du, French vous/tu, Spanish, Italian, Dutch).
+- Load test with 20 shops at once and a large shop next to small ones.
+- Structural security tests: every way to write to a store, every Shopify mutation, authentication of every page and webhook, no owner database role in app code; review check for every database migration.
 - Phase 0 documentation set.
+- Lists and links in metafields and metaobject fields: translated item by item with AI or by hand, shown as lists (never as JSON); the number of items and the link addresses always stay those of the original.
+- Automatic translation also covers pages, blog posts and blogs, and catches missed product and collection webhooks: the worker checks every 30 minutes for content changed since its last check (migration 20261030100000).
+- French and Spanish interface (about 800 texts each), chosen from the admin user's language; still to be reviewed by native speakers (docs/I18N_REVIEW.md).
+- Review text search through a reviewed definer function and a trigram index: 207 → 12.5 ms at 50,000 drafts (migration 20261030110000).
+- Launch preparation: competitive analysis (Langify, Transcy), App Store listing draft in English and German with 8 screenshots of the real app, a 30-day launch plan and the list of owner decisions (docs).
+
+### Changed
+- Overview: one next step with the page's only primary button (add a language, measure, review drafts, allow AI, first translation, publish a language, the least translated language, countries without their language, all caught up); the share per language and the store-wide figure only from the newest completed measurement, so a measurement under way, failed or stuck never shows partial numbers; measuring said in words, with "Measure again" when it hasn't moved for 30 minutes and no reloading of the page otherwise; countries without their language grouped by reason, with Shopify's language limit when it limits the fix; an "AI translation" card in place of the store card. The store-wide figure says how many published languages it covers; content whose latest read didn't finish (skipped after errors, or left by a measurement that stopped) is noted with its languages, links to that language's coverage details and is never reported as "all caught up" (theme and notification texts, which the figures don't count, aside); countries count as "in their language" only once their languages are measured. A store with live translations (made anywhere, measured) is never sent to "publish your first translation"; the countries card counts the countries of the fix it names; a newer measurement that is stuck can be started again from the Overview and the Coverage page (whose button used to stay disabled); a measurement waiting without a running worker says so instead of "it begins by itself"; the primary language is named in the admin's language; language names read as in a sentence (French and Spanish in lower case), lists of two or three say "and", a line of missing languages names at most ten; screen readers hear how a measurement followed on the page ended (done, failed, stuck), and no part count is read out on every reload; a stuck or uninstalled measurement's half-read types stay "not fully read" while the next one runs, and the Coverage page names the first of them instead of "everything counted is translated" (while a scan runs: that it reads the type again when the type is still ahead of it, else to scan again once it has finished, as for a type that scan skipped itself or a language it doesn't cover). A language name with parentheses of its own reads with brackets inside the Coverage page's parentheses ("Produkte (Portugiesisch [Portugal])"); a name that says its only country ("portugués de Portugal") doesn't get it again in the countries card; French names several languages with unread content after a colon. The history of measurements always keeps the newest completed one.
+- The app-wide daily AI limit no longer reads "paused because of high demand": the message names the app's daily limit and when it resets (midnight UTC).
+
+### Security
+- HTTP security headers on every page and data response (nosniff, Referrer-Policy, Permissions-Policy, `base-uri` and `object-src` in the CSP, HSTS in production over HTTPS). Pages requested without a shop parameter had no framing protection; they can now only be framed by the Shopify admin.
+- CI fails on high or critical advisories in production dependencies (`pnpm audit --prod`), with one reviewed, documented exception (SECURITY_MODEL.md §5f).
+- Review of `linguva_memory_fuzzy()` (docs/SECURITY_REVIEW_MEMORY_FUZZY.md): fixed `search_path` (`pg_catalog, pg_temp`) with schema-qualified names, input bound, migrations refuse to run as a superuser, and a database posture check that stops the app and worker in production if tenant isolation could be weakened.
+- The runtime role can no longer read the audit log (entries of all shops).
+- Adversarial PostgreSQL tests with three roles (runtime, owner, a user without grants).
+- Any change to a SECURITY DEFINER function must be reviewed: the posture check compares each function's definition with a reviewed hash; CODEOWNERS and a PR checklist cover migrations and tenancy code.
+- Images and metafields can only be written for the resource being edited: the server lists them from Shopify and reads form values only under those names.
+- CI checks that no source file is hidden by `.gitignore` and that every test file belongs to a suite CI runs; GraphQL documents with interpolation (skipped by codegen) are refused.
+- Rich text, lists and links are checked against the original's structure and link addresses on every write path (editor, Review approval, bulk publishing), not only in the editor's form handling.
+- Script policy (`script-src`): only the app's files, Shopify's CDN and React Router's inline scripts with a per-page nonce; injected inline scripts don't run.
+
+### Fixed
+- The worker inside the web process stops when the web process is gone, also after `kill -9` or running out of memory outside a container (IPC channel); the dev server never starts it (it would run the last build's worker, never reloaded); on a redeploy it may finish its jobs within Railway's draining time (`RAILWAY_DEPLOYMENT_DRAINING_SECONDS`, capped at an hour) instead of a fixed 20 s; a web process gone while the worker was still starting is noticed before the worker takes any job. `GET /healthz/worker` sends at most one Redis read at a time, so requests during a Redis outage can't pile up commands in the web process.
+- A database that didn't answer during the first request's security posture check no longer fails every later request until a restart; the check runs again (a real posture problem still stops the process).
+- Approving an older draft, or a job publishing automatically a moment after someone translated the same field, could replace that person's newer translation. Drafts, automatic publishing and the editor (two people editing the same field) now check that the translation they replace is still in place (migration 20261029200000).
+- The app's `?locale=` parameter (language to translate into) collided with Shopify's `locale` (admin language); it is now `?lang=`.
+- A shop starting a job waited behind another shop's whole queued catalogue; items are now queued by their position in their own job.
+- First open after install could fail (race between the install and parallel page loads writing settings, languages or the subscription cache).
+- Settings showed the server's default AI allowance instead of the plan's.
+- Polaris layouts with several breakpoints were ignored (wrong responsive syntax).
+- Glossary and translation memory showed no languages to a merchant who opened them before other pages.
+- First open after install could fail when the app's loaders created the shop in parallel; reinstalls were recorded once per parallel request.
+- `.env` wasn't loaded under `shopify app dev`; `.dockerignore` didn't exclude `.env` files.
+- Shopify API errors showed a bare status code; language codes instead of names on Jobs and Review; SEO preview notes ran together.
+- A replaced or removed translation that was already outdated is kept in the history as written for an older source, so restoring it can't mark it current for the new text.
+- Fuzzy memory search couldn't use its index under row-level security and scanned the whole memory (446 ms at 100,000 entries); it now uses a shop + trigram index through a narrow security definer function (37 ms median).
+- Review search treated `%` and `_` as wildcards.
+- Bulk jobs with automatic publishing published results with quality warnings; these now go to Review. Jobs also stop publishing when the merchant switches back to review mode.
+- Errors from memory suggestions are shown in the editor.
+- Re-saving an outdated translation unchanged now requires an explicit "still correct" confirmation instead of being silently skipped.
+- Rejected drafts are no longer re-created by the next bulk job for the same source text.
+- Audit entries record the acting staff member from the session token.
+- Latest revisions are read with one `DISTINCT ON` query instead of the full history; locale sync skips unchanged rows; fuzzy memory search uses the trigram index (new migration).
+- Glossary CSV uploads over the size limit are refused before the body is parsed.
+- Restoring from an editor only accepts revisions of the resource shown.
+- Approving drafts failed for all selected drafts when one of their products had been deleted in Shopify; those drafts are now marked outdated and the others publish.
 
 ### Removed
 - Template demo pages and the `write_products` scope.

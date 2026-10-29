@@ -6,6 +6,8 @@ export interface TranslationRequest {
   targetLocale: string;
   /** Extra context that guides but isn't translated (for example a product title). */
   context?: string;
+  /** Form of address: "more" formal (Sie, vous), "less" informal (du, tu). Ignored where a language has none. */
+  formality?: "more" | "less";
 }
 
 export interface TranslationResult {
@@ -18,6 +20,11 @@ export interface TranslationResult {
 export interface TranslationProvider {
   readonly id: string;
   translate(request: TranslationRequest, signal?: AbortSignal): Promise<TranslationResult>;
+  /**
+   * Which Shopify locales the provider can translate into, read from the
+   * provider itself (true / false per locale). Absent: every locale.
+   */
+  targetSupport?(locales: readonly string[]): Promise<Map<string, boolean>>;
 }
 
 export type ProviderErrorKind =

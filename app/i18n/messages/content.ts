@@ -1,0 +1,98 @@
+/** Texts of the "All content" page. Keys start with "content.". */
+import type { Message, Translation } from "./define";
+
+export const en = {
+  "content.intro":
+    "Everything in your store that Shopify lets you translate: {ready} of {total} content types have something to translate. Products and collections have their own pages in the navigation.",
+  "content.ready.heading": "Ready to translate",
+  "content.ready.none": "Nothing besides products and collections yet.",
+  "content.table.area": "Area",
+  "content.table.how": "How",
+  "content.table.action": "Action",
+  "content.mode.bulk": "Translate all at once",
+  "content.mode.legal": "One by one (legal text)",
+  "content.mode.single": "One by one",
+  "content.translate": "Translate",
+  "content.translateLabel": "Translate {label}",
+  "content.permission.heading": "Needs your permission",
+  "content.permission.allow": "Allow access",
+  "content.permission.allowLabel": "Allow access to {label}",
+  "content.permission.note": "Linguva only asks to read this content. It never changes your originals.",
+  "content.empty.heading": "Not in your store yet",
+  "content.empty.note": "They appear under Ready to translate as soon as you add them in Shopify.",
+  "content.unavailable.heading": "Not available to apps in this store",
+  "content.unavailable.note": "You can translate these in Shopify's own Translate & Adapt app.",
+  "content.group.onlineStore": "Online store",
+} as const satisfies Record<string, Message>;
+
+export const de: Translation<typeof en> = {
+  "content.intro":
+    "Alles in deinem Shop, was Shopify übersetzen lässt: {ready} von {total} Inhaltsarten haben etwas zu übersetzen. Produkte und Kollektionen haben eigene Seiten in der Navigation.",
+  "content.ready.heading": "Bereit zum Übersetzen",
+  "content.ready.none": "Noch nichts außer Produkten und Kollektionen.",
+  "content.table.area": "Bereich",
+  "content.table.how": "Vorgehen",
+  "content.table.action": "Aktion",
+  "content.mode.bulk": "Alle auf einmal übersetzen",
+  "content.mode.legal": "Einzeln (Rechtstext)",
+  "content.mode.single": "Einzeln",
+  "content.translate": "Übersetzen",
+  "content.translateLabel": "Übersetzen: {label}",
+  "content.permission.heading": "Braucht deine Erlaubnis",
+  "content.permission.allow": "Zugriff erlauben",
+  "content.permission.allowLabel": "Zugriff erlauben: {label}",
+  "content.permission.note": "Linguva fragt nur nach Lesezugriff auf diese Inhalte. Deine Originale werden nie geändert.",
+  "content.empty.heading": "Noch nicht in deinem Shop",
+  "content.empty.note": "Sie erscheinen unter „Bereit zum Übersetzen“, sobald du sie in Shopify hinzufügst.",
+  "content.unavailable.heading": "In diesem Shop für Apps nicht verfügbar",
+  "content.unavailable.note": "Du kannst sie in Shopifys eigener App „Translate & Adapt“ übersetzen.",
+  "content.group.onlineStore": "Onlineshop",
+};
+
+export const fr: Translation<typeof en> = {
+  "content.intro":
+    "Tout ce que Shopify vous permet de traduire dans votre boutique : {ready} types de contenu sur {total} ont quelque chose à traduire. Les produits et les collections ont leurs propres pages dans la navigation.",
+  "content.ready.heading": "Prêt à traduire",
+  "content.ready.none": "Rien d'autre que les produits et les collections pour l'instant.",
+  "content.table.area": "Domaine",
+  "content.table.how": "Méthode",
+  "content.table.action": "Action",
+  "content.mode.bulk": "Tout traduire en une fois",
+  "content.mode.legal": "Un par un (texte juridique)",
+  "content.mode.single": "Un par un",
+  "content.translate": "Traduire",
+  "content.translateLabel": "Traduire : {label}",
+  "content.permission.heading": "Nécessite votre autorisation",
+  "content.permission.allow": "Autoriser l'accès",
+  "content.permission.allowLabel": "Autoriser l'accès : {label}",
+  "content.permission.note": "Linguva ne demande qu'un accès en lecture à ce contenu et ne modifie jamais vos originaux.",
+  "content.empty.heading": "Pas encore dans votre boutique",
+  "content.empty.note": "Ils apparaissent sous « Prêt à traduire » dès que vous les ajoutez dans Shopify.",
+  "content.unavailable.heading": "Non disponible pour les applications dans cette boutique",
+  "content.unavailable.note": "Vous pouvez les traduire dans l'application Translate & Adapt de Shopify.",
+  "content.group.onlineStore": "Boutique en ligne",
+};
+
+export const es: Translation<typeof en> = {
+  "content.intro":
+    "Todo lo que Shopify te permite traducir en tu tienda: {ready} de {total} tipos de contenido tienen algo que traducir. Los productos y las colecciones tienen sus propias páginas en la navegación.",
+  "content.ready.heading": "Listo para traducir",
+  "content.ready.none": "Por ahora, nada aparte de los productos y las colecciones.",
+  "content.table.area": "Área",
+  "content.table.how": "Método",
+  "content.table.action": "Acción",
+  "content.mode.bulk": "Traducir todo a la vez",
+  "content.mode.legal": "Uno por uno (texto legal)",
+  "content.mode.single": "Uno por uno",
+  "content.translate": "Traducir",
+  "content.translateLabel": "Traducir: {label}",
+  "content.permission.heading": "Necesita tu permiso",
+  "content.permission.allow": "Permitir acceso",
+  "content.permission.allowLabel": "Permitir acceso: {label}",
+  "content.permission.note": "Linguva solo solicita acceso de lectura a este contenido y nunca cambia tus originales.",
+  "content.empty.heading": "Todavía no están en tu tienda",
+  "content.empty.note": "Aparecerán en “Listo para traducir” en cuanto los agregues en Shopify.",
+  "content.unavailable.heading": "No disponible para aplicaciones en esta tienda",
+  "content.unavailable.note": "Puedes traducirlos en la aplicación Translate & Adapt de Shopify.",
+  "content.group.onlineStore": "Tienda online",
+};

@@ -17,7 +17,7 @@ function fakeFetch(responses: Array<(body: { text: string[] }) => Response>) {
   const calls: Call[] = [];
   let i = 0;
   const impl = (async (url: string, init: RequestInit) => {
-    const body = JSON.parse(init.body as string);
+    const body = init.body ? JSON.parse(init.body as string) : {};
     calls.push({ url, headers: init.headers as Record<string, string>, body });
     const respond = responses[Math.min(i++, responses.length - 1)]!;
     return respond(body);
@@ -70,6 +70,16 @@ describe("DeepLProvider", () => {
       ignore_tags: ["x"],
       context: "Product: Shoe",
     });
+  });
+
+  it("asks for the configured form of address, falling back where a language has none", async () => {
+    const { impl, calls } = fakeFetch([ok, ok]);
+    const provider = new DeepLProvider({ apiKey: "key:fx", fetch: impl });
+    await provider.translate({ segments: ["Hello"], sourceLocale: "en", targetLocale: "de", formality: "less" });
+    await provider.translate({ segments: ["Hello"], sourceLocale: "en", targetLocale: "de" });
+    // prefer_*: never fails for languages without formal/informal forms (DeepL API reference).
+    expect(calls[0]!.body.formality).toBe("prefer_less");
+    expect(calls[1]!.body).not.toHaveProperty("formality");
   });
 
   it("uses the Pro endpoint for non-free keys", async () => {
@@ -172,5 +182,52 @@ describe("withRetry", () => {
     ).rejects.toThrow();
     expect(attempts).toBe(5);
     expect(delays).toEqual([100, 200, 400, 500]);
+  });
+});
+
+describe("DeepLProvider.getUsage", () => {
+  it("reads character count and limit from the usage endpoint", async () => {
+    const { impl, calls } = fakeFetch([() => Response.json({ character_count: 1200, character_limit: 500000 })]);
+    const usage = await new DeepLProvider({ apiKey: "free-key:fx", fetch: impl }).getUsage();
+    expect(usage).toEqual({ characterCount: 1200, characterLimit: 500000 });
+    expect(calls[0]!.url).toBe("https://api-free.deepl.com/v2/usage");
+  });
+
+  it("reports an invalid key as an auth error", async () => {
+    const { impl } = fakeFetch([() => new Response(null, { status: 403 })]);
+    await expect(new DeepLProvider({ apiKey: "k:fx", fetch: impl }).getUsage()).rejects.toMatchObject({ kind: "auth" });
+  });
+});
+
+describe("DeepL target languages", () => {
+  it("are read from DeepL once a day and matched to Shopify locales", async () => {
+    const { deeplSupports } = await import("../../app/.server/providers/deepl");
+    const { aiLanguageSupport } = await import("../../app/.server/providers/language-support");
+    let calls = 0;
+    const impl = (async (url: string, init?: RequestInit) => {
+      calls++;
+      expect(url).toBe("https://api-free.example/v2/languages?type=target");
+      expect((init?.headers as Record<string, string>).Authorization).toBe("DeepL-Auth-Key key:fx");
+      return Response.json([{ language: "DE" }, { language: "EN-GB" }, { language: "EN-US" }, { language: "PT-BR" }, { language: "ZH-HANS" }]);
+    }) as unknown as typeof fetch;
+    const provider = new DeepLProvider({ apiKey: "key:fx", baseUrl: "https://api-free.example", fetch: impl });
+    expect(await aiLanguageSupport(provider, ["de", "en-GB", "pt-BR", "pt-PT", "zh-CN", "ga"])).toEqual({
+      de: "supported",
+      "en-GB": "supported",
+      "pt-BR": "supported",
+      "pt-PT": "unsupported",
+      "zh-CN": "supported",
+      ga: "unsupported",
+    });
+    await provider.targetSupport(["de"]);
+    expect(calls).toBe(1);
+    expect(deeplSupports(new Set(["NB"]), "no")).toBe(true);
+  });
+
+  it("are 'unknown' when DeepL can't be asked, and 'none' without a provider", async () => {
+    const { aiLanguageSupport } = await import("../../app/.server/providers/language-support");
+    const failing = new DeepLProvider({ apiKey: "bad", baseUrl: "https://down.example", fetch: (async () => new Response("", { status: 403 })) as unknown as typeof fetch });
+    expect(await aiLanguageSupport(failing, ["de"])).toEqual({ de: "unknown" });
+    expect(await aiLanguageSupport(null, ["de"])).toEqual({ de: "none" });
   });
 });

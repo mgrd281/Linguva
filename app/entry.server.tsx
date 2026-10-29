@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { PassThrough } from "stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
@@ -5,8 +6,42 @@ import { createReadableStreamFromReadable } from "@react-router/node";
 import { type EntryContext } from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
+import { addSecurityHeaders } from "./.server/lib/security-headers";
+import { logger } from "./.server/lib/logger";
+import { startEmbeddedWorker } from "./.server/jobs/embedded-worker";
 
 export const streamTimeout = 5000;
+
+// Background jobs inside this process's container when no worker service
+// exists (on by default in production only; docs/RAILWAY_STAGING.md §8b).
+startEmbeddedWorker();
+
+/**
+ * Unexpected loader and action errors: logged for operations (the page only
+ * shows a generic message). Name, code and a short message only; no request
+ * data, so no tokens or store content end up in logs. Responses that routes
+ * throw on purpose (404, Shopify's auth flow) and cancelled requests are
+ * not errors.
+ */
+export function handleError(error: unknown, { request }: { request: Request }) {
+  if (request.signal.aborted || error instanceof Response) return;
+  const err = error as { name?: string; code?: string; message?: string; stack?: string };
+  logger.error(
+    {
+      err: { name: err?.name, code: err?.code, message: String(err?.message ?? error).slice(0, 300) },
+      route: new URL(request.url).pathname,
+      method: request.method,
+      at: err?.stack?.split("\n").slice(1, 4).map((l) => l.trim()),
+    },
+    "request failed",
+  );
+}
+
+// Loader and action data (client navigation, fetchers).
+export function handleDataRequest(response: Response, { request }: { request: Request }) {
+  addSecurityHeaders(request, response.headers, { document: false });
+  return response;
+}
 
 export default async function handleRequest(
   request: Request,
@@ -15,6 +50,9 @@ export default async function handleRequest(
   reactRouterContext: EntryContext
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
+  // React Router's inline scripts carry this nonce; the policy allows no other inline script.
+  const nonce = import.meta.env.DEV ? undefined : randomBytes(16).toString("base64");
+  addSecurityHeaders(request, responseHeaders, { document: true, scriptNonce: nonce });
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"
@@ -25,8 +63,10 @@ export default async function handleRequest(
       <ServerRouter
         context={reactRouterContext}
         url={request.url}
+        nonce={nonce}
       />,
       {
+        nonce,
         [callbackName]: () => {
           const body = new PassThrough();
           const stream = createReadableStreamFromReadable(body);

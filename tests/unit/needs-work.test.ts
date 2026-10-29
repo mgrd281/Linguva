@@ -1,0 +1,83 @@
+import type { TranslationRevision } from "@prisma/client";
+import { describe, expect, it } from "vitest";
+import { fieldsNeedingTranslation, planResourceWork } from "../../app/.server/jobs/needs-work";
+
+const GID = "gid://shopify/Product/1";
+const content = [
+  { key: "title", value: "Jacket", digest: "d1", locale: "en", type: "SINGLE_LINE_TEXT_FIELD" },
+  { key: "body_html", value: "<p>Warm</p>", digest: "d2", locale: "en", type: "HTML" },
+  { key: "meta_title", value: "SEO", digest: "d3", locale: "en", type: "SINGLE_LINE_TEXT_FIELD" },
+  { key: "meta_description", value: "", digest: "d4", locale: "en", type: "MULTI_LINE_TEXT_FIELD" },
+  { key: "handle", value: "jacket", digest: "d5", locale: "en", type: "URI" },
+];
+
+function revision(key: string, value: string, extra: Partial<TranslationRevision> = {}): TranslationRevision {
+  return {
+    id: key,
+    shopId: "s",
+    resourceGid: GID,
+    key,
+    locale: "de",
+    marketGid: null,
+    value,
+    sourceDigest: "old",
+    origin: "AI",
+    provider: "mock",
+    approved: false,
+    actorId: null,
+    restoredFromId: null,
+    createdAt: new Date(),
+    ...extra,
+  };
+}
+
+const resource = (translations: Array<{ key: string; value: string; outdated: boolean }>) => ({
+  resourceId: GID,
+  content,
+  translations: translations.map((t) => ({ ...t, updatedAt: null })),
+});
+
+describe("planResourceWork", () => {
+  it("translates missing fields and never touches current translations", () => {
+    const keys = fieldsNeedingTranslation(
+      resource([
+        { key: "title", value: "Jacke", outdated: false },
+        { key: "meta_title", value: " ", outdated: false },
+      ]),
+    ).map((f) => f.key);
+    // title is current, handle is manual-only, the empty source is ignored.
+    expect(keys).toEqual(["body_html", "meta_title"]);
+  });
+
+  it("refreshes outdated translations that are Linguva's own unreviewed AI output", () => {
+    const latest = new Map([[`${GID}|body_html`, revision("body_html", "<p>Warm DE</p>")]]);
+    const plan = planResourceWork(resource([{ key: "body_html", value: "<p>Warm DE</p>", outdated: true }]), { latest });
+    expect(plan.fields.map((f) => f.key)).toContain("body_html");
+    expect(plan.protectedKeys).toEqual([]);
+  });
+
+  it.each([
+    ["a manual revision", revision("body_html", "<p>Hand</p>", { origin: "MANUAL", approved: true })],
+    ["an approved AI revision", revision("body_html", "<p>Hand</p>", { approved: true })],
+    ["no Linguva revision (edited in Shopify or another app)", undefined],
+    ["a revision that no longer matches the live value", revision("body_html", "<p>Other</p>")],
+  ])("protects outdated translations with %s", (_label, latestRevision) => {
+    const latest = new Map(latestRevision ? [[`${GID}|body_html`, latestRevision]] : []);
+    const plan = planResourceWork(resource([{ key: "body_html", value: "<p>Hand</p>", outdated: true }]), { latest });
+    expect(plan.fields.map((f) => f.key)).not.toContain("body_html");
+    expect(plan.protectedKeys).toEqual(["body_html"]);
+  });
+
+  it("replaces protected translations only with explicit permission", () => {
+    const plan = planResourceWork(resource([{ key: "body_html", value: "<p>Hand</p>", outdated: true }]), {
+      overwriteProtected: true,
+    });
+    expect(plan.fields.map((f) => f.key)).toContain("body_html");
+  });
+
+  it("leaves fields with a pending draft for the same source to review", () => {
+    const pendingDrafts = new Map([[`${GID}|body_html`, "d2"], [`${GID}|title`, "stale-digest"]]);
+    const keys = fieldsNeedingTranslation(resource([]), { pendingDrafts }).map((f) => f.key);
+    expect(keys).toEqual(["title", "meta_title"]);
+  });
+});

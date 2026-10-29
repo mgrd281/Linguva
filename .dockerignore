@@ -1,3 +1,20 @@
 .cache
 build
 node_modules
+
+# Never copy local secrets or tooling state into an image.
+.env
+.env.*
+!.env.example
+.git
+.github
+.shopify
+coverage
+playwright-report
+test-results
+*.log
+dump.rdb
+
+# Not needed to build or run the app.
+docs
+tests

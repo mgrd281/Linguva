@@ -1,6 +1,6 @@
 # Shopify API Compatibility Matrix
 
-Status: **Phase 0 — research findings.** Nothing in this file is implemented yet.
+Status: research findings, kept current. What is implemented is listed in FEATURE_STATUS.md; "VERIFIED" here means confirmed in Shopify's documentation or schema, **not** on a real store.
 
 Research date: 2026-10-27. Sources: shopify.dev (docs search + page fetches) and the npm registry.
 
@@ -28,6 +28,11 @@ Legend:
 | Authentication | `authenticate.admin(request)` validates the ID (session) token and performs **token exchange** | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/cli-app-authentication |
 | Offline tokens | **Expiring offline access tokens are required for all public apps as of 2027-01-01.** The template enables `future.expiringOfflineAccessTokens: true` | VERIFIED | Shopify changelog + CLI auth docs |
 | Scopes | Declared in `shopify.app.toml` `[access_scopes]`. Deploy with `shopify app deploy` | VERIFIED | CLI auth docs |
+| Admin-created custom apps | New ones can no longer be created in the Shopify admin. Use Dev Dashboard or Shopify CLI apps | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/legacy/admin-custom-apps |
+| Client credentials grant | `POST https://{shop}/admin/oauth/access_token` with `client_id`, `client_secret`, `grant_type=client_credentials`. Only for stores in the app's own organization. Token valid 24 h; carries the installation's granted scopes. Used only by the live tests | VERIFIED | shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant |
+| `ShopPlan.partnerDevelopment` | Boolean "partner development shop". Used as the gate for live tests | VERIFIED (schema) | admin-2026-10 schema |
+| Page, Article, Blog GIDs | `Page`, `Article` and `Blog` are Node types in 2026-10, so GIDs are `gid://shopify/Page/<id>` etc. | VERIFIED (schema). **ASSUMPTION** that `translatableResources(PAGE/ARTICLE/BLOG)` returns these GIDs; checked by `tests/live` |
+| Product/collection mutations (2026-10) | `productCreate(product:)`, `productUpdate(product:)`, `productDelete(input:)`, `collectionCreate(collection:)`, `collectionDelete(input:)` | VERIFIED (schema, codegen) | Used only for live-test fixtures |
 | Prisma | npm `latest` tag currently points to `8.0.0-rc.27` (a release candidate). The last stable line is `7.10.1` | VERIFIED (npm) | npm registry. **Decision needed**: pin a stable version (see ROADMAP, D-05) |
 
 ## 2. Translation APIs
@@ -38,7 +43,8 @@ Legend:
 | `translatableResourcesByIds` | Exists, returns a `TranslatableResourceConnection` | VERIFIED |
 | `translatableResource(resourceId:)` | Single-resource read used to fetch digests before writing | VERIFIED |
 | `TranslatableResource.nestedTranslatableResources` | Exists (for example, product → options) | VERIFIED |
-| `translationsRegister(resourceId, translations[])` | Creates or updates translations. Each `TranslationInput` needs a `translatableContentDigest`. Optional `marketId` scopes a translation to one market | VERIFIED |
+| `translationsRegister(resourceId, translations[])` | Creates or updates translations. Each `TranslationInput` needs a `translatableContentDigest`. Optional `marketId` scopes a translation to one market (also for the default language, per the docs' product example) | VERIFIED |
+| Error code for a wrong digest | `INVALID_TRANSLATABLE_CONTENT` (in the `TranslationErrorCode` enum). The fake store returns it | VERIFIED (schema). **ASSUMPTION** that this is the code returned for a stale digest; checked by `tests/live` |
 | `translationsRemove(resourceId, translationKeys, locales, marketIds)` | Deletes translations. Only locales returned by `shopLocales` are valid | VERIFIED |
 | `Translation.outdated` | Boolean that is true when the source changed after the translation was last updated | VERIFIED |
 | `Translation.market` | `null` means the translation applies to all markets | VERIFIED |
@@ -53,7 +59,9 @@ Legend:
 | App proxies | Not supported for translation | VERIFIED |
 | Max input array size | 250 items for any array input (bounds the `translations` array per call) | VERIFIED |
 | Bulk operations | `bulkOperationRunQuery` needs a Node connection, max 5 connections, max 2 nesting levels. `bulkOperations` query replaces `currentBulkOperation` (2026-01+) | VERIFIED (general rules). **ASSUMPTION**: whether `translatableResources` can run inside a bulk query must be tested on a dev store |
-| Translation-specific webhooks | No dedicated "translation changed" webhook was found. Change detection uses resource webhooks (`products/update`, `collections/update`, …) plus periodic reconciliation | ASSUMPTION — confirm the topic list against the 2026-10 webhook reference |
+| Translation-specific webhooks | No dedicated "translation changed" webhook was found. Automatic translation uses `products/create`, `products/update`, `collections/create`, `collections/update` (`shopify.app.toml`, scope `read_products`) | Topics: VERIFIED (app config). No-translation-webhook: ASSUMPTION |
+| Webhook `include_fields` | Narrows the payload; Shopify drops a delivery whose payload equals one sent shortly before, so a field that always changes (`updated_at`) must be included. Linguva requests `admin_graphql_api_id` and `updated_at` | VERIFIED (shopify.dev, "Webhooks delivery structure") |
+| Webhooks caused by our own writes | Whether `translationsRegister` triggers `products/update` is not documented. If it does, the automatic check finds nothing to translate (source unchanged) and spends no AI allowance | ASSUMPTION, tested only with the fake store |
 
 ### 2.1 Translatable resource types (Admin API 2026-10, VERIFIED)
 
@@ -65,7 +73,8 @@ Legend:
 | PAGE | title, body_html, handle, meta_title, meta_description | MVP |
 | BLOG | title, handle, meta_title, meta_description | MVP |
 | ARTICLE | title, body_html, summary_html, handle, meta_title, meta_description | MVP |
-| MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Phase 3 |
+| MEDIA_IMAGE / COLLECTION_IMAGE / ARTICLE_IMAGE | alt | Implemented in the editor, bulk jobs and the coverage report (top-level `translatableResources` per image type; ASSUMPTION for collection and blog post images until the live test). Product images: `product.media` (MediaImage ids) → `translatableResourcesByIds`. Collection and blog post images: `nestedTranslatableResources(resourceType: COLLECTION_IMAGE / ARTICLE_IMAGE)` of the parent (schema-valid; how Shopify nests them is ASSUMPTION until the live test runs) |
+| Metafields (2026-10) | value | Implemented in the editor and bulk jobs for text, rich text, list and link types. `Metafield.translatable: Boolean!` on the owner's `metafields` (`HasMetafields`), then `translatableResourcesByIds`. The `METAFIELD` resource type for `translatableResources` is deprecated (VERIFIED, schema) |
 | MENU / LINK | title | Phase 3 |
 | FILTER | label | Phase 3 |
 | METAOBJECT | depends on definition | Phase 3 |
@@ -77,6 +86,19 @@ Legend:
 | SELLING_PLAN / SELLING_PLAN_GROUP | name, option1-3, description | Later |
 | EMAIL_TEMPLATE / PACKING_SLIP_TEMPLATE | title/body_html, body | Later. Contains Liquid, so it needs strict placeholder protection |
 
+### 2.2 Technical Shopify limits that shape features
+
+| Limit | Effect in Linguva | Source |
+|---|---|---|
+| `METAFIELD` resource type deprecated for `translatableResources` | Custom fields are found through their owner only: the editor and bulk jobs (with the option on) check each owner; the coverage report can't count them without one request per resource | VERIFIED (schema) |
+| Rich text metafields are JSON (`RICH_TEXT_FIELD`) | Translated through markup and converted back; documents with node types Linguva doesn't know are left to Shopify's editor rather than guessed at | VERIFIED (type); node set per Shopify's rich text editor, unknown types refused |
+| List and link metafields are JSON (`LIST_SINGLE_LINE_TEXT_FIELD`, `LIST_MULTI_LINE_TEXT_FIELD`, `LINK`, `LIST_LINK`) | Each text is translated; the JSON is rebuilt from the original, so item count and URLs can't change. Values of another shape are refused, not guessed at | VERIFIED (types in `LocalizableContentType`, schema 2026-10); value shapes per Shopify's metafield type docs, to confirm on the dev store |
+| JSON and file metafields | Counted, not translated (no reliable text to translate, risk of breaking data) | Linguva decision |
+| Market-specific translations (`marketId`) | Not written; all translations apply to all markets | Not implemented |
+| No webhook for pages, blog posts, blogs, menus, theme content | `WebhookSubscriptionTopic` (2026-10) has no `PAGES_*`, `ARTICLES_*` or `BLOGS_*` topics. Pages, blog posts and blogs are found by a periodic check: `products`, `collections`, `pages`, `articles` sorted by `UPDATED_AT` (newest first, stop at the last check), `blogs` filtered with `updated_at:>'…'` (`BlogSortKeys` has no `UPDATED_AT`) | VERIFIED (schema enums and documented search syntax); behaviour on a real store to confirm |
+| Webhook delivery is at least once, and can be late or missed | Duplicate deliveries are suppressed by webhook id; a missed delivery is caught by the periodic check (every 30 minutes, same queue job id as the webhook) | VERIFIED (Shopify docs: at-least-once) |
+| 20 languages per shop; primary language only in the admin | Settings and the database refuse more than 20 automatic languages | VERIFIED |
+
 ## 3. Billing
 
 | Topic | Finding | Status |
@@ -86,6 +108,8 @@ Legend:
 | Plan types | Free, monthly, yearly, monthly+yearly, usage-based. Free trials. Proration handled by Shopify | VERIFIED |
 | Public plans | Up to 8 | VERIFIED |
 | Private plans | Available only to selected stores (`*.myshopify.com`). Since 2026-09-21: unlimited private plans and unlimited target stores | VERIFIED |
+| Billing webhooks | Shopify App Pricing sends **no** subscription webhooks (`app_subscriptions/update` is Billing API only). After plan approval Shopify redirects to the welcome link with `plan_handle`; other changes are read from the Partner API | VERIFIED (shopify.dev/docs/apps/launch/billing/shopify-app-pricing) |
+| Plan testing | Dev stores of the same Partner org can select every plan at $0; a $0 private test plan exists | VERIFIED |
 | Subscription state | Query `activeSubscription` in the **Partner API** (status: active, pending, cancelled, frozen). Persists beyond uninstall. Historical Events API available | VERIFIED |
 | Usage charges | **App Events API**. Billing meters are defined in the Partner Dashboard and matched to an `event_handle`. Requests carry an `idempotency_key`. The blog example uses an `/app/unstable/events` path | VERIFIED (concept). **ASSUMPTION**: endpoint stability and auth method; re-check before Phase 5 |
 | Dev stores | On dev stores in the same Partner org, any plan can be selected at no charge ($0 contract) | VERIFIED |
@@ -115,9 +139,13 @@ Legend:
 | Security check | `shopify app security check` flags missing compliance webhooks (`MISSING_COMPLIANCE_WEBHOOKS`) | VERIFIED. Add it to CI |
 | Protected customer data | Only needed if we read customer/order data. **Linguva doesn't need customer data.** Don't request those scopes | VERIFIED (requirement). The design choice is ours |
 
-## 6. Proposed minimal access scopes (ASSUMPTION — confirm per feature)
+## 6. Access scopes
 
-`read_products, read_content, read_online_store_pages, read_themes, read_translations, write_translations, read_locales, write_locales, read_markets`
+In use (`shopify.app.toml`): `read_products, read_content, read_online_store_pages, read_translations, write_translations, read_locales, write_locales`.
+
+Optional (`optional_scopes`, requested at runtime with `scopes.request` and revocable by the merchant, VERIFIED shopify.dev "Manage access scopes"): `read_markets`, asked for only on the Markets page. Optional scopes must be deployed with `shopify app deploy` before they can be requested.
+
+Markets read model (VERIFIED, 2026-10 schema via codegen): `markets { id name handle status webPresences { subfolderSuffix domain { host } defaultLocale alternateLocales rootUrls { locale url } } }`; `ShopLocale.published` tells whether a language is visible.
 
 - No customer or order scopes.
 - `read_online_store_navigation`, `read_metaobjects`, and `read_legal_policies` are added only when those resource types ship.

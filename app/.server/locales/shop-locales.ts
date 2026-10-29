@@ -97,29 +97,36 @@ export async function syncShopLocales(
   await withTenant(
     shopId,
     async (tx) => {
+      // Most page loads see the same locales; skip the writes then.
+      const stored = await tx.shopLocale.findMany({ where: { shopId } });
+      const same =
+        stored.length === locales.length &&
+        locales.every((l) =>
+          stored.some((s) => s.locale === l.locale && s.name === l.name && s.primary === l.primary && s.published === l.published),
+        );
+      if (same) return;
       await tx.shopLocale.deleteMany({
         where: { shopId, locale: { notIn: locales.map((l) => l.locale) } },
       });
+      // Insert-if-missing, then update: safe when several pages sync at once
+      // (an upsert can hit the unique constraint when two inserts race).
+      await tx.shopLocale.createMany({
+        data: locales.map((l) => ({ shopId, locale: l.locale, name: l.name, primary: l.primary, published: l.published, syncedAt })),
+        skipDuplicates: true,
+      });
       for (const l of locales) {
-        await tx.shopLocale.upsert({
+        await tx.shopLocale.update({
           where: { shopId_locale: { shopId, locale: l.locale } },
-          create: {
-            shopId,
-            locale: l.locale,
-            name: l.name,
-            primary: l.primary,
-            published: l.published,
-            syncedAt,
-          },
-          update: {
-            name: l.name,
-            primary: l.primary,
-            published: l.published,
-            syncedAt,
-          },
+          data: { name: l.name, primary: l.primary, published: l.published, syncedAt },
         });
       }
     },
     client,
   );
+}
+
+/** Language names by code, from the last sync (no Shopify call). */
+export async function storedLocaleNames(shopId: string, client: PrismaClient = defaultClient): Promise<Record<string, string>> {
+  const rows = await withTenant(shopId, (tx) => tx.shopLocale.findMany({ where: { shopId }, select: { locale: true, name: true } }), client);
+  return Object.fromEntries(rows.map((r) => [r.locale, r.name]));
 }

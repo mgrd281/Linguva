@@ -1,6 +1,6 @@
 # Database Schema
 
-Status: **Phase 0 — proposal.** No `schema.prisma` exists yet. Field lists are indicative and will be finalized in Milestone M1 with migrations and tests.
+Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop, ShopInstallation, ShopSettings, ShopLocale, WebhookEvent, AuditLog, PrivacyRequest, TranslationRevision, UsageLedger, TranslationJob, TranslationJobItem, TranslationMemory, Glossary, GlossaryTerm, TranslationDraft, CoverageReport, CoverageStat, CoverageGap, CoverageTitleHash), all tenant tables under fail-closed RLS, plus the non-tenant `PlatformUsageDay` (a date and a character count, for the platform cost cap). Coverage tables hold only counts, resource ids and hashes. Entities below that are not in the schema yet (Subscription, Entitlement, ProviderUsage, AdminUser, FeatureFlag, ShopMarket) are still proposals.
 
 ## 1. Conventions
 
@@ -30,7 +30,9 @@ Status: **Phase 0 — proposal.** No `schema.prisma` exists yet. Field lists are
 | Model | Key fields | Constraints / notes |
 |---|---|---|
 | **Subscription** | id, shopId, source (APP_PRICING/MANUAL/NONE), planHandle, status (ACTIVE/PENDING/CANCELLED/FROZEN/TRIAL), trialEndsAt, currentPeriodStart/End, lastReconciledAt, rawSnapshot jsonb | Local **cache** of Partner API `activeSubscription`. Never the sole authority |
-| **Entitlement** | id, shopId, kind (PLAN/OWNER_COMPLIMENTARY/ENTERPRISE_CONTRACT), features jsonb, monthlyCharLimit, costCapMicros, validFrom, validUntil, revokedAt, approvedByAdminId, reason | Resolved server-side into an effective feature set. OWNER kind requires an admin approval record and an AuditLog entry |
+| **ComplimentaryAccess** (implemented) | shopId (PK), shopifyShopGid, reason, grantedBy, monthlyCharLimit, grantedAt, expiresAt, revokedAt, revokedBy, revokeReason | Owner complimentary access (BILLING_DESIGN §4). RLS + FORCE; runtime role SELECT only, written by the operator tool with the owner role; CHECK constraints on the GID format and the limit |
+| **ShopSubscription** (implemented) | shopId (PK), state, planHandle, pendingPlanHandle, trialEndsAt, cancelAtEndOfCycle, currentPeriodEnd, checkedAt | Cache of the Partner API `activeSubscription` (6 h TTL) |
+| **Entitlement** (planned) | id, shopId, kind (PLAN/ENTERPRISE_CONTRACT), features jsonb, monthlyCharLimit, validFrom, validUntil, revokedAt, reason | For negotiated enterprise contracts |
 | **UsageLedger** | id, shopId, periodKey (YYYY-MM), kind (RESERVE/COMMIT/RELEASE/ADJUST/REFUND), chars, costMicros, provider, jobId, idempotencyKey, createdAt | **Append-only.** unique(shopId, idempotencyKey). Balance = SUM per period |
 | **UsageReservation** | id, shopId, jobId, reservedChars, committedChars, status (OPEN/COMMITTED/RELEASED/EXPIRED), expiresAt | unique(shopId, jobId). An expiry sweeper releases stale reservations |
 | **ProviderUsage** | id, shopId, provider, model, requestId, chars, inputTokens, outputTokens, costMicros, latencyMs, outcome | Feeds the cost/margin dashboards. No text content |
@@ -54,12 +56,15 @@ Status: **Phase 0 — proposal.** No `schema.prisma` exists yet. Field lists are
 |---|---|---|
 | **ProviderConfiguration** | id, provider, enabled, modelId, routingWeight, pricePer1MCharsMicros, regions, dpaStatus | Global (not tenant). Admin-managed. API keys are **not stored here**; they come from env/secret manager |
 | **WebhookEvent** | id, shopId (nullable until resolved), topic, webhookId (`X-Shopify-Webhook-Id`), triggeredAt, receivedAt, processedAt, status, payloadHash | unique(webhookId) for duplicate suppression. The raw payload is kept only if needed and expires after N days |
-| **AuditLog** | id, shopId (nullable), actorType (MERCHANT_USER/ADMIN/SYSTEM), actorId, action, targetType, targetId, metadata jsonb, ip, createdAt | Append-only (`UPDATE`/`DELETE` revoked for the app role) |
+| **AuditLog** | id, shopId (nullable), actorType (MERCHANT_USER/ADMIN/SYSTEM), actorId, action, targetType, targetId, metadata jsonb, ip, createdAt | Insert-only for the app role (no `SELECT`, `UPDATE` or `DELETE`): it holds entries of every shop and isn't under RLS |
 | **PrivacyRequest** | id, shopId, topic, shopifyRequestId, receivedAt, dueAt (+30d), completedAt, status, notes | Tracks compliance webhook obligations |
 | **AdminUser** | id, email, role (OWNER/SUPPORT/FINANCE/READONLY), mfaSecretEnc, mfaEnabledAt, lastLoginAt, disabledAt | Separate admin app only |
 | **FeatureFlag** | key, description, defaultOn, rules jsonb (shop allow-list by Shop.id) | Global |
 
 ## 3. Row-level security (defense in depth)
+
+Exception: `TranslationMemory` has RLS enabled but not forced, so that the owner-defined `linguva_memory_fuzzy()` function can use the shop + trigram GIN index (see SECURITY_MODEL §5c). The runtime role is subject to RLS on every table.
+
 
 ```sql
 ALTER TABLE "TranslationEntry" ENABLE ROW LEVEL SECURITY;

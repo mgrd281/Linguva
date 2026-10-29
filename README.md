@@ -2,7 +2,7 @@
 
 AI translation and multilingual SEO app for Shopify merchants (public app, planned for the Shopify App Store).
 
-**Status:** foundation (authentication, multi-tenant database with row-level security, encrypted tokens, compliance webhooks) and interactive product translation (AI drafts via DeepL, review, digest-checked publishing, usage metering) are implemented and tested. Nothing has been verified on a real development store yet. See [docs/ROADMAP.md](docs/ROADMAP.md) for exactly what is implemented, tested, and verified.
+**Status:** commercial feature set in development on a draft PR (not merged, not deployed). Implemented and tested locally against simulated Shopify, Partner and DeepL APIs: tenancy with row-level security, encrypted tokens, compliance webhooks, translation editor for products, collections, pages, blog posts and blogs (including image alt text and text metafields), SEO checks and handles, coverage report, bulk jobs with review, translation memory, glossary, history and restore, cost limits, Shopify App Pricing and a read-only Markets page. **Verified on Shopify so far: read-only checks on a development store** (FEATURE_STATUS.md). See [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) for the exact state of each feature and [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) for the verification plan.
 
 ## Stack
 
@@ -25,9 +25,13 @@ pnpm db:up                       # Docker: Postgres + Redis (creates roles and d
 # without Docker: psql -U postgres -f scripts/db/init-roles.sql
 cp .env.example .env             # then set TOKEN_ENCRYPTION_KEYS (see the comment in the file)
 pnpm db:migrate                  # runs migrations as the owner role
-pnpm exec prisma generate
-pnpm dev                         # shopify app dev: links the Partner app and opens the dev store
+pnpm config:link                 # once: create or choose the Linguva development app
+pnpm preflight                   # checks the local setup (no Shopify calls)
+pnpm dev                         # shopify app dev on your development store
+pnpm worker:dev                  # only if `pnpm dev` doesn't start the worker (see docs/SHOPIFY_CLI_SETUP.md §5)
 ```
+
+Step by step, with scopes, webhooks and billing: [docs/SHOPIFY_CLI_SETUP.md](docs/SHOPIFY_CLI_SETUP.md). Use `TRANSLATION_PROVIDER=mock` without a DeepL key.
 
 ## Checks
 
@@ -35,9 +39,15 @@ pnpm dev                         # shopify app dev: links the Partner app and op
 pnpm typecheck
 pnpm lint
 pnpm test               # unit tests
-pnpm test:integration   # needs PostgreSQL with scripts/db/init-roles.sql applied
+pnpm test:integration   # needs PostgreSQL (scripts/db/init-roles.sql applied) and Redis
+pnpm test:security      # tenant isolation, payload and XSS tests (same services)
+pnpm test:performance   # fuzzy memory search with 100,000 entries (same services)
+pnpm test:ui            # Playwright: production build in Chromium, simulated Shopify, accessibility (docs/UI_TESTING.md)
+pnpm test:live          # optional: guarded contract tests on a dev store (docs/DEV_STORE_SETUP.md), never in CI
+pnpm preflight          # checks a local setup before `pnpm dev` (no Shopify calls)
 pnpm build
 pnpm graphql-codegen    # re-validates GraphQL operations against the Admin API schema
+pnpm check:ignored      # before pushing: no source file hidden by .gitignore
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of these plus a migration drift check and a secret scan.
@@ -53,11 +63,20 @@ app/
     webhooks/       verification + duplicate suppression
     privacy/        compliance webhook handlers
     locales/        shopLocales sync
+    translation/    segmentation, protection, validation, translate/save services
+    providers/      DeepL, mock, retry
+    jobs/           bulk jobs: processors, queues, errors
+    queue/          Redis connection, token bucket
+    usage/          usage ledger and quota
+    memory/         translation memory and segment alignment
+    glossary/       glossary terms, CSV import/export
+    review/         drafts for bulk review
   lib/              code shared by server and UI
   routes/           pages (app.*) and webhook endpoints (webhooks.*)
 prisma/             schema and migrations (incl. RLS policies)
+worker/             background worker entrypoint
 scripts/db/         local/CI database roles
-tests/              unit/ and integration/
+tests/              unit/, integration/, security/ and live/ (dev store only)
 docs/               architecture, security, billing, roadmap
 ```
 
@@ -72,7 +91,16 @@ docs/               architecture, security, billing, roadmap
 | [docs/TRANSLATION_ENGINE.md](docs/TRANSLATION_ENGINE.md) | Feasibility matrix, translation pipeline |
 | [docs/BILLING_DESIGN.md](docs/BILLING_DESIGN.md) | Shopify App Pricing, entitlements, metering |
 | [docs/COST_MODEL.md](docs/COST_MODEL.md) | Unit economics (assumptions) |
+| [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) | Implemented / Tested Locally / Verified on Shopify, per feature |
+| [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) | Test cases on a development store, beta exit criteria, results log |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Progress, milestones, risks, decisions |
+| [docs/SHOPIFY_CLI_SETUP.md](docs/SHOPIFY_CLI_SETUP.md) | Install on a development store with Shopify CLI: setup, preflight, scopes, webhooks |
+| [docs/BETA_READINESS.md](docs/BETA_READINESS.md) | Beta readiness review: blockers, defects fixed, open items |
+| [docs/UI_TESTING.md](docs/UI_TESTING.md) | Playwright UI tests: what is real, what is simulated |
+| [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
+| [docs/RAILWAY_STAGING.md](docs/RAILWAY_STAGING.md) | Hosting on Railway: staging (test stores only, mock AI), image, roles, variables, approvals; KARINEX production plan |
+| [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
+| [docs/SECURITY_REVIEW_MEMORY_FUZZY.md](docs/SECURITY_REVIEW_MEMORY_FUZZY.md) | Security review of the fuzzy search function, roles and grants |
 | [CHANGELOG.md](CHANGELOG.md) | Change history |
 
 ## Project boundaries

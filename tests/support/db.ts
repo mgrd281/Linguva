@@ -5,11 +5,16 @@ export const ownerDb = new PrismaClient({
   datasources: { db: { url: process.env.MIGRATION_DATABASE_URL! } },
 });
 
-/** Removes all rows between tests (TRUNCATE isn't subject to RLS). */
+/**
+ * Removes all rows between tests (TRUNCATE isn't subject to RLS). Every
+ * table except Prisma's migration log is cleared, so new tables can't be
+ * forgotten here.
+ */
 export async function resetDatabase() {
+  const tables = await ownerDb.$queryRaw<Array<{ tablename: string }>>`
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   await ownerDb.$executeRawUnsafe(
-    `TRUNCATE "UsageLedger", "TranslationRevision", "AuditLog", "ShopLocale", "ShopSettings", "ShopInstallation",
-       "Shop", "Session", "WebhookEvent", "PrivacyRequest" CASCADE`,
+    `TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} CASCADE`,
   );
 }
 

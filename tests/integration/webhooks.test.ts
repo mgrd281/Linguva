@@ -1,14 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 import type { ActionFunctionArgs } from "react-router";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { action as uninstalled } from "../../app/routes/webhooks.app.uninstalled";
 import { action as dataRequest } from "../../app/routes/webhooks.customers.data_request";
 import { action as customersRedact } from "../../app/routes/webhooks.customers.redact";
 import { action as shopRedact } from "../../app/routes/webhooks.shop.redact";
+import { action as content } from "../../app/routes/webhooks.content";
+import { purgeWebhookLog, WEBHOOK_LOG_RETENTION_DAYS } from "../../app/.server/webhooks/process-webhook";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { syncShopLocales } from "../../app/.server/locales/shop-locales";
 import { countAsOwner, ownerDb, resetDatabase } from "../support/db";
 import { signedWebhookRequest } from "../support/webhooks";
+import { resetConfigCache } from "../../app/.server/lib/config";
 
 const app = new PrismaClient();
 const SHOP = "webhooks.myshopify.com";
@@ -37,6 +40,7 @@ describe("webhook authentication", () => {
     ["customers/redact", "/webhooks/customers/redact", customersRedact],
     ["shop/redact", "/webhooks/shop/redact", shopRedact],
     ["app/uninstalled", "/webhooks/app/uninstalled", uninstalled],
+    ["products/update", "/webhooks/content", content],
   ])("returns 401 for %s with an invalid HMAC and does nothing", async (topic, path, handler) => {
     const response = await call(
       handler as Action,
@@ -117,7 +121,7 @@ describe("compliance webhooks", () => {
     const other = await upsertInstalledShop({ shopDomain: "keep.myshopify.com" }, app);
     await syncShopLocales(shop.id, [{ locale: "de", name: "German", primary: true, published: true, rtl: false }], app);
     await app.session.create({ data: { id: `offline_${SHOP}`, shop: SHOP, state: "", accessToken: "v1.a.b.c.d" } });
-    await app.auditLog.create({ data: { shopId: shop.id, actorType: "SYSTEM", action: "test" } });
+    await app.auditLog.createMany({ data: [{ shopId: shop.id, actorType: "SYSTEM", action: "test" }] });
 
     const response = await call(
       shopRedact as Action,
@@ -131,8 +135,8 @@ describe("compliance webhooks", () => {
       expect(await countAsOwner(table, shop.id)).toBe(0);
     }
     // Audit entries survive but no longer point at the shop.
-    expect(await app.auditLog.count({ where: { shopId: shop.id } })).toBe(0);
-    expect(await app.auditLog.count({ where: { action: "test" } })).toBe(1);
+    expect(await ownerDb.auditLog.count({ where: { shopId: shop.id } })).toBe(0);
+    expect(await ownerDb.auditLog.count({ where: { action: "test" } })).toBe(1);
     // Other tenants are untouched.
     expect(await countAsOwner("ShopSettings", other.shop.id)).toBe(1);
     expect(await app.privacyRequest.count({ where: { topic: "SHOP_REDACT", status: "COMPLETED" } })).toBe(1);
@@ -190,5 +194,91 @@ describe("duplicate deliveries", () => {
       status: "PROCESSED",
       attempts: 2,
     });
+  });
+});
+
+describe("content webhooks (automatic translation)", () => {
+  it("accept a signed products/update and queue nothing while automatic translation is off", async () => {
+    await upsertInstalledShop({ shopDomain: SHOP }, app);
+    const response = await call(
+      content as Action,
+      signedWebhookRequest({
+        path: "/webhooks/content",
+        topic: "products/update",
+        shop: SHOP,
+        body: { admin_graphql_api_id: "gid://shopify/Product/1", updated_at: "2026-10-27T10:00:00Z" },
+        webhookId: "content-1",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await app.webhookEvent.findUniqueOrThrow({ where: { webhookId: "content-1" } })).toMatchObject({ status: "PROCESSED", topic: "PRODUCTS_UPDATE" });
+  });
+});
+
+describe("webhook log retention", () => {
+  it("deletes finished entries older than the retention period and keeps the rest", async () => {
+    const now = new Date("2026-10-27T12:00:00Z");
+    const old = new Date(now.getTime() - (WEBHOOK_LOG_RETENTION_DAYS + 1) * 86_400_000);
+    const recent = new Date(now.getTime() - 86_400_000);
+    const row = (webhookId: string, status: "PROCESSED" | "FAILED" | "PROCESSING", receivedAt: Date) => ({
+      webhookId,
+      topic: "PRODUCTS_UPDATE",
+      shopDomain: SHOP,
+      payloadHash: "x",
+      status,
+      receivedAt,
+    });
+    await app.webhookEvent.createMany({
+      data: [row("old-done", "PROCESSED", old), row("old-failed", "FAILED", old), row("old-running", "PROCESSING", old), row("recent", "PROCESSED", recent)],
+    });
+    expect(await purgeWebhookLog(app, now)).toBe(2);
+    expect((await app.webhookEvent.findMany({ orderBy: { webhookId: "asc" } })).map((e) => e.webhookId)).toEqual(["old-running", "recent"]);
+  });
+});
+
+describe("staging: stores the deployment doesn't serve", () => {
+  const STAGING = { LINGUVA_STAGE: "staging", TRANSLATION_PROVIDER: "mock", ALLOWED_SHOPS: SHOP };
+
+  beforeEach(() => {
+    for (const [k, v] of Object.entries(STAGING)) vi.stubEnv(k, v);
+    resetConfigCache();
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetConfigCache();
+  });
+
+  it.each([
+    ["a production store", "karinex.myshopify.com"],
+    ["a store not on the list", "another-dev-store.myshopify.com"],
+  ])("acknowledges and drops a signed webhook from %s, storing nothing", async (_label, shop) => {
+    await upsertInstalledShop({ shopDomain: shop }, app);
+    const response = await call(
+      uninstalled as Action,
+      signedWebhookRequest({ path: "/webhooks/app/uninstalled", topic: "app/uninstalled", shop, body: { domain: shop } }),
+    );
+    // 200: Shopify stops retrying; nothing recorded, the shop untouched.
+    expect(response.status).toBe(200);
+    expect(await app.webhookEvent.count()).toBe(0);
+    expect((await ownerDb.shop.findUnique({ where: { shopDomain: shop } }))?.status).toBe("ACTIVE");
+  });
+
+  it("still refuses an invalid HMAC first (401), whatever the store", async () => {
+    const response = await call(
+      uninstalled as Action,
+      signedWebhookRequest({ path: "/webhooks/app/uninstalled", topic: "app/uninstalled", shop: "karinex.myshopify.com", body: {}, secret: "wrong-secret" }),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("processes webhooks of the listed test store as usual", async () => {
+    await upsertInstalledShop({ shopDomain: SHOP }, app);
+    const response = await call(
+      uninstalled as Action,
+      signedWebhookRequest({ path: "/webhooks/app/uninstalled", topic: "app/uninstalled", shop: SHOP, body: { domain: SHOP } }),
+    );
+    expect(response.status).toBe(200);
+    expect(await app.webhookEvent.count()).toBe(1);
+    expect((await ownerDb.shop.findUnique({ where: { shopDomain: SHOP } }))?.status).toBe("UNINSTALLED");
   });
 });

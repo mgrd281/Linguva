@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
+import { ensureDatabasePosture } from "../lib/db-guard";
 
 export interface VerifiedWebhook {
   webhookId: string;
@@ -85,6 +86,7 @@ export async function processWebhook(
     shop: webhook.shop,
   });
 
+  await ensureDatabasePosture();
   if (!(await claim(webhook, client))) {
     log.info("webhook duplicate ignored");
     return "duplicate";
@@ -112,4 +114,19 @@ export async function processWebhook(
 /** Maps an outcome to the HTTP status Shopify expects (non-2xx => retry). */
 export function webhookResponse(outcome: WebhookOutcome): Response {
   return new Response(null, { status: outcome === "failed" ? 500 : 200 });
+}
+
+/** Duplicate suppression only needs recent deliveries (Shopify retries for hours, not weeks). */
+export const WEBHOOK_LOG_RETENTION_DAYS = 14;
+
+/**
+ * Deletes delivery log entries older than the retention period (product
+ * webhooks arrive often). Entries still PROCESSING are kept.
+ */
+export async function purgeWebhookLog(client: PrismaClient = defaultClient, now = new Date()) {
+  const cutoff = new Date(now.getTime() - WEBHOOK_LOG_RETENTION_DAYS * 86_400_000);
+  const { count } = await client.webhookEvent.deleteMany({
+    where: { status: { in: ["PROCESSED", "FAILED"] }, receivedAt: { lt: cutoff } },
+  });
+  return count;
 }

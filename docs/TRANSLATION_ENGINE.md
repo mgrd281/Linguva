@@ -1,6 +1,6 @@
 # Translation Engine
 
-Status: **Phase 0 — design and feasibility.** Not implemented.
+Status: the pipeline in §2, translation memory (§2.1) and glossary (§2.2) are **implemented and tested**; the benchmark (§4) is planned.
 
 ## 1. Feature feasibility matrix
 
@@ -44,6 +44,30 @@ discover → fetch(source, digest) → normalize → protect → TM lookup → r
 | Restore + validate | All tokens are present exactly once. HTML tag multiset equals the source. No new attributes or URLs. Length ratio within bounds per pair. Numbers/units preserved. Glossary PREFERRED applied and FORBIDDEN absent. Sanitizer allow-list. Failures → `FAILED` with code; never published |
 | Save | `TranslationEntry` + `TranslationRevision`. `isManuallyLocked` entries are never overwritten automatically |
 | Publish | Re-fetch digests via `translatableResourcesByIds`. Digest changed → `STALE`, re-queue. Else `translationsRegister`, check `userErrors`, read back |
+
+### 2.1 Translation memory (implemented)
+
+- Stored per shop, source locale, target locale and market (`""` = all markets), at **segment** level (the same segments the provider sees, with inline codes), keyed by a whitespace-insensitive SHA-256 of the segment.
+- **Exact matches** are applied automatically before any provider call. Approved entries are always used; unreviewed machine entries only when the shop allows it (Settings, on by default). Market-specific entries win over general ones.
+- **Fuzzy matches** (pg_trgm `similarity`, default ≥ 0.6, length within ±50 %) are only suggestions in the editor ("Fill from memory"); they are never published automatically.
+- Identical segments within one request are sent to the provider once. Memory hits and duplicates are not billed and don't count against the monthly quota.
+- Entries are written when translations are published: APPROVED for anything a person wrote or approved, MACHINE for automatic publishing. An approved entry is never replaced by machine output. A person's own translation is aligned with the source segment by segment (inline codes are matched by tag + attributes or literal value); segments whose structure differs are not stored rather than guessed.
+
+### 2.2 Glossary (implemented)
+
+| Rule | Effect |
+|---|---|
+| Never translate | The term becomes an opaque code; it is copied verbatim |
+| Always translate as | The term becomes an opaque code that renders as the merchant's translation, so the provider can't change the wording (grammatical inflection is not adapted) |
+| Never use | A target wording that blocks the result (the field is rejected, never published) |
+
+Terms apply to all languages or one, and to all markets or one; the most specific term wins. CSV import validates every row and imports nothing if any row is invalid; export neutralises spreadsheet formulas.
+
+### 2.3 Review and protection (implemented)
+
+- Bulk jobs save **drafts** unless the merchant explicitly enabled automatic publishing (Settings; who and when is recorded). Drafts are published through the same digest-checked save as the editor; a draft whose source changed becomes STALE.
+- An outdated translation is **protected** from bulk jobs if a person wrote or approved it, or if Linguva didn't write it (manual edits in Shopify, other apps). Only Linguva's own unreviewed machine output is refreshed, unless the merchant ticks "Also replace … written or approved by a person" for that job.
+- Every write creates a revision (origin, approval, actor). The value Linguva replaces is kept as an `EXTERNAL` revision. A revision can be restored only while the source digest is unchanged, because Shopify accepts translations only for the current source.
 
 ## 3. Loop and duplicate prevention
 

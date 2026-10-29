@@ -4,12 +4,35 @@ import { testEnv } from "./tests/support/env";
 
 export default defineConfig({
   test: {
+    // Integration and security suites share one test database.
+    fileParallelism: false,
     projects: [
       {
         test: {
           name: "unit",
           include: ["tests/unit/**/*.test.ts"],
           env: testEnv,
+        },
+      },
+      {
+        test: {
+          name: "security",
+          include: ["tests/security/**/*.test.ts"],
+          env: testEnv,
+          globalSetup: ["tests/support/integration-global-setup.ts"],
+          fileParallelism: false,
+          hookTimeout: 60_000,
+        },
+      },
+      {
+        test: {
+          name: "performance",
+          include: ["tests/performance/**/*.test.ts"],
+          env: testEnv,
+          globalSetup: ["tests/support/integration-global-setup.ts"],
+          fileParallelism: false,
+          hookTimeout: 180_000,
+          testTimeout: 120_000,
         },
       },
       {

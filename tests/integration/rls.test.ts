@@ -102,10 +102,11 @@ describe("row-level security", () => {
     );
   });
 
-  it("keeps the audit log append-only for the runtime role", async () => {
-    const entry = await app.auditLog.create({
-      data: { actorType: "SYSTEM", action: "test.event" },
-    });
+  it("keeps the audit log insert-only for the runtime role", async () => {
+    await app.auditLog.createMany({ data: [{ actorType: "SYSTEM", action: "test.event" }] });
+    const entry = await ownerDb.auditLog.findFirstOrThrow({ where: { action: "test.event" } });
+    // It can't read entries (of any shop) back either.
+    await expect(app.auditLog.findMany()).rejects.toThrow(/permission denied/);
     await expect(
       app.auditLog.update({ where: { id: entry.id }, data: { action: "tampered" } }),
     ).rejects.toThrow(/permission denied/);

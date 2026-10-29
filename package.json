@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "build": "react-router build",
+    "build": "react-router build && pnpm run build:worker && pnpm run build:ops",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
@@ -24,7 +24,24 @@
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
     "db:up": "docker compose up -d postgres redis",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node scripts/migrate.mjs",
+    "build:worker": "esbuild worker/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=build/worker/index.js",
+    "worker": "LOG_SERVICE=linguva-worker node build/worker/index.js",
+    "worker:dev": "pnpm run build:worker && LOG_SERVICE=linguva-worker node --env-file-if-exists=.env build/worker/index.js",
+    "build:ops": "esbuild scripts/ops/complimentary.ts scripts/ops/preflight.ts scripts/ops/coverage-check.ts scripts/ops/smoke.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outdir=build/ops",
+    "ops:complimentary": "node --env-file-if-exists=.env build/ops/complimentary.js",
+    "preflight": "pnpm run build:ops && node --env-file-if-exists=.env build/ops/preflight.js",
+    "ops:coverage-check": "pnpm run build:ops && node --env-file-if-exists=.env build/ops/coverage-check.js",
+    "ops:smoke": "pnpm run build:ops && node build/ops/smoke.js",
+    "test:security": "vitest run --project security",
+    "test:performance": "vitest run --project performance",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "test:live:rehearsal": "LIVE_REHEARSAL=dev-store vitest run --config vitest.live-rehearsal.config.ts && LIVE_REHEARSAL=demo-catalog vitest run --config vitest.live-rehearsal.config.ts",
+    "test:deepl": "vitest run --config vitest.quality.config.ts",
+    "check:ignored": "node scripts/check-ignored.mjs",
+    "build:ui-preload": "esbuild tests/ui/server/preload.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=build/ui-test/preload.js",
+    "test:ui": "pnpm build && pnpm build:ui-preload && playwright test",
+    "test:visual:update": "pnpm build && pnpm build:ui-preload && playwright test tests/ui/visual.spec.ts --update-snapshots"
   },
   "type": "module",
   "engines": {
@@ -39,6 +56,8 @@
     "@shopify/app-bridge-react": "^4.2.4",
     "@shopify/shopify-app-react-router": "^3.0.2",
     "@shopify/shopify-app-session-storage-prisma": "^11.0.0",
+    "bullmq": "6.3.12",
+    "ioredis": "6.0.0",
     "isbot": "^5.1.31",
     "parse5": "^8.0.1",
     "pino": "^10.4.0",
@@ -50,6 +69,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "1.63.0",
     "@shopify/api-codegen-preset": "^2.0.0",
     "@shopify/polaris-types": "1.0.1",
     "@types/eslint": "^9.6.1",
@@ -58,6 +79,7 @@
     "@types/react-dom": "^18.3.7",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
+    "esbuild": "0.28.2",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
@@ -68,7 +90,8 @@
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "yaml": "2.9.1"
   },
   "workspaces": {
     "packages": [
@@ -79,6 +102,11 @@
     "overrides": {
       "qs": "^6.16.0",
       "p-map": "^4.0.0"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-ggr8-5vv4-36mx"
+      ]
     },
     "onlyBuiltDependencies": [
       "@prisma/client",

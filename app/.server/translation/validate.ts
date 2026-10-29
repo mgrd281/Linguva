@@ -4,13 +4,18 @@
  * translation to review.
  */
 
+import type { SeoIssueCode } from "../../lib/seo";
+
 export type IssueCode =
+  | SeoIssueCode
   | "EMPTY_TRANSLATION"
   | "NUMBERS_CHANGED"
   | "FORBIDDEN_TERM"
   | "PREFERRED_TERM_MISSING"
   | "LENGTH_RATIO"
-  | "UNTRANSLATED";
+  | "UNTRANSLATED"
+  | "WRONG_SCRIPT"
+  | "FORMALITY_MISMATCH";
 
 export interface ValidationIssue {
   code: IssueCode;

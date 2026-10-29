@@ -45,6 +45,173 @@ Status: **Phase 0 — proposal and threat model.** Controls listed here aren't i
 - Duplicate suppression: `unique(webhookId)` on `WebhookEvent`. A duplicate gets a 200 and is not processed again.
 - Replay window: reject events whose `X-Shopify-Triggered-At` is older than a configurable window (the default must allow Shopify retries, which can take up to ~48h — **ASSUMPTION, verify**). Duplicates are still caught by the ID check.
 - Handlers only persist and enqueue. They respond within a few hundred ms.
+- The delivery log keeps finished entries for 14 days (`purgeWebhookLog`, run by the worker's sweep): long enough for Shopify's retries, short enough that frequent product webhooks don't grow the table. It stores topic, shop domain and a payload hash, never the payload.
+
+## 5c. RLS and indexes: the fuzzy search function
+
+PostgreSQL evaluates a query's own conditions after the RLS policy unless they are LEAKPROOF. Trigram (`%`) and `ILIKE` operators aren't, so under RLS no index can serve them. For translation memory this made fuzzy search scan all of a shop's entries.
+
+`linguva_memory_fuzzy()` (migration `20261027180000_memory_fuzzy_function`) is a deliberate exception, and `linguva_draft_search()` (§5l) follows the same pattern:
+
+- `SECURITY DEFINER`, owned by the (non-superuser) migration role, `search_path = pg_catalog, pg_temp` with every `public` object schema-qualified; `EXECUTE` revoked from PUBLIC and granted only to `linguva_app`. Full review, threat tests, residual risks and alternatives: [SECURITY_REVIEW_MEMORY_FUZZY.md](SECURITY_REVIEW_MEMORY_FUZZY.md).
+- It takes **no shop argument**. The tenant comes from `current_setting('app.shop_id')`, the same transaction setting the RLS policy uses, so a caller can't choose another shop. Without a tenant it returns nothing.
+- To run as the owner without RLS, `TranslationMemory` has RLS enabled but not forced. The runtime role stays fully under RLS for every direct query; only the owner (migrations) isn't forced.
+- Covered by the security suite: no rows without a tenant, no rows of another tenant, the function's attributes, and RLS still on for the table.
+
+## 5d. Database posture check
+
+`checkDatabasePosture()` (`app/.server/lib/db-posture.ts`) runs once per process in the web app, the webhook handlers and the worker, as the runtime role. It checks that the runtime role:
+
+- isn't superuser, BYPASSRLS or CREATEROLE;
+- owns no tables;
+- can't create objects in `public`.
+
+It also checks that:
+
+- every tenant table has RLS with exactly the reviewed policy, and FORCE (except `TranslationMemory`);
+- the only SECURITY DEFINER function is the reviewed one, with the required `search_path`, a non-privileged owner and no PUBLIC execute;
+- the runtime role can't write `ComplimentaryAccess` (free access is granted only by the operator tool with the owner role, BILLING_DESIGN §4).
+
+In production a failed check makes requests and jobs fail instead of running with weakened isolation.
+
+Grants of the runtime role on global tables: `AuditLog` insert only (no read); `Shop`, `Session`, `WebhookEvent`, `PrivacyRequest` read/write (they hold no merchant content; access is by verified shop domain or webhook id).
+
+## 5a. AI cost and abuse limits (implemented, tested)
+
+| Control | Where | Behaviour |
+|---|---|---|
+| Monthly allowance per shop | `UsageLedger` reservation (advisory lock) | Request refused, bulk job stops with `QUOTA_EXCEEDED` |
+| Daily cap per shop (`AI_DAILY_CHAR_LIMIT`, never above the monthly allowance) | Same transaction | Refused / job stops with `DAILY_LIMIT`, resumable the next UTC day |
+| Platform cap per day across all shops (`AI_PLATFORM_DAILY_CHAR_LIMIT`, our provider cost) | `PlatformUsageDay`, conditional `UPDATE` in the reservation transaction | Refused / `PLATFORM_LIMIT`. Concurrency-tested: never overshoots |
+| Largest single interactive request (`AI_MAX_CHARS_PER_REQUEST`) | Before reservation | `REQUEST_TOO_LARGE`, no provider call |
+| Requests per minute per staff member and per shop (AI translate, memory suggestions) | Redis token buckets (shared by all instances; Redis required in production) | `RATE_LIMITED_USER` / `RATE_LIMITED_SHOP` with retry time; no quota used. Staff ids are hashed in Redis keys |
+
+`PlatformUsageDay` holds only a date and a number, so it isn't under RLS. The runtime role can read, insert and update it, but not delete.
+
+## 5b. No unintended publishing (implemented, tested)
+
+- Bulk jobs create drafts by default. Automatic publishing needs an explicit, recorded confirmation.
+- A job publishes only while automatic publishing is on for the job **and** still on in Settings. Switching back to review stops running jobs from publishing; their results become drafts.
+- Even with automatic publishing, results with quality warnings go to Review instead of the storefront.
+- The editor's AI and memory actions only fill the form. Publishing needs the merchant's save.
+- Approval needs explicit draft ids of the same shop with status PENDING; rejected, stale and other shops' drafts are never published.
+
+**Every write path (phase D audit).** Only two functions change translations in a store: `registerTranslations` (called only by `saveResourceTranslations`) and `removeTranslations` (called only by `history.removeTranslation`). `tests/security/structure.test.ts` fails if another caller or another Shopify mutation appears.
+
+| Path | Who starts it | Guards |
+|---|---|---|
+| Editor save (`resource-editor`) | The merchant, per field | Session token; source digest (refused if the original changed); **translation unchanged since the page was opened** (phase D); handle changes need a confirmation; the value replaced is kept as a revision |
+| Restore a version (`history`) | The merchant | Same shop's revision of the edited resource; source digest; refused for revisions written for an older original |
+| Remove a translation (`history`) | The merchant | Same shop and resource; the removed value is kept as a revision |
+| Approve drafts (`review/drafts`) | The merchant, explicit draft ids | Same shop, PENDING only; source digest; **the translation the draft replaces must still be in place** (`currentDigest`, phase D), otherwise STALE |
+| Automatic publishing (`jobs/processors`) | A bulk or automatic job | Explicitly enabled and confirmed, still enabled in Settings, plan includes it, no quality warnings, translations a person wrote or approved skipped unless the job allows replacing them, source digest, **translation unchanged since planning** (phase D) |
+
+**Bug found by the audit (fixed in phase D):** a draft or an automatically published result was made for the translation in place when the job ran. If someone wrote a translation afterwards (in Shopify's editor or Linguva's), approving the older draft, or the job finishing a moment later, replaced the person's newer translation. Drafts now store which translation they replace, and publishing checks it again on the store's current state (`tests/security/draft-protection.test.ts`, mutation-checked). The editor has the same check: each field carries a marker of the translation shown, so when two people edit the same field, the later save is refused with an explanation instead of replacing the earlier one (the marker only prevents accidents; a person can still replace a translation on purpose after reloading, and the replaced value is kept as a revision).
+
+**Structure of rich text, lists and links (phase F).** For these types `saveResourceTranslations` itself refuses a value whose structure, number of items or link addresses differ from the original Shopify reports at that moment (`keepsSourceStructure`, code `STRUCTURE_CHANGED`), and a list with an untranslated item (`EMPTY_TRANSLATION`). Because every path above goes through it, a form or an edited draft can't point a link elsewhere or drop list items, whichever page posted it (`tests/integration/attached-resources.test.ts`, `bulk-attached.test.ts`). Trade-off: a rich text translation someone wrote in Shopify's own editor with different formatting stays in the store, but Linguva won't write it again (for example when restoring it from the history).
+
+## 5e. HTTP security headers (implemented, tested)
+
+`app/.server/lib/security-headers.ts`, applied to every page and data response (`entry.server.tsx`):
+
+| Header | Value | Why |
+|---|---|---|
+| Content-Security-Policy | Shopify's `frame-ancestors` for the store's admin, plus `base-uri 'self'; object-src 'none'` | Clickjacking, base-tag and plugin injection |
+| (no shop in the request) | `frame-ancestors https://admin.shopify.com https://*.myshopify.com` | Before, such pages had no framing protection at all |
+| Content-Security-Policy `script-src` (phase G) | `'self' 'nonce-…' https://cdn.shopify.com`, a new nonce per page; React Router's inline scripts carry it. Not on the Vite dev server (its refresh script is inline) | An injected inline script or event handler doesn't run (tested); scripts only from the app and Shopify's CDN (App Bridge, Polaris) |
+| X-Content-Type-Options | `nosniff` | MIME sniffing |
+| Referrer-Policy | `strict-origin-when-cross-origin` | No full app URLs (with `shop`, `host`) sent to other sites |
+| Permissions-Policy | camera, microphone, geolocation, payment, usb off | Not needed by the app |
+| Strict-Transport-Security | `max-age=31536000`, production over HTTPS only | Never on local http |
+
+Not set on purpose: `X-Frame-Options` (the admin must embed the app), `Cross-Origin-Opener-Policy` (App Bridge). Tests: `tests/unit/security-headers.test.ts`; the production build is checked in `tests/ui/install.spec.ts`, and `tests/ui/csp.spec.ts` runs the main flows under the script policy (Polaris from Shopify's CDN, previews, dialogs, toasts) with no violation and shows that an injected inline script is blocked. App Bridge is simulated there: the real one must be checked inside the admin on the development store (DEV_STORE_TEST_PLAN); if it needs another source, the policy is widened for that source only.
+
+## 5f. Dependencies
+
+CI runs `pnpm audit --prod --audit-level high` and fails on any high or critical advisory in what ships. Accepted exceptions (`pnpm.auditConfig.ignoreGhsas` in package.json), each reviewed:
+
+| Advisory | Package and path | Why accepted | Remove when |
+|---|---|---|---|
+| GHSA-ggr8-5vv4-36mx (stack exhaustion with recursive objects) | `deepmerge-ts` 7.1.5 via `prisma` → `@prisma/config` | Only merges the repository's own Prisma configuration when the CLI runs (migrations); no merchant, Shopify or network input reaches it; not in the web app or worker bundle. Every Prisma 6 release pins 7.1.5 | Upgrading to Prisma 7 |
+
+Development-only tools (not shipped, not run on user input) also have advisories as of 2026-10-27: `minimatch` (ReDoS) via ESLint plugins, `lodash` and `@graphql-tools/utils` via the GraphQL codegen preset. They run only on the repository's own files; they are reviewed when those tools are updated.
+
+## 5g. Database change review: images and custom fields in bulk jobs (migration 20261029160000)
+
+| Change | Review |
+|---|---|
+| `TranslationJob.includeAttached BOOLEAN NOT NULL DEFAULT false` | Set only by `createBulkJob`, and only true for all-field jobs of types with images and custom fields. Existing jobs keep false. No security meaning beyond "check more resources". |
+| `TranslationDraft.parentGid TEXT NULL` with a CHECK on the GID format | Written only by the worker, from the job item's own resource (never from request input). Used for the Review page's editor link and type filter (`startsWith` a fixed GID prefix; no user text reaches it). |
+| Row-level security | Unchanged: both tables keep `ENABLE` + `FORCE ROW LEVEL SECURITY` and their `tenant_isolation` policy on `shopId`, which covers new columns. No new grants, functions or roles. |
+| Cross-tenant risk | A draft's `resourceGid`/`parentGid` come from Shopify for the job's own shop; approval re-reads the resource from that shop's Admin API and checks the source digest before publishing. Security tests for drafts and bulk jobs cover cross-shop access (`tests/security/bulk-jobs-security.test.ts`, `memory-glossary-review-security.test.ts`). |
+
+## 5h. Database change review: automatic translation (migration 20261029180000)
+
+| Change | Review |
+|---|---|
+| `ShopSettings.autoTranslateLocales TEXT[] NOT NULL DEFAULT '{}'` with a CHECK (at most 20 entries, locale code format) | Written only by `setAutoTranslate`, which keeps only the shop's own additional languages (from Shopify) and records an audit log entry (`auto_translate.enabled`/`disabled`, actor id, languages). `autoTranslateNew` already existed and stays false by default; turning it on without a language turns it off. The CHECK refuses malformed or too many values even if a later code path skipped the filter (tested). |
+| Row-level security | Unchanged: `ShopSettings` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy on `shopId`, which covers the new column. No new grants, functions or roles. |
+| New webhook topics (`products/create|update`, `collections/create|update`) | Same route action as the other webhooks: HMAC verified by the Shopify library, duplicate deliveries suppressed by `webhookId`. The shop comes from the verified delivery; the resource id from the payload is accepted only when it is a numeric GID of the topic's type. `include_fields` limits the payload to the id and `updated_at` (no product data is stored). Nothing is queued unless the shop turned automatic translation on. |
+| Queue `translation-auto` | Payload is ids only (`shopId`, resource GID, type), validated by a strict schema in the worker (`INVALID_PAYLOAD` otherwise, tested). The check re-reads consent, settings and plan for that shop, then creates items in that shop's tenant transaction; the item runs through the normal item queue, so publishing, protection of translations a person wrote or approved, AI allowance and daily caps apply unchanged. |
+| Unintended publishing or overwriting | Automatic items never join a running job that only translates search listings or may replace protected translations (`overwriteProtected`); they wait for it. Results are drafts unless the shop enabled automatic publishing (§5b). A bulk job the merchant starts while an automatic job runs takes it over with the merchant's own settings. |
+| Cross-tenant risk | Store B's webhooks never read store A's settings; an automatic check reads only its own shop's Admin API. Covered by `tests/integration/auto-translate.test.ts` ("stay within their store", RLS counts under the other tenant). |
+
+## 5i. Database change review: draft remembers the translation it replaces (migration 20261029200000)
+
+| Change | Review |
+|---|---|
+| `TranslationDraft.currentDigest TEXT NULL` with a CHECK (`none` or 64 hex characters) | Written only by the worker when it saves a draft, from the store's own translation of that field (sha256, never the value itself, so no merchant text is duplicated). Read only when the same shop approves the draft; a mismatch refuses publishing (STALE). NULL for drafts made before the migration keeps the earlier behaviour for them. |
+| Row-level security | Unchanged: `TranslationDraft` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy on `shopId`, which covers the new column. No new grants, functions or roles. |
+| Cross-tenant risk | None added: the column is compared with the translation read from the approving shop's own Admin API. |
+
+## 5j. Database change review: draft remembers its field type (migration 20261030090000)
+
+| Change | Review |
+|---|---|
+| `TranslationDraft.valueType TEXT NULL` with a CHECK (upper-case letters and `_`, at most 64) | Written only by the worker when it saves a draft, from the content type Shopify reported for the field. Used only to display the draft (a list, link or rich text shown readably on Review). Never trusted for publishing: `saveResourceTranslations` checks rich text, lists and links against the type and source Shopify reports at that moment (`keepsSourceStructure`), so a wrong or missing value can't let a changed structure or link address through. |
+| Row-level security | Unchanged: `TranslationDraft` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy on `shopId`, which covers the new column. No new grants, functions or roles. |
+| Cross-tenant risk | None added: the column holds a Shopify type name, never merchant text, and is read only by the draft's own shop. |
+
+## 5k. Database change review: periodic check for automatic translation (migration 20261030100000)
+
+| Change | Review |
+|---|---|
+| `ShopSettings.autoSweptAt TIMESTAMPTZ NULL` | A time, no merchant content. Written by `setAutoTranslate` (now when turned on, NULL when turned off) and by the worker's sweep after a complete check of the shop. Read only by the sweep to ask Shopify for resources changed since then. |
+| Row-level security | Unchanged: `ShopSettings` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY` and its `tenant_isolation` policy; the sweep reads and writes it per shop through `withTenant`. No new grants, functions or roles. |
+| Cross-tenant risk | None added: the sweep lists active shops (the `Shop` table, as the stalled-item sweeper does), then works inside each shop's tenant context with that shop's own Admin API session; resource ids from Shopify are queued with the shop's id, never another's. |
+
+## 5l. Database change review: indexed Review search (migration 20261030110000)
+
+| Change | Review |
+|---|---|
+| `linguva_draft_search(text, integer)`: second `SECURITY DEFINER` function | Same pattern and hardening as §5c: no shop argument, tenant from `app.shop_id`, fixed `search_path`, schema-qualified, executable only by `linguva_app`, returns ids of PENDING drafts only (contents are read through RLS afterwards). Reviewed hash in `DEFINER_FUNCTIONS`. Full review: [SECURITY_REVIEW_MEMORY_FUZZY.md §10](SECURITY_REVIEW_MEMORY_FUZZY.md) |
+| `TranslationDraft` RLS enabled but not forced | Only the owner (migration) role is unfiltered; the runtime role stays under RLS for every operation (tested). Second and last entry of `NOT_FORCED_TABLES` |
+| Partial trigram index on pending drafts | No data change; makes the search a few milliseconds instead of a scan |
+
+## 5m. Database change review: live translation coverage (migration 20261031090000)
+
+| Change | Review |
+|---|---|
+| `CoverageItem`, `CoverageCount`, `CoverageSegment`: new tenant tables | RLS enabled **and forced**, `tenant_isolation` policy on `app.shop_id` (USING and WITH CHECK), granted to `linguva_app` only; no definer function, no `NO FORCE`. Isolation tested in `tests/security/coverage-security.test.ts` (no rows without a tenant, no write for another shop, forged queue payloads find nothing) |
+| What is stored | Shopify field keys (`title`, `body_html`, theme and metafield keys), states, counts, GIDs and a 32-hex sha256 prefix of the normalised translated SEO title (duplicate check). **No merchant text**: the test scans every coverage row of a shop with translated titles, SEO titles, a custom field and an image and finds none of their words. Titles shown on the coverage page are read live from Shopify for the visible page only |
+| `CoverageStat`, `CoverageGap`, `CoverageTitleHash` dropped | Replaced by the tables above; they held only counts, ids and hashes |
+| Index `TranslationJobItem(shopId, resourceGid)` | No data change; finds the latest attempt per resource for "failed" |
+| Writers | The scan worker, the webhook refresh (resource GID from the verified webhook, checked against `Product`/`Collection`), and the app after its own writes; all through `withTenant`, serialised per shop and language by an advisory lock so count changes never interleave |
+
+**Review of every database change (phase D).** `tests/unit/migration-review.test.ts` checks that each migration after `20261029120000` names its review section here and the section exists; that statements able to weaken isolation (`SECURITY DEFINER`, `NO FORCE`/`DISABLE ROW LEVEL SECURITY`, `BYPASSRLS`, grants to `PUBLIC`, `DROP POLICY`, role changes) appear only in the migrations reviewed for them; and that a new table with `shopId` gets RLS, FORCE and its policy in the same migration. The applied state is checked at runtime by the posture check (§5d).
+
+## 5n. Hosted stages: staging isolation and release guard (no database change)
+
+Hosting on Railway (docs/RAILWAY_STAGING.md) adds configuration guards, one public route and a container image; no migration.
+
+- **Staging can't reach a production store.** `LINGUVA_STAGE=staging` requires `ALLOWED_SHOPS` (the test stores), refuses KARINEX and SOFTWAREFACH even when listed, requires the mock provider and refuses a DeepL key. A store outside the list gets 403 on every app page, `/auth/*`, the login form and the install hook (no session, no tenant), checked before Shopify's token exchange from the `shop` parameter and again from the verified session. Its webhooks are acknowledged after the HMAC check and dropped (nothing stored).
+- **No accidental production release.** On Railway, `LINGUVA_STAGE` must be set and equal the environment's name; `production` also needs `LINGUVA_PRODUCTION_APPROVED=yes`, set by the owner for an approved release. Both web and worker validate this at start and exit otherwise.
+- **`/healthz`**: public, read-only `SELECT 1` as the runtime role, answers only `{"status":"ok"}` or 503; no shop, no error details, `Cache-Control: no-store`.
+- **`/healthz/worker`**: public, reads one Redis key (the worker's heartbeat: start time, mode, pid, commit, provider name; no secrets, no shop data); answers only `{"status":"ok"}` (200) or the state word (503), `Cache-Control: no-store`. At most one read is in flight per process (requests share it, 500 ms limit), so requests during a Redis outage whose connects hang can't pile up commands in the web process.
+- **Worker inside the web container (production, RAILWAY_STAGING.md §8b)**: a child process of the web process with the web's variables minus `MIGRATION_DATABASE_URL` (the owner role stays with the pre-deploy step); it runs its own database posture check (§5d) and refuses to process jobs if the check fails; tenant isolation is unchanged (every job enters its shop's tenant context).
+- **Image**: runs as the unprivileged `node` user; production dependencies only; `.env*`, `.git` and `.shopify` never enter the build context. Migrations run as the owner role in a pre-deploy step; the runtime role has no DDL (hosted roles: `scripts/db/hosted-roles.sql`, passwords from the shell environment, never in files).
+
+Evidence: `tests/unit/staging-config.test.ts`, `tests/integration/webhooks.test.ts` (staging cases), `tests/integration/healthz.test.ts`, `tests/integration/worker-health.test.ts`, `tests/unit/embedded-worker.test.ts`, `tests/unit/deploy-config.test.ts`, `scripts/ci/image-check.sh` (CI: image built, migrated, started in staging mode, smoke-checked; started in production mode with the worker inside, worker killed and restarted, clean stop).
 
 ## 6. Admin control center
 

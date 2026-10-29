@@ -3,12 +3,30 @@
 # Partner organization.
 client_id = ""
 name = "Linguva"
+# Replaced by the CLI tunnel URL on `shopify app dev`
+# (automatically_update_urls_on_dev). Never a production URL in this file.
+application_url = "https://example.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
+# Pin the development store for `shopify app dev` (never a production store):
+# dev_store_url = "your-dev-store.myshopify.com"
+
+[auth]
+# Required by Shopify; the app uses managed installation and token exchange.
+redirect_urls = ["https://example.com/auth/callback"]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # Least privilege: read catalog/content, read+write translations and locales.
 # No customer or order scopes (ADR-007).
 scopes = "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales"
+# Requested only where needed, when the merchant opens that feature: Markets
+# overview, menus, metaobjects, theme content, policies, shipping methods.
+# All read-only; the app works without them.
+optional_scopes = ["read_markets", "read_online_store_navigation", "read_metaobjects", "read_themes", "read_legal_policies", "read_shipping"]
 
 [webhooks]
 api_version = "2026-10"
@@ -22,6 +40,13 @@ api_version = "2026-10"
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
+
+  # Handled by: /app/routes/webhooks.content.tsx
+  # Automatic translation of new and changed content (off unless the merchant turns it on).
+  [[webhooks.subscriptions]]
+  topics = ["products/create", "products/update", "collections/create", "collections/update"]
+  uri = "/webhooks/content"
+  include_fields = ["admin_graphql_api_id", "updated_at"]
 
   # Mandatory compliance topics for public apps.
   # See: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance

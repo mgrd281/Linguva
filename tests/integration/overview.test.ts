@@ -196,6 +196,29 @@ describe("percentages from completed measurements only", () => {
     expect(overview.progress.find((l) => l.locale === "de")).toMatchObject({ partial: true });
   });
 
+  it("keeps content a stuck measurement left half read as partial while the next one runs", async () => {
+    const { store, shop, deps } = await measuredStore();
+    const { report } = await start(shop.id, "complete");
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    // A newer measurement reads the first of two product pages and stops moving.
+    const { report: stuck } = await start(shop.id, "stuck");
+    expect(await runCoveragePage(deps, { shopId: shop.id, reportId: stuck.id, segmentIndex: 0, cursor: null })).toMatchObject({ segmentIndex: 0 });
+    await ownerDb.$transaction([
+      ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shop.id}, true)`,
+      ownerDb.$executeRaw`UPDATE "CoverageReport" SET "updatedAt" = now() - interval '31 minutes' WHERE "id" = ${stuck.id}::uuid`,
+    ]);
+    expect((await loadOverview(store.asAdmin(), shop, app)).progress[0]).toMatchObject({ locale: "de", partial: true });
+
+    // Measured again: the stuck report is replaced and its half-read type stays "not fully read" meanwhile.
+    await start(shop.id, "again");
+    const overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.measurement.state).toBe("queued");
+    expect(overview.progress[0]).toMatchObject({ locale: "de", partial: true });
+    const segment = await withTenant(shop.id, (tx) => tx.coverageSegment.findFirst({ where: { reportId: stuck.id } }), app);
+    expect(segment).toMatchObject({ status: "FAILED", errorCode: "STALLED" });
+  });
+
   it("counts translations already live in the store (made anywhere) as past the first translation", async () => {
     const { store, shop, deps } = await measuredStore();
     store.translate("gid://shopify/Product/1", "de", "title", "Produkt 1 Jacke");

@@ -27,18 +27,21 @@ export function languageList(i18n: I18n, names: readonly string[], shown = 3): s
 
 /**
  * "Bulgarian (Bulgaria)", "Italian (Italy, Switzerland)": the language and the
- * countries it would reach. A regional language reaching just its own region
- * needs no countries ("Portuguese (Brazil)"); a name that has parentheses of
- * its own gets the countries after a colon ("Portuguese (Brazil): Portugal").
+ * countries it would reach. A name that already names its only country needs
+ * none ("Portuguese (Brazil)"); with parentheses in the name or a country
+ * name, the countries follow a colon ("Portuguese (Brazil): Portugal").
  */
-export function gapEntry(i18n: I18n, locale: string, name: string, countries: readonly Pick<CountryCoverage, "code" | "name">[]): string {
-  const region = locale.split("-")[1]?.toUpperCase();
-  if (region && countries.length === 1 && countries[0]!.code.toUpperCase() === region) return name;
-  const list = countryList(i18n, countries.map((c) => i18n.country(c.code, c.name)));
-  return name.includes("(") ? `${name}: ${list}` : `${name} (${list})`;
+export function gapEntry(i18n: I18n, name: string, countries: readonly Pick<CountryCoverage, "code" | "name">[]): string {
+  const names = countries.map((c) => i18n.country(c.code, c.name));
+  if (names.length === 1 && name.includes(names[0]!)) return name;
+  const list = countryList(i18n, names);
+  return name.includes("(") || names.some((n) => n.includes("(")) ? i18n.t("overview.countries.gap.entry", { language: name, countries: list }) : `${name} (${list})`;
 }
 
-/** The entries of one gap line: at most GAP_SHOWN, then "and N more". */
+/** The entries of one gap line: at most GAP_SHOWN, then "and N more"; semicolons once an entry has a colon. */
 export function gapLine(i18n: I18n, entries: readonly string[]): string {
-  return entries.length > GAP_SHOWN ? i18n.t("overview.languages.more", { list: entries.slice(0, GAP_SHOWN).join(", "), count: entries.length - GAP_SHOWN }) : entries.join(", ");
+  const separator = entries.some((e) => e.includes(":")) ? "; " : ", ";
+  return entries.length > GAP_SHOWN
+    ? i18n.t("overview.languages.more", { list: entries.slice(0, GAP_SHOWN).join(separator), count: entries.length - GAP_SHOWN })
+    : entries.join(separator);
 }

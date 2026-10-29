@@ -105,6 +105,10 @@ export async function markShopUninstalled(
         where: { shopId: shop.id, status: { in: ["QUEUED", "RUNNING"] } },
         data: { status: "FAILED", finishedAt: new Date(), errorCode: "SHOP_UNINSTALLED" },
       });
+      await tx.coverageSegment.updateMany({
+        where: { shopId: shop.id, status: "SCANNING" },
+        data: { status: "FAILED", errorCode: "SHOP_UNINSTALLED" },
+      });
     },
     client,
   );

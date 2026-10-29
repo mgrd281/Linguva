@@ -32,7 +32,7 @@ function errorMessage(i18n: I18n, code: string | null | undefined): string | nul
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
 
 /** What to do first: drafts to review, then failed fields, then the biggest gap that counts. */
-function nextStep(data: Data, i18n: I18n): { text: string; href: string; kind: "review" | "failed" | "missing" } | null {
+function nextStep(data: Data, i18n: I18n, scanning: boolean): { text: string; href: string; kind: "review" | "failed" | "missing" | "unread" } | null {
   const shown = data.targets.map((l) => l.locale);
   const name = (locale: string) => i18n.language(locale, data.names[locale]);
   const sum = (locale: string, states: FieldState[]) =>
@@ -51,7 +51,15 @@ function nextStep(data: Data, i18n: I18n): { text: string; href: string; kind: "
     }
     if (best) break;
   }
-  if (!best) return null;
+  if (!best) {
+    // Content the last scan didn't finish reading may be untranslated: say so instead of "all done".
+    const unread = data.segments.find(
+      (s) => shown.includes(s.locale) && !Object.hasOwn(HEADLINE_EXCLUDED_TYPES, s.resourceType) && (s.status === "FAILED" || (s.status === "SCANNING" && !scanning)),
+    );
+    return unread
+      ? { kind: "unread", text: i18n.t("coverage.next.unread", { type: kindLabel(i18n, unread.resourceType), language: name(unread.locale) }), href: "" }
+      : null;
+  }
   const vars = { count: best.n, type: kindLabel(i18n, best.type), language: name(best.locale) };
   return best.state === "failed"
     ? { kind: "failed", text: i18n.t("coverage.next.failed", vars), href: itemsHref({ lang: best.locale, type: best.type, state: "failed" }) }
@@ -86,7 +94,7 @@ export default function Coverage() {
   const types = useMemo(() => (selected ? byType(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
   const groups = useMemo(() => (selected ? byFieldGroup(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
   const segmentOf = (type: string) => data.segments.find((s) => s.locale === selected && s.resourceType === type);
-  const step = scanned ? nextStep(data, i18n) : null;
+  const step = scanned ? nextStep(data, i18n, scanning) : null;
   const actionError = [runner.data, fixer.data].find((d) => d && "error" in d) as { error: string } | undefined;
   const languageOf = (locale: string) => i18n.language(locale, data.names[locale]);
   const marketQuery = data.markets.selected ? `&market=${encodeURIComponent(data.markets.selected)}` : "";
@@ -220,11 +228,14 @@ export default function Coverage() {
                 {step ? (
                   <>
                     <s-paragraph>{step.text}</s-paragraph>
-                    <s-stack direction="inline">
-                      <s-button href={step.href} variant="primary">
-                        {t(`coverage.next.action.${step.kind}`)}
-                      </s-button>
-                    </s-stack>
+                    {/* Scanning again is the page's own button. */}
+                    {step.kind === "unread" ? null : (
+                      <s-stack direction="inline">
+                        <s-button href={step.href} variant="primary">
+                          {t(`coverage.next.action.${step.kind}`)}
+                        </s-button>
+                      </s-stack>
+                    )}
                   </>
                 ) : (
                   <s-paragraph>{t("coverage.next.done")}</s-paragraph>

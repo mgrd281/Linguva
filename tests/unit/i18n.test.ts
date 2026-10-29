@@ -12,7 +12,7 @@ const placeholders = (m: Message) =>
   [...new Set((typeof m === "string" ? [m] : [m.one, m.other]).flatMap((s) => [...s.matchAll(/\{(\w+)\}/g)].map((x) => x[1])))].sort();
 
 // Words that are the same in English and German, French or Spanish.
-const SAME_IN_BOTH = new Set(["{type} {reference}", "{state}: {fields}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK"]);
+const SAME_IN_BOTH = new Set(["{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK"]);
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
@@ -20,7 +20,7 @@ const SAME_IN_FRENCH = new Set([
 ]);
 const SAME_IN_SPANISH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Plan", "Manual", "Original", "Formal", "Informal", "No", "no", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
-  ...["{language} (original)", "{title}, {field}, original", "{type} {reference}", "{state}: {fields}"],
+  ...["{language} (original)", "{title}, {field}, original", "{type} {reference}", "{state}: {fields}", "{language}: {countries}"],
 ]);
 
 describe("interface language", () => {

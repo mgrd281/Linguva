@@ -101,6 +101,11 @@ export async function createCoverageReport(
           where: { id: active.id },
           data: { status: "FAILED", errorCode: "STALLED", finishedAt: new Date() },
         });
+        // Its half-read types stay "not fully read" while the new report runs (as failCoverageReport does).
+        await tx.coverageSegment.updateMany({
+          where: { shopId: input.shopId, reportId: active.id, status: "SCANNING" },
+          data: { status: "FAILED", errorCode: "STALLED" },
+        });
       }
       const report = await tx.coverageReport.create({
         data: {

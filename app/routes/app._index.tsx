@@ -269,6 +269,7 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
       nameOf(a).localeCompare(nameOf(b), i18n.locale),
   );
   const restart = remeasure && (m.state === "failed" || m.state === "stalled");
+  const partial = data.progress.filter((l) => l.published && l.partial);
   // Read out on change: text that changes with the state only (the part count stays outside).
   const footerLive = !remeasure
     ? null
@@ -278,13 +279,14 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
         ? t("overview.scan.queued")
         : m.state === "waiting"
           ? t("overview.scan.waiting")
-          : restart
-            ? t("overview.scan.updateFailed")
-            : ended === "done"
-              ? t("overview.scan.updated")
-              : null;
+          : m.state === "running"
+            ? t("overview.scan.runningAgain")
+            : restart
+              ? t("overview.scan.updateFailed")
+              : ended === "done"
+                ? t(partial.length ? "overview.scan.updatedPartial" : "overview.scan.updated")
+                : null;
   const footerCount = remeasure && m.state === "running" ? t("overview.scan.running", { done: m.done, total: m.total }) : null;
-  const partial = data.progress.filter((l) => l.published && l.partial);
   const manage = <s-link href="/app/languages">{t("overview.languages.manage")}</s-link>;
 
   if (!data.progress.length) {
@@ -451,7 +453,7 @@ function CountriesSection({ data, i18n }: { data: Data; i18n: I18n }) {
             <s-heading>{t("overview.countries.missing.heading")}</s-heading>
             {reasons.map((reason) => (
               <s-paragraph key={reason}>
-                {t(GAP_LINE[reason], { languages: gapLine(i18n, countries.missing.filter((m) => m.reason === reason).map((m) => gapEntry(i18n, m.locale, nameOf(m.locale), m.countries))) })}
+                {t(GAP_LINE[reason], { languages: gapLine(i18n, countries.missing.filter((m) => m.reason === reason).map((m) => gapEntry(i18n, nameOf(m.locale), m.countries))) })}
               </s-paragraph>
             ))}
             {capacity ? <s-text color="subdued">{capacity}</s-text> : null}

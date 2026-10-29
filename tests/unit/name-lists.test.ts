@@ -31,17 +31,25 @@ describe("languages inside a sentence", () => {
 });
 
 describe("gap lines", () => {
+  const es = translator("es");
+
   it("says which countries a language would reach, without nested parentheses", () => {
-    expect(gapEntry(en, "it", "Italian", [{ code: "IT", name: "Italy" }, { code: "CH", name: "Switzerland" }])).toBe("Italian (Italy, Switzerland)");
-    // A regional language reaching its own region; reaching another country it still names it.
-    expect(gapEntry(de, "pt-BR", de.language("pt-BR"), [{ code: "BR", name: "Brazil" }])).toBe("Portugiesisch (Brasilien)");
-    expect(gapEntry(de, "pt-BR", de.language("pt-BR"), [{ code: "PT", name: "Portugal" }])).toBe("Portugiesisch (Brasilien): Portugal");
-    expect(gapEntry(en, "nb", "Norwegian (Bokmål)", [{ code: "NO", name: "Norway" }])).toBe("Norwegian (Bokmål): Norway");
+    expect(gapEntry(en, "Italian", [{ code: "IT", name: "Italy" }, { code: "CH", name: "Switzerland" }])).toBe("Italian (Italy, Switzerland)");
+    // A name that already names its only country; one that doesn't still gets it, after a colon.
+    expect(gapEntry(de, de.language("pt-BR"), [{ code: "BR", name: "Brazil" }])).toBe("Portugiesisch (Brasilien)");
+    expect(gapEntry(de, de.language("pt-BR"), [{ code: "PT", name: "Portugal" }])).toBe("Portugiesisch (Brasilien): Portugal");
+    expect(gapEntry(en, "Chinese (Traditional)", [{ code: "TW", name: "Taiwan" }])).toBe("Chinese (Traditional): Taiwan");
+    // French puts a space before the colon; a country name with parentheses doesn't nest either.
+    expect(gapEntry(fr, "norvégien (bokmål)", [{ code: "NO", name: "Norway" }])).toBe("norvégien (bokmål) : Norvège");
+    expect(gapEntry(es, "inglés", [{ code: "HK", name: "Hong Kong" }])).toBe(`inglés: ${es.country("HK")}`);
   });
 
-  it("names at most GAP_SHOWN languages", () => {
+  it("names at most GAP_SHOWN languages, with semicolons once an entry has a colon", () => {
     const entries = Array.from({ length: GAP_SHOWN + 2 }, (_, i) => `L${i}`);
     expect(gapLine(de, entries)).toBe(`${entries.slice(0, GAP_SHOWN).join(", ")} und 2 weitere`);
     expect(gapLine(de, entries.slice(0, 3))).toBe("L0, L1, L2");
+    expect(gapLine(de, ["Italienisch (Italien, Schweiz)", "Norwegisch (Bokmål): Norwegen", "Polnisch (Polen)"])).toBe(
+      "Italienisch (Italien, Schweiz); Norwegisch (Bokmål): Norwegen; Polnisch (Polen)",
+    );
   });
 });

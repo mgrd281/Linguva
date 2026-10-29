@@ -3,7 +3,7 @@
 -- left alone, plus the columns runs, budgets and estimates need. Ids, codes,
 -- times, counts and Shopify GIDs only, no merchant content. Row-level
 -- security, grants and CHECK constraints are reviewed in
--- docs/SECURITY_MODEL.md §5p.
+-- docs/SECURITY_MODEL.md §5q.
 
 -- CreateEnum
 CREATE TYPE "SmartRunTrigger" AS ENUM ('SCHEDULED', 'MANUAL');

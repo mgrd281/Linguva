@@ -95,7 +95,7 @@ async function main() {
     try {
       const lock = await connection.set(`${prefix}:auto-sweep-lock`, String(process.pid), "PX", AUTO_SWEEP_INTERVAL_MS - 60_000, "NX");
       if (lock !== "OK") return;
-      const summary = await sweepChangedContent(deps, queues.auto);
+      const summary = await sweepChangedContent({ ...deps, coverageQueue: queues.coverage }, queues.auto);
       if (summary.queued || summary.failed) logger.info(summary, "automatic translation: changed content checked");
     } catch (error) {
       logger.error({ err: (error as Error).name }, "automatic translation check failed");

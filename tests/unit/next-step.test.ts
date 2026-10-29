@@ -111,6 +111,20 @@ describe("next step", () => {
     expect(nextStep(input({ targets: [fr, es], progress: [row(fr, 10, 10), { ...row(es, 10, 10), partial: true }] }))).toEqual({ id: "done" });
   });
 
+  it("never says all caught up while content types can't be read (no access), and sends to where access is allowed", () => {
+    // Menus, menu links and metaobjects without their optional scope: everything readable is translated.
+    const unreadable = { types: 3, href: "/app/content/menus" };
+    expect(nextStep(input({ unreadable }))).toEqual({ id: "access", types: 3, href: "/app/content/menus" });
+    // The steps before still come first.
+    expect(nextStep(input({ unreadable, progress: [row(fr, 9, 10)] }))).toMatchObject({ id: "translate", locale: "fr" });
+    expect(nextStep(input({ unreadable, progress: [{ ...row(fr, 10, 10), partial: true }] }))).toEqual({ id: "unread", locale: "fr" });
+    expect(nextStep(input({ unreadable, pendingDrafts: 2 }))).toEqual({ id: "review", count: 2 });
+    // Also without background jobs to measure an unmeasured language: access is still something to do.
+    const de = { locale: "de", name: "German", published: true };
+    expect(nextStep(input({ unreadable, jobsAvailable: false, targets: [fr, de], progress: [row(fr, 10, 10), row(de, 0, 0, false)] }))).toMatchObject({ id: "access" });
+    expect(nextStep(input({ unreadable: null }))).toEqual({ id: "done" });
+  });
+
   it("skips countries it can't know about", () => {
     expect(nextStep(input({ countries: null }))).toEqual({ id: "done" });
     expect(nextStep(input({ countries: { rows: [], missing: [] } }))).toEqual({ id: "done" });

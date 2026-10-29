@@ -29,6 +29,7 @@ import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
 import { listAttachedResources } from "../shopify/attached-resources";
 import { isEditableAttachedField } from "../translation/attached-editor";
+import { noteCoverageRead, noteResourceGone } from "../coverage/items";
 import type { Entitlements } from "../../lib/plans";
 
 export type Admin = Pick<AdminApiContext, "graphql">;
@@ -306,9 +307,13 @@ export async function processItem(
   const dailyLimit = deps.dailyLimit === undefined ? undefined : Math.min(deps.dailyLimit, monthlyLimit);
 
   const admin = await deps.adminFor(shop.shopDomain);
+  // Coverage takes the read as the state when it started: a save made meanwhile stays newer.
+  const readAt = new Date();
   const resource = await getTranslatableResource(admin, item.resourceGid, job.targetLocale);
   if (!resource) {
     await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "RESOURCE_GONE" }, deps.prisma);
+    // Deleted in Shopify: it leaves coverage in every language, with the custom fields it owns.
+    await noteResourceGone(payload.shopId, item.resourceGid, deps.prisma);
     return { status: "SKIPPED", errorCode: "RESOURCE_GONE" };
   }
   // The language became the store's primary language: there is nothing to translate into.
@@ -316,6 +321,9 @@ export async function processItem(
     await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "SAME_LANGUAGE" }, deps.prisma);
     return { status: "SKIPPED", errorCode: "SAME_LANGUAGE" };
   }
+  // Coverage follows what the job read: an original changed in Shopify (no webhook for pages and
+  // blogs, or a refresh that didn't run) shows as outdated, and the job's drafts as drafts.
+  await noteCoverageRead(payload.shopId, job.targetLocale, [resource], readAt, deps.prisma);
   // Publishing needs automatic publishing on the job AND still on in the
   // shop's settings: switching back to review stops running jobs publishing.
   // Even then only results without quality warnings go live; flagged ones
@@ -362,7 +370,9 @@ export async function processItem(
   // Image alt text and custom fields of the item, when the merchant included
   // them (all fields only), with the same rules: drafts, protection, checks.
   if (job.includeAttached) {
+    const attachedAt = new Date();
     const attached = await listAttachedResources(admin, item.resourceGid, job.targetLocale);
+    await noteCoverageRead(payload.shopId, job.targetLocale, attached, attachedAt, deps.prisma);
     for (const a of attached) {
       const editable = { ...a, content: a.content.filter((c) => isEditableAttachedField(c)) };
       const label = a.kind === "IMAGE" ? "Image" : `${a.label} (custom field)`;

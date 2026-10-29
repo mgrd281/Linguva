@@ -273,14 +273,17 @@ export class FakeShopifyStore {
       return Response.json({
         data: {
           [owners[1]!.toLowerCase()]: {
-            nodes: slice.map((id) => ({
-              id,
-              metafields: { nodes: (this.metafields.get(id) ?? []).slice(0, 50).map((m) => ({ id: m.id, translatable: m.translatable })) },
-            })),
+            // metafields(first: 50) of any kind, as Shopify returns them.
+            nodes: slice.map((id) => ({ id, metafields: this.metafieldPage(id, 0, 50) })),
             pageInfo: { hasNextPage: end < all.length, endCursor: slice.length ? String(end) : null },
           },
         },
       });
+    }
+    if (name === "LinguvaOwnerMetafieldsAfter") {
+      const gid = String(vars.id);
+      if (!this.products.has(gid)) return Response.json({ data: { node: null } });
+      return Response.json({ data: { node: { metafields: this.metafieldPage(gid, Number(vars.after ?? 0), 100) } } });
     }
     if (name === "LinguvaProbeTranslatable") {
       const prefix = `gid://shopify/${gidTypeOf(String(vars.resourceType))}/`;
@@ -377,6 +380,14 @@ export class FakeShopifyStore {
     }
     throw new Error(`FakeShopifyStore: unsupported operation ${name}`);
   };
+
+  /** One page of an owner's metafields (id and translatable), in the order they were added. */
+  private metafieldPage(ownerGid: string, start: number, first: number) {
+    const all = this.metafields.get(ownerGid) ?? [];
+    const nodes = all.slice(start, start + first).map((m) => ({ id: m.id, translatable: m.translatable }));
+    const end = start + nodes.length;
+    return { nodes, pageInfo: { hasNextPage: end < all.length, endCursor: nodes.length ? String(end) : null } };
+  }
 
   private node(gid: string, locale: string) {
     const fields = this.products.get(gid)!;

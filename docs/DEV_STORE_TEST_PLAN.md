@@ -97,12 +97,14 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **K3** "Translate missing" on a row → a job for missing and outdated fields only; while it runs, the dashboard shows progress and, once enough items are done, a remaining time; compare with the real end time.
 - **K4** Approve a draft on Review → the field turns complete on the dashboard without a rescan; reject one → missing again.
 - **K5** Change a product's English description in Shopify's admin → within about a minute its translation shows as outdated (webhook refresh). Record the delay.
-- **K6** Change a page's text in Shopify's admin → shows after the next scan only (no webhook for pages); confirm the page says so.
+- **K6** Change a page's text in Shopify's admin → with automatic translation off, shows after the next scan only (no webhook for pages); confirm the page says so. With it on, the periodic check reads the page again within about half an hour.
 - **K7** A type without its optional scope (policies) → "no access" with "Allow access", not a failed scan; after granting and rescanning → counted.
 - **K8** Unpublish a language → marked "Not published" and left out of the whole-store figure.
 - **K9** Market filter (with `read_markets`): only the market's languages are shown.
 - **K10** Large catalog (if available, 1,000+ products): scan duration, dashboard load time, item pages.
 - **K11** Theme content and notification templates appear on their own rows, "Not in the totals".
+- **K12** After `shopify app deploy` (the delete topics are new), delete a product with a custom field in Shopify's admin → it and its custom field leave the coverage figures within seconds, in every language (`products/delete`); same for a collection. Record whether `products/delete` really sends only the numeric `id`.
+- **K13** Add and publish a language after a scan → the whole-store figure says "measured in N of M published languages" and the next step asks to scan; remove a language in Shopify → its figures and pending drafts disappear (Overview and Review); add it back → "not fully read yet" until the next scan.
 
 ### K2. Import and export
 - **K2.1** Export Products for German (only gaps) → CSV opens in a spreadsheet without formulas firing; columns as documented.

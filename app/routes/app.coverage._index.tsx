@@ -8,9 +8,9 @@ import type { I18n } from "../i18n/i18n";
 import { hasMessage, kindLabel, kindPlural } from "../i18n/labels";
 import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar, StateLegend, StateSummary } from "../components/Coverage";
 import { ProgressBar } from "../components/ProgressBar";
-import { byFieldGroup, byType, headlineByLocale, storeWide, unreadMessage, unreadSegment, type Tally } from "../lib/coverage-view";
-import { inParentheses } from "../lib/name-lists";
-import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES, type FieldState } from "../lib/coverage-rules";
+import { byFieldGroup, byType, coverageNextStep, headlineByLocale, storeWide, unreadableTypes, type CoverageNextStep, type Tally } from "../lib/coverage-view";
+import { inParentheses, languageList } from "../lib/name-lists";
+import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES } from "../lib/coverage-rules";
 import { localeFlag } from "../lib/flags";
 import { CONTENT_TYPES, isContentType, RESOURCE_KINDS, type ResourceKind } from "../lib/resource-kinds";
 
@@ -31,38 +31,43 @@ function errorMessage(i18n: I18n, code: string | null | undefined): string | nul
 }
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
+type Step = CoverageNextStep<Data["segments"][number]>;
 
-/** What to do first: drafts to review, then failed fields, then the biggest gap that counts. */
-function nextStep(data: Data, i18n: I18n, scanning: boolean): { text: string; href: string; kind: "review" | "failed" | "missing" | "unread" } | null {
-  const shown = data.targets.map((l) => l.locale);
+/** Where the merchant allows access to the first of these types (its content page asks for the scope). */
+function accessHref(types: readonly string[]): string | null {
+  const type = types.find(isContentType);
+  return type ? `/app/content/${CONTENT_TYPES[type].slug}` : null;
+}
+
+/** The next step in words, and its action (none: scanning again is the page's own button, or there's nothing to do). */
+function stepView(step: Step, data: Data, i18n: I18n): { text: string; action: { href: string; label: string } | null } {
+  const { t } = i18n;
   const name = (locale: string) => i18n.language(locale, data.names[locale]);
-  const sum = (locale: string, states: FieldState[]) =>
-    data.counts.filter((c) => c.locale === locale && states.includes(c.state)).reduce((n, c) => n + c.count, 0);
-  const drafts = shown.map((l) => ({ l, n: sum(l, ["review", "draft"]) })).sort((a, b) => b.n - a.n)[0];
-  if (drafts && drafts.n > 0) return { kind: "review", text: i18n.t("coverage.next.review", { count: drafts.n, language: name(drafts.l) }), href: `/app/review?lang=${encodeURIComponent(drafts.l)}` };
-  let best: { locale: string; type: string; n: number; state: "failed" | "missing" } | null = null;
-  for (const state of ["failed", "missing"] as const) {
-    for (const c of data.counts) {
-      if (!shown.includes(c.locale) || Object.hasOwn(HEADLINE_EXCLUDED_TYPES, c.resourceType) || c.fieldGroup === "url") continue;
-      if (state === "failed" ? c.state !== "failed" : c.state !== "missing" && c.state !== "outdated") continue;
-      const n = data.counts
-        .filter((x) => x.locale === c.locale && x.resourceType === c.resourceType && x.fieldGroup !== "url" && (state === "failed" ? x.state === "failed" : x.state === "missing" || x.state === "outdated"))
-        .reduce((s, x) => s + x.count, 0);
-      if (!best || n > best.n) best = { locale: c.locale, type: c.resourceType, n, state };
+  switch (step.kind) {
+    case "review":
+      return {
+        text: t("coverage.next.review", { count: step.count, language: name(step.locale) }),
+        action: { href: `/app/review?lang=${encodeURIComponent(step.locale)}`, label: t("coverage.next.action.review") },
+      };
+    case "failed":
+    case "missing": {
+      const vars = { count: step.count, type: kindLabel(i18n, step.type), language: inParentheses(name(step.locale)) };
+      return step.kind === "failed"
+        ? { text: t("coverage.next.failed", vars), action: { href: itemsHref({ lang: step.locale, type: step.type, state: "failed" }), label: t("coverage.next.action.failed") } }
+        : { text: t("coverage.next.missing", vars), action: { href: itemsHref({ lang: step.locale, type: step.type }), label: t("coverage.next.action.missing") } };
     }
-    if (best) break;
+    case "unread":
+      return { text: t(step.message, { type: kindLabel(i18n, step.segment.resourceType), language: inParentheses(name(step.segment.locale)) }), action: null };
+    case "unmeasured":
+      return { text: t(step.message, { language: name(step.locale) }), action: null };
+    case "denied": {
+      const href = accessHref(step.types);
+      const types = inParentheses(languageList(i18n, step.types.map((type) => kindLabel(i18n, type))));
+      return { text: t("coverage.next.denied", { count: step.types.length, types }), action: href ? { href, label: t("coverage.next.action.denied") } : null };
+    }
+    case "scanning":
+      return { text: t("coverage.next.scanning"), action: null };
   }
-  if (!best) {
-    // Content the last scan didn't finish reading may be untranslated: say so instead of "all done".
-    const unread = unreadSegment(data.segments, { locales: shown, types: data.coverageTypes, selected: data.selected, scanning });
-    if (!unread) return null;
-    const vars = { type: kindLabel(i18n, unread.resourceType), language: inParentheses(name(unread.locale)) };
-    return { kind: "unread", text: i18n.t(unreadMessage(unread, scanning), vars), href: "" };
-  }
-  const vars = { count: best.n, type: kindLabel(i18n, best.type), language: inParentheses(name(best.locale)) };
-  return best.state === "failed"
-    ? { kind: "failed", text: i18n.t("coverage.next.failed", vars), href: itemsHref({ lang: best.locale, type: best.type, state: "failed" }) }
-    : { kind: "missing", text: i18n.t("coverage.next.missing", vars), href: itemsHref({ lang: best.locale, type: best.type }) };
 }
 
 export default function Coverage() {
@@ -85,15 +90,31 @@ export default function Coverage() {
   }, [live, revalidator]);
 
   const headline = useMemo(() => headlineByLocale(data.counts), [data.counts]);
+  const measured = useMemo(() => new Set(data.measured), [data.measured]);
   const published = data.targets.filter((l) => l.published).map((l) => l.locale);
-  const store = storeWide(data.counts, published);
+  // As on the Overview: only published languages read in full make up the figure.
+  const counted = published.filter((l) => measured.has(l));
+  const store = storeWide(data.counts, counted);
   const scanned = data.segments.length > 0;
   const selected = data.selected;
   const selectedName = selected ? i18n.language(selected, data.names[selected]) : "";
   const types = useMemo(() => (selected ? byType(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
   const groups = useMemo(() => (selected ? byFieldGroup(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
   const segmentOf = (type: string) => data.segments.find((s) => s.locale === selected && s.resourceType === type);
-  const step = scanned ? nextStep(data, i18n, scanning) : null;
+  // Types the figures count that Linguva can't read: named beside the figure, never "all done".
+  const unreadable = unreadableTypes(data.segments, { locales: data.targets.map((l) => l.locale), types: data.coverageTypes });
+  const next = scanned
+    ? coverageNextStep({
+        counts: data.counts,
+        segments: data.segments,
+        targets: data.targets,
+        measured,
+        types: data.coverageTypes,
+        selected,
+        scan: { scanning, locales: scanning ? (data.report?.locales ?? []) : [] },
+      })
+    : null;
+  const step = next ? stepView(next, data, i18n) : null;
   const actionError = [runner.data, fixer.data].find((d) => d && "error" in d) as { error: string } | undefined;
   const languageOf = (locale: string) => i18n.language(locale, data.names[locale]);
   const marketQuery = data.markets.selected ? `&market=${encodeURIComponent(data.markets.selected)}` : "";
@@ -212,9 +233,21 @@ export default function Coverage() {
                 </span>
                 <StateBar counts={store.counts} label={t("coverage.store.percentLabel")} i18n={i18n} height={10} />
                 <s-text color="subdued">
-                  {store.total ? t("coverage.store.fields", { complete: i18n.number(store.complete), total: i18n.number(store.total) }) : t("coverage.store.nothing")}
+                  {published.length > 0 && counted.length === 0
+                    ? t("coverage.store.notMeasured")
+                    : !store.total
+                      ? t("coverage.store.nothing")
+                      : counted.length < published.length
+                        ? t("coverage.store.fieldsSome", { complete: i18n.number(store.complete), total: i18n.number(store.total), count: counted.length, published: published.length })
+                        : t("coverage.store.fields", { complete: i18n.number(store.complete), total: i18n.number(store.total) })}
                 </s-text>
                 <StateSummary counts={store.counts} i18n={i18n} />
+                {unreadable.length ? (
+                  <s-stack direction="inline" gap="small" alignItems="center">
+                    <s-text color="subdued">{t("coverage.store.denied", { count: unreadable.length })}</s-text>
+                    {accessHref(unreadable) ? <s-link href={accessHref(unreadable)!}>{t("coverage.types.allowAccess")}</s-link> : null}
+                  </s-stack>
+                ) : null}
                 {published.length === 0 && data.targets.length > 0 ? (
                   <s-banner tone="info">
                     <s-paragraph>{t("coverage.store.noPublished")}</s-paragraph>
@@ -228,13 +261,13 @@ export default function Coverage() {
                   <>
                     <s-paragraph>{step.text}</s-paragraph>
                     {/* Scanning again is the page's own button. */}
-                    {step.kind === "unread" ? null : (
+                    {step.action ? (
                       <s-stack direction="inline">
-                        <s-button href={step.href} variant="primary">
-                          {t(`coverage.next.action.${step.kind}`)}
+                        <s-button href={step.action.href} variant="primary">
+                          {step.action.label}
                         </s-button>
                       </s-stack>
-                    )}
+                    ) : null}
                   </>
                 ) : (
                   <s-paragraph>{t("coverage.next.done")}</s-paragraph>
@@ -261,9 +294,16 @@ export default function Coverage() {
                         <s-heading>{name}</s-heading>
                         {l.published ? <s-badge tone="success">{t("coverage.languages.published")}</s-badge> : <s-badge tone="warning">{t("coverage.languages.unpublished")}</s-badge>}
                       </s-stack>
-                      <span style={{ fontSize: 24, lineHeight: "32px", fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>{percentLabel(i18n, tally.complete, tally.total)}</span>
-                      <StateBar counts={tally.counts} label={t("coverage.languages.progressLabel", { language: name })} i18n={i18n} />
-                      <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) })}</s-text>
+                      {measured.has(l.locale) ? (
+                        <>
+                          <span style={{ fontSize: 24, lineHeight: "32px", fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>{percentLabel(i18n, tally.complete, tally.total)}</span>
+                          <StateBar counts={tally.counts} label={t("coverage.languages.progressLabel", { language: name })} i18n={i18n} />
+                          <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) })}</s-text>
+                        </>
+                      ) : (
+                        // A share of what was read so far could read as 100 %: no figure until every type is read.
+                        <s-text color="subdued">{t("coverage.languages.notMeasured")}</s-text>
+                      )}
                       {!l.published ? <s-text color="subdued">{t("coverage.languages.unpublishedHelp")}</s-text> : null}
                       <StateLegend counts={tally.counts} i18n={i18n} states={["review", "draft", "failed", "outdated", "missing"]} hrefFor={(state) => itemsHref({ lang: l.locale, state })} />
                       {l.locale === selected ? (
@@ -370,7 +410,8 @@ export default function Coverage() {
         </s-section>
       ) : null}
 
-      {scanned && selected && groups.size ? (
+      {/* Field groups add up every type: only for a language read in full. */}
+      {scanned && selected && measured.has(selected) && groups.size ? (
         <s-section heading={t("coverage.groups.heading", { language: selectedName })} padding="none">
           <s-table>
             <s-table-header-row>

@@ -145,6 +145,12 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
         detail: t("overview.next.unread.detail"),
         action: { href: `/app/coverage?lang=${encodeURIComponent(step.locale)}`, label: t("overview.languages.updateCoverage") },
       };
+    case "access":
+      return {
+        title: t("overview.next.access.label", { count: step.types }),
+        detail: t("overview.next.access.detail"),
+        action: step.href ? { href: step.href, label: t("coverage.types.allowAccess") } : { href: "/app/coverage", label: t("overview.languages.updateCoverage") },
+      };
     case "done":
       return {
         title: (
@@ -316,6 +322,12 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
             </s-text>
           </s-stack>
         ) : null}
+        {anyMeasured && data.unreadable ? (
+          <s-stack direction="inline" gap="small" alignItems="center">
+            <s-text color="subdued">{t("overview.languages.unreadable", { count: data.unreadable.types })}</s-text>
+            {data.unreadable.href ? <s-link href={data.unreadable.href}>{t("coverage.types.allowAccess")}</s-link> : null}
+          </s-stack>
+        ) : null}
         {anyMeasured ? (
           // A native list: Polaris' list roles fail the accessibility check.
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 12 }}>
@@ -328,11 +340,14 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
                 : complete
                   ? `/app/coverage?lang=${encodeURIComponent(row.locale)}`
                   : itemsHref({ lang: row.locale, state: "incomplete" });
+              // Content Linguva can't read was never checked: not "fully translated".
               const label = !counted
                 ? t("overview.languages.translateLabel", { language: name })
-                : complete
-                  ? t("overview.languages.completeLabel", { language: name })
-                  : t("overview.languages.missingLabel", { language: name, percent: percentLabel(i18n, row.complete, row.total) });
+                : complete && row.unchecked
+                  ? t("overview.languages.uncheckedLabel", { language: name, percent: percentLabel(i18n, row.complete, row.total) })
+                  : complete
+                    ? t("overview.languages.completeLabel", { language: name })
+                    : t("overview.languages.missingLabel", { language: name, percent: percentLabel(i18n, row.complete, row.total) });
               return (
                 <li key={row.locale}>
                   <s-grid gridTemplateColumns="minmax(0, 2fr) minmax(0, 3fr)" alignItems="center" columnGap="base">

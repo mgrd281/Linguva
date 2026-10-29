@@ -66,9 +66,12 @@ const coveragePayloadSchema = z
     cursor: z.string().max(1000).nullable(),
   })
   .strict();
-const refreshPayloadSchema = z
-  .object({ shopId: uuid, resourceGid: z.string().regex(/^gid:\/\/shopify\/(Product|Collection)\/\d{1,20}$/) })
-  .strict();
+/**
+ * Resources whose coverage is read again when they change: products and
+ * collections (webhooks), pages, blog posts and blogs (the periodic check).
+ */
+export const COVERAGE_REFRESH_GID = /^gid:\/\/shopify\/(Product|Collection|Page|Article|Blog)\/\d{1,20}$/;
+const refreshPayloadSchema = z.object({ shopId: uuid, resourceGid: z.string().regex(COVERAGE_REFRESH_GID) }).strict();
 const autoPayloadSchema = z
   .object({
     shopId: uuid,
@@ -204,10 +207,19 @@ export async function enqueueCoveragePage(queues: Queues, payload: CoveragePageP
 /** How long a refresh waits, so several saves in a row are read once. */
 export const COVERAGE_REFRESH_DELAY_MS = 30_000;
 
-/** Queues a coverage refresh of one product or collection (after its webhook). */
+/** Part of a refresh's queue job id per resource type (ids are numeric within a type only). */
+const REFRESH_ID_TYPE: Record<string, string> = { Product: "p", Collection: "c", Page: "pg", Article: "ar", Blog: "bl" };
+
+/** Queue job id of a resource's coverage refresh: later changes within the delay join it. */
+export function coverageRefreshJobId(payload: CoverageRefreshPayload): string {
+  const type = /^gid:\/\/shopify\/(\w+)\//.exec(payload.resourceGid)?.[1] ?? "";
+  return `covref_${payload.shopId}_${payload.resourceGid.replace(/\D/g, "")}_${REFRESH_ID_TYPE[type] ?? "x"}`;
+}
+
+/** Queues a coverage refresh of one resource (after its webhook, or a change the periodic check found). */
 export async function enqueueCoverageRefresh(queue: Pick<Queues["coverage"], "add">, payload: CoverageRefreshPayload) {
   await queue.add("coverage-refresh", payload, {
-    jobId: `covref_${payload.shopId}_${payload.resourceGid.replace(/\D/g, "")}_${payload.resourceGid.includes("/Product/") ? "p" : "c"}`,
+    jobId: coverageRefreshJobId(payload),
     delay: COVERAGE_REFRESH_DELAY_MS,
     attempts: 3,
     backoff: { type: "exponential", delay: 5_000, jitter: 0.5 },
@@ -329,6 +341,8 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
       } catch (error) {
         const decision = classifyError(error);
         if (decision.kind === "rate-limited") return delay(job, token, decision.waitMs);
+        // The failed job is removed (the next change queues a new one): the log is what remains.
+        if (isFinalAttempt(job)) logger.warn({ queue: QUEUE_NAMES.coverage, queueJobId: job.id, shopId: refresh.data.shopId, err: (error as Error).name }, "coverage refresh failed");
         throw error;
       }
     }

@@ -30,6 +30,7 @@ import {
   type TranslatableKind,
 } from "../../lib/resource-kinds";
 import { isFieldGroup, isFieldState, isMetafieldCoverageType, type FieldGroup } from "../../lib/coverage-rules";
+import { measuredLocales } from "../../lib/coverage-view";
 import { AccessDeniedError } from "../shopify/translations-api";
 import { translatableByIds } from "../shopify/attached-resources";
 import { isSearchableType, searchIds } from "../shopify/search-ids";
@@ -136,6 +137,8 @@ export async function loadCoverageDashboard(request: Request) {
     coverageTypes: COVERAGE_TYPES,
     /** The newest completed measurement (a failed or stuck newer one has no full scan to show). */
     lastFullScan: summary.lastCompleted?.finishedAt ?? null,
+    /** Languages whose figures are whole (as on the Overview): only these make up percentages. */
+    measured: [...measuredLocales(summary.lastCompleted, summary.segments, COVERAGE_TYPES)],
     report: report
       ? {
           status: report.status,
@@ -147,6 +150,8 @@ export async function loadCoverageDashboard(request: Request) {
           resourcesScanned: report.resourcesScanned,
           progress: { done: Math.min(report.segmentIndex, report.segments.length), total: report.segments.length },
           scanning: current ? { type: current.resourceType, language: names.get(current.locale) ?? current.locale } : null,
+          // Segments are "TYPE|locale".
+          locales: [...new Set(report.segments.map((s) => s.slice(s.indexOf("|") + 1)))],
         }
       : null,
     segments: summary.segments,

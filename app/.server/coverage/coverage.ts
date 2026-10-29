@@ -11,11 +11,12 @@ import { prisma as defaultClient } from "../lib/db";
 import { AccessDeniedError, getTranslatableResource, listTranslatableResources, type TranslatableResourceData } from "../shopify/translations-api";
 import { listOwnerMetafields, METAFIELD_OWNER_TYPES, type MetafieldOwnerType } from "../shopify/metafield-owners";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { storedTargetLocales } from "../locales/shop-locales";
 import { shopKey } from "../queue/redis";
 import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, kindOfGid, RESOURCE_KINDS, type TranslatableKind } from "../../lib/resource-kinds";
-import { dropCoverageItemsTx, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
+import { dropCoverageTypeTx, dropDeletedResource, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
 
 /** Custom fields of each owner type ("PRODUCT_METAFIELD", …). */
 export const METAFIELD_COVERAGE_TYPES = METAFIELD_OWNER_TYPES.map((owner) => `${owner}_METAFIELD` as const);
@@ -218,9 +219,9 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
       const key = { shopId_locale_resourceType: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } };
       if (page === "denied") {
         // Without the scope nothing of the type can be read or translated:
-        // earlier results are removed rather than shown as current.
-        await tx.coverageItem.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
-        await tx.coverageCount.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
+        // earlier results are removed rather than shown as current (under the
+        // language's lock, so no count change of the type interleaves).
+        await dropCoverageTypeTx(tx, payload.shopId, segment.locale, segment.resourceType);
         await tx.coverageSegment.upsert({
           where: key,
           create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "DENIED", reportId: report.id, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
@@ -301,10 +302,15 @@ export interface CoverageRefreshPayload {
 }
 
 /**
- * Reads one resource again in every language whose type was scanned (after
- * a products/collections webhook: the original may have changed, which
- * makes translations outdated). A resource Shopify no longer returns is
- * removed from coverage.
+ * Reads one resource again in every language its type was read in (after a
+ * products/collections webhook, or a page, blog post or blog the periodic
+ * check found changed: the original may have changed, which makes
+ * translations outdated). Also while a scan reads the type, or after one
+ * stopped in it: the item's time (syncedAt) keeps an older scan read from
+ * replacing this one, and the refresh counts as seen, so the scan's end
+ * keeps the item. Not for a type without access or a language that is no
+ * longer a target. A resource Shopify no longer returns is removed from
+ * coverage.
  */
 export async function refreshCoverageResource(deps: CoverageDeps, payload: CoverageRefreshPayload) {
   const resourceType = kindOfGid(payload.resourceGid);
@@ -313,7 +319,13 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
   if (!shop || shop.status !== "ACTIVE") return { refreshed: 0 };
   const segments = await withTenant(
     payload.shopId,
-    (tx) => tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: "SCANNED" } }),
+    async (tx) => {
+      const [rows, targets] = await Promise.all([
+        tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: { in: ["SCANNED", "SCANNING", "FAILED"] } } }),
+        storedTargetLocales(tx, payload.shopId),
+      ]);
+      return rows.filter((s) => !targets || targets.includes(s.locale));
+    },
     deps.prisma,
   );
   if (!segments.length) return { refreshed: 0 };
@@ -323,21 +335,14 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
     await throttle(deps, payload.shopId);
     const at = new Date();
     const data = await getTranslatableResource(admin, payload.resourceGid, segment.locale);
-    await withTenant(
+    if (!data) {
+      // Deleted in Shopify: gone in every language, with the custom fields it owns.
+      await dropDeletedResource(payload.shopId, payload.resourceGid, deps.prisma);
+      break;
+    }
+    refreshed += await withTenant(
       payload.shopId,
-      async (tx) => {
-        if (data) {
-          refreshed += await syncCoverageTx(
-            tx,
-            payload.shopId,
-            segment.locale,
-            [{ resourceGid: payload.resourceGid, resourceType, observed: { data, at } }],
-            { create: true, seen: true },
-          );
-        } else {
-          await dropCoverageItemsTx(tx, payload.shopId, segment.locale, [payload.resourceGid]);
-        }
-      },
+      (tx) => syncCoverageTx(tx, payload.shopId, segment.locale, [{ resourceGid: payload.resourceGid, resourceType, observed: { data, at } }], { create: true, seen: true }),
       deps.prisma,
     );
   }

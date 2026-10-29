@@ -63,7 +63,7 @@ New tenant tables:
 - an FK to `Shop` `ON DELETE CASCADE`;
 - guarded grants: `SELECT, INSERT, UPDATE`, plus `DELETE` only where the feature deletes; never `ALL` or `TRUNCATE`;
 - CHECK constraints;
-- the review section `SECURITY_MODEL.md` §5p.
+- the review section `SECURITY_MODEL.md` §5q.
 
 ### `SmartAutoConfig` (one row per shop, PK `shopId`)
 

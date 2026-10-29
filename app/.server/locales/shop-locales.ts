@@ -1,7 +1,8 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
-import { withTenant } from "../tenancy/with-tenant";
+import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { dropOtherLocalesTx } from "../coverage/items";
 
 import { MAX_ENABLED_LOCALES } from "../../lib/locale-limits";
 
@@ -88,6 +89,13 @@ export async function fetchAndSyncShopLocales(
   return summary;
 }
 
+/**
+ * Mirrors the shop's locales. When its additional languages change (one
+ * removed, or the primary language changed), what belonged to a language
+ * that is no longer one goes with it: its coverage (so it is measured again
+ * before it counts, if added back) and its pending drafts, which can't be
+ * published any more (STALE, LOCALE_GONE).
+ */
 export async function syncShopLocales(
   shopId: string,
   locales: ShopLocaleInfo[],
@@ -105,6 +113,15 @@ export async function syncShopLocales(
           stored.some((s) => s.locale === l.locale && s.name === l.name && s.primary === l.primary && s.published === l.published),
         );
       if (same) return;
+      const before = new Set(stored.filter((s) => !s.primary).map((s) => s.locale));
+      const targets = locales.filter((l) => !l.primary).map((l) => l.locale);
+      if (stored.length === 0 || targets.length !== before.size || targets.some((l) => !before.has(l))) {
+        await dropOtherLocalesTx(tx, shopId, targets);
+        await tx.translationDraft.updateMany({
+          where: { shopId, status: "PENDING", locale: { notIn: targets } },
+          data: { status: "STALE", staleReason: "LOCALE_GONE" },
+        });
+      }
       await tx.shopLocale.deleteMany({
         where: { shopId, locale: { notIn: locales.map((l) => l.locale) } },
       });
@@ -123,6 +140,12 @@ export async function syncShopLocales(
     },
     client,
   );
+}
+
+/** The store's additional languages from the last sync, or null before the first one (nothing to tell them apart by). */
+export async function storedTargetLocales(tx: TenantTx, shopId: string): Promise<string[] | null> {
+  const rows = await tx.shopLocale.findMany({ where: { shopId }, select: { locale: true, primary: true } });
+  return rows.length ? rows.filter((r) => !r.primary).map((r) => r.locale) : null;
 }
 
 /** Language names by code, from the last sync (no Shopify call). */

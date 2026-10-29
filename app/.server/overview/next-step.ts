@@ -28,6 +28,8 @@ export type NextStep =
     }
   /** Everything else is done, but the last measurement couldn't read some content (of this language first). */
   | { id: "unread"; locale: string }
+  /** Everything else is done, but Linguva has no access to some content types: they were never checked. */
+  | { id: "access"; types: number; href: string | null }
   | { id: "done" };
 
 export interface NextStepInput {
@@ -41,6 +43,8 @@ export interface NextStepInput {
   measuredLocales: readonly string[];
   /** Per target language; measured rows carry their counts; partial: the measurement skipped some of its content. */
   progress: ReadonlyArray<{ locale: string; name: string | null; published: boolean; measured: boolean; partial?: boolean; complete: number; total: number }>;
+  /** Content types of the published languages Linguva can't read (no access scope), and where to allow it. */
+  unreadable?: { types: number; href: string | null } | null;
   /** Countries of the active markets, or null when unknown (no access, error). */
   countries: { rows: readonly CountryCoverage[]; missing: ReadonlyArray<{ locale: string; reason: MissingReason; countries: readonly CountryCoverage[] }> } | null;
   /** Languages the store can still add (Shopify allows MAX_ENABLED_LOCALES). */
@@ -101,6 +105,8 @@ export function nextStep(input: NextStepInput): NextStep | null {
   // Skipped content may be untranslated: never "all caught up" over it.
   const unread = input.progress.find((p) => p.published && p.partial);
   if (unread) return { id: "unread", locale: unread.locale };
+  // Nor over content Linguva has no access to: it was never read.
+  if (input.unreadable && input.unreadable.types > 0) return { id: "access", types: input.unreadable.types, href: input.unreadable.href };
   // Nor over a published language that was never measured (no background jobs to measure it).
   if (unmeasured) return null;
   return measured.size > 0 ? { id: "done" } : null;

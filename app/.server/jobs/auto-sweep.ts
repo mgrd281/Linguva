@@ -6,7 +6,9 @@
  * translation on for the resources changed since its last check
  * (`ShopSettings.autoSweptAt`) and queues the same check a webhook queues.
  * That check only translates missing or outdated fields, so content that
- * didn't really change costs no AI allowance.
+ * didn't really change costs no AI allowance. Changed pages, blog posts and
+ * blogs are also read again for the coverage report (products and
+ * collections are, after their webhooks).
  *
  * Each shop is read through its own Admin API session and handled in its
  * own tenant context; a failure leaves its position unchanged, so the next
@@ -16,7 +18,8 @@ import type { PrismaClient } from "@prisma/client";
 import { logger } from "../lib/logger";
 import { shopKey } from "../queue/redis";
 import { autoTranslatePaused, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
-import { changedSince, SWEPT_TYPES } from "../shopify/recent-changes";
+import { queueSweptCoverageRefresh, type CoverageRefreshQueue } from "../coverage/refresh";
+import { changedSince, SWEPT_TYPES, type SweptType } from "../shopify/recent-changes";
 import { AccessDeniedError } from "../shopify/translations-api";
 import { withTenant } from "../tenancy/with-tenant";
 import { AUTO_GID, enqueueAutoCheck, type AutoQueue } from "./auto-translate";
@@ -40,9 +43,15 @@ export const MAX_CHANGES_PER_TYPE = 500;
 const OVERLAP_MS = 2 * 60 * 1000;
 /** Admin API cost of one listing request, taken from the shop's Shopify budget like every other request. */
 const LIST_COST = 10;
+/** Types without webhooks: the check is the only way coverage learns they changed. */
+const REFRESHED_BY_SWEEP: ReadonlySet<SweptType> = new Set(["PAGE", "ARTICLE", "BLOG"]);
 
 export async function sweepChangedContent(
-  deps: Pick<JobDependencies, "prisma" | "adminFor" | "billingFor"> & Partial<Pick<JobDependencies, "shopifyLimiter" | "keyPrefix">>,
+  deps: Pick<JobDependencies, "prisma" | "adminFor" | "billingFor"> &
+    Partial<Pick<JobDependencies, "shopifyLimiter" | "keyPrefix">> & {
+      /** The coverage queue: changed pages, blog posts and blogs are read again for the report. */
+      coverageQueue?: CoverageRefreshQueue | null;
+    },
   queue: AutoQueue,
   now = new Date(),
   maxPerType = MAX_CHANGES_PER_TYPE,
@@ -83,6 +92,7 @@ export async function sweepChangedContent(
         for (const change of found.changes) {
           if (!AUTO_GID[resourceType].test(change.id)) continue;
           await enqueueAutoCheck(queue, { shopId: shop.id, resourceGid: change.id, resourceType, changedAt: new Date(change.updatedAt).toISOString() });
+          if (deps.coverageQueue && REFRESHED_BY_SWEEP.has(resourceType)) await queueSweptCoverageRefresh(deps.coverageQueue, shop.id, change.id);
           summary.queued++;
         }
         if (found.capped) {

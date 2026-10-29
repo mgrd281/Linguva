@@ -361,11 +361,19 @@ Scores expected to change once the checks pass (not before): Shopify integration
 
 **UI and UX (Tested Locally; UI_REVIEW.md):** prioritized review of 10 screens with before/after screenshots. Fixed: drafts made coverage bars look finished (now striped, percentage beside the bar), the original description's preview cut off list items (regression-tested), field states moved to the top of every editor field (missing fields now say so), compact coverage header, specific next-step actions, whole-store key, item rows grouped by state (−43 % height), finished onboarding steps on one line, export defaults to a published language, import summary, SEO length bars. Design stays at 8: the criterion needs the real admin, and the layout decisions that remain wait for the competitor-based specification.
 
+## 4k. Phase K: Smart Auto-Translate for the Business plan (2026-10-29, all Tested Locally)
+
+Scheduled, budgeted automatic translation (SMART_AUTO_TRANSLATE.md), after an audit of the existing pipeline that found and fixed defects first (SMART_AUTO_TRANSLATE_AUDIT.md): fields retranslated by a reused job item, a periodic check that could drop changes beyond its cap, usage keys that could collide, a pause that let queued items continue, coverage that could say 100 % over what it hadn't read, deleted products and removed languages left in coverage, and custom fields after an owner's first 50 metafields not counted.
+
+Evidence added: unit and integration tests for schedules (daylight saving, catch-up, one run per occurrence with five ticks at once), planning while measuring (only missing and outdated machine fields of the chosen scope; people's translations, drafts waiting for review, removals and exclusions kept), budgets and pauses, the plan checked on the server for every action, tick and item, forged requests (form and database); a performance test of a run over 5,000 products in two languages (31 s, median 14 ms per page, nothing planned twice); browser tests of the settings card and page on desktop and phone with accessibility checks; screenshots on desktop, tablet and iPhone (`docs/ui-review/smart-auto/`).
+
+Scores unchanged: every criterion this touches is either met already (performance 3, billing 2) or waits for a store (content coverage 9: webhooks and the periodic check on real events; Shopify integration: writes and webhooks). Smart Auto-Translate is not verified on Shopify yet; DEV_STORE_TEST_PLAN.md §Q lists the checks.
+
 ## 5. Next steps, in order of effect
 
 **Without external access (I can continue):**
 
-1. JSON metafields where a definition says which values are text; menus and metaobjects in the automatic check (coverage)
+1. JSON metafields where a definition says which values are text (coverage); menus, metaobjects and the other types are in the smart schedule (Business) since phase K, basic automatic translation keeps the five main types
 2. Glossary suggestions from the catalogue and a quality reference set prepared for the DeepL test (AI translation)
 3. App Store screenshots generated from the UI tests (design, launch)
 

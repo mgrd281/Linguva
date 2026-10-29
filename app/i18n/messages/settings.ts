@@ -4,7 +4,7 @@ import type { Message, Translation } from "./define";
 export const en = {
   "settings.ai.heading": "AI translation",
   "settings.ai.body":
-    "When you translate with AI, the product text you select is sent to DeepL SE (Germany) for processing. Linguva sends no customer data. Every AI result is a draft until you publish it.",
+    "When Linguva translates with AI (when you ask it to, or automatically once you turn automatic translation or the smart schedule on), the store texts it translates are sent to DeepL SE (Germany) for processing. Linguva sends no customer data. AI results are drafts until you publish them, unless you turn on automatic publishing.",
   "settings.ai.since": "since {date}",
   "settings.ai.notAllowed": "Not allowed",
   "settings.ai.withdraw": "Withdraw permission",
@@ -90,7 +90,7 @@ export const en = {
 export const de: Translation<typeof en> = {
   "settings.ai.heading": "KI-Übersetzung",
   "settings.ai.body":
-    "Wenn du mit KI übersetzt, wird der ausgewählte Produkttext zur Verarbeitung an DeepL SE (Deutschland) gesendet. Linguva sendet keine Kundendaten. Jedes KI-Ergebnis bleibt ein Entwurf, bis du es veröffentlichst.",
+    "Wenn Linguva mit KI übersetzt (wenn du es anstößt, oder automatisch, sobald du die automatische Übersetzung oder den intelligenten Zeitplan einschaltest), werden die übersetzten Texte deines Shops zur Verarbeitung an DeepL SE (Deutschland) gesendet. Linguva sendet keine Kundendaten. KI-Ergebnisse bleiben Entwürfe, bis du sie veröffentlichst, außer du schaltest das automatische Veröffentlichen ein.",
   "settings.ai.since": "seit {date}",
   "settings.ai.notAllowed": "Nicht erlaubt",
   "settings.ai.withdraw": "Einwilligung widerrufen",
@@ -177,7 +177,7 @@ export const de: Translation<typeof en> = {
 export const fr: Translation<typeof en> = {
   "settings.ai.heading": "Traduction par IA",
   "settings.ai.body":
-    "Lorsque vous traduisez avec l'IA, le texte produit que vous sélectionnez est envoyé à DeepL SE (Allemagne) pour traitement. Linguva n'envoie aucune donnée client. Chaque résultat de l'IA reste un brouillon tant que vous ne l'avez pas publié.",
+    "Lorsque Linguva traduit avec l'IA (à votre demande, ou automatiquement une fois la traduction automatique ou la planification intelligente activée), les textes de la boutique traduits sont envoyés à DeepL SE (Allemagne) pour traitement. Linguva n'envoie aucune donnée client. Les résultats de l'IA restent des brouillons tant que vous ne les publiez pas, sauf si vous activez la publication automatique.",
   "settings.ai.since": "depuis le {date}",
   "settings.ai.notAllowed": "Non autorisé",
   "settings.ai.withdraw": "Retirer l'autorisation",
@@ -268,7 +268,7 @@ export const fr: Translation<typeof en> = {
 export const es: Translation<typeof en> = {
   "settings.ai.heading": "Traducción con IA",
   "settings.ai.body":
-    "Cuando traduces con IA, el texto de producto que seleccionas se envía a DeepL SE (Alemania) para su procesamiento. Linguva no envía datos de clientes. Cada resultado de IA es un borrador hasta que lo publiques.",
+    "Cuando Linguva traduce con IA (cuando tú lo pides, o automáticamente una vez que activas la traducción automática o la programación inteligente), los textos de la tienda que traduce se envían a DeepL SE (Alemania) para su procesamiento. Linguva no envía datos de clientes. Los resultados de IA son borradores hasta que los publiques, salvo que actives la publicación automática.",
   "settings.ai.since": "desde el {date}",
   "settings.ai.notAllowed": "No permitido",
   "settings.ai.withdraw": "Retirar el permiso",

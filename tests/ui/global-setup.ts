@@ -14,6 +14,8 @@ import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { upsertTerms } from "../../app/.server/glossary/glossary";
 import { saveDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
+import { saveSmartSettings, setSmartEnabled } from "../../app/.server/smart/config";
+import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { testEnv } from "../support/env";
 import { DEMO_GLOSSARY, demoDrafts } from "./fixtures/demo-store";
@@ -37,7 +39,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "autoLimits", "downgraded"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "autoLimits", "downgraded", "business", "businessEdit", "businessPause"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -70,6 +72,91 @@ export default async function globalSetup() {
     ]);
     // Turned on under a paid plan, before the store moved to Free.
     await setAutoTranslate({ shopId: ids.downgraded!, enabled: true, locales: ["de"], allowedLocales: ["de"], actorId: null }, app);
+
+    // The smart schedule of the Business store: daily at 23:00 Berlin time, with two past checks.
+    {
+      const shopId = ids.business!;
+      await saveSmartSettings(
+        {
+          shopId,
+          actorId: null,
+          version: 0,
+          primaryLocale: "en",
+          value: {
+            mode: "daily",
+            timeZone: "Europe/Berlin",
+            times: [23 * 60],
+            weekdays: [1, 2, 3, 4, 5, 6, 7],
+            locales: ["fr", "de"],
+            resourceTypes: ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"],
+            fieldGroups: [],
+            includeAttached: false,
+            publishMode: "DRAFT",
+            replaceOutdatedMachine: true,
+            dailyBudget: 50_000,
+            monthlyBudget: 1_000_000,
+          },
+        },
+        app,
+      );
+      await setSmartEnabled({ shopId, actorId: null, enabled: true }, app);
+      const day = 86_400_000;
+      const lastNight = new Date(Math.floor(Date.now() / day) * day - 3_600_000);
+      await withTenant(
+        shopId,
+        async (tx) => {
+          const scope = { locales: ["fr", "de"], resourceTypes: ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"], fieldGroups: [] };
+          await tx.smartAutoRun.create({
+            data: { shopId, trigger: "SCHEDULED", occurrenceAt: new Date(lastNight.getTime() - day), status: "SKIPPED", errorCode: "PAUSED", ...scope, createdAt: new Date(lastNight.getTime() - day), finishedAt: new Date(lastNight.getTime() - day) },
+          });
+          await tx.smartAutoRun.create({
+            data: {
+              shopId,
+              trigger: "SCHEDULED",
+              occurrenceAt: lastNight,
+              status: "COMPLETED",
+              ...scope,
+              resourcesChecked: 64,
+              resourcesChanged: 3,
+              fieldsDetected: 12,
+              charsEstimated: 1840,
+              createdAt: lastNight,
+              startedAt: lastNight,
+              scanFinishedAt: new Date(lastNight.getTime() + 4 * 60_000),
+              finishedAt: new Date(lastNight.getTime() + 6 * 60_000),
+            },
+          });
+          await tx.smartAutoConfig.update({ where: { shopId }, data: { lastSuccessAt: new Date(lastNight.getTime() + 6 * 60_000) } });
+        },
+        app,
+      );
+    }
+
+    // The smart schedule of the store whose pause and Check now are tested: on, daily into German.
+    await saveSmartSettings(
+      {
+        shopId: ids.businessPause!,
+        actorId: null,
+        version: 0,
+        primaryLocale: "en",
+        value: {
+          mode: "daily",
+          timeZone: "Europe/Berlin",
+          times: [3 * 60],
+          weekdays: [1, 2, 3, 4, 5, 6, 7],
+          locales: ["de"],
+          resourceTypes: ["PRODUCT"],
+          fieldGroups: [],
+          includeAttached: false,
+          publishMode: "DRAFT",
+          replaceOutdatedMachine: true,
+          dailyBudget: null,
+          monthlyBudget: null,
+        },
+      },
+      app,
+    );
+    await setSmartEnabled({ shopId: ids.businessPause!, actorId: null, enabled: true }, app);
 
     // A German job with custom fields: a list of links waits on Review.
     const fieldsStore = UI_SHOPS.customFields.build();

@@ -77,6 +77,7 @@ export const en = {
   "automatic.blocked.NO_LANGUAGE": "None of the chosen languages can be translated now. Choose languages below.",
 
   "automatic.basic.replaced": "The smart schedule replaces automatic translation of changes; turning it on turns that off.",
+  "automatic.basic.replacedOn": "The smart schedule is on and replaces automatic translation of changes. To use automatic translation instead, turn the smart schedule off.",
 
   "automatic.upsell.heading": "Smart schedule",
   "automatic.upsell.body":
@@ -164,7 +165,7 @@ export const en = {
     other: "{count} needed translation ({fields} fields, about {chars} characters)",
   },
   "automatic.activity.excluded": { one: "{count} left alone", other: "{count} left alone" },
-  "automatic.activity.billed": "{billed} characters sent to AI, {memory} reused from translation memory",
+  "automatic.activity.billed": "{billed} characters sent to AI, {memory} not sent (translation memory and repeated text)",
   "automatic.activity.failed": { one: "{count} item failed", other: "{count} items failed" },
   "automatic.activity.reason.PAUSED": "paused",
   "automatic.activity.reason.COALESCED": "the previous check was still running",
@@ -274,6 +275,7 @@ export const de: Translation<typeof en> = {
   "automatic.blocked.NO_LANGUAGE": "Keine der gewählten Sprachen kann gerade übersetzt werden. Wähle unten Sprachen aus.",
 
   "automatic.basic.replaced": "Der intelligente Zeitplan ersetzt die automatische Übersetzung von Änderungen; beim Einschalten wird diese ausgeschaltet.",
+  "automatic.basic.replacedOn": "Der intelligente Zeitplan ist eingeschaltet und ersetzt die automatische Übersetzung von Änderungen. Um stattdessen die automatische Übersetzung zu nutzen, schalte den intelligenten Zeitplan aus.",
 
   "automatic.upsell.heading": "Intelligenter Zeitplan",
   "automatic.upsell.body":
@@ -361,7 +363,7 @@ export const de: Translation<typeof en> = {
     other: "{count} brauchten eine Übersetzung ({fields} Felder, etwa {chars} Zeichen)",
   },
   "automatic.activity.excluded": { one: "{count} ausgenommen", other: "{count} ausgenommen" },
-  "automatic.activity.billed": "{billed} Zeichen an die KI gesendet, {memory} aus dem Übersetzungsspeicher wiederverwendet",
+  "automatic.activity.billed": "{billed} Zeichen an die KI gesendet, {memory} nicht gesendet (Übersetzungsspeicher und wiederholter Text)",
   "automatic.activity.failed": { one: "{count} Eintrag fehlgeschlagen", other: "{count} Einträge fehlgeschlagen" },
   "automatic.activity.reason.PAUSED": "pausiert",
   "automatic.activity.reason.COALESCED": "die vorige Prüfung lief noch",
@@ -471,6 +473,7 @@ export const fr: Translation<typeof en> = {
   "automatic.blocked.NO_LANGUAGE": "Aucune des langues choisies ne peut être traduite pour le moment. Choisissez des langues ci-dessous.",
 
   "automatic.basic.replaced": "La planification intelligente remplace la traduction automatique des changements ; l'activer désactive celle-ci.",
+  "automatic.basic.replacedOn": "La planification intelligente est activée et remplace la traduction automatique des changements. Pour utiliser la traduction automatique à la place, désactivez la planification intelligente.",
 
   "automatic.upsell.heading": "Planification intelligente",
   "automatic.upsell.body":
@@ -558,7 +561,7 @@ export const fr: Translation<typeof en> = {
     other: "{count} à traduire ({fields} champs, environ {chars} caractères)",
   },
   "automatic.activity.excluded": { one: "{count} exclu", other: "{count} exclus" },
-  "automatic.activity.billed": "{billed} caractères envoyés à l'IA, {memory} réutilisés depuis la mémoire de traduction",
+  "automatic.activity.billed": "{billed} caractères envoyés à l'IA, {memory} non envoyés (mémoire de traduction et texte répété)",
   "automatic.activity.failed": { one: "{count} élément en échec", other: "{count} éléments en échec" },
   "automatic.activity.reason.PAUSED": "en pause",
   "automatic.activity.reason.COALESCED": "la vérification précédente était encore en cours",
@@ -668,6 +671,7 @@ export const es: Translation<typeof en> = {
   "automatic.blocked.NO_LANGUAGE": "Ninguno de los idiomas elegidos se puede traducir ahora. Elige idiomas abajo.",
 
   "automatic.basic.replaced": "La programación inteligente reemplaza la traducción automática de cambios; al activarla, esta se desactiva.",
+  "automatic.basic.replacedOn": "La programación inteligente está activada y reemplaza la traducción automática de cambios. Para usar la traducción automática en su lugar, desactiva la programación inteligente.",
 
   "automatic.upsell.heading": "Programación inteligente",
   "automatic.upsell.body":
@@ -755,7 +759,7 @@ export const es: Translation<typeof en> = {
     other: "{count} necesitaban traducción ({fields} campos, unos {chars} caracteres)",
   },
   "automatic.activity.excluded": { one: "{count} excluido", other: "{count} excluidos" },
-  "automatic.activity.billed": "{billed} caracteres enviados a la IA, {memory} reutilizados de la memoria de traducción",
+  "automatic.activity.billed": "{billed} caracteres enviados a la IA, {memory} no enviados (memoria de traducción y texto repetido)",
   "automatic.activity.failed": { one: "{count} elemento falló", other: "{count} elementos fallaron" },
   "automatic.activity.reason.PAUSED": "en pausa",
   "automatic.activity.reason.COALESCED": "la revisión anterior seguía en curso",

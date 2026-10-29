@@ -145,6 +145,21 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **P4** Publish a Linguva translation → if Shopify sends `products/update` for it, the check ends "up to date" and the AI usage doesn't change. Record whether the webhook arrives at all (see SHOPIFY_API_MATRIX §2).
 - **P5** Turn automatic translation off → saving a product queues nothing (no new job).
 
+### Q. Smart Auto-Translate (Business; docs/SMART_AUTO_TRANSLATE.md)
+Preparation: the test store on the `business` plan ($0 on development stores, P7) or owner complimentary access; German and French added; at least 30 products and 2 pages (P2); AI consent given; `TRANSLATION_PROVIDER=mock` (P6). Log each case in §3 with the time, what the Activity list showed and the job ids.
+- **Q1** Settings shows the "Smart schedule" card; on a lower plan it shows the short Business card and no smart actions. Open "Schedule and options": the store's time zone is preselected, the next three checks follow every change of mode, days, times and zone before saving.
+- **Q2** Choose "Every day" at a time 5 minutes ahead, German only, Products only, drafts. Save, turn on. At that time (within a minute) a check appears under Recent checks: running, then done with "N items checked · M needed translation". Review lists the drafts; nothing is published (check one product's German page in the store).
+- **Q3** Check now twice quickly → one check (the second click says a check is already running); once it is done, Check now again within 5 minutes → "Try again in a few minutes".
+- **Q4** Translate one product title by hand (editor, publish), then change its English title. Next check: the hand-written title stays (the item ends "protected kept"), its other fields are translated.
+- **Q5** Editor of a product: tick "Don't translate automatically". Change its title. Next check: Recent checks counts it under "left alone"; no draft for it. Untick → the following check translates it.
+- **Q6** Daily budget = a small number (for example 200). Check now → the check stops translating at the budget, Recent checks says "daily budget is used up", the card shows "Paused" with the time it continues (midnight in the schedule's zone). No further AI usage until then (Usage on the Plan page).
+- **Q7** Pause → Check now is refused, items already queued end "the smart schedule is paused", no AI usage. Resume → the next check translates what is still missing.
+- **Q8** Mode "As changes come in": edit a product → within about a minute a draft for it (webhook); edit a page → within 30 minutes (periodic check). Mode back to "Every day": edits create nothing until the daily check.
+- **Q9** Automatic publishing: choose it without the confirmation → "Not saved"; with it → the next check publishes results without quality notes; flagged ones wait on Review. Set it back to drafts afterwards.
+- **Q10** Coverage page: the smart card shows the next check and what is translating; Coverage items show "Translating now", "Not translated automatically" and "Waits for the next check".
+- **Q11** Change the store's primary language in Shopify (test store only) → the next tick pauses the schedule ("main language changed"), nothing is deleted. Save the smart settings again → it continues. Change the primary language back.
+- **Q12** Uninstall and reinstall the app → the smart schedule is off and nothing is published; the settings are kept.
+
 ### U. Polaris and App Bridge inside the real admin
 - **U1** Admin navigation lists every Linguva page; the current one is highlighted.
 - **U2** Editor: Shopify's save bar appears on change; Discard restores; leaving with changes asks first.

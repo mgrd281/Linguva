@@ -33,6 +33,8 @@ export const en = {
   "plan.plans.bulk": "Bulk",
   "plan.plans.yes": "Yes",
   "plan.plans.no": "No",
+  "plan.plans.includes": "Also includes",
+  "plan.plans.nothing": "—",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -68,6 +70,8 @@ export const de: Translation<typeof en> = {
   "plan.plans.bulk": "Massenübersetzung",
   "plan.plans.yes": "Ja",
   "plan.plans.no": "Nein",
+  "plan.plans.includes": "Außerdem enthalten",
+  "plan.plans.nothing": "—",
 };
 
 export const fr: Translation<typeof en> = {
@@ -103,6 +107,8 @@ export const fr: Translation<typeof en> = {
   "plan.plans.bulk": "Traduction groupée",
   "plan.plans.yes": "Oui",
   "plan.plans.no": "Non",
+  "plan.plans.includes": "Inclut aussi",
+  "plan.plans.nothing": "—",
 };
 
 export const es: Translation<typeof en> = {
@@ -138,4 +144,6 @@ export const es: Translation<typeof en> = {
   "plan.plans.bulk": "Traducción masiva",
   "plan.plans.yes": "Sí",
   "plan.plans.no": "No",
+  "plan.plans.includes": "Incluye además",
+  "plan.plans.nothing": "—",
 };

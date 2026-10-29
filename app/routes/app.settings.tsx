@@ -30,6 +30,7 @@ import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usag
 import { useResultToast } from "../components/app-bridge";
 import { SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
 import { loadSmartPanel } from "../.server/smart/panel";
+import { getSmartConfig } from "../.server/smart/config";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 
@@ -139,6 +140,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (enabled) {
       if (!hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "CONSENT_REQUIRED" };
       if (!billing.entitlements.bulk) return { ok: false, error: "PLAN_BULK" };
+      // The smart schedule replaces it while on: both would follow the same changes.
+      if ((await getSmartConfig(shop.id))?.enabled) return { ok: false, error: "SMART_ON" };
     }
     const locales = await fetchAndSyncShopLocales(admin, shop.id);
     const targets = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
@@ -179,6 +182,8 @@ export default function Settings() {
     smartFetcher.submit({ intent, ...extra }, { method: "post", action: "/app/settings/automatic" });
   useResultToast(smartFetcher.data, smartToast(t, smartFetcher.data));
   const smartBusy = smartFetcher.state !== "idle";
+  // While the smart schedule is on, it replaces automatic translation of changes (no controls for both).
+  const smartOn = Boolean(data.smart && data.smart.status.state !== "off");
   const languageNames = new Map(data.style.languages.map((l) => [l.locale, language(l.locale, l.name)]));
   const autoError = autoFetcher.data && "error" in autoFetcher.data ? autoFetcher.data.error : null;
   // Saved settings are confirmed with a toast; problems stay on the page.
@@ -373,8 +378,12 @@ export default function Settings() {
           <s-paragraph>
             {data.publishMode === "AUTO_PUBLISH" ? t("settings.auto.bodyAutoPublish") : t("settings.auto.bodyReview")}
           </s-paragraph>
-          {data.smart ? <s-text color="subdued">{t("automatic.basic.replaced")}</s-text> : null}
-          {data.auto.enabled ? (
+          {smartOn ? (
+            <s-paragraph>{t("automatic.basic.replacedOn")}</s-paragraph>
+          ) : data.smart ? (
+            <s-text color="subdued">{t("automatic.basic.replaced")}</s-text>
+          ) : null}
+          {smartOn && !data.auto.enabled ? null : data.auto.enabled ? (
             <s-paragraph>
               <s-badge tone="success">{t("common.state.on")}</s-badge>{" "}
               {autoLanguages.length ? languageList(i18n, autoLanguages, Infinity) : t("settings.auto.noActiveLanguages")}
@@ -400,7 +409,7 @@ export default function Settings() {
               <s-paragraph>{t("settings.auto.waitingConsent.body")}</s-paragraph>
             </s-banner>
           ) : null}
-          {!data.auto.available || !data.auto.planIncludes ? (
+          {smartOn && !data.auto.enabled ? null : !data.auto.available || !data.auto.planIncludes ? (
             <s-stack direction="block" gap="small">
               {!data.auto.available ? (
                 <s-banner tone="info" heading={t("settings.auto.unavailable.heading")}>

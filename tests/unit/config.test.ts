@@ -83,6 +83,20 @@ describe("getConfig: values pasted into a hosting dashboard", () => {
     expect(getConfig({ ...valid, DEEPL_API_URL: "" } as NodeJS.ProcessEnv).DEEPL_API_URL).toBeUndefined();
   });
 
+  it("accepts DeepL's address only over https (the API key travels in a header), naming the variable, not the value", () => {
+    expect(getConfig({ ...valid, DEEPL_API_URL: "HTTPS://api.deepl.com/v2/" } as NodeJS.ProcessEnv).DEEPL_API_URL).toBe("HTTPS://api.deepl.com");
+    for (const url of ["http://deepl-relay.example", "ws://deepl-relay.example", "ftp://deepl-relay.example", "file:///deepl-relay/key", "javascript:deepl-relay", "deepl-relay.example"]) {
+      let message = "";
+      try {
+        getConfig({ ...valid, DEEPL_API_URL: url } as NodeJS.ProcessEnv);
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message, url).toMatch(/DEEPL_API_URL/);
+      expect(message, url).not.toContain("deepl-relay");
+    }
+  });
+
   it("reads character limits with thousands separators, never 450.000 as 450", () => {
     for (const value of ["450000", "450.000", "450,000", "450 000", " 450000 "]) {
       expect(getConfig({ ...valid, AI_MONTHLY_CHAR_LIMIT: value } as NodeJS.ProcessEnv).AI_MONTHLY_CHAR_LIMIT).toBe(450_000);

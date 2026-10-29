@@ -41,6 +41,15 @@ function deeplBaseUrl(value: unknown): unknown {
   return typeof v === "string" ? v.replace(/\/+$/, "").replace(/\/v2$/i, "").replace(/\/+$/, "") : v;
 }
 
+/** Every request to it carries the API key and merchant text: https only. */
+function isHttps(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const schema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -60,7 +69,7 @@ const schema = z.object({
     ),
   // AI translation is disabled when no provider key is configured (an empty value counts as none).
   DEEPL_API_KEY: z.preprocess(pasted, z.string().min(1).optional()),
-  DEEPL_API_URL: z.preprocess(deeplBaseUrl, z.string().url().optional()),
+  DEEPL_API_URL: z.preprocess(deeplBaseUrl, z.string().url().refine(isHttps, "must be an https:// address").optional()),
   // Monthly AI character allowance per shop until plans are wired to billing.
   AI_MONTHLY_CHAR_LIMIT: z.preprocess(charCount, z.coerce.number().int().positive().default(20_000)),
   // Daily cap per shop (UTC day); defaults to the monthly allowance.

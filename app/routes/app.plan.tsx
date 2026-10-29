@@ -32,7 +32,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       : null,
     choosePlanUrl: billing.configured && appHandle ? planSelectionUrl(shop.shopDomain, appHandle) : null,
     usage: { month: await getMonthlyUsage(shop.id), today: await getDailyUsage(shop.id) },
-    costPerMillion: getConfig().AI_COST_USD_PER_MILLION_CHARS,
+    // The internal provider cost is for the owner's own stores only; no other shop receives it.
+    costPerMillion: billing.state === "COMPLIMENTARY" ? getConfig().AI_COST_USD_PER_MILLION_CHARS : null,
   };
 };
 
@@ -103,7 +104,7 @@ export default function Plan() {
               autoPublish: yesNo(e.autoPublish),
             })}
           </s-paragraph>
-          {complimentary ? (
+          {complimentary && data.costPerMillion !== null ? (
             <s-paragraph>
               {t("plan.current.cost", {
                 cost: estimatedCostUsd(data.usage.month, data.costPerMillion).toFixed(2),

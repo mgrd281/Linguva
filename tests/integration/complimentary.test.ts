@@ -2,7 +2,10 @@
  * Owner complimentary access: every feature without a subscription for the
  * operator's own stores, while AI usage stays metered and costed.
  */
+import { createHmac, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { Session } from "@shopify/shopify-api";
+import type { LoaderFunctionArgs } from "react-router";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   complimentaryUsageReport,
@@ -16,7 +19,10 @@ import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { setAiConsent, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { getMonthlyUsage } from "../../app/.server/usage/usage-ledger";
+import { resetConfigCache } from "../../app/.server/lib/config";
 import { PLANS } from "../../app/lib/plans";
+import { loader as planLoader } from "../../app/routes/app.plan";
+import { sessionStorage } from "../../app/shopify.server";
 import { ownerDb, resetDatabase } from "../support/db";
 import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
 import { FakeShopifyStore } from "../support/fake-store";
@@ -149,5 +155,35 @@ describe("owner complimentary access", () => {
     const s = await shop("customer.myshopify.com", OTHER);
     const status = await getBillingStatus(deps({ fetchImpl: fakePartnerApi({ handle: "starter" }).fetchImpl }), s);
     expect(status).toMatchObject({ state: "ACTIVE", entitlements: PLANS.starter });
+  });
+});
+
+describe("the Plan page", () => {
+  /** The Plan page's data as App Bridge requests it: the shop's session token, its offline session stored. */
+  async function planPage(shopDomain: string) {
+    await sessionStorage.storeSession(new Session({ id: `offline_${shopDomain}`, shop: shopDomain, state: "", isOnline: false, accessToken: "shpat_test" }));
+    const now = Math.floor(Date.now() / 1000);
+    const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    const claims = { iss: `https://${shopDomain}/admin`, dest: `https://${shopDomain}`, aud: process.env.SHOPIFY_API_KEY, sub: "42", exp: now + 60, nbf: now - 5, iat: now - 5, jti: randomUUID(), sid: randomUUID() };
+    const unsigned = `${part({ alg: "HS256", typ: "JWT" })}.${part(claims)}`;
+    const token = `${unsigned}.${createHmac("sha256", process.env.SHOPIFY_API_SECRET!).update(unsigned).digest("base64url")}`;
+    const request = new Request("https://linguva.test/app/plan", { headers: { Authorization: `Bearer ${token}` } });
+    return planLoader({ request, params: {}, context: {} } as LoaderFunctionArgs);
+  }
+
+  it("sends the internal AI cost rate only to the owner's complimentary stores", async () => {
+    await shop("own-store.myshopify.com", OWN);
+    await shop("customer.myshopify.com", OTHER);
+    await grant(OWN);
+    process.env.COMPLIMENTARY_SHOP_GIDS = OWN;
+    resetConfigCache();
+    try {
+      expect(await planPage("own-store.myshopify.com")).toMatchObject({ state: "COMPLIMENTARY", costPerMillion: 25 });
+      // Billing isn't configured here: every feature, but no internal figures.
+      expect(await planPage("customer.myshopify.com")).toMatchObject({ configured: false, state: "ACTIVE", costPerMillion: null });
+    } finally {
+      delete process.env.COMPLIMENTARY_SHOP_GIDS;
+      resetConfigCache();
+    }
   });
 });

@@ -145,9 +145,15 @@ function ownCalls(root: ts.Node): ts.CallExpression[] {
   return calls;
 }
 
+/** A call the function waits for: awaited, returned, or the export itself (webhookAction(…)). A call left floating doesn't stop the response. */
+const awaited = (call: ts.CallExpression, root: ts.Node) =>
+  call === root || ts.isAwaitExpression(call.parent) || ts.isReturnStatement(call.parent) || (ts.isArrowFunction(call.parent) && call.parent.body === call);
+
 /** Whether `node` itself calls one of `allowed` (by the name it has in its file) or authenticate.*, imported from where they are defined. */
 function callsAuthentication(node: ts.Node | null, imports: Map<string, { file: string; name: string }>, allowed: Record<string, string>) {
-  return Boolean(node) && ownCalls(node!).some(({ expression: callee }) => {
+  return Boolean(node) && ownCalls(node!).some((call) => {
+    if (!awaited(call, node!)) return false;
+    const callee = call.expression;
     if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)) {
       const imported = imports.get(callee.expression.text);
       return imported?.name === LIBRARY.name && imported.file === LIBRARY.file;
@@ -183,7 +189,7 @@ describe("every page and webhook authenticates", () => {
   it("the delegates authenticate", () => {
     for (const [name, path] of Object.entries(DELEGATES)) {
       const source = parse({ path, text: readFileSync(join(ROOT, path), "utf8") });
-      const [delegate] = exportsOf(source, [name]);
+      const delegate = exportsOf(source, [name]).find((e) => e.name === name);
       // webhookAction returns the route's action: that function authenticates.
       const returned: ts.Node[] = [];
       if (delegate?.node) {
@@ -209,8 +215,9 @@ describe("every page and webhook authenticates", () => {
       "loader: false",
       "action: true",
     ]);
-    // Nor one in a function that may never run, or in a function of the same name that isn't the reviewed one.
+    // Nor one in a function that may never run, one nobody waits for, or a function of the same name that isn't the reviewed one.
     expect(check(`${using}export const action = async ({ request }) => { const later = () => requireShop(request); return null; };`)).toEqual(["action: false"]);
+    expect(check(`${using}export const loader = async ({ request }) => { requireShop(request); return null; };`)).toEqual(["loader: false"]);
     expect(check(`const requireShop = (r) => r;\nexport const loader = ({ request }) => requireShop(request);`)).toEqual(["loader: false"]);
     // Renamed locally: followed. Re-exported from elsewhere, or destructured: can't be checked here, so refused.
     expect(check(`${using}const handler = ({ request }) => requireShop(request);\nexport { handler as action };`)).toEqual(["action: true"]);

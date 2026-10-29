@@ -78,6 +78,36 @@ describe("worker status", () => {
     expect(await readWorkerStatus(slow as never, "lv:test", 20)).toEqual({ state: "unknown" });
   });
 
+  it("sends one read at a time per client, so a Redis that hangs can't collect a queue of them", async () => {
+    let answer: (value: string | null) => void = () => undefined;
+    const hanging = redis("connecting", () => new Promise((resolve) => (answer = resolve)));
+    for (let i = 0; i < 5; i++) expect(await readWorkerStatus(hanging as never, "lv:test", 5)).toEqual({ state: "unknown" });
+    expect(hanging.get).toHaveBeenCalledTimes(1);
+    // A caller still waiting gets the shared answer; the next one sends a new read.
+    const waiting = readWorkerStatus(hanging as never, "lv:test", 1_000);
+    answer(null);
+    expect(await waiting).toEqual({ state: "stopped" });
+    expect(hanging.get).toHaveBeenCalledTimes(1);
+    await readWorkerStatus(hanging as never, "lv:test", 5);
+    expect(hanging.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't leave an unhandled rejection when a shared read fails after every caller gave up", async () => {
+    let fail: (error: Error) => void = () => undefined;
+    const failing = redis("connecting", () => new Promise((_resolve, reject) => (fail = reject)));
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", listener);
+    try {
+      expect(await readWorkerStatus(failing as never, "lv:test", 5)).toEqual({ state: "unknown" });
+      fail(new Error("Connection is closed."));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", listener);
+    }
+  });
+
   it("asks a client that is still connecting (the first request after start)", async () => {
     expect(await readWorkerStatus(redis("connecting", async () => null) as never, "lv:test")).toEqual({ state: "stopped" });
   });

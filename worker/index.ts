@@ -125,6 +125,11 @@ async function main() {
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
+  // Inside the web process (embedded): stop once it is gone, also after kill -9 or running out of memory.
+  if (mode === "embedded" && process.channel) {
+    process.channel.unref();
+    process.on("disconnect", () => void shutdown("web process gone"));
+  }
 }
 
 main().catch((error) => {

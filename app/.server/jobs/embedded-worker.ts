@@ -36,9 +36,11 @@ export interface EmbeddedWorkerSetting {
   reason: string;
 }
 
-export function embeddedWorkerSetting(env: NodeJS.ProcessEnv): EmbeddedWorkerSetting {
+export function embeddedWorkerSetting(env: NodeJS.ProcessEnv, dev = false): EmbeddedWorkerSetting {
   // The worker itself never starts another one.
   if (env.LINGUVA_WORKER_MODE === "embedded") return { on: false, reason: "worker process" };
+  // The dev server would run whatever build/worker/index.js the last build left, never reloaded.
+  if (dev) return { on: false, reason: "dev server (run pnpm worker:dev for background jobs)" };
   const raw = env.LINGUVA_EMBEDDED_WORKER?.trim().toLowerCase();
   if (raw) {
     if (ON.has(raw)) return { on: true, reason: "LINGUVA_EMBEDDED_WORKER" };
@@ -55,6 +57,18 @@ export function workerChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const child: NodeJS.ProcessEnv = { ...env, LOG_SERVICE: "linguva-worker", LINGUVA_WORKER_MODE: "embedded" };
   delete child.MIGRATION_DATABASE_URL;
   return child;
+}
+
+/**
+ * How long the child may finish its jobs after SIGTERM, and when the web
+ * process gives up: within Railway's draining time (the time between SIGTERM
+ * and SIGKILL, RAILWAY_DEPLOYMENT_DRAINING_SECONDS) when it allows more than
+ * the defaults, so a deploy doesn't cut jobs it had time for.
+ */
+export function stopTimeouts(env: NodeJS.ProcessEnv): { stopMs: number; exitMs: number } {
+  const drainingMs = Number(env.RAILWAY_DEPLOYMENT_DRAINING_SECONDS?.trim() || 0) * 1000;
+  if (!Number.isFinite(drainingMs)) return { stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS };
+  return { stopMs: Math.max(STOP_TIMEOUT_MS, drainingMs - 5_000), exitMs: Math.max(HARD_EXIT_MS, drainingMs - 2_000) };
 }
 
 /** 1 s, 2 s, 4 s … up to 5 min, ±20 % so restarts don't line up. */
@@ -80,12 +94,14 @@ export interface SupervisorDeps {
   now(): number;
   random(): number;
   log: Log;
+  /** SIGKILL after this long (default STOP_TIMEOUT_MS). */
+  stopTimeoutMs?: number;
 }
 
 export interface WorkerSupervisor {
   /** Starts the first child after START_DELAY_MS. */
   begin(): void;
-  /** SIGTERM to the child (SIGKILL after STOP_TIMEOUT_MS); resolves once it has exited. Idempotent. */
+  /** SIGTERM to the child (SIGKILL after the stop timeout); resolves once it has exited. Idempotent. */
   stop(): Promise<void>;
   /** Synchronous last word when the web process exits: SIGTERM, no waiting. */
   killNow(): void;
@@ -172,7 +188,7 @@ export function createWorkerSupervisor(deps: SupervisorDeps): WorkerSupervisor {
         killTimer = deps.setTimer(() => {
           deps.log.warn({ pid: current.pid }, "embedded worker didn't stop in time; killing it");
           current.kill("SIGKILL");
-        }, STOP_TIMEOUT_MS);
+        }, deps.stopTimeoutMs ?? STOP_TIMEOUT_MS);
         current.kill("SIGTERM");
       });
       return stopped;
@@ -221,13 +237,13 @@ const STATE = Symbol.for("linguva.embeddedWorker");
  * Called once when the web server's bundle loads (entry.server). Never
  * throws into the web process; a second call (hot reload) does nothing.
  */
-export function startEmbeddedWorker(env: NodeJS.ProcessEnv = process.env): void {
+export function startEmbeddedWorker(env: NodeJS.ProcessEnv = process.env, dev: boolean = import.meta.env.DEV): void {
   const holder = globalThis as { [STATE]?: true };
   if (holder[STATE]) return;
   holder[STATE] = true;
   const log = logger.child({ component: "embedded-worker" });
   try {
-    const setting = embeddedWorkerSetting(env);
+    const setting = embeddedWorkerSetting(env, dev);
     if (!setting.on) {
       log.info({ reason: setting.reason }, "embedded worker off");
       return;
@@ -237,9 +253,11 @@ export function startEmbeddedWorker(env: NodeJS.ProcessEnv = process.env): void 
       log.error({}, "embedded worker: build/worker/index.js not found; background jobs won't run");
       return;
     }
+    const timeouts = stopTimeouts(env);
     const supervisor = createWorkerSupervisor({
       spawnWorker: () => {
-        const child = spawn(process.execPath, [entry], { stdio: "inherit", env: workerChildEnv(env) });
+        // The IPC channel tells the child when this process is gone, even after kill -9 (worker/index.ts).
+        const child = spawn(process.execPath, [entry], { stdio: ["inherit", "inherit", "inherit", "ipc"], env: workerChildEnv(env) });
         deprioritise(child.pid);
         return child;
       },
@@ -248,6 +266,7 @@ export function startEmbeddedWorker(env: NodeJS.ProcessEnv = process.env): void 
       now: Date.now,
       random: Math.random,
       log,
+      stopTimeoutMs: timeouts.stopMs,
     });
 
     let shuttingDown = false;
@@ -257,7 +276,7 @@ export function startEmbeddedWorker(env: NodeJS.ProcessEnv = process.env): void 
       log.info({ signal }, "embedded worker stopping");
       // The web server closes on the same signal (react-router-serve); the
       // process ends by itself once the child is gone and requests are done.
-      setTimeout(() => process.exit(0), HARD_EXIT_MS).unref();
+      setTimeout(() => process.exit(0), timeouts.exitMs).unref();
       void supervisor.stop();
     };
     process.on("SIGTERM", () => shutdown("SIGTERM"));

@@ -81,6 +81,24 @@ export type WorkerStatus =
 
 const NOT_CONNECTED = new Set(["reconnecting", "close", "end"]);
 
+/**
+ * One read in flight per client and key: callers share it. The endpoint is
+ * public, and a Redis whose connects hang keeps every command queued, so
+ * each request would otherwise add one more for the whole outage.
+ */
+const pendingReads = new WeakMap<object, Map<string, Promise<string | null>>>();
+
+function sharedGet(redis: Pick<Redis, "get">, key: string): Promise<string | null> {
+  let reads = pendingReads.get(redis);
+  if (!reads) pendingReads.set(redis, (reads = new Map()));
+  let read = reads.get(key);
+  if (!read) {
+    read = redis.get(key).finally(() => reads.delete(key));
+    reads.set(key, read);
+  }
+  return read;
+}
+
 export async function readWorkerStatus(
   redis: Pick<Redis, "get" | "status">,
   prefix: string,
@@ -90,7 +108,7 @@ export async function readWorkerStatus(
   let timer: NodeJS.Timeout | undefined;
   try {
     const value = await Promise.race([
-      redis.get(heartbeatKey(prefix)),
+      sharedGet(redis, heartbeatKey(prefix)),
       new Promise<"timeout">((resolveTimeout) => {
         timer = setTimeout(() => resolveTimeout("timeout"), timeoutMs);
       }),

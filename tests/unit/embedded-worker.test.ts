@@ -10,8 +10,10 @@ import {
   MAX_RESTART_DELAY_MS,
   restartDelayMs,
   STABLE_AFTER_MS,
+  HARD_EXIT_MS,
   START_DELAY_MS,
   STOP_TIMEOUT_MS,
+  stopTimeouts,
   workerChildEnv,
   type WorkerChild,
 } from "../../app/.server/jobs/embedded-worker";
@@ -38,6 +40,21 @@ describe("whether the web process runs the worker", () => {
   it("never starts another worker from inside the worker", () => {
     expect(embeddedWorkerSetting({ LINGUVA_STAGE: "production", LINGUVA_EMBEDDED_WORKER: "on", LINGUVA_WORKER_MODE: "embedded" }).on).toBe(false);
   });
+
+  it("is off in the dev server, whatever the switch says (it would run a stale build)", () => {
+    expect(embeddedWorkerSetting({ LINGUVA_EMBEDDED_WORKER: "on" }, true)).toMatchObject({ on: false, reason: expect.stringMatching(/pnpm worker:dev/) });
+    expect(embeddedWorkerSetting({ LINGUVA_STAGE: "production" }, true).on).toBe(false);
+  });
+});
+
+describe("time to stop after SIGTERM", () => {
+  it("uses Railway's draining time when it allows more than the defaults", () => {
+    expect(stopTimeouts({})).toEqual({ stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS });
+    expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "0" })).toEqual({ stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS });
+    expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "120" })).toEqual({ stopMs: 115_000, exitMs: 118_000 });
+    expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: " 26 " })).toEqual({ stopMs: 21_000, exitMs: HARD_EXIT_MS });
+    expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "two minutes" })).toEqual({ stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS });
+  });
 });
 
 describe("the worker's environment", () => {
@@ -61,7 +78,7 @@ describe("restart delay", () => {
 });
 
 /** A child process the test controls, and a clock that only moves when told. */
-function harness() {
+function harness(options: { stopTimeoutMs?: number } = {}) {
   let time = 0;
   const timers: Array<{ at: number; run: () => void; id: number }> = [];
   let nextId = 1;
@@ -122,6 +139,7 @@ function harness() {
       warn: (_obj: unknown, msg?: string) => void logs.push(["warn", msg ?? ""]),
       error: (_obj: unknown, msg?: string) => void logs.push(["error", msg ?? ""]),
     } as never,
+    ...options,
   });
 
   /** Moves the clock forward, running every timer that falls due on the way. */
@@ -238,6 +256,19 @@ describe("worker supervisor", () => {
     h.children[0]!.exit(null, "SIGKILL");
     await stopped;
     expect(h.children).toHaveLength(1);
+  });
+
+  it("gives the child the stop timeout it was given (Railway's draining time)", async () => {
+    const h = harness({ stopTimeoutMs: 115_000 });
+    h.supervisor.begin();
+    h.advance(START_DELAY_MS);
+    const stopped = h.supervisor.stop();
+    h.advance(STOP_TIMEOUT_MS);
+    expect(h.children[0]!.signals).toEqual(["SIGTERM"]);
+    h.advance(115_000 - STOP_TIMEOUT_MS);
+    expect(h.children[0]!.signals).toEqual(["SIGTERM", "SIGKILL"]);
+    h.children[0]!.exit(null, "SIGKILL");
+    await stopped;
   });
 
   it("resolves at once when stopped before the start or while waiting to restart", async () => {

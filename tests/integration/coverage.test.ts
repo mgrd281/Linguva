@@ -6,6 +6,8 @@ import {
   createCoverageReport,
   refreshCoverageResource,
   runCoveragePage,
+  segmentOf,
+  skipCoverageSegment,
   STALE_REPORT_MS,
   type CoverageDeps,
   type CoveragePagePayload,
@@ -31,7 +33,7 @@ import { removeTranslation } from "../../app/.server/translation/history";
 import { approveDrafts, rejectDrafts, saveDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
 import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
-import { headlineByLocale, byType } from "../../app/lib/coverage-view";
+import { headlineByLocale, byType, unreadMessage, unreadSegment } from "../../app/lib/coverage-view";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
 import { deletePrefix, testPrefix, testRedis, waitFor } from "../support/redis";
@@ -251,15 +253,55 @@ describe("coverage scan", () => {
     expect(await runCoveragePage(deps, next!)).toBeNull();
   });
 
-  it("settles types an earlier measurement left half read when a new one starts", async () => {
+  it("settles types an earlier measurement left half read when a new one starts, and nothing else", async () => {
     const { shop, deps } = await setup(8, 0);
+    await runAll(deps, shop.id, ["de"]);
+    const segments = () => withTenant(shop.id, (tx) => tx.coverageSegment.findMany({ where: { locale: "de" } }), app);
     const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "o1" }, app);
+    // Half way through the products (two pages of four).
     await runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null });
+    // Asking again while it runs changes nothing: the type is still being read.
+    expect(await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "o1b" }, app)).toMatchObject({ created: false });
+    expect((await segments()).find((s) => s.resourceType === "PRODUCT")).toMatchObject({ status: "SCANNING" });
     // The report itself is gone (failed elsewhere) but its half-read type is still marked as being read.
     await withTenant(shop.id, (tx) => tx.coverageReport.update({ where: { id: report.id }, data: { status: "FAILED" } }), app);
     await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "o2" }, app);
-    const segment = await withTenant(shop.id, (tx) => tx.coverageSegment.findFirst({ where: { locale: "de", resourceType: "PRODUCT" } }), app);
-    expect(segment).toMatchObject({ status: "FAILED", errorCode: "STALLED" });
+    const after = await segments();
+    expect(after.find((s) => s.resourceType === "PRODUCT")).toMatchObject({ status: "FAILED", errorCode: "STALLED" });
+    // Types read in full stay so.
+    const others = after.filter((s) => s.resourceType !== "PRODUCT");
+    expect(others.length).toBe(COVERAGE_TYPES.length - 1);
+    expect(others.filter((s) => s.status !== "SCANNED")).toEqual([]);
+  });
+
+  it("tells types the scan under way reads again from those it skipped or doesn't cover", async () => {
+    const { shop, deps } = await setup(2, 2);
+    // An earlier scan skipped the collections, in both languages.
+    const first = await createCoverageReport({ shopId: shop.id, locales: ["de", "fr"], requestedBy: null, idempotencyKey: "a1" }, app);
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: first.report.id, segmentIndex: 0, cursor: null };
+    while (next) {
+      const skip: boolean = segmentOf(first.report, next.segmentIndex)?.resourceType === "COLLECTION";
+      next = skip ? await skipCoverageSegment(app, next, "SHOPIFY_QUERY_ERROR") : await runCoveragePage(deps, next);
+    }
+    const page = async () => {
+      const { segments } = await loadCoverageSummary(shop.id, app);
+      const say = (locale: string) => {
+        const unread = unreadSegment(segments, { locales: [locale], types: COVERAGE_TYPES, selected: null, scanning: true });
+        return unread && { type: unread.resourceType, message: unreadMessage(unread, true) };
+      };
+      return { de: say("de"), fr: say("fr") };
+    };
+    // The next scan covers German only and hasn't reached the collections yet.
+    const second = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "a2" }, app);
+    expect(await page()).toEqual({
+      de: { type: "COLLECTION", message: "coverage.next.unreadScanning" },
+      fr: { type: "COLLECTION", message: "coverage.next.unreadAfterScan" },
+    });
+    // It reads the products, then skips the collections too: it won't come back to them.
+    const collections = await runCoveragePage(deps, { shopId: shop.id, reportId: second.report.id, segmentIndex: 0, cursor: null });
+    expect(collections).toMatchObject({ segmentIndex: 1 });
+    expect(await skipCoverageSegment(app, collections!, "SHOPIFY_QUERY_ERROR")).toMatchObject({ segmentIndex: 2 });
+    expect((await page()).de).toEqual({ type: "COLLECTION", message: "coverage.next.unreadAfterScan" });
   });
 });
 

@@ -91,7 +91,10 @@ export const en = {
   "overview.next.done.detail": "Your published languages are fully translated.",
   "overview.next.unread.label": "Some content couldn't be checked",
   "overview.next.unread.detail": "The last measurement couldn't read some content, so its figures may be older or incomplete. The coverage details show which.",
-  "overview.languages.partial": "In the last measurement, some content in {languages} couldn't be read; the figures for it may be older or incomplete.",
+  "overview.languages.partial": {
+    one: "In the last measurement, some content in {languages} couldn't be read; the figures for it may be older or incomplete.",
+    other: "In the last measurement, some content in {languages} couldn't be read; the figures for it may be older or incomplete.",
+  },
   "overview.scan.updated": "The measurement is done; the figures above are up to date.",
   "overview.scan.updatedPartial": "The measurement is done, but some content couldn't be read (see below).",
   "overview.scan.runningAgain": "The figures above update when this new measurement is done. You can leave this page.",
@@ -212,7 +215,10 @@ export const de: Translation<typeof en> = {
   "overview.next.done.detail": "Deine veröffentlichten Sprachen sind vollständig übersetzt.",
   "overview.next.unread.label": "Einige Inhalte konnten nicht geprüft werden",
   "overview.next.unread.detail": "Die letzte Messung konnte einige Inhalte nicht lesen; ihre Zahlen sind vielleicht älter oder unvollständig. Die Abdeckung im Detail zeigt, welche.",
-  "overview.languages.partial": "Bei der letzten Messung konnten einige Inhalte auf {languages} nicht gelesen werden; die Zahlen dazu sind vielleicht älter oder unvollständig.",
+  "overview.languages.partial": {
+    one: "Bei der letzten Messung konnten einige Inhalte auf {languages} nicht gelesen werden; die Zahlen dazu sind vielleicht älter oder unvollständig.",
+    other: "Bei der letzten Messung konnten einige Inhalte auf {languages} nicht gelesen werden; die Zahlen dazu sind vielleicht älter oder unvollständig.",
+  },
   "overview.scan.updated": "Die Messung ist fertig; die Zahlen oben sind aktuell.",
   "overview.scan.updatedPartial": "Die Messung ist fertig, einige Inhalte konnten aber nicht gelesen werden (siehe unten).",
   "overview.scan.runningAgain": "Die Zahlen oben werden aktualisiert, sobald die neue Messung fertig ist. Du kannst diese Seite verlassen.",
@@ -333,7 +339,11 @@ export const fr: Translation<typeof en> = {
   "overview.next.done.detail": "Vos langues publiées sont entièrement traduites.",
   "overview.next.unread.label": "Certains contenus n'ont pas pu être vérifiés",
   "overview.next.unread.detail": "La dernière mesure n'a pas pu lire certains contenus ; leurs chiffres sont peut-être plus anciens ou incomplets. Le détail de la couverture indique lesquels.",
-  "overview.languages.partial": "Lors de la dernière mesure, certains contenus en {languages} n'ont pas pu être lus ; les chiffres correspondants sont peut-être plus anciens ou incomplets.",
+  "overview.languages.partial": {
+    one: "Lors de la dernière mesure, certains contenus en {languages} n'ont pas pu être lus ; les chiffres correspondants sont peut-être plus anciens ou incomplets.",
+    // Several names after "en" would each need theirs ("en tchèque et en polonais").
+    other: "Lors de la dernière mesure, certains contenus n'ont pas pu être lus dans ces langues : {languages} ; les chiffres correspondants sont peut-être plus anciens ou incomplets.",
+  },
   "overview.scan.updated": "La mesure est terminée ; les chiffres ci-dessus sont à jour.",
   "overview.scan.updatedPartial": "La mesure est terminée, mais certains contenus n'ont pas pu être lus (voir ci-dessous).",
   "overview.scan.runningAgain": "Les chiffres ci-dessus seront mis à jour à la fin de la nouvelle mesure. Vous pouvez quitter cette page.",
@@ -454,7 +464,10 @@ export const es: Translation<typeof en> = {
   "overview.next.done.detail": "Tus idiomas publicados están traducidos por completo.",
   "overview.next.unread.label": "No se pudo comprobar parte del contenido",
   "overview.next.unread.detail": "La última medición no pudo leer parte del contenido, así que sus cifras pueden ser más antiguas o incompletas. El detalle de la cobertura muestra cuál.",
-  "overview.languages.partial": "En la última medición no se pudo leer parte del contenido en {languages}; sus cifras pueden ser más antiguas o incompletas.",
+  "overview.languages.partial": {
+    one: "En la última medición no se pudo leer parte del contenido en {languages}; sus cifras pueden ser más antiguas o incompletas.",
+    other: "En la última medición no se pudo leer parte del contenido en {languages}; sus cifras pueden ser más antiguas o incompletas.",
+  },
   "overview.scan.updated": "La medición ha terminado; las cifras de arriba están actualizadas.",
   "overview.scan.updatedPartial": "La medición ha terminado, pero no se pudo leer parte del contenido (ver abajo).",
   "overview.scan.runningAgain": "Las cifras de arriba se actualizarán cuando termine la nueva medición. Puedes salir de esta página.",

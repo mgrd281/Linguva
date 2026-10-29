@@ -95,3 +95,14 @@ export function unreadSegment<S extends { locale: string; resourceType: string; 
     })[0] ?? null
   );
 }
+
+/**
+ * What the Coverage page says about such a type: scan again. While a scan is
+ * under way (its button disabled): it reads the type again if the type is
+ * still ahead of it (ahead), else scan again once it's done (it skipped the
+ * type itself, or doesn't cover the language).
+ */
+export function unreadMessage(segment: { ahead?: boolean }, scanning: boolean) {
+  if (!scanning) return "coverage.next.unread" as const;
+  return segment.ahead ? ("coverage.next.unreadScanning" as const) : ("coverage.next.unreadAfterScan" as const);
+}

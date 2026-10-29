@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { translator } from "../../app/i18n/i18n";
-import { GAP_SHOWN, gapEntry, gapLine, languageList, upperFirst } from "../../app/lib/name-lists";
+import { GAP_SHOWN, gapEntry, gapLine, inParentheses, languageList, upperFirst } from "../../app/lib/name-lists";
 
 const de = translator("de");
 const fr = translator("fr");
@@ -22,6 +22,11 @@ describe("languages inside a sentence", () => {
   it("names three and counts the rest, in the form for languages", () => {
     expect(languageList(de, ["Bulgarisch", "Tschechisch", "Estnisch", "Kroatisch"])).toBe("Bulgarisch, Tschechisch, Estnisch und 1 weitere");
     expect(languageList(fr, ["bulgare", "tchèque", "estonien", "croate", "hongrois"])).toBe("bulgare, tchèque, estonien et 2 autres");
+  });
+
+  it("turns a name's own parentheses into brackets inside other parentheses", () => {
+    expect(inParentheses("Portugiesisch (Portugal)")).toBe("Portugiesisch [Portugal]");
+    expect(inParentheses("Französisch")).toBe("Französisch");
   });
 
   it("capitalises only where a name starts a link or label", () => {
@@ -45,6 +50,17 @@ describe("gap lines", () => {
     // French puts a space before the colon; a country name with parentheses doesn't nest either.
     expect(gapEntry(fr, "norvégien (bokmål)", [{ code: "NO", name: "Norway" }])).toBe("norvégien (bokmål) : Norvège");
     expect(gapEntry(es, "inglés", [{ code: "HK", name: "Hong Kong" }])).toBe(`inglés: ${es.country("HK")}`);
+  });
+
+  it("knows a name that says its country outside parentheses too", () => {
+    expect(gapEntry(es, es.language("pt-PT"), [{ code: "PT", name: "Portugal" }])).toBe("portugués de Portugal");
+    expect(gapEntry(es, es.language("pt-BR"), [{ code: "BR", name: "Brazil" }])).toBe("portugués de Brasil");
+  });
+
+  it("decides the colon form by the countries it names, not those behind 'and N more'", () => {
+    const countries = ["US", "GB", "AU", "HK"].map((code) => ({ code, name: code }));
+    expect(gapEntry(es, "inglés", countries)).toBe(`inglés (${["US", "GB", "AU"].map((c) => es.country(c)).join(", ")} y 1 más)`);
+    expect(gapEntry(es, "inglés", [countries[3]!, ...countries.slice(0, 3)])).toBe(`inglés: ${["HK", "US", "GB"].map((c) => es.country(c)).join(", ")} y 1 más`);
   });
 
   it("names at most GAP_SHOWN languages, with semicolons once a shown entry has a colon", () => {

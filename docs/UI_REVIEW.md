@@ -86,6 +86,7 @@ An independent review of the deployed page (2026-10-29) found a few states where
 - A newer measurement stuck for 30 minutes could be restarted nowhere (the Coverage page's button stayed disabled and polled forever); both pages now offer "Measure again".
 - Without a running worker a waiting measurement said "it begins by itself"; it now says background jobs aren't running (heartbeat).
 - "Fully translated" no longer appears over content the measurement skipped or over a published language that was never measured; countries count as "in their language" only when their languages are measured; the store-wide figure names how many languages it covers; the primary language appears in the admin's language.
+- While a scan ran, the Coverage page promised it would read a type again that it had already skipped (or whose language it doesn't cover); it now says to scan again once it has finished, and promises a new read only for types still ahead of it.
 
 ## 4. Tests for the changes
 

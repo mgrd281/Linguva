@@ -8,7 +8,8 @@ import type { I18n } from "../i18n/i18n";
 import { hasMessage, kindLabel, kindPlural } from "../i18n/labels";
 import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar, StateLegend, StateSummary } from "../components/Coverage";
 import { ProgressBar } from "../components/ProgressBar";
-import { byFieldGroup, byType, headlineByLocale, storeWide, unreadSegment, type Tally } from "../lib/coverage-view";
+import { byFieldGroup, byType, headlineByLocale, storeWide, unreadMessage, unreadSegment, type Tally } from "../lib/coverage-view";
+import { inParentheses } from "../lib/name-lists";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES, type FieldState } from "../lib/coverage-rules";
 import { localeFlag } from "../lib/flags";
 import { CONTENT_TYPES, isContentType, RESOURCE_KINDS, type ResourceKind } from "../lib/resource-kinds";
@@ -54,11 +55,11 @@ function nextStep(data: Data, i18n: I18n, scanning: boolean): { text: string; hr
   if (!best) {
     // Content the last scan didn't finish reading may be untranslated: say so instead of "all done".
     const unread = unreadSegment(data.segments, { locales: shown, types: data.coverageTypes, selected: data.selected, scanning });
-    const vars = unread ? { type: kindLabel(i18n, unread.resourceType), language: name(unread.locale) } : null;
-    // While a scan runs, its button is disabled: it reads the type again by itself.
-    return vars ? { kind: "unread", text: i18n.t(scanning ? "coverage.next.unreadScanning" : "coverage.next.unread", vars), href: "" } : null;
+    if (!unread) return null;
+    const vars = { type: kindLabel(i18n, unread.resourceType), language: inParentheses(name(unread.locale)) };
+    return { kind: "unread", text: i18n.t(unreadMessage(unread, scanning), vars), href: "" };
   }
-  const vars = { count: best.n, type: kindLabel(i18n, best.type), language: name(best.locale) };
+  const vars = { count: best.n, type: kindLabel(i18n, best.type), language: inParentheses(name(best.locale)) };
   return best.state === "failed"
     ? { kind: "failed", text: i18n.t("coverage.next.failed", vars), href: itemsHref({ lang: best.locale, type: best.type, state: "failed" }) }
     : { kind: "missing", text: i18n.t("coverage.next.missing", vars), href: itemsHref({ lang: best.locale, type: best.type }) };

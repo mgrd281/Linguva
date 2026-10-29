@@ -376,7 +376,7 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
               </div>
             </div>
           ) : null}
-          {partial.length ? <s-text color="subdued">{t("overview.languages.partial", { languages: languageList(i18n, partial.map(rawName)) })}</s-text> : null}
+          {partial.length ? <s-text color="subdued">{t("overview.languages.partial", { languages: languageList(i18n, partial.map(rawName)), count: partial.length })}</s-text> : null}
           {remeasurer.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
           {restart ? (
             <remeasurer.Form method="post" action="/app/coverage">

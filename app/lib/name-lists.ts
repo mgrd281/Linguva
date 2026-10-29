@@ -1,7 +1,7 @@
 /**
- * Language and country names inside the Overview's sentences (pure). French
- * and Spanish language names come lower-case from Intl, as they are written
- * inside sentences; only a link or label that starts with one capitalises it.
+ * Language and country names inside sentences (pure). French and Spanish
+ * language names come lower-case from Intl, as they are written inside
+ * sentences; only a link or label that starts with one capitalises it.
  */
 import { INTL_LOCALE, type I18n } from "../i18n/i18n";
 import type { CountryCoverage } from "./country-coverage";
@@ -14,6 +14,16 @@ const COUNTRIES_SHOWN = 3;
 export function upperFirst(text: string): string {
   return text ? text[0]!.toLocaleUpperCase() + text.slice(1) : text;
 }
+
+/** A name written inside parentheses: its own become brackets ("Produkte (Portugiesisch [Portugal])"). */
+export function inParentheses(name: string): string {
+  return name.replace(/\(([^()]*)\)/g, "[$1]");
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The name says the country as a word of its own ("portugués de Portugal"), not inside another ("Bulgarian"). */
+const namesCountry = (name: string, country: string) => new RegExp(`(^|[^\\p{L}])${escapeRegExp(country)}($|[^\\p{L}])`, "u").test(name);
 
 /** Countries inside parentheses: "Italy, Switzerland and 2 more". */
 export function countryList(i18n: I18n, names: readonly string[], shown = COUNTRIES_SHOWN): string {
@@ -29,14 +39,14 @@ export function languageList(i18n: I18n, names: readonly string[], shown = 3): s
 
 /**
  * "Bulgarian (Bulgaria)", "Italian (Italy, Switzerland)": the language and the
- * countries it would reach. A regional name that says its only country in
- * parentheses needs none ("Portuguese (Brazil)"); with parentheses in the
- * name or a shown country name, the countries follow a colon ("Portuguese
+ * countries it would reach. A regional name that says its only country needs
+ * none ("Portuguese (Brazil)", "portugués de Portugal"); with parentheses in
+ * the name or a shown country name, the countries follow a colon ("Portuguese
  * (Brazil): Portugal").
  */
 export function gapEntry(i18n: I18n, name: string, countries: readonly Pick<CountryCoverage, "code" | "name">[]): string {
   const names = countries.map((c) => i18n.country(c.code, c.name));
-  if (names.length === 1 && name.includes(`(${names[0]})`)) return name;
+  if (names.length === 1 && namesCountry(name, names[0]!)) return name;
   const list = countryList(i18n, names);
   const nested = name.includes("(") || names.slice(0, COUNTRIES_SHOWN).some((n) => n.includes("("));
   return nested ? i18n.t("overview.countries.gap.entry", { language: name, countries: list }) : `${name} (${list})`;

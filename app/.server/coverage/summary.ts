@@ -15,6 +15,8 @@ export interface SegmentInfo {
   status: CoverageSegmentStatus;
   scannedAt: string | null;
   errorCode: string | null;
+  /** The measurement under way has still to read it (it never goes back to a type it skipped). */
+  ahead: boolean;
 }
 
 export interface CoverageSummary {
@@ -77,6 +79,9 @@ export async function loadCoverageSummary(shopId: string, client: PrismaClient =
             AND NOT ('meta_title' = ANY("sourceKeys"))
           GROUP BY "locale", "resourceType"`,
       ]);
+      // Segments are "TYPE|locale"; a report under way reads from its position on.
+      const active = report?.status === "QUEUED" || report?.status === "RUNNING";
+      const ahead = new Set(report && active ? report.segments.slice(report.segmentIndex) : []);
       return {
         report: report
           ? {
@@ -105,6 +110,7 @@ export async function loadCoverageSummary(shopId: string, client: PrismaClient =
           status: s.status,
           scannedAt: s.scannedAt?.toISOString() ?? null,
           errorCode: s.errorCode,
+          ahead: ahead.has(`${s.resourceType}|${s.locale}`),
         })),
         counts,
         items: items.map((i) => ({ locale: i.locale, resourceType: i.resourceType, count: i._count._all })),

@@ -56,6 +56,8 @@ export class FakeShopifyStore {
   /** All resources by GID (products and collections). */
   readonly products = new Map<string, Field[]>();
   readonly translations = new Map<string, { value: string; digest: string }>();
+  /** The store's time zone (Settings → General). */
+  timeZone = "Europe/Berlin";
   /** Product media (MediaImage GIDs; null = a video or 3D model). */
   readonly media = new Map<string, Array<{ id: string; url: string } | null>>();
   /** Nested image resources of collections and articles, by parent. */
@@ -220,7 +222,7 @@ export class FakeShopifyStore {
     }
     const recent = /^LinguvaRecent(Products|Collections|Pages|Articles|Blogs)$/.exec(name);
     if (recent) {
-      // Newest first by updatedAt (blogs: filtered by updated_at:>'…' instead).
+      // Filtered by updated_at:>'…'; oldest first by updatedAt unless reversed (blogs: Shopify's default order).
       const resourceType = { Products: "PRODUCT", Collections: "COLLECTION", Pages: "PAGE", Articles: "ARTICLE", Blogs: "BLOG" }[recent[1]!]!;
       if (this.deniedTypes.has(resourceType)) {
         if (this.throwsLikeLibrary) {
@@ -230,8 +232,11 @@ export class FakeShopifyStore {
       }
       const changedAt = (gid: string) => this.updatedAt.get(gid) ?? new Date("2026-01-01T00:00:00Z");
       let all = [...this.products.keys()].filter((gid) => gid.startsWith(`gid://shopify/${gidTypeOf(resourceType)}/`));
-      // Blogs keep Shopify's default order (by id); the others are sorted by UPDATED_AT, reversed.
-      if (resourceType !== "BLOG") all.sort((a, b) => changedAt(b).getTime() - changedAt(a).getTime());
+      // Blogs keep Shopify's default order (by id); the others are sorted by UPDATED_AT.
+      if (resourceType !== "BLOG") {
+        all.sort((a, b) => changedAt(a).getTime() - changedAt(b).getTime());
+        if (vars.reverse) all.reverse();
+      }
       const after = /^updated_at:>'(.+)'$/.exec(String(vars.query ?? ""));
       if (after) all = all.filter((gid) => changedAt(gid) > new Date(after[1]!));
       const start = vars.after ? Number(vars.after) : 0;
@@ -268,14 +273,17 @@ export class FakeShopifyStore {
       return Response.json({
         data: {
           [owners[1]!.toLowerCase()]: {
-            nodes: slice.map((id) => ({
-              id,
-              metafields: { nodes: (this.metafields.get(id) ?? []).slice(0, 50).map((m) => ({ id: m.id, translatable: m.translatable })) },
-            })),
+            // metafields(first: 50) of any kind, as Shopify returns them.
+            nodes: slice.map((id) => ({ id, metafields: this.metafieldPage(id, 0, 50) })),
             pageInfo: { hasNextPage: end < all.length, endCursor: slice.length ? String(end) : null },
           },
         },
       });
+    }
+    if (name === "LinguvaOwnerMetafieldsAfter") {
+      const gid = String(vars.id);
+      if (!this.products.has(gid)) return Response.json({ data: { node: null } });
+      return Response.json({ data: { node: { metafields: this.metafieldPage(gid, Number(vars.after ?? 0), 100) } } });
     }
     if (name === "LinguvaProbeTranslatable") {
       const prefix = `gid://shopify/${gidTypeOf(String(vars.resourceType))}/`;
@@ -305,6 +313,7 @@ export class FakeShopifyStore {
       });
     }
     if (name === "LinguvaShopLocales") return Response.json({ data: { shopLocales: this.locales } });
+    if (name === "LinguvaShopTimeZone") return Response.json({ data: { shop: { ianaTimezone: this.timeZone } } });
     if (name === "LinguvaProductMedia") {
       const gid = String(vars.id);
       if (!this.products.has(gid)) return Response.json({ data: { product: null } });
@@ -371,6 +380,14 @@ export class FakeShopifyStore {
     }
     throw new Error(`FakeShopifyStore: unsupported operation ${name}`);
   };
+
+  /** One page of an owner's metafields (id and translatable), in the order they were added. */
+  private metafieldPage(ownerGid: string, start: number, first: number) {
+    const all = this.metafields.get(ownerGid) ?? [];
+    const nodes = all.slice(start, start + first).map((m) => ({ id: m.id, translatable: m.translatable }));
+    const end = start + nodes.length;
+    return { nodes, pageInfo: { hasNextPage: end < all.length, endCursor: nodes.length ? String(end) : null } };
+  }
 
   private node(gid: string, locale: string) {
     const fields = this.products.get(gid)!;

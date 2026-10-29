@@ -9,7 +9,7 @@ import { storeMemory } from "../../app/.server/memory/translation-memory";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { listPendingDrafts, rejectDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
-import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
+import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { latestRevisions } from "../../app/.server/translation/revisions";
 import { action as shopRedact } from "../../app/routes/webhooks.shop.redact";
@@ -120,6 +120,8 @@ describe("shop/redact", () => {
     const tables = ["TranslationDraft", "TranslationJob", "TranslationJobItem", "TranslationMemory", "GlossaryTerm", "Glossary", "UsageLedger"];
     for (const t of tables) expect(await countAsOwner(t, shop.id)).toBeGreaterThan(0);
 
+    // Shopify sends shop/redact 48 hours after the uninstall.
+    await markShopUninstalled(DOMAIN, app);
     const call = shopRedact as (args: ActionFunctionArgs) => Promise<Response>;
     const response = await call({
       request: signedWebhookRequest({ path: "/webhooks/shop/redact", topic: "shop/redact", shop: DOMAIN, body: { shop_domain: DOMAIN } }),

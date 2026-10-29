@@ -7,6 +7,8 @@ import {
   createWorkers,
   enqueueDiscovery,
   enqueueItems,
+  REPORT_STALL_MS,
+  requeueStalledDiscovery,
   requeueStalledItems,
   type Queues,
   type WorkerSet,
@@ -146,6 +148,33 @@ describe("bulk translation worker (BullMQ + Redis)", () => {
     const items = await withTenant(shop.id, (tx) => tx.translationJobItem.findMany(), app);
     // Throttling never counted as a failed attempt.
     expect(items.every((i) => i.attempts === 1)).toBe(true);
+  });
+
+  it("keeps an item throttled after it was claimed waiting, not running, and counts one attempt", async () => {
+    const { shop, store, job, deps } = await setup(1);
+    const { runDiscoveryPage } = await import("../../app/.server/jobs/processors");
+    const { itemIds } = await runDiscoveryPage(deps, { shopId: shop.id, jobId: job.id });
+    // The item's own read of the product is throttled once.
+    store.failNext = { count: 1, error: () => new HttpThrottlingError({ ...http, code: 429, retryAfter: 0.05 }) };
+    await enqueueItems(queues, shop.id, itemIds, undefined, app);
+    await waitFor(finished(shop.id, job.id));
+    const [item] = await withTenant(shop.id, (tx) => tx.translationJobItem.findMany(), app);
+    expect(item).toMatchObject({ status: "SUCCEEDED", attempts: 1 });
+  });
+
+  it("continues a job whose discovery never got queued, once", async () => {
+    const { shop, job, deps } = await setup(3);
+    // The job exists, but queueing its first page failed (Redis was down): it would stay active forever.
+    expect(await requeueStalledDiscovery(deps, queues)).toBe(0);
+    await ownerDb.$transaction([
+      ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shop.id}, true)`,
+      ownerDb.$executeRawUnsafe(`UPDATE "TranslationJob" SET "updatedAt" = now() - interval '${Math.ceil(REPORT_STALL_MS / 1000) + 60} seconds'`),
+    ]);
+    expect(await requeueStalledDiscovery(deps, queues)).toBe(1);
+    // A second sweep sees the queued page and adds nothing.
+    expect(await requeueStalledDiscovery(deps, queues)).toBe(0);
+    await waitFor(finished(shop.id, job.id));
+    expect(await jobRow(shop.id, job.id)).toMatchObject({ status: "COMPLETED", succeededItems: 3 });
   });
 
   it("ignores duplicate enqueues of the same item", async () => {

@@ -3,7 +3,8 @@
  * store description for the AI) is saved and shown again after a reload.
  */
 import { expect, test } from "@playwright/test";
-import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
+import { UI_ENV, UI_SHOPS } from "./fixtures/shops";
+import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp, sessionToken } from "./helpers";
 
 test("the translation style is saved per language @responsive", async ({ page }) => {
   await openApp(page, "full", "/app/settings");
@@ -56,11 +57,69 @@ test("automatic translation is off by default and turned on per language @respon
   await section.getByRole("button", { name: "Turn on automatic translation" }).click();
   await expectToast(page, /translated about a minute later/);
   await page.reload();
-  await expect(section.getByText("French, German")).toBeVisible();
+  await expect(section.getByText("French and German")).toBeVisible();
   await expect(section.getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
   await expect(section.getByRole("checkbox", { name: "Arabic", exact: true })).not.toBeChecked();
 
   // Off again (other tests use this store).
   await section.getByRole("button", { name: "Turn off" }).click();
   await expect(section.getByText("Changes are translated when you start a translation.")).toBeVisible();
+});
+
+test("automatic translation says why it waits, and offers only the plan's languages @responsive", async ({ page }) => {
+  await openApp(page, "autoLimits", "/app/settings");
+  const section = page.locator('s-section[heading="Automatic translation"]');
+  const status = section.locator("s-paragraph").filter({ has: page.locator("s-badge") });
+  // Spanish was chosen, but the Starter plan's three languages are French, German and Italian.
+  await expect(status).toHaveText(/^\s*On\s+German\s*$/);
+  const paused = section.locator('s-banner[heading="Automatic translation is paused"]');
+  await expect(paused).toBeVisible();
+  await expect(paused).toContainText(/Today's AI allowance is used up\. It continues by itself after .+ UTC, with everything changed meanwhile\./);
+  // Only the plan's languages can be chosen; the others are named, with the way to more.
+  for (const name of ["French", "German", "Italian"]) await expect(section.getByRole("checkbox", { name, exact: true })).toBeVisible();
+  await expect(section.getByRole("checkbox", { name: "Spanish", exact: true })).toHaveCount(0);
+  await expect(section.getByText("Spanish isn't among your plan's languages.")).toBeVisible();
+  await expect(section.getByRole("link", { name: "See plans" })).toBeVisible();
+  await expect(section.getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
+  await expect(section.getByRole("button", { name: "Turn off" })).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test("a forged request can't add a language outside the plan or lift a pause", async ({ page }) => {
+  await openApp(page, "autoLimits", "/app/settings");
+  const response = await page.request.post(new URL("/app/settings.data", UI_ENV.appUrl).toString(), {
+    headers: { Authorization: `Bearer ${sessionToken(UI_SHOPS.autoLimits.domain)}` },
+    form: { intent: "auto", enabled: "true", locale: "de,es" },
+  });
+  expect(response.ok()).toBe(true);
+  await page.reload();
+  const section = page.locator('s-section[heading="Automatic translation"]');
+  // Nothing was written: still German only, and still paused.
+  await expect(section.locator("s-paragraph").filter({ has: page.locator("s-badge") })).toHaveText(/^\s*On\s+German\s*$/);
+  await expect(section.locator('s-banner[heading="Automatic translation is paused"]')).toBeVisible();
+});
+
+test("automatic translation waits while AI translation isn't allowed", async ({ page }) => {
+  await openApp(page, "autoLimits", "/app/settings");
+  const section = page.locator('s-section[heading="Automatic translation"]');
+  const ai = page.locator('s-section[heading="AI translation"]');
+  await ai.getByRole("button", { name: "Withdraw permission" }).click();
+  const waiting = section.locator('s-banner[heading="Automatic translation is waiting for your permission"]');
+  await expect(waiting).toBeVisible();
+  await expect(waiting).toContainText("changes made meanwhile are translated then");
+  // Allowed again (the other tests use this store).
+  await ai.getByRole("button", { name: "Allow AI processing" }).click();
+  await expect(waiting).toHaveCount(0);
+});
+
+test("automatic translation left on after a downgrade can still be turned off", async ({ page }) => {
+  await openApp(page, "downgraded", "/app/settings");
+  const section = page.locator('s-section[heading="Automatic translation"]');
+  await expect(section.locator('s-banner[heading="Automatic translation is part of the plans with bulk translation"]')).toBeVisible();
+  await expect(section.locator("s-paragraph").filter({ has: page.locator("s-badge") }).first()).toHaveText(/^\s*On\s+German\s*$/);
+  await section.getByRole("button", { name: "Turn off" }).click();
+  await expectToast(page, "Automatic translation is off.");
+  await expect(section.getByText("Changes are translated when you start a translation.")).toBeVisible();
+  await expect(section.getByRole("button", { name: "Turn off" })).toHaveCount(0);
 });

@@ -43,6 +43,7 @@ describe("complimentary grant check", () => {
       bulk: true,
       glossary: true,
       autoPublish: true,
+      smartAuto: true,
     });
   });
 

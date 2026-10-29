@@ -4,7 +4,7 @@ import type { Message, Translation } from "./define";
 export const en = {
   "settings.ai.heading": "AI translation",
   "settings.ai.body":
-    "When you translate with AI, the product text you select is sent to DeepL SE (Germany) for processing. Linguva sends no customer data. Every AI result is a draft until you publish it.",
+    "When Linguva translates with AI (when you ask it to, or automatically once you turn automatic translation or the smart schedule on), the store texts it translates are sent to DeepL SE (Germany) for processing. Linguva sends no customer data. AI results are drafts until you publish them, unless you turn on automatic publishing.",
   "settings.ai.since": "since {date}",
   "settings.ai.notAllowed": "Not allowed",
   "settings.ai.withdraw": "Withdraw permission",
@@ -58,6 +58,20 @@ export const en = {
   "settings.auto.noLanguage.body": "Tick the languages new and changed content should be translated into.",
   "settings.auto.savedOn": "Products and collections you save from now on are translated about a minute later; pages, blog posts and blogs within about half an hour.",
   "settings.auto.savedOff": "Automatic translation is off.",
+  "settings.auto.outsidePlan": {
+    one: "{languages} isn't among your plan's languages.",
+    other: "{languages} aren't among your plan's languages.",
+  },
+  "settings.auto.planLanguage.heading": "Your plan includes fewer languages",
+  "settings.auto.planLanguage.body": "Automatic translation works in the languages your plan includes.",
+  "settings.auto.paused.heading": "Automatic translation is paused",
+  "settings.auto.paused.DAILY_LIMIT": "Today's AI allowance is used up. It continues by itself after {date}, with everything changed meanwhile.",
+  "settings.auto.paused.PLATFORM_LIMIT": "The app's AI limit for today is reached. It continues by itself after {date}, with everything changed meanwhile.",
+  "settings.auto.paused.QUOTA_EXCEEDED": "This month's AI allowance is used up. It continues by itself after {date}, with everything changed meanwhile.",
+  "settings.auto.paused.PROVIDER": "AI translation isn't available right now. Linguva tries again after {date}; nothing changed meanwhile is lost.",
+  "settings.auto.noActiveLanguages": "None of the chosen languages can be translated now. Choose languages below.",
+  "settings.auto.waitingConsent.heading": "Automatic translation is waiting for your permission",
+  "settings.auto.waitingConsent.body": "AI translation isn't allowed at the moment, so nothing is sent. Allow it in the section above, and changes made meanwhile are translated then.",
 
   "settings.memory.body":
     "Approved translations are always reused for identical text. You can also reuse unreviewed machine translations, which keeps wording consistent and avoids paying twice for the same sentence.",
@@ -76,7 +90,7 @@ export const en = {
 export const de: Translation<typeof en> = {
   "settings.ai.heading": "KI-Übersetzung",
   "settings.ai.body":
-    "Wenn du mit KI übersetzt, wird der ausgewählte Produkttext zur Verarbeitung an DeepL SE (Deutschland) gesendet. Linguva sendet keine Kundendaten. Jedes KI-Ergebnis bleibt ein Entwurf, bis du es veröffentlichst.",
+    "Wenn Linguva mit KI übersetzt (wenn du es anstößt, oder automatisch, sobald du die automatische Übersetzung oder den intelligenten Zeitplan einschaltest), werden die zu übersetzenden Texte deines Shops zur Verarbeitung an DeepL SE (Deutschland) gesendet. Linguva sendet keine Kundendaten. KI-Ergebnisse bleiben Entwürfe, bis du sie veröffentlichst, außer du schaltest das automatische Veröffentlichen ein.",
   "settings.ai.since": "seit {date}",
   "settings.ai.notAllowed": "Nicht erlaubt",
   "settings.ai.withdraw": "Einwilligung widerrufen",
@@ -131,6 +145,20 @@ export const de: Translation<typeof en> = {
   "settings.auto.noLanguage.body": "Wähle die Sprachen aus, in die neue und geänderte Inhalte übersetzt werden sollen.",
   "settings.auto.savedOn": "Produkte und Kollektionen, die du ab jetzt speicherst, werden etwa eine Minute später übersetzt; Seiten, Blogbeiträge und Blogs innerhalb von etwa einer halben Stunde.",
   "settings.auto.savedOff": "Die automatische Übersetzung ist deaktiviert.",
+  "settings.auto.outsidePlan": {
+    one: "{languages} gehört nicht zu den Sprachen deines Tarifs.",
+    other: "{languages} gehören nicht zu den Sprachen deines Tarifs.",
+  },
+  "settings.auto.planLanguage.heading": "Dein Tarif umfasst weniger Sprachen",
+  "settings.auto.planLanguage.body": "Die automatische Übersetzung arbeitet in den Sprachen, die dein Tarif umfasst.",
+  "settings.auto.paused.heading": "Die automatische Übersetzung ist pausiert",
+  "settings.auto.paused.DAILY_LIMIT": "Das KI-Kontingent für heute ist aufgebraucht. Sie läuft nach {date} von selbst weiter, mit allem, was sich inzwischen geändert hat.",
+  "settings.auto.paused.PLATFORM_LIMIT": "Das KI-Limit der App für heute ist erreicht. Sie läuft nach {date} von selbst weiter, mit allem, was sich inzwischen geändert hat.",
+  "settings.auto.paused.QUOTA_EXCEEDED": "Das KI-Kontingent dieses Monats ist aufgebraucht. Sie läuft nach {date} von selbst weiter, mit allem, was sich inzwischen geändert hat.",
+  "settings.auto.paused.PROVIDER": "Die KI-Übersetzung ist gerade nicht verfügbar. Linguva versucht es nach {date} erneut; nichts, was sich inzwischen ändert, geht verloren.",
+  "settings.auto.noActiveLanguages": "Keine der gewählten Sprachen kann gerade übersetzt werden. Wähle unten Sprachen aus.",
+  "settings.auto.waitingConsent.heading": "Die automatische Übersetzung wartet auf deine Erlaubnis",
+  "settings.auto.waitingConsent.body": "Die KI-Übersetzung ist gerade nicht erlaubt, deshalb wird nichts gesendet. Erlaube sie im Abschnitt oben; was sich inzwischen ändert, wird dann übersetzt.",
 
   "settings.memory.body":
     "Freigegebene Übersetzungen werden für identischen Text immer wiederverwendet. Du kannst auch ungeprüfte maschinelle Übersetzungen wiederverwenden. Das hält die Formulierungen einheitlich, und du zahlst nicht zweimal für denselben Satz.",
@@ -149,7 +177,7 @@ export const de: Translation<typeof en> = {
 export const fr: Translation<typeof en> = {
   "settings.ai.heading": "Traduction par IA",
   "settings.ai.body":
-    "Lorsque vous traduisez avec l'IA, le texte produit que vous sélectionnez est envoyé à DeepL SE (Allemagne) pour traitement. Linguva n'envoie aucune donnée client. Chaque résultat de l'IA reste un brouillon tant que vous ne l'avez pas publié.",
+    "Lorsque Linguva traduit avec l'IA (à votre demande, ou automatiquement une fois la traduction automatique ou la planification intelligente activée), les textes de la boutique qu'il traduit sont envoyés à DeepL SE (Allemagne) pour traitement. Linguva n'envoie aucune donnée client. Les résultats de l'IA restent des brouillons tant que vous ne les publiez pas, sauf si vous activez la publication automatique.",
   "settings.ai.since": "depuis le {date}",
   "settings.ai.notAllowed": "Non autorisé",
   "settings.ai.withdraw": "Retirer l'autorisation",
@@ -208,6 +236,20 @@ export const fr: Translation<typeof en> = {
   "settings.auto.savedOn":
     "Les produits et collections que vous enregistrez à partir de maintenant sont traduits environ une minute plus tard ; les pages, articles de blog et blogs dans un délai d'environ une demi-heure.",
   "settings.auto.savedOff": "La traduction automatique est désactivée.",
+  "settings.auto.outsidePlan": {
+    one: "Votre forfait n'inclut pas {languages}.",
+    other: "Votre forfait n'inclut pas {languages}.",
+  },
+  "settings.auto.planLanguage.heading": "Votre forfait inclut moins de langues",
+  "settings.auto.planLanguage.body": "La traduction automatique fonctionne dans les langues incluses dans votre forfait.",
+  "settings.auto.paused.heading": "La traduction automatique est en pause",
+  "settings.auto.paused.DAILY_LIMIT": "Le quota d'IA d'aujourd'hui est épuisé. Elle reprend d'elle-même après le {date}, avec tout ce qui a changé entre-temps.",
+  "settings.auto.paused.PLATFORM_LIMIT": "La limite d'IA de l'application pour aujourd'hui est atteinte. Elle reprend d'elle-même après le {date}, avec tout ce qui a changé entre-temps.",
+  "settings.auto.paused.QUOTA_EXCEEDED": "Le quota d'IA de ce mois-ci est épuisé. Elle reprend d'elle-même après le {date}, avec tout ce qui a changé entre-temps.",
+  "settings.auto.paused.PROVIDER": "La traduction par IA n'est pas disponible pour le moment. Linguva réessaie après le {date} ; rien de ce qui change entre-temps n'est perdu.",
+  "settings.auto.noActiveLanguages": "Aucune des langues choisies ne peut être traduite pour le moment. Choisissez des langues ci-dessous.",
+  "settings.auto.waitingConsent.heading": "La traduction automatique attend votre autorisation",
+  "settings.auto.waitingConsent.body": "La traduction par IA n'est pas autorisée pour le moment, donc rien n'est envoyé. Autorisez-la dans la section ci-dessus ; ce qui change entre-temps sera alors traduit.",
 
   "settings.memory.body":
     "Les traductions approuvées sont toujours réutilisées pour un texte identique. Vous pouvez aussi réutiliser les traductions automatiques non révisées : la formulation reste cohérente et vous ne payez pas deux fois la même phrase.",
@@ -226,7 +268,7 @@ export const fr: Translation<typeof en> = {
 export const es: Translation<typeof en> = {
   "settings.ai.heading": "Traducción con IA",
   "settings.ai.body":
-    "Cuando traduces con IA, el texto de producto que seleccionas se envía a DeepL SE (Alemania) para su procesamiento. Linguva no envía datos de clientes. Cada resultado de IA es un borrador hasta que lo publiques.",
+    "Cuando Linguva traduce con IA (cuando tú lo pides, o automáticamente una vez que activas la traducción automática o la programación inteligente), los textos de la tienda que traduce se envían a DeepL SE (Alemania) para su procesamiento. Linguva no envía datos de clientes. Los resultados de IA son borradores hasta que los publiques, salvo que actives la publicación automática.",
   "settings.ai.since": "desde el {date}",
   "settings.ai.notAllowed": "No permitido",
   "settings.ai.withdraw": "Retirar el permiso",
@@ -282,6 +324,20 @@ export const es: Translation<typeof en> = {
   "settings.auto.savedOn":
     "Los productos y colecciones que guardes a partir de ahora se traducen aproximadamente un minuto después; las páginas, entradas de blog y blogs, en aproximadamente media hora.",
   "settings.auto.savedOff": "La traducción automática está desactivada.",
+  "settings.auto.outsidePlan": {
+    one: "Tu plan no incluye {languages}.",
+    other: "Tu plan no incluye {languages}.",
+  },
+  "settings.auto.planLanguage.heading": "Tu plan incluye menos idiomas",
+  "settings.auto.planLanguage.body": "La traducción automática funciona en los idiomas que incluye tu plan.",
+  "settings.auto.paused.heading": "La traducción automática está en pausa",
+  "settings.auto.paused.DAILY_LIMIT": "La cuota de IA de hoy está agotada. Continúa por sí sola después del {date}, con todo lo que haya cambiado mientras tanto.",
+  "settings.auto.paused.PLATFORM_LIMIT": "Se alcanzó el límite de IA de la aplicación para hoy. Continúa por sí sola después del {date}, con todo lo que haya cambiado mientras tanto.",
+  "settings.auto.paused.QUOTA_EXCEEDED": "La cuota de IA de este mes está agotada. Continúa por sí sola después del {date}, con todo lo que haya cambiado mientras tanto.",
+  "settings.auto.paused.PROVIDER": "La traducción con IA no está disponible ahora. Linguva lo intenta de nuevo después del {date}; no se pierde nada de lo que cambie mientras tanto.",
+  "settings.auto.noActiveLanguages": "Ninguno de los idiomas elegidos se puede traducir ahora. Elige idiomas abajo.",
+  "settings.auto.waitingConsent.heading": "La traducción automática espera tu permiso",
+  "settings.auto.waitingConsent.body": "La traducción con IA no está permitida ahora, así que no se envía nada. Permítela en la sección de arriba; lo que cambie mientras tanto se traducirá entonces.",
 
   "settings.memory.body":
     "Las traducciones aprobadas siempre se reutilizan para textos idénticos. También puedes reutilizar traducciones automáticas sin revisar, lo que mantiene la coherencia de la redacción y evita pagar dos veces por la misma frase.",

@@ -120,7 +120,7 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 4 | Image alt texts | ✅ | Integration and security tests (editor) |
 | 5 | Text metafields | ✅ | Integration and security tests (editor) |
 | 6 | Rich text, JSON and list metafields | ◐ | Phase B: rich text translated with structure and links kept (`tests/unit/rich-text.test.ts`, attached-resources and bulk tests). Phase F: lists and links translated item by item, addresses and item count enforced on every write path (`tests/unit/structured-text.test.ts`, `tests/ui/structured.spec.ts`). JSON still counted only; nothing verified on Shopify |
-| 7 | Images and metafields in bulk jobs and the coverage report | ◐ | Phase B: both in bulk jobs (`tests/integration/bulk-attached.test.ts`), images in the coverage report; custom fields can't be listed there (deprecated `METAFIELD` type) |
+| 7 | Images and metafields in bulk jobs and the coverage report | ◐ | Phase B: both in bulk jobs (`tests/integration/bulk-attached.test.ts`); both in the coverage report, custom fields per owner type (products, collections, pages, blog posts; every translatable one, `tests/integration/coverage.test.ts`). Blog, shop and variant custom fields aren't counted (COVERAGE_RULES §10); nothing verified on Shopify |
 | 8 | Market-specific translations | ❌ | Markets page is read-only |
 | 9 | New and changed products are translated automatically (webhooks) | ◐ | Phase B: products and collections, `tests/integration/auto-translate.test.ts` (incl. BullMQ end to end). Phase F: pages, blog posts and blogs, and missed webhooks, by a periodic check (`tests/integration/auto-sweep.test.ts`). Delivery and Shopify's sort order not verified on a store |
 | 10 | Coverage confirmed on a development store | ❌ | Live test probes all types, not run yet |
@@ -361,11 +361,21 @@ Scores expected to change once the checks pass (not before): Shopify integration
 
 **UI and UX (Tested Locally; UI_REVIEW.md):** prioritized review of 10 screens with before/after screenshots. Fixed: drafts made coverage bars look finished (now striped, percentage beside the bar), the original description's preview cut off list items (regression-tested), field states moved to the top of every editor field (missing fields now say so), compact coverage header, specific next-step actions, whole-store key, item rows grouped by state (−43 % height), finished onboarding steps on one line, export defaults to a published language, import summary, SEO length bars. Design stays at 8: the criterion needs the real admin, and the layout decisions that remain wait for the competitor-based specification.
 
+## 4k. Phase K: Smart Auto-Translate for the Business plan (2026-10-29, all Tested Locally)
+
+Scheduled, budgeted automatic translation (SMART_AUTO_TRANSLATE.md), after an audit of the existing pipeline that found and fixed defects first (SMART_AUTO_TRANSLATE_AUDIT.md): fields retranslated by a reused job item, a periodic check that could drop changes beyond its cap, usage keys that could collide, a pause that let queued items continue, coverage that could say 100 % over what it hadn't read, deleted products and removed languages left in coverage, and custom fields after an owner's first 50 metafields not counted.
+
+Evidence added: unit and integration tests for schedules (daylight saving, catch-up, one run per occurrence with five ticks at once), planning while measuring (only missing and outdated machine fields of the chosen scope; people's translations, drafts waiting for review, removals and exclusions kept), budgets and pauses, the plan checked on the server for every action, tick and item, forged requests (form and database); a performance test of a run over 5,000 products in two languages (31 s, median 14 ms per page, nothing planned twice); browser tests of the settings card and page on desktop and phone with accessibility checks; screenshots on desktop, tablet and iPhone (`docs/ui-review/smart-auto/`).
+
+An independent review of the smart backend found 6 problems and several smaller ones, each reproduced against PostgreSQL (a merchant's pause lifted by a plan or consent change, double translation beside a merchant's bulk job, the budget window at midnight, a run left QUEUED, a resource hidden by a stopped job's leftover, an estimate of 0 for stores measured earlier). All are fixed with a test that fails without the fix (SMART_AUTO_TRANSLATE_AUDIT.md §12). A second review (documentation, interface, texts, tests) and a third one, of the fix commit (18 of 22 findings held: the tick's next look after a pause or a save, a check or bulk job taking over the real-time job, a stale copy of the shop's languages, among others), followed; their findings are fixed with tests, one is documented as a limitation (§12, rows 12–36).
+
+Scores unchanged: every criterion this touches is either met already (performance 3, billing 2) or waits for a store (content coverage 9: webhooks and the periodic check on real events; Shopify integration: writes and webhooks). Smart Auto-Translate is not verified on Shopify yet; DEV_STORE_TEST_PLAN.md §Q lists the checks.
+
 ## 5. Next steps, in order of effect
 
 **Without external access (I can continue):**
 
-1. JSON metafields where a definition says which values are text; menus and metaobjects in the automatic check (coverage)
+1. JSON metafields where a definition says which values are text (coverage); menus, metaobjects and the other types are in the smart schedule (Business) since phase K, basic automatic translation keeps the five main types
 2. Glossary suggestions from the catalogue and a quality reference set prepared for the DeepL test (AI translation)
 3. App Store screenshots generated from the UI tests (design, launch)
 

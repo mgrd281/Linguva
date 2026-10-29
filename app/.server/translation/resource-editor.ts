@@ -14,7 +14,7 @@ import { requireShop } from "../shopify/require-shop";
 import { getTranslatableResource } from "../shopify/translations-api";
 import { fuzzyMatches } from "../memory/translation-memory";
 import { resolveGlossary } from "../glossary/glossary";
-import { getDailyUsage, getMonthlyUsage, QuotaExceededError } from "../usage/usage-ledger";
+import { getDailyUsage, getMonthlyUsage, QUOTA_CODES, QuotaExceededError } from "../usage/usage-ledger";
 import { getRequestLimiter, RequestRateLimitedError } from "../usage/request-limits";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { allowedTargetLocales, type BillingStatus } from "../billing/subscription";
@@ -24,6 +24,7 @@ import {
   contentGid,
   isContentType,
   kindMeta,
+  RESOURCE_KINDS,
   resourceGid,
   resourceTitle,
   type TranslatableKind,
@@ -42,6 +43,7 @@ import { isMachineTranslatable, segmentField } from "./translate-fields";
 import { listRevisions } from "./revisions";
 import { removeTranslation, restoreRevision } from "./history";
 import { HANDLE_PROBLEM_MESSAGES, validateHandle } from "../../lib/handles";
+import { addSmartExclusion, isSmartExcluded, liftCausePause, removeSmartExclusion } from "../smart/config";
 import type { TranslationEdit } from "./product-translation-service";
 import type { TranslatableResourceData } from "../shopify/translations-api";
 import {
@@ -113,6 +115,15 @@ export async function resolveEditorContext(
 export const EDITOR_PAGE_SIZE = 50;
 const PAGING_THRESHOLD = 60;
 
+/**
+ * Smart Auto-Translate (Business): the editor can leave a product, collection,
+ * page, blog post or blog out of it (its custom fields with it). Without
+ * billing (development) everything is included, as everywhere else.
+ */
+function smartExclusionAllowed(ctx: EditorContext): boolean {
+  return Object.hasOwn(RESOURCE_KINDS, ctx.kind) && (!ctx.billing || ctx.billing.entitlements.smartAuto);
+}
+
 /** Plan limits for this editor request (config limits when billing isn't checked). */
 function editorLimits(ctx: EditorContext) {
   const config = getConfig();
@@ -130,7 +141,7 @@ export async function loadEditorData(ctx: EditorContext) {
   const revisions = await listRevisions(shopId, resourceId, target.locale);
   const history: Record<
     string,
-    Array<{ id: string; value: string; origin: string; approved: boolean; createdAt: string; restorable: boolean }>
+    Array<{ id: string; value: string; origin: string; approved: boolean; createdAt: string; restorable: boolean; removed: boolean }>
   > = {};
   for (const r of revisions) {
     const list = (history[r.key] ??= []);
@@ -142,7 +153,9 @@ export async function loadEditorData(ctx: EditorContext) {
       approved: r.approved,
       createdAt: r.createdAt.toISOString(),
       // Shopify only accepts translations of the current source text.
-      restorable: r.sourceDigest === digests.get(r.key) && r.value !== (translations.get(r.key)?.value ?? ""),
+      restorable: r.value !== "" && r.sourceDigest === digests.get(r.key) && r.value !== (translations.get(r.key)?.value ?? ""),
+      // The translation was removed (an empty revision).
+      removed: r.value === "",
     });
   }
 
@@ -191,6 +204,7 @@ export async function loadEditorData(ctx: EditorContext) {
     caution,
     // The search result preview applies to storefront pages only.
     seoPreview: !isContentType(ctx.kind),
+    smart: smartExclusionAllowed(ctx) ? { excluded: await isSmartExcluded(shopId, resourceId) } : null,
     ai: {
       available: getTranslationProvider() !== null,
       consent: hasCurrentAiConsent(settings),
@@ -227,6 +241,7 @@ export type EditorActionResult =
   | { kind: "removed"; key: string; status: string }
   | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string; code?: string }> }
   | { kind: "consent" }
+  | { kind: "smart"; excluded: boolean }
   | { kind: "error"; code: string; retryAfterSeconds?: number };
 
 function rateLimited(error: RequestRateLimitedError) {
@@ -242,7 +257,7 @@ function aiErrorCode(error: unknown): string | undefined {
   if (error instanceof AiConsentRequiredError) return "CONSENT_REQUIRED";
   if (error instanceof AiRequestTooLargeError) return "REQUEST_TOO_LARGE";
   if (error instanceof QuotaExceededError) {
-    return { monthly: "QUOTA_EXCEEDED", daily: "DAILY_LIMIT", platform: "PLATFORM_LIMIT" }[error.scope];
+    return QUOTA_CODES[error.scope];
   }
   if (error instanceof TranslationProviderError) return `PROVIDER_${error.kind.toUpperCase()}`;
   return undefined;
@@ -285,9 +300,17 @@ export function checkHandleEdits(resource: TranslatableResourceData, edits: Tran
 export async function runEditorAction(ctx: EditorContext, form: FormData) {
   const { admin, shopId, actorId, resourceId, target } = ctx;
   const intent = form.get("intent");
+  if (intent === "smart-exclude" || intent === "smart-include") {
+    // Checked here, whatever the page showed: a lower plan can't change it.
+    if (!smartExclusionAllowed(ctx)) return { kind: "error", code: "PLAN_SMART" } satisfies EditorActionResult;
+    if (intent === "smart-exclude") await addSmartExclusion({ shopId, resourceGid: resourceId, actorId });
+    else await removeSmartExclusion({ shopId, resourceGid: resourceId, actorId });
+    return { kind: "smart", excluded: intent === "smart-exclude" } satisfies EditorActionResult;
+  }
 
   if (intent === "grant-consent") {
     await setAiConsent({ shopId, granted: true, actorId });
+    await liftCausePause(shopId, "CONSENT");
     return { kind: "consent" } satisfies EditorActionResult;
   }
 

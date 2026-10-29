@@ -238,6 +238,68 @@ export const UI_SHOPS = {
     slowTranslationsMs: 20_000,
     build: () => new FakeShopifyStore(3),
   },
+  business: {
+    // Business plan with the smart schedule on: daily at 23:00 (Berlin) into German and French, with past checks.
+    // Read only: screenshots and the card's values come from it.
+    domain: "ui-business.myshopify.com",
+    gid: "gid://shopify/Shop/91014",
+    name: "Business Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }],
+    plan: "business",
+    build: () => new FakeShopifyStore(6).addCollections(2),
+  },
+  businessEdit: {
+    // Business plan, smart schedule never set up: the tests set it up, change it, pause and resume it.
+    domain: "ui-business-edit.myshopify.com",
+    gid: "gid://shopify/Shop/91017",
+    name: "Business Edit Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }, { locale: "es", name: "Spanish", primary: false, published: true }],
+    plan: "business",
+    build: () => new FakeShopifyStore(3),
+  },
+  businessPause: {
+    // Business plan with the smart schedule on (daily into German): the tests pause, resume and check now.
+    domain: "ui-business-pause.myshopify.com",
+    gid: "gid://shopify/Shop/91018",
+    name: "Business Pause Store",
+    locales: [en, de],
+    plan: "business",
+    build: () => new FakeShopifyStore(2),
+  },
+  smartDowngraded: {
+    // The smart schedule was turned on under Business; the store is now on Pro (no smart schedule).
+    domain: "ui-smart-downgraded.myshopify.com",
+    gid: "gid://shopify/Shop/91019",
+    name: "Smart Downgraded Store",
+    locales: [en, de],
+    plan: "pro",
+    build: () => new FakeShopifyStore(2),
+  },
+  autoLimits: {
+    // Starter (three additional languages) with four: Spanish is outside the plan.
+    // Automatic translation was turned on for German and Spanish, and today's AI allowance ran out.
+    domain: "ui-autolimits.myshopify.com",
+    gid: "gid://shopify/Shop/91015",
+    name: "Limits Store",
+    locales: [
+      en,
+      de,
+      { locale: "fr", name: "French", primary: false, published: true },
+      { locale: "it", name: "Italian", primary: false, published: true },
+      { locale: "es", name: "Spanish", primary: false, published: true },
+    ],
+    plan: "starter",
+    build: () => new FakeShopifyStore(3),
+  },
+  downgraded: {
+    // Automatic translation turned on under a paid plan; the store is now on Free (no bulk translation).
+    domain: "ui-downgraded.myshopify.com",
+    gid: "gid://shopify/Shop/91016",
+    name: "Downgraded Store",
+    locales: [en, de],
+    plan: null,
+    build: () => new FakeShopifyStore(3),
+  },
   fresh: {
     // Never seeded: installs through token exchange in the test.
     domain: "ui-fresh.myshopify.com",

@@ -46,6 +46,17 @@ describe("container image", () => {
   });
 });
 
+describe("the owner role's database URL", () => {
+  it("serves the migration step only: the web server drops it before it starts anything", () => {
+    // Migrations run before the server, in their own process (pre-deploy command, scripts/migrate.mjs).
+    expect(read("Dockerfile")).toMatch(/^CMD \["react-router-serve", "\.\/build\/server\/index\.js"\]$/m);
+    expect(read("scripts/migrate.mjs")).toMatch(/process\.env\.MIGRATION_DATABASE_URL/);
+    const entry = read("app/entry.server.tsx");
+    expect(entry).toMatch(/^dropMigrationDatabaseUrl\(\);$/m);
+    expect(entry.indexOf("dropMigrationDatabaseUrl();")).toBeLessThan(entry.indexOf("startEmbeddedWorker();"));
+  });
+});
+
 describe("background jobs in the web container", () => {
   it("the server bundle starts the embedded worker, which runs the worker bundle the build writes", () => {
     expect(read("app/entry.server.tsx")).toMatch(/^startEmbeddedWorker\(\);$/m);

@@ -16,7 +16,7 @@ import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
-import { fieldName, hasMessage, issueName, kindLabel, kindSingular } from "../i18n/labels";
+import { fieldName, hasMessage, issueName, jobErrorMessage, kindLabel, kindSingular } from "../i18n/labels";
 
 type EditorLoader = () => ReturnType<typeof loadEditorData>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
@@ -54,6 +54,7 @@ export function ResourceTranslationEditor() {
   const aiFetcher = useFetcher<EditorAction>();
   const saveFetcher = useFetcher<EditorAction>();
   const consentFetcher = useFetcher<EditorAction>();
+  const smartFetcher = useFetcher<EditorAction>();
   const memoryFetcher = useFetcher<EditorAction>();
   const restoreFetcher = useFetcher<EditorAction>();
   const removeFetcher = useFetcher<EditorAction>();
@@ -169,6 +170,11 @@ export function ResourceTranslationEditor() {
     return `?${params.toString()}`;
   };
   const remaining = Math.max(0, Math.min(data.ai.limit - data.ai.used, data.ai.dailyLimit - data.ai.usedToday));
+  // Smart Auto-Translate (Business): left out of automatic translation, as just chosen or as stored.
+  const smartResult = smartFetcher.data?.kind === "smart" ? smartFetcher.data : null;
+  const smartError = smartFetcher.data?.kind === "error" ? smartFetcher.data : null;
+  const smartExcluded = smartFetcher.formData ? smartFetcher.formData.get("intent") === "smart-exclude" : (smartResult?.excluded ?? data.smart?.excluded ?? false);
+  useResultToast(smartResult, smartResult ? (smartResult.excluded ? t("editor.smart.excluded") : t("editor.smart.included")) : null);
 
   return (
     <s-page heading={data.title}>
@@ -310,6 +316,21 @@ export function ResourceTranslationEditor() {
               : t("editor.toolbar.notConfigured")}
           </s-text>
         </s-stack>
+        {data.smart ? (
+          <s-checkbox
+            label={t("editor.smart.exclude")}
+            details={t("editor.smart.excludeDetails")}
+            {...(smartExcluded ? { checked: true } : {})}
+            {...(smartFetcher.state !== "idle" ? { disabled: true } : {})}
+            // React 18 sends no onChange for a web component; its input event comes through.
+            onInput={(e) => smartFetcher.submit({ intent: e.currentTarget.checked ? "smart-exclude" : "smart-include" }, { method: "post" })}
+          />
+        ) : null}
+        {smartError ? (
+          <s-banner tone="critical">
+            <s-paragraph>{jobErrorMessage(i18n, smartError.code) ?? t("editor.aiError.generic")}</s-paragraph>
+          </s-banner>
+        ) : null}
         {ai ? (
           <s-paragraph>
             {ai.provider === "memory"
@@ -590,15 +611,17 @@ export function ResourceTranslationEditor() {
                       <s-text color="subdued">
                         {i18n.dateTime(h.createdAt)}
                         {" · "}
-                        {h.origin === "EXTERNAL"
-                          ? t("editor.history.origin.external")
-                          : h.origin === "AI"
-                            ? h.approved
-                              ? t("editor.history.origin.aiApproved")
-                              : t("editor.history.origin.ai")
-                            : t("editor.history.origin.manual")}
+                        {h.removed
+                          ? t("editor.history.removed")
+                          : h.origin === "EXTERNAL"
+                            ? t("editor.history.origin.external")
+                            : h.origin === "AI"
+                              ? h.approved
+                                ? t("editor.history.origin.aiApproved")
+                                : t("editor.history.origin.ai")
+                              : t("editor.history.origin.manual")}
                       </s-text>
-                      <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>
+                      {h.removed ? null : <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>}
                       {h.restorable ? (
                         <s-button
                           variant="tertiary"

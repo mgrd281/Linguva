@@ -4,9 +4,29 @@ import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 
 /**
  * monthly: the shop's monthly allowance; daily: the shop's daily cap;
- * platform: the cap on AI characters across all shops per day (our cost).
+ * platform: the cap on AI characters across all shops per day (our cost);
+ * smartDaily/smartMonthly: the merchant's Smart Auto-Translate budgets.
  */
-export type QuotaScope = "monthly" | "daily" | "platform";
+export type QuotaScope = "monthly" | "daily" | "platform" | "smartDaily" | "smartMonthly";
+
+/** The code a stop at each limit reports (job outcomes, editor messages). */
+export const QUOTA_CODES: Record<QuotaScope, string> = {
+  monthly: "QUOTA_EXCEEDED",
+  daily: "DAILY_LIMIT",
+  platform: "PLATFORM_LIMIT",
+  smartDaily: "SMART_BUDGET_DAILY",
+  smartMonthly: "SMART_BUDGET_MONTHLY",
+};
+
+/** Where usage came from: "smart" for Smart Auto-Translate (its budgets sum these). */
+export type UsageOrigin = "smart";
+
+/** A merchant's own budget on top of the plan's limits, in their time zone's day and month. */
+export interface UsageBudget {
+  origin: UsageOrigin;
+  daily?: { limit: number; since: Date };
+  monthly?: { limit: number; since: Date };
+}
 
 export class QuotaExceededError extends Error {
   constructor(
@@ -52,6 +72,19 @@ async function addPlatformChars(tx: TenantTx, day: string, chars: number, cap: n
   return updated === 1;
 }
 
+async function sumOriginSince(tx: TenantTx, shopId: string, origin: UsageOrigin, since: Date): Promise<number> {
+  const result = await tx.usageLedger.aggregate({
+    where: { shopId, origin, createdAt: { gte: since } },
+    _sum: { chars: true },
+  });
+  return result._sum.chars ?? 0;
+}
+
+/** Characters Smart Auto-Translate used since a time (the start of a budget window). */
+export async function getOriginUsageSince(shopId: string, origin: UsageOrigin, since: Date, client: PrismaClient = defaultClient): Promise<number> {
+  return withTenant(shopId, (tx) => sumOriginSince(tx, shopId, origin, since), client);
+}
+
 async function platformChars(tx: TenantTx, day: string): Promise<number> {
   const rows = await tx.$queryRaw<Array<{ chars: bigint }>>`SELECT "chars" FROM "PlatformUsageDay" WHERE "day" = ${day}::date`;
   return Number(rows[0]?.chars ?? 0);
@@ -91,8 +124,16 @@ export interface Reservation {
   period: string;
   /** UTC day of the reservation; settlement adjusts that day's platform counter. */
   day: string;
+  /**
+   * When it was reserved. Its settle and release rows carry this time, so every
+   * window summed by time (the shop's day, the smart budgets' local day and
+   * month) counts a reservation and its correction in the same window.
+   */
+  at: Date;
   chars: number;
   provider: string;
+  /** Copied to the settle and release rows, so a budget sums the net usage. */
+  origin?: UsageOrigin;
 }
 
 /** Shop daily usage (UTC day), for display. */
@@ -119,6 +160,8 @@ export async function reserveUsage(
     dailyLimit?: number;
     /** Optional cap across all shops per UTC day. */
     platformDailyLimit?: number;
+    /** Smart Auto-Translate: its origin and the merchant's budgets. */
+    budget?: UsageBudget;
   },
   client: PrismaClient = defaultClient,
 ): Promise<Reservation> {
@@ -139,8 +182,10 @@ export async function reserveUsage(
           key: input.key,
           period: already.periodKey,
           day: dayKey(already.createdAt),
+          at: already.createdAt,
           chars: already.chars,
           provider: already.provider ?? input.provider,
+          ...(already.origin ? { origin: already.origin as UsageOrigin } : {}),
         };
       }
       const used = await sumChars(tx, input.shopId, period);
@@ -152,6 +197,16 @@ export async function reserveUsage(
         if (today + input.chars > input.dailyLimit) {
           throw new QuotaExceededError(today, input.chars, input.dailyLimit, "daily");
         }
+      }
+      // The merchant's own Smart Auto-Translate budgets (local day and month), on top of the plan's limits.
+      const budget = input.budget;
+      if (budget?.daily) {
+        const used = await sumOriginSince(tx, input.shopId, budget.origin, budget.daily.since);
+        if (used + input.chars > budget.daily.limit) throw new QuotaExceededError(used, input.chars, budget.daily.limit, "smartDaily");
+      }
+      if (budget?.monthly) {
+        const used = await sumOriginSince(tx, input.shopId, budget.origin, budget.monthly.since);
+        if (used + input.chars > budget.monthly.limit) throw new QuotaExceededError(used, input.chars, budget.monthly.limit, "smartMonthly");
       }
       // Same transaction: a refused shop reservation never counts globally.
       if (!(await addPlatformChars(tx, day, input.chars, input.platformDailyLimit ?? null))) {
@@ -165,23 +220,39 @@ export async function reserveUsage(
           chars: input.chars,
           provider: input.provider,
           idempotencyKey: input.key,
+          origin: input.budget?.origin ?? null,
+          createdAt: now,
         },
       });
       return null;
     },
     client,
   );
-  return existing ?? { shopId: input.shopId, key: input.key, period, day, chars: input.chars, provider: input.provider };
+  return (
+    existing ?? {
+      shopId: input.shopId,
+      key: input.key,
+      period,
+      day,
+      at: now,
+      chars: input.chars,
+      provider: input.provider,
+      ...(input.budget ? { origin: input.budget.origin } : {}),
+    }
+  );
 }
 
-/** Records actual usage: the difference to the reservation is adjusted. */
+/**
+ * Records actual usage: the difference to the reservation is adjusted. The
+ * settle row is written even without a difference, so a later release of the
+ * same reservation (an error after the provider call) can't undo billed usage.
+ */
 export async function settleUsage(
   reservation: Reservation,
   actualChars: number,
   client: PrismaClient = defaultClient,
 ): Promise<void> {
   const delta = actualChars - reservation.chars;
-  if (delta === 0) return;
   await withTenant(
     reservation.shopId,
     async (tx) => {
@@ -192,14 +263,16 @@ export async function settleUsage(
         chars: delta,
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:settle`,
+        origin: reservation.origin ?? null,
+        createdAt: reservation.at,
       });
-      if (inserted) await addPlatformChars(tx, reservation.day, delta, null);
+      if (inserted && delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
     },
     client,
   );
 }
 
-/** Returns reserved characters when the provider call failed. */
+/** Returns reserved characters when the provider call failed. Does nothing once the reservation is settled. */
 export async function releaseUsage(
   reservation: Reservation,
   client: PrismaClient = defaultClient,
@@ -207,6 +280,11 @@ export async function releaseUsage(
   await withTenant(
     reservation.shopId,
     async (tx) => {
+      const settled = await tx.usageLedger.findUnique({
+        where: { shopId_idempotencyKey: { shopId: reservation.shopId, idempotencyKey: `${reservation.key}:settle` } },
+        select: { id: true },
+      });
+      if (settled) return;
       const inserted = await insertOnce(tx, {
         shopId: reservation.shopId,
         periodKey: reservation.period,
@@ -214,6 +292,8 @@ export async function releaseUsage(
         chars: -reservation.chars,
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:release`,
+        origin: reservation.origin ?? null,
+        createdAt: reservation.at,
       });
       if (inserted) await addPlatformChars(tx, reservation.day, -reservation.chars, null);
     },

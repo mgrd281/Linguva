@@ -8,7 +8,7 @@ import {
   InvalidSession,
 } from "@shopify/shopify-api";
 import { TranslationProviderError } from "../providers/types";
-import { QuotaExceededError } from "../usage/usage-ledger";
+import { QUOTA_CODES, QuotaExceededError } from "../usage/usage-ledger";
 import { AiConsentRequiredError } from "../translation/product-translation-service";
 
 /** Stops the whole job (remaining items are cancelled), e.g. quota used up. */
@@ -50,8 +50,9 @@ export function classifyError(error: unknown): ErrorClass {
   if (error instanceof ItemPermanentError) return { kind: "item-permanent", code: error.code };
   if (error instanceof AiConsentRequiredError) return { kind: "job-stop", code: "CONSENT_REQUIRED" };
   if (error instanceof QuotaExceededError) {
-    const code = { monthly: "QUOTA_EXCEEDED", daily: "DAILY_LIMIT", platform: "PLATFORM_LIMIT" }[error.scope];
-    return { kind: "job-stop", code };
+    // One item that alone needs more than the limit fails by itself; the others still fit.
+    if (error.requested > error.limit) return { kind: "item-permanent", code: "TOO_LARGE_FOR_LIMIT" };
+    return { kind: "job-stop", code: QUOTA_CODES[error.scope] };
   }
 
   if (error instanceof TranslationProviderError) {

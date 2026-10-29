@@ -14,6 +14,7 @@ vi.hoisted(() => {
 
 import { PrismaClient } from "@prisma/client";
 import { sweepChangedContent } from "../../app/.server/jobs/auto-sweep";
+import type { CoverageRefreshQueue } from "../../app/.server/coverage/refresh";
 import { createAutoItems, queueAutoTranslate, type AutoTranslatePayload } from "../../app/.server/jobs/auto-translate";
 import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
 import { createQueues, createWorkers, type Queues, type WorkerSet } from "../../app/.server/jobs/queues";
@@ -83,9 +84,10 @@ describe("periodic check for automatic translation", () => {
 
     const { added, queue } = fakeQueue();
     const now = new Date(enabledAt.getTime() + minutes(30));
-    expect(await sweepChangedContent(depsFor({ "sweep-start.myshopify.com": store }), queue, now)).toEqual({ shops: 1, queued: 0, failed: 0 });
+    expect(await sweepChangedContent(depsFor({ "sweep-start.myshopify.com": store }), queue, now)).toEqual({ shops: 1, queued: 0, failed: 0, catchingUp: 0 });
     expect(added).toEqual([]);
-    expect(await sweptAt(shop.id)).toEqual(now);
+    // A run that got everything reads its last two minutes again next time (clock differences to Shopify).
+    expect(await sweptAt(shop.id)).toEqual(new Date(now.getTime() - minutes(2)));
   });
 
   it("queues pages, blog posts, blogs, products and collections changed since, with the webhook's job id", async () => {
@@ -119,6 +121,22 @@ describe("periodic check for automatic translation", () => {
     const again = fakeQueue();
     await sweepChangedContent(depsFor({ "sweep-types.myshopify.com": store }), again.queue, new Date(now.getTime() + minutes(30)));
     expect(again.added).toEqual([]);
+  });
+
+  it("reads changed pages, blog posts and blogs again for the coverage report (they have no webhooks)", async () => {
+    const { shop, store } = await shopWithStore("sweep-coverage.myshopify.com");
+    const start = (await sweptAt(shop.id))!;
+    for (const gid of ["gid://shopify/Page/1", "gid://shopify/Article/1", "gid://shopify/Blog/1", "gid://shopify/Product/2", "gid://shopify/Collection/1"]) {
+      store.touch(gid, new Date(start.getTime() + minutes(5)));
+    }
+    const refreshes: Array<{ data: { shopId: string; resourceGid: string }; jobId: unknown }> = [];
+    const coverageQueue = { add: async (_: string, data: { shopId: string; resourceGid: string }, opts: { jobId?: string }) => void refreshes.push({ data, jobId: opts.jobId }) };
+    const { queue } = fakeQueue();
+    await sweepChangedContent({ ...depsFor({ "sweep-coverage.myshopify.com": store }), coverageQueue: coverageQueue as unknown as CoverageRefreshQueue }, queue, new Date(start.getTime() + minutes(30)));
+    // Products and collections are read again after their own webhooks.
+    expect(refreshes.map((r) => r.data)).toEqual(["Page", "Article", "Blog"].map((type) => ({ shopId: shop.id, resourceGid: `gid://shopify/${type}/1` })));
+    // One pending refresh per resource, apart from a product or collection with the same number.
+    expect(refreshes.map((r) => r.jobId)).toEqual(["pg", "ar", "bl"].map((type) => `covref_${shop.id}_1_${type}`));
   });
 
   it.each([false, true])("skips a type the store hasn't granted access to (library throws: %s), and keeps its position after a failure", async (throwsLikeLibrary) => {
@@ -157,7 +175,7 @@ describe("periodic check for automatic translation", () => {
       billingFor: async () => ({ configured: true, state: "ACTIVE" as const, entitlements: PLANS.free, subscription: null, stale: false, mustChoosePlan: false }),
     };
     const { added, queue } = fakeQueue();
-    expect(await sweepChangedContent(deps, queue)).toEqual({ shops: 0, queued: 0, failed: 0 });
+    expect(await sweepChangedContent(deps, queue)).toEqual({ shops: 0, queued: 0, failed: 0, catchingUp: 0 });
     expect(added).toEqual([]);
     expect([...off.store.calls, ...noConsent.store.calls, ...free.store.calls]).toEqual([]);
   });
@@ -184,18 +202,29 @@ describe("periodic check for automatic translation", () => {
     );
   });
 
-  it("covers at most a set number of changes per type in one run, newest first", async () => {
+  it("reads a set number of changes per type, oldest first, and says up to when it got them all", async () => {
     const store = new FakeShopifyStore(5);
     const since = new Date("2026-10-01T00:00:00Z");
-    for (let i = 1; i <= 5; i++) store.touch(`gid://shopify/Product/${i}`, new Date(since.getTime() + minutes(i)));
-    expect(await changedSince(store.asAdmin(), "PRODUCT", since, 3)).toEqual({
-      ids: ["gid://shopify/Product/5", "gid://shopify/Product/4", "gid://shopify/Product/3"],
-      capped: true,
-    });
-    expect(await changedSince(store.asAdmin(), "PRODUCT", new Date(since.getTime() + minutes(3)), 3)).toEqual({
-      ids: ["gid://shopify/Product/5", "gid://shopify/Product/4"],
-      capped: false,
-    });
+    const at = (i: number) => new Date(since.getTime() + minutes(i));
+    for (let i = 1; i <= 5; i++) store.touch(`gid://shopify/Product/${i}`, at(i));
+    const first = await changedSince(store.asAdmin(), "PRODUCT", since, 3);
+    expect(first.changes.map((c) => c.id)).toEqual(["gid://shopify/Product/1", "gid://shopify/Product/2", "gid://shopify/Product/3"]);
+    expect(first).toMatchObject({ capped: true, through: at(3) });
+    const rest = await changedSince(store.asAdmin(), "PRODUCT", first.through!, 3);
+    expect(rest).toMatchObject({ changes: [{ id: "gid://shopify/Product/4" }, { id: "gid://shopify/Product/5" }], capped: false });
+  });
+
+  it("never splits a second between two runs", async () => {
+    const store = new FakeShopifyStore(5);
+    const since = new Date("2026-10-01T00:00:00Z");
+    const same = new Date(since.getTime() + minutes(1));
+    // A bulk edit: four products in the same second.
+    for (let i = 1; i <= 4; i++) store.touch(`gid://shopify/Product/${i}`, same);
+    store.touch("gid://shopify/Product/5", new Date(since.getTime() + minutes(2)));
+    const first = await changedSince(store.asAdmin(), "PRODUCT", since, 2);
+    expect(first.changes).toHaveLength(4);
+    expect(first).toMatchObject({ capped: true, through: same });
+    expect((await changedSince(store.asAdmin(), "PRODUCT", first.through!, 2)).changes.map((c) => c.id)).toEqual(["gid://shopify/Product/5"]);
   });
 
   it("finds changed blogs by the updated_at filter (blogs can't be sorted by update time)", async () => {
@@ -203,7 +232,45 @@ describe("periodic check for automatic translation", () => {
     const since = new Date("2026-10-01T00:00:00Z");
     store.touch("gid://shopify/Blog/1", new Date(since.getTime() + minutes(5)));
     store.touch("gid://shopify/Blog/3", new Date(since.getTime() + minutes(1)));
-    expect(await changedSince(store.asAdmin(), "BLOG", since, 10)).toEqual({ ids: ["gid://shopify/Blog/1", "gid://shopify/Blog/3"], capped: false });
+    const found = await changedSince(store.asAdmin(), "BLOG", since, 10);
+    expect(found).toMatchObject({ capped: false, through: null });
+    expect(found.changes.map((c) => c.id)).toEqual(["gid://shopify/Blog/1", "gid://shopify/Blog/3"]);
+  });
+
+  it("drops no change beyond its limit: the next runs go on from the last one queued", async () => {
+    const { shop } = await shopWithStore("sweep-catchup.myshopify.com");
+    const store = new FakeShopifyStore(7);
+    const start = (await sweptAt(shop.id))!;
+    for (let i = 1; i <= 7; i++) store.touch(`gid://shopify/Product/${i}`, new Date(start.getTime() + minutes(i)));
+    const deps = depsFor({ "sweep-catchup.myshopify.com": store });
+    const queued: string[] = [];
+    for (let run = 1; run <= 3; run++) {
+      const { added, queue } = fakeQueue();
+      const summary = await sweepChangedContent(deps, queue, new Date(start.getTime() + minutes(30 * run)), 3);
+      queued.push(...added.filter((a) => a.data.resourceType === "PRODUCT").map((a) => a.data.resourceGid));
+      expect(summary.catchingUp).toBe(run < 3 ? 1 : 0);
+    }
+    expect(queued).toEqual([1, 2, 3, 4, 5, 6, 7].map((i) => `gid://shopify/Product/${i}`));
+  });
+
+  it("waits while automatic translation is paused, and then translates what changed meanwhile", async () => {
+    const { shop, store } = await shopWithStore("sweep-paused.myshopify.com");
+    const start = (await sweptAt(shop.id))!;
+    const deps = depsFor({ "sweep-paused.myshopify.com": store });
+    await withTenant(
+      shop.id,
+      (tx) => tx.shopSettings.update({ where: { shopId: shop.id }, data: { autoPausedUntil: new Date(start.getTime() + minutes(60)), autoPauseReason: "DAILY_LIMIT" } }),
+      app,
+    );
+    store.touch("gid://shopify/Page/1", new Date(start.getTime() + minutes(10)));
+    const during = fakeQueue();
+    await sweepChangedContent(deps, during.queue, new Date(start.getTime() + minutes(30)));
+    expect(during.added).toEqual([]);
+    expect(store.calls).toEqual([]);
+    expect(await sweptAt(shop.id)).toEqual(start);
+    const after = fakeQueue();
+    await sweepChangedContent(deps, after.queue, new Date(start.getTime() + minutes(90)));
+    expect(after.added.map((a) => a.data.resourceGid)).toEqual(["gid://shopify/Page/1"]);
   });
 });
 

@@ -3,7 +3,7 @@
  * heartbeat expires by itself when it stops, and GET /healthz/worker says
  * so without details.
  */
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loader } from "../../app/routes/healthz_.worker";
 import { resetQueueClient } from "../../app/.server/queue/client";
 import { heartbeatKey, readWorkerStatus, startHeartbeat } from "../../app/.server/queue/heartbeat";
@@ -15,6 +15,8 @@ const redis = testRedis();
 const KEY = heartbeatKey(keyPrefix("test"));
 const info = { startedAt: new Date().toISOString(), mode: "standalone" as const, pid: process.pid, commit: null, provider: "none" };
 
+// Also before: another suite (the browser tests' setup) may have left a heartbeat on this Redis.
+beforeEach(() => redis.del(KEY));
 afterEach(() => redis.del(KEY));
 afterAll(async () => {
   await resetQueueClient();

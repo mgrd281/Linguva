@@ -91,6 +91,13 @@ export const en = {
   "overview.next.done.detail": "Your published languages are fully translated.",
   "overview.next.unread.label": "Some content couldn't be checked",
   "overview.next.unread.detail": "The last measurement couldn't read some content, so its figures may be older or incomplete. The coverage details show which.",
+  "overview.next.access.label": { one: "Linguva can't read {count} content type yet", other: "Linguva can't read {count} content types yet" },
+  "overview.next.access.detail": "Content without access isn't counted or translated. Allow access to include it; the permission is read-only.",
+  "overview.languages.unreadable": {
+    one: "Not in these figures: {count} content type Linguva can't read yet.",
+    other: "Not in these figures: {count} content types Linguva can't read yet.",
+  },
+  "overview.languages.uncheckedLabel": "{language}, {percent} translated, some content not checked: see details",
   "overview.languages.partial": {
     one: "In the last measurement, some content in {languages} couldn't be read; the figures for it may be older or incomplete.",
     other: "In the last measurement, some content in {languages} couldn't be read; the figures for it may be older or incomplete.",
@@ -215,6 +222,13 @@ export const de: Translation<typeof en> = {
   "overview.next.done.detail": "Deine veröffentlichten Sprachen sind vollständig übersetzt.",
   "overview.next.unread.label": "Einige Inhalte konnten nicht geprüft werden",
   "overview.next.unread.detail": "Die letzte Messung konnte einige Inhalte nicht lesen; ihre Zahlen sind vielleicht älter oder unvollständig. Die Abdeckung im Detail zeigt, welche.",
+  "overview.next.access.label": { one: "Linguva kann {count} Inhaltstyp noch nicht lesen", other: "Linguva kann {count} Inhaltstypen noch nicht lesen" },
+  "overview.next.access.detail": "Inhalte ohne Zugriff werden weder gezählt noch übersetzt. Erlaube den Zugriff, um sie einzubeziehen; die Berechtigung ist nur zum Lesen.",
+  "overview.languages.unreadable": {
+    one: "Nicht in diesen Zahlen: {count} Inhaltstyp, den Linguva noch nicht lesen kann.",
+    other: "Nicht in diesen Zahlen: {count} Inhaltstypen, die Linguva noch nicht lesen kann.",
+  },
+  "overview.languages.uncheckedLabel": "{language}, {percent} übersetzt, einige Inhalte nicht geprüft: Details ansehen",
   "overview.languages.partial": {
     one: "Bei der letzten Messung konnten einige Inhalte auf {languages} nicht gelesen werden; die Zahlen dazu sind vielleicht älter oder unvollständig.",
     other: "Bei der letzten Messung konnten einige Inhalte auf {languages} nicht gelesen werden; die Zahlen dazu sind vielleicht älter oder unvollständig.",
@@ -339,6 +353,13 @@ export const fr: Translation<typeof en> = {
   "overview.next.done.detail": "Vos langues publiées sont entièrement traduites.",
   "overview.next.unread.label": "Certains contenus n'ont pas pu être vérifiés",
   "overview.next.unread.detail": "La dernière mesure n'a pas pu lire certains contenus ; leurs chiffres sont peut-être plus anciens ou incomplets. Le détail de la couverture indique lesquels.",
+  "overview.next.access.label": { one: "Linguva ne peut pas encore lire {count} type de contenu", other: "Linguva ne peut pas encore lire {count} types de contenu" },
+  "overview.next.access.detail": "Les contenus sans accès ne sont ni comptés ni traduits. Autorisez l'accès pour les inclure ; l'autorisation est en lecture seule.",
+  "overview.languages.unreadable": {
+    one: "Hors de ces chiffres : {count} type de contenu que Linguva ne peut pas encore lire.",
+    other: "Hors de ces chiffres : {count} types de contenu que Linguva ne peut pas encore lire.",
+  },
+  "overview.languages.uncheckedLabel": "{language}, {percent} traduit, certains contenus non vérifiés : voir le détail",
   "overview.languages.partial": {
     one: "Lors de la dernière mesure, certains contenus en {languages} n'ont pas pu être lus ; les chiffres correspondants sont peut-être plus anciens ou incomplets.",
     // Several names after "en" would each need theirs ("en tchèque et en polonais").
@@ -464,6 +485,13 @@ export const es: Translation<typeof en> = {
   "overview.next.done.detail": "Tus idiomas publicados están traducidos por completo.",
   "overview.next.unread.label": "No se pudo comprobar parte del contenido",
   "overview.next.unread.detail": "La última medición no pudo leer parte del contenido, así que sus cifras pueden ser más antiguas o incompletas. El detalle de la cobertura muestra cuál.",
+  "overview.next.access.label": { one: "Linguva aún no puede leer {count} tipo de contenido", other: "Linguva aún no puede leer {count} tipos de contenido" },
+  "overview.next.access.detail": "El contenido sin acceso no se cuenta ni se traduce. Permite el acceso para incluirlo; el permiso es solo de lectura.",
+  "overview.languages.unreadable": {
+    one: "Fuera de estas cifras: {count} tipo de contenido que Linguva aún no puede leer.",
+    other: "Fuera de estas cifras: {count} tipos de contenido que Linguva aún no puede leer.",
+  },
+  "overview.languages.uncheckedLabel": "{language}, {percent} traducido, parte del contenido sin comprobar: ver el detalle",
   "overview.languages.partial": {
     one: "En la última medición no se pudo leer parte del contenido en {languages}; sus cifras pueden ser más antiguas o incompletas.",
     other: "En la última medición no se pudo leer parte del contenido en {languages}; sus cifras pueden ser más antiguas o incompletas.",

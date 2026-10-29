@@ -6,7 +6,7 @@ import { providerContext } from "../../lib/resource-kinds";
 import { logger } from "../lib/logger";
 import { alignDocuments, type SegmentPair } from "../memory/alignment";
 import { recordMemoryUse, storeMemory } from "../memory/translation-memory";
-import type { TranslationProvider } from "../providers/types";
+import { billedBeforeFailure, type TranslationProvider } from "../providers/types";
 import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import {
   getTranslatableResource,
@@ -123,8 +123,9 @@ export async function aiTranslateResource(
       )
     : null;
 
+  let result: Awaited<ReturnType<typeof completeTranslation>>;
   try {
-    const result = await completeTranslation(prepared, {
+    result = await completeTranslation(prepared, {
       provider: input.provider,
       sourceLocale: sourceLocaleOf(resource),
       targetLocale: input.targetLocale,
@@ -132,19 +133,23 @@ export async function aiTranslateResource(
       context: translationContext(settings.aiStoreContext, providerContext(resource.resourceId, titleField?.value, input.resourceType)),
       formality: formalityFor(settings, input.targetLocale),
     });
-    if (reservation) await settleUsage(reservation, result.billedCharacters, client);
-    await recordMemoryUse(input.shopId, result.memoryEntryIds, client);
-    return {
-      outcomes: result.outcomes,
-      provider: result.provider,
-      memoryHits: result.memoryHits,
-      charsSaved: result.charsSaved,
-      digests: Object.fromEntries(resource.content.map((f) => [f.key, f.digest])),
-    };
   } catch (error) {
-    if (reservation) await releaseUsage(reservation, client);
+    // Only the provider call failed: release what it didn't bill.
+    if (reservation) {
+      const billed = billedBeforeFailure(error);
+      await (billed > 0 ? settleUsage(reservation, billed, client) : releaseUsage(reservation, client));
+    }
     throw error;
   }
+  if (reservation) await settleUsage(reservation, result.billedCharacters, client);
+  await recordMemoryUse(input.shopId, result.memoryEntryIds, client);
+  return {
+    outcomes: result.outcomes,
+    provider: result.provider,
+    memoryHits: result.memoryHits,
+    charsSaved: result.charsSaved,
+    digests: Object.fromEntries(resource.content.map((f) => [f.key, f.digest])),
+  };
 }
 
 export interface TranslationEdit {

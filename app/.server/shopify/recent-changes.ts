@@ -1,9 +1,10 @@
 /**
- * Resources changed since a given time, newest first (Admin API 2026-10).
- * Products, collections, pages and blog posts are sorted by UPDATED_AT
- * (a sort key of each, VERIFIED in the schema); blogs have no such sort key
- * and are filtered with the documented `updated_at` search term instead.
- * Used by the periodic check for automatic translation.
+ * Resources changed since a given time, oldest first (Admin API 2026-10).
+ * Every type is filtered with the documented `updated_at` search term;
+ * products, collections, pages and blog posts are also sorted by
+ * UPDATED_AT (a sort key of each, VERIFIED in the schema), so a run that
+ * stops at its limit knows up to when it got everything. Blogs have no such
+ * sort key. Used by the periodic check for automatic translation.
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { AccessDeniedError, isAccessDenied, ShopifyApiError } from "./translations-api";
@@ -16,32 +17,32 @@ export type SweptType = (typeof SWEPT_TYPES)[number];
 const PAGE_SIZE = 100;
 
 const PRODUCTS = `#graphql
-  query LinguvaRecentProducts($first: Int!, $after: String) {
-    products(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+  query LinguvaRecentProducts($first: Int!, $after: String, $query: String!) {
+    products(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {
       nodes { id updatedAt }
       pageInfo { hasNextPage endCursor }
     }
   }
 `;
 const COLLECTIONS = `#graphql
-  query LinguvaRecentCollections($first: Int!, $after: String) {
-    collections(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+  query LinguvaRecentCollections($first: Int!, $after: String, $query: String!) {
+    collections(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {
       nodes { id updatedAt }
       pageInfo { hasNextPage endCursor }
     }
   }
 `;
 const PAGES = `#graphql
-  query LinguvaRecentPages($first: Int!, $after: String) {
-    pages(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+  query LinguvaRecentPages($first: Int!, $after: String, $query: String!) {
+    pages(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {
       nodes { id updatedAt }
       pageInfo { hasNextPage endCursor }
     }
   }
 `;
 const ARTICLES = `#graphql
-  query LinguvaRecentArticles($first: Int!, $after: String) {
-    articles(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+  query LinguvaRecentArticles($first: Int!, $after: String, $query: String!) {
+    articles(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {
       nodes { id updatedAt }
       pageInfo { hasNextPage endCursor }
     }
@@ -64,28 +65,36 @@ const QUERIES: Record<SweptType, { document: string; field: "products" | "collec
   BLOG: { document: BLOGS, field: "blogs" },
 };
 
+/** The whole second of an ISO time (Shopify's update times have seconds). */
+const second = (iso: string) => Math.floor(Date.parse(iso) / 1000);
+
 interface Connection {
   nodes: Array<{ id: string; updatedAt: string }>;
   pageInfo: { hasNextPage: boolean; endCursor?: string | null };
 }
 
 /**
- * GIDs of resources of one type changed after `since`, newest first, at
- * most `max`. `capped`: more changed than that (the rest is left to a
- * "Translate all" run; the caller logs it).
+ * Resources of one type changed after `since`, oldest first, about `max`.
+ * `capped`: more changed than that; `through` is then the update time up to
+ * which every change was returned (the next run continues after it), and
+ * null for blogs, which can't be read in that order. The cut never splits a
+ * second: changes made in the same second as the last one returned all come
+ * along, so continuing after `through` loses nothing.
  */
 export async function changedSince(
   admin: Admin,
   type: SweptType,
   since: Date,
   max: number,
-): Promise<{ ids: string[]; capped: boolean }> {
+  /** Called before every request (the shop's Shopify rate limit); may throw RateLimitedError. */
+  beforeRequest?: () => Promise<void>,
+): Promise<{ changes: Array<{ id: string; updatedAt: string }>; capped: boolean; through: Date | null }> {
   const { document, field } = QUERIES[type];
-  const ids: string[] = [];
+  const changes: Array<{ id: string; updatedAt: string }> = [];
   let after: string | null = null;
   for (;;) {
-    const variables: Record<string, unknown> = { first: PAGE_SIZE, after };
-    if (type === "BLOG") variables.query = `updated_at:>'${since.toISOString()}'`;
+    await beforeRequest?.();
+    const variables: Record<string, unknown> = { first: PAGE_SIZE, after, query: `updated_at:>'${since.toISOString()}'` };
     const response = await admin.graphql(document, { variables }).catch((error: unknown) => {
       // The Shopify library throws on GraphQL errors (a missing scope among them).
       throw isAccessDenied(error) ? new AccessDeniedError(type) : error;
@@ -95,16 +104,16 @@ export async function changedSince(
     const connection = body.data?.[field];
     if (!connection) throw new ShopifyApiError(`${field} returned no data`);
     for (const node of connection.nodes) {
-      if (new Date(node.updatedAt) <= since) {
-        // Sorted newest first: everything after this changed earlier. Blogs
-        // are filtered, not sorted: skip just this one.
-        if (type !== "BLOG") return { ids, capped: false };
-        continue;
+      // The search term filters already; this guards against an inclusive comparison (whole seconds, as Shopify compares).
+      if (second(node.updatedAt) <= second(since.toISOString())) continue;
+      const last = changes[changes.length - 1];
+      if (changes.length >= max && (type === "BLOG" || !last || second(node.updatedAt) !== second(last.updatedAt))) {
+        // Sorted by update time: everything up to the last one returned is complete.
+        return { changes, capped: true, through: type === "BLOG" || !last ? null : new Date(second(last.updatedAt) * 1000) };
       }
-      if (ids.length === max) return { ids, capped: true };
-      ids.push(node.id);
+      changes.push({ id: node.id, updatedAt: node.updatedAt });
     }
-    if (!connection.pageInfo.hasNextPage || !connection.pageInfo.endCursor) return { ids, capped: false };
+    if (!connection.pageInfo.hasNextPage || !connection.pageInfo.endCursor) return { changes, capped: false, through: null };
     after = connection.pageInfo.endCursor;
   }
 }

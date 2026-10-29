@@ -104,6 +104,18 @@ describe("DeepLProvider", () => {
     expect(result.translations).toEqual(segments.map((s) => `DE:${s}`));
   });
 
+  it("reports what earlier batches billed when a later batch fails", async () => {
+    // Batch 1 (50 texts) is billed; batch 2 is refused.
+    const { impl, calls } = fakeFetch([ok, () => new Response(null, { status: 400 })]);
+    const segments = Array.from({ length: 60 }, (_, i) => `text ${i}`);
+    const failure = await new DeepLProvider({ apiKey: "k", fetch: impl, retry: noSleep })
+      .translate({ segments, sourceLocale: "en", targetLocale: "de" })
+      .catch((error: unknown) => error);
+    expect(calls.length).toBe(2);
+    expect(failure).toBeInstanceOf(TranslationProviderError);
+    expect((failure as TranslationProviderError).billedCharacters).toBe(segments.slice(0, 50).reduce((n, s) => n + s.length, 0));
+  });
+
   it("retries rate limits and server errors, then succeeds", async () => {
     const { impl, calls } = fakeFetch([
       () => new Response(null, { status: 429, headers: { "retry-after": "0" } }),

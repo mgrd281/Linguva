@@ -8,8 +8,12 @@
  * Fictional stores only; no merchant data.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { openApp } from "./helpers";
+import { openApp, setWorkerRunning } from "./helpers";
 import type { UiShopKey } from "./fixtures/shops";
+
+// The smart schedule runs in the worker: these pages are tested with background jobs running.
+test.beforeAll(() => setWorkerRunning(true));
+test.afterAll(() => setWorkerRunning(false));
 
 const OUT = process.env.UI_REVIEW_SCREENSHOTS;
 test.skip(!OUT, "Design review screenshots on demand (UI_REVIEW_SCREENSHOTS=<folder>).");
@@ -25,7 +29,18 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "import-export", shop: "full", path: "/app/translations", phone: true },
   { name: "jobs", shop: "full", path: "/app/jobs" },
   { name: "empty-overview", shop: "empty", path: "/app" },
+  // Smart Auto-Translate (UI_REVIEW_SCREENSHOTS=docs/ui-review/smart-auto).
+  { name: "smart-settings", shop: "business", path: "/app/settings", phone: true },
+  { name: "smart-page", shop: "business", path: "/app/settings/automatic", phone: true },
+  { name: "smart-upsell", shop: "full", path: "/app/settings", phone: true },
 ];
+
+/** The smart schedule's screens also on a tablet and an iPhone (Chromium with their viewports). */
+const DEVICES = [
+  { name: "tablet", viewport: { width: 820, height: 1180 }, scale: 2, mobile: false },
+  { name: "iphone", viewport: { width: 390, height: 844 }, scale: 3, mobile: true },
+];
+const SMART = SCREENS.filter((s) => s.name.startsWith("smart-"));
 
 async function settle(page: Page) {
   await page.evaluate(() => document.fonts.ready);
@@ -41,5 +56,20 @@ for (const screen of SCREENS) {
     await settle(page);
     const image = await page.screenshot({ path: `${OUT}/${screen.name}-${phone ? "phone" : "desktop"}.png`, fullPage: true, animations: "disabled", caret: "hide" });
     expect(image.length).toBeGreaterThan(5_000);
+  });
+}
+
+for (const device of DEVICES) {
+  test.describe(device.name, () => {
+    test.use({ viewport: device.viewport, deviceScaleFactor: device.scale, isMobile: device.mobile, hasTouch: device.mobile });
+    for (const screen of SMART) {
+      test(`${screen.name} on a ${device.name}`, async ({ page }, info) => {
+        test.skip(info.project.name === "mobile", "Taken once, in the desktop project");
+        await openApp(page, screen.shop, screen.path);
+        await settle(page);
+        const image = await page.screenshot({ path: `${OUT}/${screen.name}-${device.name}.png`, fullPage: true, animations: "disabled", caret: "hide" });
+        expect(image.length).toBeGreaterThan(5_000);
+      });
+    }
   });
 }

@@ -88,7 +88,8 @@ export async function markShopUninstalled(
 
   const updated = await client.shop.update({
     where: { id: shop.id },
-    data: { status: "UNINSTALLED", uninstalledAt: new Date() },
+    // No scheduled check is due for an uninstalled shop.
+    data: { status: "UNINSTALLED", uninstalledAt: new Date(), smartNextRunAt: null },
   });
   await withTenant(
     shop.id,
@@ -108,6 +109,16 @@ export async function markShopUninstalled(
       await tx.coverageSegment.updateMany({
         where: { shopId: shop.id, status: "SCANNING" },
         data: { status: "FAILED", errorCode: "SHOP_UNINSTALLED" },
+      });
+      // The smart schedule stops and stays paused: a reinstall never resumes checks or
+      // automatic publishing without the merchant (settings are kept until shop/redact).
+      await tx.smartAutoRun.updateMany({
+        where: { shopId: shop.id, status: { in: ["QUEUED", "WAITING", "RUNNING"] } },
+        data: { status: "CANCELLED", errorCode: "SHOP_UNINSTALLED", finishedAt: new Date() },
+      });
+      await tx.smartAutoConfig.updateMany({
+        where: { shopId: shop.id, enabled: true },
+        data: { enabled: false, nextRunAt: null, pausedAt: null, pauseReason: null, pausedUntil: null },
       });
     },
     client,

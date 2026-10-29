@@ -2,11 +2,12 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { shopBilling } from "../.server/billing/billing";
+import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { getConfig } from "../.server/lib/config";
 import { getDailyUsage, getMonthlyUsage } from "../.server/usage/usage-ledger";
 import { estimatedCostUsd, PLANS, planSelectionUrl } from "../lib/plans";
 import { useI18n } from "../i18n/react";
+import { languageList } from "../lib/name-lists";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -32,7 +33,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       : null,
     choosePlanUrl: billing.configured && appHandle ? planSelectionUrl(shop.shopDomain, appHandle) : null,
     usage: { month: await getMonthlyUsage(shop.id), today: await getDailyUsage(shop.id) },
-    costPerMillion: getConfig().AI_COST_USD_PER_MILLION_CHARS,
+    // The allowance actually enforced (without billing: the server's configured limit, not the plan table's).
+    limits: aiLimitsFor(getConfig(), billing),
+    // The internal provider cost is for the owner's own stores only; no other shop receives it.
+    costPerMillion: billing.state === "COMPLIMENTARY" ? getConfig().AI_COST_USD_PER_MILLION_CHARS : null,
   };
 };
 
@@ -93,7 +97,7 @@ export default function Plan() {
             <s-paragraph>{t("plan.current.pending", { plan: planName(data.subscription.pendingPlanHandle) })}</s-paragraph>
           ) : null}
           <s-paragraph>
-            {t("plan.current.usage", { month: data.usage.month, limit: e.monthlyChars, today: data.usage.today })}
+            {t("plan.current.usage", { month: data.usage.month, limit: data.limits.limit, today: data.usage.today })}
           </s-paragraph>
           <s-paragraph>
             {t("plan.current.features", {
@@ -101,9 +105,10 @@ export default function Plan() {
               bulk: yesNo(e.bulk),
               glossary: yesNo(e.glossary),
               autoPublish: yesNo(e.autoPublish),
+              smart: yesNo(e.smartAuto),
             })}
           </s-paragraph>
-          {complimentary ? (
+          {complimentary && data.costPerMillion !== null ? (
             <s-paragraph>
               {t("plan.current.cost", {
                 cost: estimatedCostUsd(data.usage.month, data.costPerMillion).toFixed(2),
@@ -138,7 +143,10 @@ export default function Plan() {
             <s-table-header format="numeric">{t("plan.plans.characters")}</s-table-header>
             <s-table-header format="numeric">{t("common.languages")}</s-table-header>
             <s-table-header>{t("plan.plans.bulk")}</s-table-header>
-            <s-table-header>{t("common.nav.glossary")}</s-table-header>
+            {/* Glossary and the smart schedule share one column: the phone layout labels at most four. */}
+            <s-table-header>{t("plan.plans.includes")}</s-table-header>
+            {/* Empty last column: on a phone Polaris drops the label of the table's last column. */}
+            <s-table-header listSlot="inline"></s-table-header>
           </s-table-header-row>
           <s-table-body>
             {Object.values(PLANS).map((p) => (
@@ -147,7 +155,12 @@ export default function Plan() {
                 <s-table-cell>{i18n.number(p.monthlyChars)}</s-table-cell>
                 <s-table-cell>{p.maxTargetLocales}</s-table-cell>
                 <s-table-cell>{p.bulk ? t("plan.plans.yes") : t("plan.plans.no")}</s-table-cell>
-                <s-table-cell>{p.glossary ? t("plan.plans.yes") : t("plan.plans.no")}</s-table-cell>
+                <s-table-cell>
+                  {p.glossary || p.smartAuto
+                    ? languageList(i18n, [...(p.glossary ? [t("common.nav.glossary")] : []), ...(p.smartAuto ? [t("automatic.name")] : [])], Infinity)
+                    : t("plan.plans.nothing")}
+                </s-table-cell>
+                <s-table-cell></s-table-cell>
               </s-table-row>
             ))}
           </s-table-body>

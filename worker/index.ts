@@ -12,7 +12,7 @@ import { billingDeps } from "../app/.server/billing/billing";
 import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
-import { createQueues, createWorkers, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
+import { createQueues, createWorkers, enqueueCoveragePage, requeueStalledDiscovery, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
 import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
 import { createRedis, keyPrefix } from "../app/.server/queue/redis";
@@ -20,8 +20,12 @@ import { startHeartbeat } from "../app/.server/queue/heartbeat";
 import { TokenBucket } from "../app/.server/queue/rate-limiter";
 import { withShopifyTimeout } from "../app/.server/shopify/admin-timeout";
 import { purgeWebhookLog } from "../app/.server/webhooks/process-webhook";
+import { repairAllSmartRuns } from "../app/.server/smart/plan";
+import { smartTick } from "../app/.server/smart/runs";
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+/** Smart Auto-Translate: schedules are checked every minute (times are in whole minutes). */
+const SMART_TICK_MS = 60 * 1000;
 
 async function main() {
   const config = getConfig();
@@ -47,7 +51,8 @@ async function main() {
       withShopifyTimeout((await unauthenticated.admin(shopDomain)).admin, config.SHOPIFY_TIMEOUT_MS, "worker"),
     provider: getTranslationProvider(),
     monthlyLimit: limits.limit,
-    dailyLimit: limits.dailyLimit,
+    // Per shop the daily cap is never above its plan's monthly allowance (processItem), as on every page.
+    dailyLimit: config.AI_DAILY_CHAR_LIMIT,
     platformDailyLimit: limits.platformDailyLimit,
     // The plan (cached Partner API state); billing off: unmetered.
     billingFor: async (shopId) => {
@@ -68,13 +73,18 @@ async function main() {
 
   const sweep = async () => {
     try {
-      const requeued = await requeueStalledItems(deps, queues);
-      if (requeued) logger.warn({ requeued }, "re-enqueued stalled items");
-      // One worker at a time (a separate worker and an embedded one, or a deploy overlap).
+      // One worker at a time (a separate worker and an embedded one, or a deploy overlap):
+      // two sweeps would queue the same orphaned item twice.
       const lock = await connection.set(`${prefix}:coverage-requeue-lock`, String(process.pid), "PX", SWEEP_INTERVAL_MS - 60_000, "NX");
       if (lock === "OK") {
+        const requeued = await requeueStalledItems(deps, queues);
+        if (requeued) logger.warn({ requeued }, "re-enqueued stalled items");
+        const discovering = await requeueStalledDiscovery(deps, queues);
+        if (discovering) logger.warn({ jobs: discovering }, "continued stalled job discovery");
         const reports = await requeueStalledReports(deps, queues);
         if (reports) logger.warn({ reports }, "continued stalled coverage reports");
+        const runs = await repairAllSmartRuns(prisma);
+        if (runs) logger.warn({ runs }, "finished smart runs whose measurement had ended");
       }
       const purged = await purgeWebhookLog(prisma);
       if (purged) logger.info({ purged }, "old webhook log entries deleted");
@@ -91,7 +101,7 @@ async function main() {
     try {
       const lock = await connection.set(`${prefix}:auto-sweep-lock`, String(process.pid), "PX", AUTO_SWEEP_INTERVAL_MS - 60_000, "NX");
       if (lock !== "OK") return;
-      const summary = await sweepChangedContent(deps, queues.auto);
+      const summary = await sweepChangedContent({ ...deps, coverageQueue: queues.coverage }, queues.auto);
       if (summary.queued || summary.failed) logger.info(summary, "automatic translation: changed content checked");
     } catch (error) {
       logger.error({ err: (error as Error).name }, "automatic translation check failed");
@@ -99,6 +109,33 @@ async function main() {
   };
   const autoTimer = setInterval(autoSweep, AUTO_SWEEP_INTERVAL_MS);
   void autoSweep();
+
+  // Smart Auto-Translate: due schedules become runs. One worker per minute; a second one
+  // (a deploy overlap) would still start each occurrence once (unique per occurrence, per-shop lock).
+  const smartDeps = {
+    prisma,
+    adminFor: deps.adminFor,
+    billingFor: deps.billingFor,
+    aiAvailable: deps.provider !== null,
+    enqueueCoveragePage: (payload: Parameters<typeof enqueueCoveragePage>[1]) => enqueueCoveragePage(queues, payload),
+  };
+  let ticking = false;
+  const tick = async () => {
+    if (ticking) return;
+    ticking = true;
+    try {
+      const lock = await connection.set(`${prefix}:smart-tick-lock`, String(process.pid), "PX", SMART_TICK_MS - 5_000, "NX");
+      if (lock !== "OK") return;
+      const summary = await smartTick(smartDeps);
+      if (summary.started || summary.skipped || summary.failed) logger.info(summary, "smart auto-translate: schedules checked");
+    } catch (error) {
+      logger.error({ err: (error as Error).name }, "smart auto-translate tick failed");
+    } finally {
+      ticking = false;
+    }
+  };
+  const smartTimer = setInterval(tick, SMART_TICK_MS);
+  void tick();
 
   // Tells the web process (and GET /healthz/worker) that jobs are being processed.
   const heartbeat = startHeartbeat(connection, {
@@ -123,6 +160,7 @@ async function main() {
     heartbeat.stop();
     clearInterval(timer);
     clearInterval(autoTimer);
+    clearInterval(smartTimer);
     // Lets active jobs finish; unfinished ones are picked up again after restart.
     await workers.close();
     await queues.close();

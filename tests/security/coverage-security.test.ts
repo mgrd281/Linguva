@@ -69,12 +69,11 @@ describe("coverage report isolation", () => {
     const dump = await withTenant(
       a.shop.id,
       async (tx) =>
-        JSON.stringify([
-          await tx.coverageReport.findMany(),
-          await tx.coverageItem.findMany(),
-          await tx.coverageCount.findMany(),
-          await tx.coverageSegment.findMany(),
-        ]),
+        JSON.stringify(
+          [await tx.coverageReport.findMany(), await tx.coverageItem.findMany(), await tx.coverageCount.findMany(), await tx.coverageSegment.findMany()],
+          // Character counts are numbers too (BIGINT).
+          (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value),
+        ),
       app,
     );
     expect(dump).toContain("gid://shopify/Product/1");

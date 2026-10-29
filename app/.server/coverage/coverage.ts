@@ -11,11 +11,13 @@ import { prisma as defaultClient } from "../lib/db";
 import { AccessDeniedError, getTranslatableResource, listTranslatableResources, type TranslatableResourceData } from "../shopify/translations-api";
 import { listOwnerMetafields, METAFIELD_OWNER_TYPES, type MetafieldOwnerType } from "../shopify/metafield-owners";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { storedTargetLocales } from "../locales/shop-locales";
 import { shopKey } from "../queue/redis";
 import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, kindOfGid, RESOURCE_KINDS, type TranslatableKind } from "../../lib/resource-kinds";
-import { dropCoverageItemsTx, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
+import { dropCoverageTypeTx, dropDeletedResource, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
+import { afterSmartScan, finishSmartScanTx, noteSmartGapTx, planSmartPage, writeSmartPlanTx } from "../smart/plan";
 
 /** Custom fields of each owner type ("PRODUCT_METAFIELD", …). */
 export const METAFIELD_COVERAGE_TYPES = METAFIELD_OWNER_TYPES.map((owner) => `${owner}_METAFIELD` as const);
@@ -60,6 +62,12 @@ export interface CoverageDeps {
   pageSize?: number;
 }
 
+/** What a page hands on after its commit. */
+export interface CoveragePageHooks {
+  /** Queues the translation items a Smart Auto-Translate run planned on the page. */
+  enqueueSmartItems?(shopId: string, itemIds: string[], position: number): Promise<void>;
+}
+
 export interface CoveragePagePayload {
   shopId: string;
   reportId: string;
@@ -79,7 +87,14 @@ export function segmentOf(report: Pick<CoverageReport, "segments">, index: numbe
  * one (one report at a time per shop) or the one this request already made.
  */
 export async function createCoverageReport(
-  input: { shopId: string; locales: readonly string[]; requestedBy: string | null; idempotencyKey: string },
+  input: {
+    shopId: string;
+    locales: readonly string[];
+    requestedBy: string | null;
+    idempotencyKey: string;
+    /** Smart Auto-Translate: the run this measurement plans translation for. */
+    smartRunId?: string | null;
+  },
   client: PrismaClient = defaultClient,
 ): Promise<{ report: CoverageReport; created: boolean }> {
   const locales = [...new Set(input.locales)].filter((l) => /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l));
@@ -113,6 +128,7 @@ export async function createCoverageReport(
           shopId: input.shopId,
           requestedBy: input.requestedBy,
           idempotencyKey: input.idempotencyKey,
+          smartRunId: input.smartRunId ?? null,
           segments: COVERAGE_TYPES.flatMap((type) => locales.map((l) => `${type}|${l}`)),
         },
       });
@@ -147,8 +163,10 @@ async function throttle(deps: CoverageDeps, shopId: string) {
 /**
  * Scans one page and returns the next page to scan, or null when the report
  * is finished or this page was already processed (a repeated queue job).
+ * A Smart Auto-Translate run's report also plans translation for what the
+ * page read, in the page's transaction (smart/plan.ts).
  */
-export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePagePayload): Promise<CoveragePagePayload | null> {
+export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePagePayload, hooks: CoveragePageHooks = {}): Promise<CoveragePagePayload | null> {
   const report = await withTenant(
     payload.shopId,
     (tx) => tx.coverageReport.findFirst({ where: { id: payload.reportId, shopId: payload.shopId } }),
@@ -182,8 +200,11 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
   const nextIndex = more ? payload.segmentIndex : payload.segmentIndex + 1;
   const nextCursor = more ? (page as { endCursor: string }).endCursor : null;
   const finished = nextIndex >= report.segments.length;
+  // Read before the transaction: revisions and drafts of what the page found.
+  const plan =
+    page === "denied" ? null : await planSmartPage(deps.prisma, { shopId: payload.shopId, report, resourceType: segment.resourceType, locale: segment.locale, changes: page.changes });
 
-  return withTenant(
+  const result = await withTenant(
     payload.shopId,
     async (tx) => {
       // Advances only from the position this page was read at, so a repeated
@@ -210,14 +231,16 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
       const key = { shopId_locale_resourceType: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } };
       if (page === "denied") {
         // Without the scope nothing of the type can be read or translated:
-        // earlier results are removed rather than shown as current.
-        await tx.coverageItem.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
-        await tx.coverageCount.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
+        // earlier results are removed rather than shown as current (under the
+        // language's lock, so no count change of the type interleaves).
+        await dropCoverageTypeTx(tx, payload.shopId, segment.locale, segment.resourceType);
         await tx.coverageSegment.upsert({
           where: key,
           create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "DENIED", reportId: report.id, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
           update: { status: "DENIED", reportId: report.id, startedAt: null, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
         });
+        // Not a gap of the smart check: nothing of the type can be read or translated (as for its
+        // estimate); its page says which chosen types need access.
       } else {
         if (payload.cursor === null) {
           await tx.coverageSegment.upsert({
@@ -229,10 +252,20 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
         await syncCoverageTx(tx, payload.shopId, segment.locale, page.changes, { create: true, seen: true });
         if (!more) await finishSegment(tx, payload.shopId, segment.locale, segment.resourceType, readAt);
       }
-      return finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: nextCursor };
+      const smartItems = plan ? await writeSmartPlanTx(tx, payload.shopId, plan) : { itemIds: [], position: 0 };
+      if (finished && report.smartRunId) await finishSmartScanTx(tx, payload.shopId, report.smartRunId);
+      const next = finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: nextCursor };
+      return { next, smartItems };
     },
     deps.prisma,
   );
+  if (!result) return null;
+  // After the commit; items left unqueued (Redis down) are queued again by the stalled-item repair.
+  if (result.smartItems.itemIds.length && hooks.enqueueSmartItems) {
+    await hooks.enqueueSmartItems(payload.shopId, result.smartItems.itemIds, result.smartItems.position);
+  }
+  if (finished && report.smartRunId) await afterSmartScan(deps.prisma, payload.shopId, report.smartRunId);
+  return result.next;
 }
 
 async function readPage(admin: Admin, resourceType: string, locale: string, cursor: string | null, pageSize: number, readAt: Date) {
@@ -272,18 +305,24 @@ async function finishSegment(tx: TenantTx, shopId: string, locale: string, resou
 }
 
 export async function failCoverageReport(shopId: string, reportId: string, errorCode: string, client: PrismaClient = defaultClient) {
-  await withTenant(
+  const smartRunId = await withTenant(
     shopId,
     async (tx) => {
-      await tx.coverageReport.updateMany({
+      const failed = await tx.coverageReport.updateMany({
         where: { id: reportId, shopId, status: { in: ACTIVE } },
         data: { status: "FAILED", errorCode, finishedAt: new Date() },
       });
       // The segment being read keeps its earlier items, marked as not fully scanned.
       await tx.coverageSegment.updateMany({ where: { shopId, reportId, status: "SCANNING" }, data: { status: "FAILED", errorCode } });
+      if (!failed.count) return null;
+      // A smart run's plan ends with its measurement: what it planned is still translated.
+      const report = await tx.coverageReport.findFirst({ where: { id: reportId, shopId }, select: { smartRunId: true } });
+      if (report?.smartRunId) await finishSmartScanTx(tx, shopId, report.smartRunId);
+      return report?.smartRunId ?? null;
     },
     client,
   );
+  if (smartRunId) await afterSmartScan(client, shopId, smartRunId);
 }
 
 
@@ -293,10 +332,15 @@ export interface CoverageRefreshPayload {
 }
 
 /**
- * Reads one resource again in every language whose type was scanned (after
- * a products/collections webhook: the original may have changed, which
- * makes translations outdated). A resource Shopify no longer returns is
- * removed from coverage.
+ * Reads one resource again in every language its type was read in (after a
+ * products/collections webhook, or a page, blog post or blog the periodic
+ * check found changed: the original may have changed, which makes
+ * translations outdated). Also while a scan reads the type, or after one
+ * stopped in it: the item's time (syncedAt) keeps an older scan read from
+ * replacing this one, and the refresh counts as seen, so the scan's end
+ * keeps the item. Not for a type without access or a language that is no
+ * longer a target. A resource Shopify no longer returns is removed from
+ * coverage.
  */
 export async function refreshCoverageResource(deps: CoverageDeps, payload: CoverageRefreshPayload) {
   const resourceType = kindOfGid(payload.resourceGid);
@@ -305,7 +349,13 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
   if (!shop || shop.status !== "ACTIVE") return { refreshed: 0 };
   const segments = await withTenant(
     payload.shopId,
-    (tx) => tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: "SCANNED" } }),
+    async (tx) => {
+      const [rows, targets] = await Promise.all([
+        tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: { in: ["SCANNED", "SCANNING", "FAILED"] } } }),
+        storedTargetLocales(tx, payload.shopId),
+      ]);
+      return rows.filter((s) => !targets || targets.includes(s.locale));
+    },
     deps.prisma,
   );
   if (!segments.length) return { refreshed: 0 };
@@ -315,21 +365,14 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
     await throttle(deps, payload.shopId);
     const at = new Date();
     const data = await getTranslatableResource(admin, payload.resourceGid, segment.locale);
-    await withTenant(
+    if (!data) {
+      // Deleted in Shopify: gone in every language, with the custom fields it owns.
+      await dropDeletedResource(payload.shopId, payload.resourceGid, deps.prisma);
+      break;
+    }
+    refreshed += await withTenant(
       payload.shopId,
-      async (tx) => {
-        if (data) {
-          refreshed += await syncCoverageTx(
-            tx,
-            payload.shopId,
-            segment.locale,
-            [{ resourceGid: payload.resourceGid, resourceType, observed: { data, at } }],
-            { create: true, seen: true },
-          );
-        } else {
-          await dropCoverageItemsTx(tx, payload.shopId, segment.locale, [payload.resourceGid]);
-        }
-      },
+      (tx) => syncCoverageTx(tx, payload.shopId, segment.locale, [{ resourceGid: payload.resourceGid, resourceType, observed: { data, at } }], { create: true, seen: true }),
       deps.prisma,
     );
   }
@@ -348,7 +391,7 @@ export async function skipCoverageSegment(
   payload: CoveragePagePayload,
   errorCode: string,
 ): Promise<CoveragePagePayload | null> {
-  return withTenant(
+  const result = await withTenant(
     payload.shopId,
     async (tx) => {
       const report = await tx.coverageReport.findFirst({ where: { id: payload.reportId, shopId: payload.shopId } });
@@ -373,9 +416,13 @@ export async function skipCoverageSegment(
           create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "FAILED", reportId: report.id, errorCode },
           update: { status: "FAILED", reportId: report.id, errorCode },
         });
+        if (report.smartRunId) await noteSmartGapTx(tx, payload.shopId, report.smartRunId, segment);
       }
-      return finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: null };
+      if (finished && report.smartRunId) await finishSmartScanTx(tx, payload.shopId, report.smartRunId);
+      return { next: finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: null }, smartRunId: finished ? report.smartRunId : null };
     },
     client,
   );
+  if (result?.smartRunId) await afterSmartScan(client, payload.shopId, result.smartRunId);
+  return result?.next ?? null;
 }

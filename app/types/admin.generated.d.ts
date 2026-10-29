@@ -88,7 +88,7 @@ export type LinguvaMetafieldOwnersProductsQueryVariables = AdminTypes.Exact<{
 
 export type LinguvaMetafieldOwnersProductsQuery = { products: { nodes: Array<(
       Pick<AdminTypes.Product, 'id'>
-      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>> } }
+      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } }
     )>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } };
 
 export type LinguvaMetafieldOwnersCollectionsQueryVariables = AdminTypes.Exact<{
@@ -99,7 +99,7 @@ export type LinguvaMetafieldOwnersCollectionsQueryVariables = AdminTypes.Exact<{
 
 export type LinguvaMetafieldOwnersCollectionsQuery = { collections: { nodes: Array<(
       Pick<AdminTypes.Collection, 'id'>
-      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>> } }
+      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } }
     )>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } };
 
 export type LinguvaMetafieldOwnersPagesQueryVariables = AdminTypes.Exact<{
@@ -110,7 +110,7 @@ export type LinguvaMetafieldOwnersPagesQueryVariables = AdminTypes.Exact<{
 
 export type LinguvaMetafieldOwnersPagesQuery = { pages: { nodes: Array<(
       Pick<AdminTypes.Page, 'id'>
-      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>> } }
+      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } }
     )>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } };
 
 export type LinguvaMetafieldOwnersArticlesQueryVariables = AdminTypes.Exact<{
@@ -121,12 +121,21 @@ export type LinguvaMetafieldOwnersArticlesQueryVariables = AdminTypes.Exact<{
 
 export type LinguvaMetafieldOwnersArticlesQuery = { articles: { nodes: Array<(
       Pick<AdminTypes.Article, 'id'>
-      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>> } }
+      & { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } }
     )>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } };
+
+export type LinguvaOwnerMetafieldsAfterQueryVariables = AdminTypes.Exact<{
+  id: AdminTypes.Scalars['ID']['input'];
+  after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+}>;
+
+
+export type LinguvaOwnerMetafieldsAfterQuery = { node?: AdminTypes.Maybe<{ metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } } | { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } }> };
 
 export type LinguvaRecentProductsQueryVariables = AdminTypes.Exact<{
   first: AdminTypes.Scalars['Int']['input'];
   after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+  query: AdminTypes.Scalars['String']['input'];
 }>;
 
 
@@ -135,6 +144,7 @@ export type LinguvaRecentProductsQuery = { products: { nodes: Array<Pick<AdminTy
 export type LinguvaRecentCollectionsQueryVariables = AdminTypes.Exact<{
   first: AdminTypes.Scalars['Int']['input'];
   after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+  query: AdminTypes.Scalars['String']['input'];
 }>;
 
 
@@ -143,6 +153,7 @@ export type LinguvaRecentCollectionsQuery = { collections: { nodes: Array<Pick<A
 export type LinguvaRecentPagesQueryVariables = AdminTypes.Exact<{
   first: AdminTypes.Scalars['Int']['input'];
   after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+  query: AdminTypes.Scalars['String']['input'];
 }>;
 
 
@@ -151,6 +162,7 @@ export type LinguvaRecentPagesQuery = { pages: { nodes: Array<Pick<AdminTypes.Pa
 export type LinguvaRecentArticlesQueryVariables = AdminTypes.Exact<{
   first: AdminTypes.Scalars['Int']['input'];
   after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
+  query: AdminTypes.Scalars['String']['input'];
 }>;
 
 
@@ -199,6 +211,11 @@ export type LinguvaSearchBlogsQueryVariables = AdminTypes.Exact<{
 
 
 export type LinguvaSearchBlogsQuery = { blogs: { nodes: Array<Pick<AdminTypes.Blog, 'id'>> } };
+
+export type LinguvaShopTimeZoneQueryVariables = AdminTypes.Exact<{ [key: string]: never; }>;
+
+
+export type LinguvaShopTimeZoneQuery = { shop: Pick<AdminTypes.Shop, 'ianaTimezone'> };
 
 export type LinguvaTranslatableResourcesQueryVariables = AdminTypes.Exact<{
   resourceType: AdminTypes.TranslatableResourceType;
@@ -320,20 +337,22 @@ interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaTranslatableByIds($ids: [ID!]!, $locale: String!) {\n    translatableResourcesByIds(resourceIds: $ids, first: 100) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n    }\n  }\n": {return: LinguvaTranslatableByIdsQuery, variables: LinguvaTranslatableByIdsQueryVariables},
   "#graphql\n  query LinguvaNestedImages($id: ID!, $type: TranslatableResourceType!, $locale: String!) {\n    translatableResource(resourceId: $id) {\n      nestedTranslatableResources(resourceType: $type, first: 10) {\n        nodes {\n          resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n        }\n      }\n    }\n  }\n": {return: LinguvaNestedImagesQuery, variables: LinguvaNestedImagesQueryVariables},
   "#graphql\n  query LinguvaOwnerMetafields($id: ID!) {\n    node(id: $id) {\n      ... on HasMetafields {\n        metafields(first: 100) {\n          nodes {\n            id\n            namespace\n            key\n            type\n            translatable\n            definition {\n              name\n            }\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaOwnerMetafieldsQuery, variables: LinguvaOwnerMetafieldsQueryVariables},
-  "#graphql\n  query LinguvaMetafieldOwnersProducts($first: Int!, $after: String) {\n    products(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersProductsQuery, variables: LinguvaMetafieldOwnersProductsQueryVariables},
-  "#graphql\n  query LinguvaMetafieldOwnersCollections($first: Int!, $after: String) {\n    collections(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersCollectionsQuery, variables: LinguvaMetafieldOwnersCollectionsQueryVariables},
-  "#graphql\n  query LinguvaMetafieldOwnersPages($first: Int!, $after: String) {\n    pages(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersPagesQuery, variables: LinguvaMetafieldOwnersPagesQueryVariables},
-  "#graphql\n  query LinguvaMetafieldOwnersArticles($first: Int!, $after: String) {\n    articles(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersArticlesQuery, variables: LinguvaMetafieldOwnersArticlesQueryVariables},
-  "#graphql\n  query LinguvaRecentProducts($first: Int!, $after: String) {\n    products(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentProductsQuery, variables: LinguvaRecentProductsQueryVariables},
-  "#graphql\n  query LinguvaRecentCollections($first: Int!, $after: String) {\n    collections(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentCollectionsQuery, variables: LinguvaRecentCollectionsQueryVariables},
-  "#graphql\n  query LinguvaRecentPages($first: Int!, $after: String) {\n    pages(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentPagesQuery, variables: LinguvaRecentPagesQueryVariables},
-  "#graphql\n  query LinguvaRecentArticles($first: Int!, $after: String) {\n    articles(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentArticlesQuery, variables: LinguvaRecentArticlesQueryVariables},
+  "#graphql\n  query LinguvaMetafieldOwnersProducts($first: Int!, $after: String) {\n    products(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersProductsQuery, variables: LinguvaMetafieldOwnersProductsQueryVariables},
+  "#graphql\n  query LinguvaMetafieldOwnersCollections($first: Int!, $after: String) {\n    collections(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersCollectionsQuery, variables: LinguvaMetafieldOwnersCollectionsQueryVariables},
+  "#graphql\n  query LinguvaMetafieldOwnersPages($first: Int!, $after: String) {\n    pages(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersPagesQuery, variables: LinguvaMetafieldOwnersPagesQueryVariables},
+  "#graphql\n  query LinguvaMetafieldOwnersArticles($first: Int!, $after: String) {\n    articles(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersArticlesQuery, variables: LinguvaMetafieldOwnersArticlesQueryVariables},
+  "#graphql\n  query LinguvaOwnerMetafieldsAfter($id: ID!, $after: String) {\n    node(id: $id) {\n      ... on HasMetafields {\n        metafields(first: 100, after: $after) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaOwnerMetafieldsAfterQuery, variables: LinguvaOwnerMetafieldsAfterQueryVariables},
+  "#graphql\n  query LinguvaRecentProducts($first: Int!, $after: String, $query: String!) {\n    products(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentProductsQuery, variables: LinguvaRecentProductsQueryVariables},
+  "#graphql\n  query LinguvaRecentCollections($first: Int!, $after: String, $query: String!) {\n    collections(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentCollectionsQuery, variables: LinguvaRecentCollectionsQueryVariables},
+  "#graphql\n  query LinguvaRecentPages($first: Int!, $after: String, $query: String!) {\n    pages(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentPagesQuery, variables: LinguvaRecentPagesQueryVariables},
+  "#graphql\n  query LinguvaRecentArticles($first: Int!, $after: String, $query: String!) {\n    articles(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentArticlesQuery, variables: LinguvaRecentArticlesQueryVariables},
   "#graphql\n  query LinguvaRecentBlogs($first: Int!, $after: String, $query: String!) {\n    blogs(first: $first, after: $after, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentBlogsQuery, variables: LinguvaRecentBlogsQueryVariables},
   "#graphql\n  query LinguvaSearchProducts($query: String!) {\n    products(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchProductsQuery, variables: LinguvaSearchProductsQueryVariables},
   "#graphql\n  query LinguvaSearchCollections($query: String!) {\n    collections(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchCollectionsQuery, variables: LinguvaSearchCollectionsQueryVariables},
   "#graphql\n  query LinguvaSearchPages($query: String!) {\n    pages(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchPagesQuery, variables: LinguvaSearchPagesQueryVariables},
   "#graphql\n  query LinguvaSearchArticles($query: String!) {\n    articles(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchArticlesQuery, variables: LinguvaSearchArticlesQueryVariables},
   "#graphql\n  query LinguvaSearchBlogs($query: String!) {\n    blogs(first: 100, query: $query) {\n      nodes {\n        id\n      }\n    }\n  }\n": {return: LinguvaSearchBlogsQuery, variables: LinguvaSearchBlogsQueryVariables},
+  "#graphql\n  query LinguvaShopTimeZone {\n    shop {\n      ianaTimezone\n    }\n  }\n": {return: LinguvaShopTimeZoneQuery, variables: LinguvaShopTimeZoneQueryVariables},
   "#graphql\n  query LinguvaTranslatableResources(\n    $resourceType: TranslatableResourceType!\n    $first: Int!\n    $after: String\n    $locale: String!\n  ) {\n    translatableResources(resourceType: $resourceType, first: $first, after: $after) {\n      nodes {\n        resourceId\n        translatableContent {\n          key\n          value\n          digest\n          locale\n          type\n        }\n        translations(locale: $locale) {\n          key\n          value\n          outdated\n          updatedAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourcesQuery, variables: LinguvaTranslatableResourcesQueryVariables},
   "#graphql\n  query LinguvaTranslatableResource($resourceId: ID!, $locale: String!) {\n    translatableResource(resourceId: $resourceId) {\n      resourceId\n      translatableContent {\n        key\n        value\n        digest\n        locale\n        type\n      }\n      translations(locale: $locale) {\n        key\n        value\n        outdated\n        updatedAt\n      }\n    }\n  }\n": {return: LinguvaTranslatableResourceQuery, variables: LinguvaTranslatableResourceQueryVariables},
   "#graphql\n  query LinguvaProbeTranslatable($resourceType: TranslatableResourceType!) {\n    translatableResources(resourceType: $resourceType, first: 1) {\n      nodes {\n        resourceId\n      }\n    }\n  }\n": {return: LinguvaProbeTranslatableQuery, variables: LinguvaProbeTranslatableQueryVariables},

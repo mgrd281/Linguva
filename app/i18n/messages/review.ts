@@ -15,6 +15,7 @@ export const en = {
   "review.saved.published": "Published: {count}",
   "review.saved.stale": "Original or translation changed in the meantime, not published: {count}",
   "review.saved.failed": "Failed: {count}",
+  "review.saved.changed": "Changed since you opened this page (a newer translation replaced it), left as it is: {count}",
   "review.rejected.body": {
     one: "{count} draft discarded. It won't be published.",
     other: "{count} drafts discarded. They won't be published.",
@@ -67,6 +68,7 @@ export const de: Translation<typeof en> = {
   "review.saved.published": "Veröffentlicht: {count}",
   "review.saved.stale": "Original oder Übersetzung inzwischen geändert, nicht veröffentlicht: {count}",
   "review.saved.failed": "Fehlgeschlagen: {count}",
+  "review.saved.changed": "Seit dem Öffnen dieser Seite geändert (eine neuere Übersetzung hat sie ersetzt), unverändert gelassen: {count}",
   "review.rejected.body": {
     one: "{count} Entwurf verworfen. Er wird nicht veröffentlicht.",
     other: "{count} Entwürfe verworfen. Sie werden nicht veröffentlicht.",
@@ -120,6 +122,7 @@ export const fr: Translation<typeof en> = {
   "review.saved.published": "Publiées : {count}",
   "review.saved.stale": "Non publiées, car l'original ou la traduction a été modifié entre-temps : {count}",
   "review.saved.failed": "Échecs : {count}",
+  "review.saved.changed": "Modifiées depuis l'ouverture de cette page (une traduction plus récente les a remplacées), laissées telles quelles : {count}",
   "review.rejected.body": {
     one: "{count} brouillon écarté. Il ne sera pas publié.",
     other: "{count} brouillons écartés. Ils ne seront pas publiés.",
@@ -173,6 +176,7 @@ export const es: Translation<typeof en> = {
   "review.saved.published": "Publicadas: {count}",
   "review.saved.stale": "No publicadas porque el original o la traducción cambiaron mientras tanto: {count}",
   "review.saved.failed": "Fallidas: {count}",
+  "review.saved.changed": "Cambiadas desde que abriste esta página (una traducción más reciente las reemplazó), se dejaron como estaban: {count}",
   "review.rejected.body": {
     one: "{count} borrador descartado. No se publicará.",
     other: "{count} borradores descartados. No se publicarán.",

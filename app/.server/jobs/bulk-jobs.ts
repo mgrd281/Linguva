@@ -5,7 +5,9 @@ import type {
 } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { refreshCoverageOverlays } from "../coverage/items";
+import { finishSmartRunIfDone } from "../smart/finish";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 
 export const ACTIVE_JOB_STATUSES = ["PENDING", "DISCOVERING", "RUNNING"] as const;
 /** requestedBy of jobs created by automatic translation (webhooks). */
@@ -82,34 +84,23 @@ export async function createBulkJob(
         where: { shopId_idempotencyKey: { shopId: input.shopId, idempotencyKey: input.idempotencyKey } },
       });
       if (repeated) return { job: repeated, created: false };
-      const active = await tx.translationJob.findFirst({
+      const active = await tx.translationJob.findMany({
         where: {
           shopId: input.shopId,
           resourceType: input.resourceType,
           targetLocale: input.targetLocale,
           status: { in: [...ACTIVE_JOB_STATUSES] },
         },
+        orderBy: { createdAt: "asc" },
       });
       const fieldScope = input.fieldScope ?? "ALL";
       const includeAttached = Boolean(input.includeAttached) && fieldScope === "ALL" && ATTACHED_BULK_TYPES.has(input.resourceType);
-      if (active?.requestedBy === AUTO_REQUESTED_BY) {
-        // An automatic job holds a few changed resources: it becomes the
-        // requested bulk job (its items stay, discovery adds the rest).
-        const job = await tx.translationJob.update({
-          where: { id: active.id },
-          data: {
-            requestedBy: input.requestedBy,
-            idempotencyKey: input.idempotencyKey,
-            overwriteProtected: input.overwriteProtected ?? false,
-            fieldScope,
-            includeAttached,
-            discoveryDone: false,
-            discoveryCursor: null,
-          },
-        });
-        return { job, created: true };
-      }
-      if (active) return { job: active, created: false };
+      // A merchant's job or a smart check's job is kept, like any other active job.
+      const other = active.find((job) => !isAutomaticJob(job));
+      if (other) return { job: other, created: false };
+      // A narrower job (search listings only) would leave the automatic job's pending items
+      // without their other fields: the automatic job finishes first.
+      if (active.length && fieldScope !== "ALL") return { job: active[0]!, created: false };
       const settings = await tx.shopSettings.findUnique({ where: { shopId: input.shopId } });
       const job = await tx.translationJob.create({
         data: {
@@ -125,10 +116,33 @@ export async function createBulkJob(
           includeAttached,
         },
       });
+      // An automatic job (also the smart schedule's real-time one) hands over what it holds.
+      for (const automatic of active) await handOverAutomaticJobTx(tx, automatic, job);
       return { job, created: true };
     },
     client,
   );
+}
+
+/** A job of automatic translation (webhooks), also the smart schedule's real-time one (no run). */
+export function isAutomaticJob(job: Pick<TranslationJob, "requestedBy" | "smartRunId">): boolean {
+  return job.requestedBy === AUTO_REQUESTED_BY || (job.requestedBy === SMART_REQUESTED_BY && !job.smartRunId);
+}
+
+/**
+ * An automatic job hands over to the job taking its place (a merchant's
+ * bulk job or a smart check's): its items that haven't started move there
+ * and run once, under that job's rules. What it did before stays its own,
+ * so the new job counts only its own work and translates every resource it
+ * finds, also one the automatic job finished earlier today. It completes
+ * once its running items are done (they keep their resources busy).
+ */
+export async function handOverAutomaticJobTx(tx: TenantTx, from: TranslationJob, to: TranslationJob) {
+  const moved = await tx.translationJobItem.updateMany({ where: { shopId: from.shopId, jobId: from.id, status: "PENDING" }, data: { jobId: to.id } });
+  if (moved.count) await tx.translationJob.update({ where: { id: to.id }, data: { totalItems: { increment: moved.count } } });
+  const left = await tx.translationJob.update({ where: { id: from.id }, data: { totalItems: { decrement: moved.count }, discoveryDone: true } });
+  await maybeComplete(tx, left);
+  return moved.count;
 }
 
 /** Returns the job only if it belongs to the shop (RLS + explicit filter). */
@@ -289,7 +303,6 @@ export interface ItemResult {
   errorCode?: string | null;
   fieldsTranslated?: number;
   fieldsRejected?: number;
-  charsBilled?: number;
   memoryHits?: number;
   charsSaved?: number;
   protectedSkipped?: number;
@@ -318,7 +331,6 @@ export async function finishItem(
           errorCode: result.errorCode ?? null,
           fieldsTranslated: result.fieldsTranslated ?? 0,
           fieldsRejected: result.fieldsRejected ?? 0,
-          charsBilled: result.charsBilled ?? 0,
           finishedAt: new Date(),
         },
       });
@@ -334,21 +346,45 @@ export async function finishItem(
         where: { id: item.jobId },
         data: {
           ...counter,
-          charsBilled: { increment: result.charsBilled ?? 0 },
           memoryHits: { increment: result.memoryHits ?? 0 },
           charsSaved: { increment: result.charsSaved ?? 0 },
           protectedSkipped: { increment: result.protectedSkipped ?? 0 },
         },
       });
-      await maybeComplete(tx, job);
-      return { resourceGid: item.resourceGid, locale: job.targetLocale };
+      const after = await maybeComplete(tx, job);
+      return { resourceGid: item.resourceGid, locale: job.targetLocale, smartRunId: after.status === "COMPLETED" ? after.smartRunId : null };
     },
     client,
   );
   if (!finished) return false;
   // Coverage shows the attempt (failed, or drafts made) right away.
   await refreshCoverageOverlays(shopId, [finished], client);
+  // The last job of a smart run finished: the run may be done.
+  if (finished.smartRunId) await finishSmartRunIfDone(shopId, finished.smartRunId, client);
   return true;
+}
+
+/**
+ * Adds what a provider call billed to the item and its job as soon as it is
+ * billed (recordBilled is called after every settled call, also one that
+ * fails later), so both totals equal the usage ledger.
+ */
+export async function recordBilled(
+  shopId: string,
+  itemId: string,
+  jobId: string,
+  chars: number,
+  client: PrismaClient = defaultClient,
+) {
+  if (chars <= 0) return;
+  await withTenant(
+    shopId,
+    async (tx) => {
+      await tx.translationJobItem.updateMany({ where: { id: itemId, shopId }, data: { charsBilled: { increment: chars } } });
+      await tx.translationJob.updateMany({ where: { id: jobId, shopId }, data: { charsBilled: { increment: chars } } });
+    },
+    client,
+  );
 }
 
 /** Stops a job because of a condition that affects all its items. */
@@ -358,15 +394,19 @@ export async function stopJob(
   errorCode: string,
   client: PrismaClient = defaultClient,
 ) {
-  await withTenant(
+  const smartRunId = await withTenant(
     shopId,
-    (tx) =>
-      tx.translationJob.updateMany({
+    async (tx) => {
+      const stopped = await tx.translationJob.updateMany({
         where: { id: jobId, shopId, status: { in: [...ACTIVE_JOB_STATUSES] } },
         data: { status: "FAILED", errorCode, finishedAt: new Date() },
-      }),
+      });
+      if (!stopped.count) return null;
+      return (await tx.translationJob.findFirst({ where: { id: jobId, shopId }, select: { smartRunId: true } }))?.smartRunId ?? null;
+    },
     client,
   );
+  if (smartRunId) await finishSmartRunIfDone(shopId, smartRunId, client);
 }
 
 export async function cancelJob(
@@ -420,7 +460,8 @@ export async function retryJobItems(
         where: { jobId, shopId, status: { in: statuses } },
         select: { id: true, status: true },
       });
-      const rediscover = job.status === "FAILED" && !job.discoveryDone;
+      // A smart check's job is filled by its run's measurement, never by a discovery of its own.
+      const rediscover = job.status === "FAILED" && !job.discoveryDone && !job.smartRunId;
       if (items.length === 0 && !rediscover) return { itemIds: [], rediscover: false };
       const failed = items.filter((i) => i.status !== "CANCELLED").length;
       const cancelled = items.length - failed;
@@ -433,7 +474,7 @@ export async function retryJobItems(
       await tx.translationJob.update({
         where: { id: jobId },
         data: {
-          status: job.discoveryDone ? "RUNNING" : "DISCOVERING",
+          status: job.discoveryDone || job.smartRunId ? "RUNNING" : "DISCOVERING",
           errorCode: null,
           finishedAt: null,
           failedItems: { decrement: failed },

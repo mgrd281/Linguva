@@ -15,7 +15,7 @@ import { CoverageMeter, itemsHref, percentLabel } from "../components/Coverage";
 import { CountryStatusBar } from "../components/CountryStatus";
 import type { MissingReason } from "../lib/country-coverage";
 import type { I18n, MessageKey } from "../i18n/i18n";
-import { gapEntry, gapLine, languageList, upperFirst } from "../lib/name-lists";
+import { gapEntry, gapLine, inParentheses, languageList, upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -144,6 +144,12 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
         title: t("overview.next.unread.label"),
         detail: t("overview.next.unread.detail"),
         action: { href: `/app/coverage?lang=${encodeURIComponent(step.locale)}`, label: t("overview.languages.updateCoverage") },
+      };
+    case "access":
+      return {
+        title: t("overview.next.access.label", { count: step.types }),
+        detail: t("overview.next.access.detail"),
+        action: step.href ? { href: step.href, label: t("coverage.types.allowAccess") } : { href: "/app/coverage", label: t("overview.languages.updateCoverage") },
       };
     case "done":
       return {
@@ -293,7 +299,7 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
     return (
       <s-section heading={t("overview.languages.heading")}>
         <s-stack direction="block" gap="base">
-          <s-paragraph>{t("overview.languages.onlyPrimary", { primary: primaryName(data, i18n) })}</s-paragraph>
+          <s-paragraph>{t("overview.languages.onlyPrimary", { primary: inParentheses(primaryName(data, i18n)) })}</s-paragraph>
           {manage}
         </s-stack>
       </s-section>
@@ -316,6 +322,12 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
             </s-text>
           </s-stack>
         ) : null}
+        {anyMeasured && data.unreadable ? (
+          <s-stack direction="inline" gap="small" alignItems="center">
+            <s-text color="subdued">{t("overview.languages.unreadable", { count: data.unreadable.types })}</s-text>
+            {data.unreadable.href ? <s-link href={data.unreadable.href}>{t("coverage.types.allowAccess")}</s-link> : null}
+          </s-stack>
+        ) : null}
         {anyMeasured ? (
           // A native list: Polaris' list roles fail the accessibility check.
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 12 }}>
@@ -328,11 +340,14 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
                 : complete
                   ? `/app/coverage?lang=${encodeURIComponent(row.locale)}`
                   : itemsHref({ lang: row.locale, state: "incomplete" });
+              // Content Linguva can't read was never checked: not "fully translated".
               const label = !counted
                 ? t("overview.languages.translateLabel", { language: name })
-                : complete
-                  ? t("overview.languages.completeLabel", { language: name })
-                  : t("overview.languages.missingLabel", { language: name, percent: percentLabel(i18n, row.complete, row.total) });
+                : complete && row.unchecked
+                  ? t("overview.languages.uncheckedLabel", { language: name, percent: percentLabel(i18n, row.complete, row.total) })
+                  : complete
+                    ? t("overview.languages.completeLabel", { language: name })
+                    : t("overview.languages.missingLabel", { language: name, percent: percentLabel(i18n, row.complete, row.total) });
               return (
                 <li key={row.locale}>
                   <s-grid gridTemplateColumns="minmax(0, 2fr) minmax(0, 3fr)" alignItems="center" columnGap="base">

@@ -63,6 +63,10 @@ export const en = {
   "editor.toolbar.leftThisMonth": "{remaining} of {limit} AI characters left this month",
   "editor.toolbar.leftToday": "{remaining} AI characters left today ({monthRemaining} of {limit} this month)",
   "editor.toolbar.notConfigured": "AI translation isn't configured",
+  "editor.smart.exclude": "Leave out of the smart schedule",
+  "editor.smart.excludeDetails": "The smart schedule leaves this item and its custom fields alone, in every language. You can still translate it here.",
+  "editor.smart.excluded": "Left out of the smart schedule.",
+  "editor.smart.included": "Back in the smart schedule.",
   "editor.fill.memory": "Similar translations from your memory are filled in below. Check them carefully, then publish.",
   "editor.fill.memoryNone": "No similar translations found in your memory.",
   "editor.fill.ai": "AI drafts are filled in below. Review them, then publish.",
@@ -126,6 +130,7 @@ export const en = {
   "editor.history.origin.aiApproved": "AI, approved",
   "editor.history.origin.ai": "AI",
   "editor.history.origin.manual": "Manual",
+  "editor.history.removed": "Translation removed by a person (not translated automatically again until the original changes)",
 
   "editor.attached.heading": "Images and custom fields",
   "editor.attached.unavailable": "Image alt text and custom fields couldn't be loaded. Reload the page to try again.",
@@ -225,6 +230,10 @@ export const de: Translation<typeof en> = {
   "editor.toolbar.leftThisMonth": "Noch {remaining} von {limit} KI-Zeichen in diesem Monat",
   "editor.toolbar.leftToday": "Heute noch {remaining} KI-Zeichen ({monthRemaining} von {limit} in diesem Monat)",
   "editor.toolbar.notConfigured": "KI-Übersetzung ist nicht eingerichtet",
+  "editor.smart.exclude": "Aus dem intelligenten Zeitplan ausnehmen",
+  "editor.smart.excludeDetails": "Der intelligente Zeitplan lässt diesen Eintrag und seine benutzerdefinierten Felder in allen Sprachen aus. Hier kannst du ihn weiterhin übersetzen.",
+  "editor.smart.excluded": "Aus dem intelligenten Zeitplan ausgenommen.",
+  "editor.smart.included": "Wieder im intelligenten Zeitplan.",
   "editor.fill.memory":
     "Ähnliche Übersetzungen aus deinem Übersetzungsspeicher sind unten eingetragen. Prüfe sie sorgfältig und veröffentliche sie dann.",
   "editor.fill.memoryNone": "Keine ähnlichen Übersetzungen in deinem Übersetzungsspeicher gefunden.",
@@ -289,6 +298,7 @@ export const de: Translation<typeof en> = {
   "editor.history.origin.aiApproved": "KI, freigegeben",
   "editor.history.origin.ai": "KI",
   "editor.history.origin.manual": "Manuell",
+  "editor.history.removed": "Übersetzung von einer Person entfernt (wird erst nach einer Änderung des Originals wieder automatisch übersetzt)",
 
   "editor.attached.heading": "Bilder und benutzerdefinierte Felder",
   "editor.attached.unavailable":
@@ -392,6 +402,10 @@ export const fr: Translation<typeof en> = {
   "editor.toolbar.leftThisMonth": "Il reste {remaining} caractères d'IA sur {limit} ce mois-ci",
   "editor.toolbar.leftToday": "Il reste {remaining} caractères d'IA aujourd'hui ({monthRemaining} sur {limit} ce mois-ci)",
   "editor.toolbar.notConfigured": "La traduction par IA n'est pas configurée",
+  "editor.smart.exclude": "Exclure de la planification intelligente",
+  "editor.smart.excludeDetails": "La planification intelligente laisse cet élément et ses champs personnalisés tels quels, dans toutes les langues. Vous pouvez toujours le traduire ici.",
+  "editor.smart.excluded": "Exclu de la planification intelligente.",
+  "editor.smart.included": "De nouveau dans la planification intelligente.",
   "editor.fill.memory":
     "Des traductions similaires issues de votre mémoire ont été insérées ci-dessous. Vérifiez-les attentivement, puis publiez-les.",
   "editor.fill.memoryNone": "Aucune traduction similaire trouvée dans votre mémoire.",
@@ -459,6 +473,7 @@ export const fr: Translation<typeof en> = {
   "editor.history.origin.aiApproved": "IA, approuvée",
   "editor.history.origin.ai": "IA",
   "editor.history.origin.manual": "Manuelle",
+  "editor.history.removed": "Traduction supprimée par une personne (pas de nouvelle traduction automatique tant que l'original ne change pas)",
 
   "editor.attached.heading": "Images et champs personnalisés",
   "editor.attached.unavailable":
@@ -561,6 +576,10 @@ export const es: Translation<typeof en> = {
   "editor.toolbar.leftThisMonth": "Quedan {remaining} de {limit} caracteres de IA este mes",
   "editor.toolbar.leftToday": "Quedan {remaining} caracteres de IA hoy ({monthRemaining} de {limit} este mes)",
   "editor.toolbar.notConfigured": "La traducción con IA no está configurada",
+  "editor.smart.exclude": "Excluir de la programación inteligente",
+  "editor.smart.excludeDetails": "La programación inteligente deja este elemento y sus campos personalizados como están, en todos los idiomas. Aquí puedes seguir traduciéndolo.",
+  "editor.smart.excluded": "Excluido de la programación inteligente.",
+  "editor.smart.included": "De nuevo en la programación inteligente.",
   "editor.fill.memory": "Abajo se rellenaron traducciones similares de tu memoria. Revísalas con atención y luego publícalas.",
   "editor.fill.memoryNone": "No se encontraron traducciones similares en tu memoria.",
   "editor.fill.ai": "Abajo se rellenaron los borradores de IA. Revísalos y luego publícalos.",
@@ -626,6 +645,7 @@ export const es: Translation<typeof en> = {
   "editor.history.origin.aiApproved": "IA, aprobada",
   "editor.history.origin.ai": "IA",
   "editor.history.origin.manual": "Manual",
+  "editor.history.removed": "Traducción eliminada por una persona (no se vuelve a traducir automáticamente hasta que cambie el original)",
 
   "editor.attached.heading": "Imágenes y campos personalizados",
   "editor.attached.unavailable":

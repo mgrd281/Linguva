@@ -127,7 +127,8 @@ export function addCounts(into: StateCounts, from: Partial<StateCounts>) {
 export function coveragePercent(complete: number, total: number): number | null {
   if (total <= 0) return null;
   if (complete >= total) return 100;
-  return Math.floor((complete / total) * 100);
+  // Integer math: (29 / 100) * 100 is 28.999… in floating point.
+  return Math.floor((complete * 100) / total);
 }
 
 /** "—" (nothing to count), "<1" (some, but under one percent) or the rounded-down number. */

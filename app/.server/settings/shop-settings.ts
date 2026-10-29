@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "../tenancy/with-tenant";
+import { AUTO_REQUESTED_BY } from "../jobs/bulk-jobs";
 
 /**
  * Version of the AI data-processing notice the merchant accepted. Bump it
@@ -172,13 +173,31 @@ export async function setAutoTranslate(
   const locales = [...new Set(input.locales)].filter((l) => input.allowedLocales.includes(l)).slice(0, 20);
   const enabled = input.enabled && locales.length > 0;
   const wasOn = (await getShopSettings(input.shopId, client)).autoTranslateNew;
-  await updateSettings(
+  await withTenant(
     input.shopId,
-    {
-      autoTranslateNew: enabled,
-      autoTranslateLocales: enabled ? locales : [],
-      // Changing the languages keeps the position; off clears it.
-      ...(enabled ? (wasOn ? {} : { autoSweptAt: new Date() }) : { autoSweptAt: null }),
+    async (tx) => {
+      await ensureSettingsRow(tx, input.shopId);
+      await tx.shopSettings.update({
+        where: { shopId: input.shopId },
+        data: {
+          autoTranslateNew: enabled,
+          autoTranslateLocales: enabled ? locales : [],
+          // Changing the languages keeps the position; off clears it. A new choice lifts a pause.
+          ...(enabled ? (wasOn ? {} : { autoSweptAt: new Date() }) : { autoSweptAt: null }),
+          autoPausedUntil: null,
+          autoPauseReason: null,
+        },
+      });
+      // Off (or a language dropped) stops what is already queued: those items aren't translated.
+      await tx.translationJob.updateMany({
+        where: {
+          shopId: input.shopId,
+          requestedBy: AUTO_REQUESTED_BY,
+          status: { in: ["PENDING", "DISCOVERING", "RUNNING"] },
+          ...(enabled ? { targetLocale: { notIn: locales } } : {}),
+        },
+        data: { status: "CANCELLED", cancelRequestedAt: new Date(), finishedAt: new Date(), errorCode: "AUTO_OFF" },
+      });
     },
     client,
   );
@@ -192,4 +211,43 @@ export async function setAutoTranslate(
     }],
   });
   return { enabled, locales: enabled ? locales : [] };
+}
+
+/** Stops that pause automatic translation, and how long. */
+const PAUSE_FOR: Record<string, (now: Date) => Date> = {
+  // The daily caps reset at midnight UTC, the allowance with the next month.
+  DAILY_LIMIT: (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)),
+  PLATFORM_LIMIT: (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)),
+  QUOTA_EXCEEDED: (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
+  // The provider is missing or refuses: try again in an hour.
+  AI_NOT_CONFIGURED: (now) => new Date(now.getTime() + 60 * 60_000),
+  PROVIDER_AUTH: (now) => new Date(now.getTime() + 60 * 60_000),
+  PROVIDER_QUOTA: (now) => new Date(now.getTime() + 60 * 60_000),
+};
+
+/** Whether automatic translation waits for a limit or the provider (autoPauseAfterStop). */
+export function autoTranslatePaused(settings: { autoPausedUntil: Date | null }, now = new Date()): boolean {
+  return settings.autoPausedUntil !== null && settings.autoPausedUntil > now;
+}
+
+/**
+ * An automatic job stopped: for a limit or the provider, automatic
+ * translation pauses until it can work again, instead of creating a failed
+ * job for every change. The periodic check keeps its position meanwhile, so
+ * the changes are translated after the pause. Returns the end of the pause,
+ * or null for a stop that isn't a pause.
+ */
+export async function autoPauseAfterStop(shopId: string, code: string, now = new Date(), client: PrismaClient = defaultClient): Promise<Date | null> {
+  const until = PAUSE_FOR[code]?.(now) ?? null;
+  if (!until) return null;
+  await withTenant(
+    shopId,
+    (tx) =>
+      tx.shopSettings.updateMany({
+        where: { shopId, autoTranslateNew: true },
+        data: { autoPausedUntil: until, autoPauseReason: code },
+      }),
+    client,
+  );
+  return until;
 }

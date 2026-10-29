@@ -8,19 +8,15 @@ import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { reliableEta } from "../lib/eta";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, isBulkResourceType, jobOutcomes, listProblemItems } from "../.server/jobs/bulk-jobs";
+import { AUTO_REQUESTED_BY, cancelJob, getJobForShop, jobOutcomes, listProblemItems } from "../.server/jobs/bulk-jobs";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
-import { editorPathFor, numericId, type TranslatableKind } from "../lib/resource-kinds";
+import { editorPathFor, numericId } from "../lib/resource-kinds";
+import { SMART_REQUESTED_BY } from "../lib/smart-auto";
 import { jobProgress } from "../lib/job-display";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
 import { itemOutcome, jobErrorMessage, jobStatus, kindLabel, kindPlural } from "../i18n/labels";
 import type { I18n } from "../i18n/i18n";
-
-/** The content type named on the page (named in the interface language). */
-function pageKind(resourceType: string): TranslatableKind {
-  return isBulkResourceType(resourceType) ? resourceType : "PRODUCT";
-}
 
 const ACTIVE = new Set(["PENDING", "DISCOVERING", "RUNNING"]);
 
@@ -42,9 +38,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       id: job.id,
       status: job.status,
       targetLocale: job.targetLocale,
-      kind: pageKind(job.resourceType),
+      // Also a smart check's images or custom fields of an owner type.
+      kind: job.resourceType,
       fieldScope: job.fieldScope,
       automatic: job.requestedBy === AUTO_REQUESTED_BY,
+      smart: job.requestedBy === SMART_REQUESTED_BY,
       errorCode: job.errorCode,
       charsBilled: job.charsBilled,
       memoryHits: job.memoryHits,
@@ -184,6 +182,11 @@ export default function JobDetail() {
           </s-paragraph>
           {job.fieldScope === "SEO" ? <s-paragraph>{t("jobs.detail.scopeSeo")}</s-paragraph> : null}
           {job.automatic ? <s-paragraph>{t("jobs.detail.automatic", { kind: kind.plural })}</s-paragraph> : null}
+          {job.smart ? (
+            <s-paragraph>
+              {t("jobs.detail.smart")} <s-link href="/app/settings/automatic">{t("jobs.detail.smartLink")}</s-link>
+            </s-paragraph>
+          ) : null}
           <s-paragraph>
             {[
               t("jobs.detail.usage.ai", { count: job.charsBilled }),

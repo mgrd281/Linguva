@@ -172,14 +172,14 @@ describe("review approval is explicit", () => {
     const foreign = await listPendingDrafts(b.shop.id, {}, app);
 
     const none = await approveDrafts({ admin: a.store.asAdmin(), shopId: a.shop.id, actorId: "1", draftIds: [] }, app);
-    expect(none).toEqual({ published: 0, stale: 0, failed: 0 });
+    expect(none).toEqual({ published: 0, stale: 0, failed: 0, changed: 0 });
 
     await rejectDrafts(a.shop.id, [first!.id], "1", app);
     const afterReject = await approveDrafts(
       { admin: a.store.asAdmin(), shopId: a.shop.id, actorId: "1", draftIds: [first!.id, ...foreign.map((d) => d.id)] },
       app,
     );
-    expect(afterReject).toEqual({ published: 0, stale: 0, failed: 0 });
+    expect(afterReject).toEqual({ published: 0, stale: 0, failed: 0, changed: 0 });
     expect(a.store.calls).not.toContain("LinguvaTranslationsRegister");
     expect(b.store.calls).not.toContain("LinguvaTranslationsRegister");
 

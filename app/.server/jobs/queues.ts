@@ -13,7 +13,11 @@ import { z } from "zod";
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import { withTenant } from "../tenancy/with-tenant";
-import { finishItem, stopJob } from "./bulk-jobs";
+import { AUTO_REQUESTED_BY, finishItem, stopJob } from "./bulk-jobs";
+import { autoPauseAfterStop } from "../settings/shop-settings";
+import { smartPauseAfterStop } from "../smart/config";
+import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
+import { currentShopLocales } from "../locales/current-locales";
 import { classifyError } from "./errors";
 import {
   processItem,
@@ -64,14 +68,18 @@ const coveragePayloadSchema = z
     cursor: z.string().max(1000).nullable(),
   })
   .strict();
-const refreshPayloadSchema = z
-  .object({ shopId: uuid, resourceGid: z.string().regex(/^gid:\/\/shopify\/(Product|Collection)\/\d{1,20}$/) })
-  .strict();
+/**
+ * Resources whose coverage is read again when they change: products and
+ * collections (webhooks), pages, blog posts and blogs (the periodic check).
+ */
+export const COVERAGE_REFRESH_GID = /^gid:\/\/shopify\/(Product|Collection|Page|Article|Blog)\/\d{1,20}$/;
+const refreshPayloadSchema = z.object({ shopId: uuid, resourceGid: z.string().regex(COVERAGE_REFRESH_GID) }).strict();
 const autoPayloadSchema = z
   .object({
     shopId: uuid,
     resourceGid: z.string().max(100),
     resourceType: z.enum(SWEPT_TYPES),
+    changedAt: z.string().datetime().optional(),
   })
   .strict()
   .refine((p) => AUTO_GID[p.resourceType].test(p.resourceGid));
@@ -201,15 +209,25 @@ export async function enqueueCoveragePage(queues: Queues, payload: CoveragePageP
 /** How long a refresh waits, so several saves in a row are read once. */
 export const COVERAGE_REFRESH_DELAY_MS = 30_000;
 
-/** Queues a coverage refresh of one product or collection (after its webhook). */
+/** Part of a refresh's queue job id per resource type (ids are numeric within a type only). */
+const REFRESH_ID_TYPE: Record<string, string> = { Product: "p", Collection: "c", Page: "pg", Article: "ar", Blog: "bl" };
+
+/** Queue job id of a resource's coverage refresh: later changes within the delay join it. */
+export function coverageRefreshJobId(payload: CoverageRefreshPayload): string {
+  const type = /^gid:\/\/shopify\/(\w+)\//.exec(payload.resourceGid)?.[1] ?? "";
+  return `covref_${payload.shopId}_${payload.resourceGid.replace(/\D/g, "")}_${REFRESH_ID_TYPE[type] ?? "x"}`;
+}
+
+/** Queues a coverage refresh of one resource (after its webhook, or a change the periodic check found). */
 export async function enqueueCoverageRefresh(queue: Pick<Queues["coverage"], "add">, payload: CoverageRefreshPayload) {
   await queue.add("coverage-refresh", payload, {
-    jobId: `covref_${payload.shopId}_${payload.resourceGid.replace(/\D/g, "")}_${payload.resourceGid.includes("/Product/") ? "p" : "c"}`,
+    jobId: coverageRefreshJobId(payload),
     delay: COVERAGE_REFRESH_DELAY_MS,
     attempts: 3,
     backoff: { type: "exponential", delay: 5_000, jitter: 0.5 },
+    // A kept failed job would make BullMQ drop every later refresh with the same id.
     removeOnComplete: true,
-    removeOnFail: { age: 86_400 },
+    removeOnFail: true,
   });
 }
 
@@ -230,24 +248,38 @@ export function createItemProcessor(deps: JobDependencies) {
     const log = logger.child({ queue: QUEUE_NAMES.items, queueJobId: job.id, shopId: payload.shopId, itemId: payload.itemId });
 
     try {
-      const outcome = await processItem(deps, payload, job.attemptsMade + 1);
+      const outcome = await processItem(deps, payload, job.attemptsMade + 1, job.id);
       log.info({ outcome: outcome.status }, "item processed");
       return outcome;
     } catch (error) {
       const decision = classifyError(error);
       switch (decision.kind) {
         case "rate-limited":
+          // Waiting isn't an attempt: the item shows as waiting, not running, until it runs again.
+          await withTenant(
+            payload.shopId,
+            (tx) =>
+              tx.translationJobItem.updateMany({
+                where: { id: payload.itemId, shopId: payload.shopId, status: "RUNNING", attempts: { gt: 0 } },
+                data: { status: "PENDING", attempts: { decrement: 1 } },
+              }),
+            deps.prisma,
+          );
           log.debug({ waitMs: decision.waitMs }, "item delayed by rate limit");
           return delay(job, token, decision.waitMs);
         case "job-stop": {
           const item = await withTenant(
             payload.shopId,
-            (tx) => tx.translationJobItem.findFirst({ where: { id: payload.itemId, shopId: payload.shopId } }),
+            (tx) => tx.translationJobItem.findFirst({ where: { id: payload.itemId, shopId: payload.shopId }, include: { job: { select: { requestedBy: true } } } }),
             deps.prisma,
           );
           if (item) {
             await stopJob(payload.shopId, item.jobId, decision.code, deps.prisma);
             await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: decision.code }, deps.prisma);
+            // Automatic translation waits for the limit or the provider instead of failing again on every change.
+            if (item.job.requestedBy === AUTO_REQUESTED_BY) await autoPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma);
+            // So does the smart schedule: its other jobs stop at their next item, and its page says why.
+            if (item.job.requestedBy === SMART_REQUESTED_BY) await smartPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma);
           }
           log.warn({ code: decision.code }, "job stopped");
           throw new UnrecoverableError(decision.code);
@@ -313,6 +345,8 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
       } catch (error) {
         const decision = classifyError(error);
         if (decision.kind === "rate-limited") return delay(job, token, decision.waitMs);
+        // The failed job is removed (the next change queues a new one): the log is what remains.
+        if (isFinalAttempt(job)) logger.warn({ queue: QUEUE_NAMES.coverage, queueJobId: job.id, shopId: refresh.data.shopId, err: (error as Error).name }, "coverage refresh failed");
         throw error;
       }
     }
@@ -321,7 +355,10 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
     const payload = parsed.data;
     const log = logger.child({ queue: QUEUE_NAMES.coverage, queueJobId: job.id, shopId: payload.shopId, reportId: payload.reportId });
     try {
-      const next = await runCoveragePage(deps, payload);
+      const next = await runCoveragePage(deps, payload, {
+        // Translation a Smart Auto-Translate run planned on the page.
+        enqueueSmartItems: (shopId, itemIds, position) => enqueueItems(queues, shopId, itemIds, undefined, deps.prisma, position),
+      });
       if (next) await enqueueCoveragePage(queues, next);
       return { done: !next };
     } catch (error) {
@@ -348,13 +385,19 @@ export function createCoverageProcessor(deps: JobDependencies, queues: Queues) {
  * Automatic translation check of one changed resource: creates its items
  * (one per chosen language) and puts them on the item queue.
  */
+/** The Admin API client of a shop, by its id (Shop is the tenant root, outside row-level security). */
+async function adminForShop(deps: JobDependencies, shopId: string) {
+  const shop = await deps.prisma.shop.findUniqueOrThrow({ where: { id: shopId }, select: { shopDomain: true } });
+  return deps.adminFor(shop.shopDomain);
+}
+
 export function createAutoProcessor(deps: JobDependencies, queues: Queues) {
   return async (job: Job<AutoTranslatePayload>, token?: string) => {
     const parsed = autoPayloadSchema.safeParse(job.data);
     if (!parsed.success) throw new UnrecoverableError("INVALID_PAYLOAD");
     const payload = parsed.data;
     const log = logger.child({ queue: QUEUE_NAMES.auto, queueJobId: job.id, shopId: payload.shopId });
-    const result = await createAutoItems(deps.prisma, payload, deps.billingFor);
+    const result = await createAutoItems(deps.prisma, payload, deps.billingFor, (shopId) => currentShopLocales(shopId, () => adminForShop(deps, shopId), deps.prisma));
     await enqueueItems(queues, payload.shopId, result.itemIds, undefined, deps.prisma);
     // A finished item checked again needs a fresh queue job id.
     await enqueueItems(queues, payload.shopId, result.reused, `auto${Date.now()}`, deps.prisma);
@@ -417,7 +460,7 @@ const LIVE_QUEUE_STATES = new Set(["waiting", "delayed", "active", "prioritized"
 /** A coverage report without progress for this long is checked for a lost queue job. */
 export const REPORT_STALL_MS = 10 * 60 * 1000;
 
-async function queueState(queue: Queues["coverage"], id: string): Promise<string> {
+async function queueState(queue: Pick<Queues["coverage"] | Queues["discovery"], "getJob">, id: string): Promise<string> {
   const job = await queue.getJob(id);
   return job ? await job.getState() : "missing";
 }
@@ -454,6 +497,44 @@ export async function requeueStalledReports(deps: JobDependencies, queues: Queue
       const states = await Promise.all(ids.map((id) => queueState(queues.coverage, id)));
       if (states.some((state) => LIVE_QUEUE_STATES.has(state))) continue;
       await enqueueCoveragePage(queues, payload, `r${window}`);
+      total++;
+    }
+  }
+  return total;
+}
+
+/**
+ * Continues bulk jobs whose discovery chain broke: queueing the first page
+ * failed after the job was created (Redis was down), or a discovery job
+ * stalled twice and BullMQ failed it without running it. Such a job would
+ * stay active forever and block new jobs for its type and language. A job
+ * still discovering that hasn't moved for REPORT_STALL_MS and has no live
+ * discovery job gets its current page queued again; a page always starts at
+ * the job's stored cursor, so a duplicate only repeats idempotent work.
+ * Iterates shops and enters each tenant separately.
+ */
+export async function requeueStalledDiscovery(deps: JobDependencies, queues: Queues, now = new Date()) {
+  const shops = await deps.prisma.shop.findMany({ where: { status: "ACTIVE" }, select: { id: true } });
+  const cutoff = new Date(now.getTime() - REPORT_STALL_MS);
+  const window = Math.floor(now.getTime() / REPORT_STALL_MS);
+  let total = 0;
+  for (const shop of shops) {
+    const jobs = await withTenant(
+      shop.id,
+      (tx) =>
+        tx.translationJob.findMany({
+          // A smart run's jobs are filled by its measurement, not by discovery (repairSmartRuns finishes them).
+          where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] }, discoveryDone: false, smartRunId: null, updatedAt: { lt: cutoff } },
+          select: { id: true, discoveryCursor: true },
+          take: 100,
+        }),
+      deps.prisma,
+    );
+    for (const job of jobs) {
+      const ids = [discoveryJobId(job.id, job.discoveryCursor), `discover_${job.id}_r${window}`, `discover_${job.id}_r${window - 1}`];
+      const states = await Promise.all(ids.map((id) => queueState(queues.discovery, id)));
+      if (states.some((state) => LIVE_QUEUE_STATES.has(state))) continue;
+      await enqueueDiscovery(queues, { shopId: shop.id, jobId: job.id }, job.discoveryCursor, `r${window}`);
       total++;
     }
   }

@@ -97,12 +97,14 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **K3** "Translate missing" on a row → a job for missing and outdated fields only; while it runs, the dashboard shows progress and, once enough items are done, a remaining time; compare with the real end time.
 - **K4** Approve a draft on Review → the field turns complete on the dashboard without a rescan; reject one → missing again.
 - **K5** Change a product's English description in Shopify's admin → within about a minute its translation shows as outdated (webhook refresh). Record the delay.
-- **K6** Change a page's text in Shopify's admin → shows after the next scan only (no webhook for pages); confirm the page says so.
+- **K6** Change a page's text in Shopify's admin → with automatic translation off, shows after the next scan only (no webhook for pages); confirm the page says so. With it on, the periodic check reads the page again within about half an hour.
 - **K7** A type without its optional scope (policies) → "no access" with "Allow access", not a failed scan; after granting and rescanning → counted.
 - **K8** Unpublish a language → marked "Not published" and left out of the whole-store figure.
 - **K9** Market filter (with `read_markets`): only the market's languages are shown.
 - **K10** Large catalog (if available, 1,000+ products): scan duration, dashboard load time, item pages.
 - **K11** Theme content and notification templates appear on their own rows, "Not in the totals".
+- **K12** After `shopify app deploy` (the delete topics are new), delete a product with a custom field in Shopify's admin → it and its custom field leave the coverage figures within seconds, in every language (`products/delete`); same for a collection. Record whether `products/delete` really sends only the numeric `id`.
+- **K13** Add and publish a language after a scan → the whole-store figure says "measured in N of M published languages" and the next step asks to scan; remove a language in Shopify → its figures and pending drafts disappear (Overview and Review); add it back → "not fully read yet" until the next scan.
 
 ### K2. Import and export
 - **K2.1** Export Products for German (only gaps) → CSV opens in a spreadsheet without formulas firing; columns as documented.
@@ -142,6 +144,21 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **P3** Translate a product title by hand, then change the English title → the automatic check keeps the hand-written translation (counted as "protected kept").
 - **P4** Publish a Linguva translation → if Shopify sends `products/update` for it, the check ends "up to date" and the AI usage doesn't change. Record whether the webhook arrives at all (see SHOPIFY_API_MATRIX §2).
 - **P5** Turn automatic translation off → saving a product queues nothing (no new job).
+
+### Q. Smart Auto-Translate (Business; docs/SMART_AUTO_TRANSLATE.md)
+Preparation: the test store on the `business` plan ($0 on development stores, P7) or owner complimentary access; German and French added; at least 30 products and 2 pages (P2); AI consent given; `TRANSLATION_PROVIDER=mock` (P6). Log each case in §3 with the time, what the Activity list showed and the job ids.
+- **Q1** Settings shows the "Smart schedule" card; on a lower plan it shows the short Business card and no smart actions. Open "Schedule and options": the store's time zone is preselected, the next three checks follow every change of mode, days, times and zone before saving.
+- **Q2** Choose "Every day" at a time 5 minutes ahead, German only, Products only, drafts. Save, turn on. At that time (within a minute) a check appears under Recent checks: running, then done with "N items checked · M needed translation". Review lists the drafts; nothing is published (check one product's German page in the store).
+- **Q3** Check now twice quickly → one check (the second click says a check is already running); once it is done, Check now again within 5 minutes → "Try again in a few minutes".
+- **Q4** Translate one product title by hand (editor, publish), then change its English title. Next check: the hand-written title stays (the item ends "protected kept"), its other fields are translated.
+- **Q5** Editor of a product: tick "Leave out of the smart schedule". Change its title. Next check: Recent checks counts it under "left alone"; no draft for it. Untick → the following check translates it.
+- **Q6** Daily budget = a small number (for example 200). Check now → the check stops translating at the budget, Recent checks says "daily budget is used up", the card shows "Paused" with the time it continues (midnight in the schedule's zone). No further AI usage until then (Usage on the Plan page).
+- **Q7** Pause → Check now is refused, items already queued end "the smart schedule is paused", no AI usage. Resume → the next check translates what is still missing.
+- **Q8** Mode "As changes come in": edit a product → within about a minute a draft for it (webhook); edit a page → within 30 minutes (periodic check). Mode back to "Every day": edits create nothing until the daily check.
+- **Q9** Automatic publishing: choose it without the confirmation → "Not saved"; with it → the next check publishes results without quality notes; flagged ones wait on Review. Set it back to drafts afterwards.
+- **Q10** Coverage page: the smart card shows the next check and what is translating; Coverage items show "Translating now", "Not translated automatically" and "Waits for the next check".
+- **Q11** Change the store's primary language in Shopify (test store only) → the next tick pauses the schedule ("main language changed"), nothing is deleted. Save the smart settings again → it continues. Change the primary language back.
+- **Q12** Uninstall and reinstall the app → the smart schedule is off and nothing is published; the settings are kept.
 
 ### U. Polaris and App Bridge inside the real admin
 - **U1** Admin navigation lists every Linguva page; the current one is highlighted.

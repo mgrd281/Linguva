@@ -103,3 +103,17 @@ test("the public start page describes Linguva and asks no one to type a shop dom
   expect(await page.content()).not.toMatch(/\[your app\]|Product feature/);
   await expect(page.locator('s-text-field[name="shop"]')).toHaveCount(0);
 });
+
+test("the content webhook routes of the production build refuse a delivery without a valid signature", async ({ request }) => {
+  for (const [path, topic] of [
+    ["/webhooks/content", "products/update"],
+    ["/webhooks/content/delete", "products/delete"],
+  ] as const) {
+    const response = await request.post(new URL(path, UI_ENV.appUrl).toString(), {
+      data: { id: 1 },
+      headers: { "X-Shopify-Topic": topic, "X-Shopify-Shop-Domain": UI_SHOPS.full.domain, "X-Shopify-Hmac-Sha256": "not-a-signature", "X-Shopify-Webhook-Id": `ui-${topic}` },
+    });
+    // Routed to the webhook action (not 404 or 405), which checks the signature first.
+    expect(response.status(), path).toBe(401);
+  }
+});

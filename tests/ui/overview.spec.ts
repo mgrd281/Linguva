@@ -39,6 +39,18 @@ test("one next step, the share per language and the countries missing their lang
   await expectNoHorizontalScroll(page);
 });
 
+test("names the content Linguva can't read beside the share, with the way to allow it @responsive", async ({ page }) => {
+  // Policies need read_legal_policies, which this store didn't grant.
+  await openApp(page, "full", "/app");
+  const languages = page.locator('s-section[heading="Your languages"]');
+  await expect(languages.getByText("Not in these figures: 1 content type Linguva can't read yet.")).toBeVisible();
+  await expect(languages.getByRole("link", { name: "Allow access" })).toHaveAttribute("href", "/app/content/policies");
+  // No language is called fully translated while a content type it counts can't be read.
+  await expect(languages.getByRole("link", { name: /fully translated/ })).toHaveCount(0);
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test("the Markets page lists every country with its languages @responsive", async ({ page }) => {
   await openApp(page, "demo", "/app/markets");
   const table = page.locator('s-section[heading="Countries and their languages"] s-table');

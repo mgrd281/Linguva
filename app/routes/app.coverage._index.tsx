@@ -231,7 +231,10 @@ export default function Coverage() {
                 <span style={{ fontSize: 32, lineHeight: "40px", fontWeight: 650, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>
                   {percentLabel(i18n, store.complete, store.total)}
                 </span>
-                <StateBar counts={store.counts} label={t("coverage.store.percentLabel")} i18n={i18n} height={10} />
+                {/* No bar before a language is read in full: an empty one would read "nothing to translate". */}
+                {published.length > 0 && counted.length === 0 ? null : (
+                  <StateBar counts={store.counts} label={t("coverage.store.percentLabel")} i18n={i18n} height={10} />
+                )}
                 <s-text color="subdued">
                   {published.length > 0 && counted.length === 0
                     ? t("coverage.store.notMeasured")

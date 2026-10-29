@@ -12,9 +12,13 @@ test("shows the whole store, each language and what to do next @responsive", asy
   await expect(page.getByRole("button", { name: "Rescan store" })).toBeVisible();
   await expect(page.getByText(/^Last full scan:/)).toBeVisible();
 
-  // Whole store: published languages only (Arabic isn't published).
-  await expect(page.locator('s-section[heading="Whole store"]')).toContainText("fields live in published languages");
+  // Whole store: published languages only (Arabic isn't published), all of them read in full.
+  const store = page.locator('s-section[heading="Whole store"]');
+  await expect(store).toContainText("fields live in published languages");
   await expect(page.getByRole("img", { name: /^Whole store coverage:/ })).toBeVisible();
+  // Policies need a scope the store didn't grant: never checked, so named beside the figure.
+  await expect(store).toContainText("Not in this figure: 1 content type Linguva can't read yet.");
+  await expect(store.getByRole("link", { name: "Allow access" })).toHaveAttribute("href", "/app/content/policies");
 
   // French drafts wait in Review: the next step says so and links there.
   const next = page.locator('s-section[heading="Next step"]');

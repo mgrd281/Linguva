@@ -442,8 +442,8 @@ export async function dropCoverageItemsTx(tx: TenantTx, shopId: string, locale: 
 /**
  * Removes a resource deleted in Shopify in every language, with the custom
  * fields it owns (their parentGid), and their counts. Languages are locked
- * in a fixed order, so two removals never wait on each other. (Images carry
- * no owner yet: the next scan of their type removes them.)
+ * in a fixed order, so two removals can't deadlock. (Images carry no owner
+ * yet: the next scan of their type removes them.)
  */
 export async function dropDeletedResourceTx(tx: TenantTx, shopId: string, gid: string) {
   const rows = await tx.coverageItem.findMany({

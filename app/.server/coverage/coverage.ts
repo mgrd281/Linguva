@@ -16,7 +16,7 @@ import { shopKey } from "../queue/redis";
 import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, kindOfGid, RESOURCE_KINDS, type TranslatableKind } from "../../lib/resource-kinds";
-import { dropDeletedResource, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
+import { dropCoverageTypeTx, dropDeletedResource, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
 
 /** Custom fields of each owner type ("PRODUCT_METAFIELD", …). */
 export const METAFIELD_COVERAGE_TYPES = METAFIELD_OWNER_TYPES.map((owner) => `${owner}_METAFIELD` as const);
@@ -211,9 +211,9 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
       const key = { shopId_locale_resourceType: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } };
       if (page === "denied") {
         // Without the scope nothing of the type can be read or translated:
-        // earlier results are removed rather than shown as current.
-        await tx.coverageItem.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
-        await tx.coverageCount.deleteMany({ where: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType } });
+        // earlier results are removed rather than shown as current (under the
+        // language's lock, so no count change of the type interleaves).
+        await dropCoverageTypeTx(tx, payload.shopId, segment.locale, segment.resourceType);
         await tx.coverageSegment.upsert({
           where: key,
           create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "DENIED", reportId: report.id, scannedAt: readAt, errorCode: "ACCESS_DENIED" },

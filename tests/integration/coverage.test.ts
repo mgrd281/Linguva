@@ -206,6 +206,40 @@ describe("coverage scan", () => {
     expect(await typeCounts(shop.id, "de", "LINK")).toMatchObject({ missing: 1 });
   });
 
+  it("removes earlier results of a type that lost its access, under the language's lock", async () => {
+    const { shop, store, deps } = await setup(1, 0);
+    store.addResource("MENU", "1", [{ key: "title", value: "Main menu", type: "SINGLE_LINE_TEXT_FIELD" }]);
+    await runAll(deps, shop.id, ["de"]);
+    expect(await typeCounts(shop.id, "de", "MENU")).toMatchObject({ missing: 1 });
+    // The merchant revokes the menus' scope; the next scan finds no access, at the menus.
+    store.deniedTypes.add("MENU");
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "revoked" }, app);
+    const menus = report.segments.indexOf("MENU|de");
+    await withTenant(shop.id, (tx) => tx.coverageReport.update({ where: { id: report.id }, data: { segmentIndex: menus } }), app);
+    // Another writer of German's counts holds the language's lock: the page waits for it.
+    let locked!: () => void;
+    let release!: () => void;
+    const hasLock = new Promise<void>((resolve) => (locked = resolve));
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const holder = withTenant(shop.id, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`coverage-items:${shop.id}:de`}, 0))`;
+      locked();
+      await held;
+    }, app);
+    await hasLock;
+    let done = false;
+    const page = runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: menus, cursor: null }).then(() => (done = true));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(done).toBe(false);
+    release();
+    await holder;
+    await page;
+    expect(await typeCounts(shop.id, "de", "MENU")).toBeUndefined();
+    expect(await withTenant(shop.id, (tx) => tx.coverageItem.count({ where: { resourceType: "MENU" } }), app)).toBe(0);
+    expect((await loadCoverageSummary(shop.id, app)).segments.find((s) => s.resourceType === "MENU")).toMatchObject({ status: "DENIED", errorCode: "ACCESS_DENIED" });
+    await expectCountsConsistent(shop.id);
+  });
+
   it("treats a missing optional scope as 'no access' also when Shopify's library throws it", async () => {
     const { shop, store, deps } = await setup(2, 0);
     // The real library throws GraphQL errors instead of returning them.

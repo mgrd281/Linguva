@@ -489,6 +489,13 @@ export async function dropOtherLocalesTx(tx: TenantTx, shopId: string, targets: 
   return locales;
 }
 
+/** Removes every item of one language and type, and their counts (the app has no access to the type). */
+export async function dropCoverageTypeTx(tx: TenantTx, shopId: string, locale: string, resourceType: string) {
+  await lock(tx, shopId, locale);
+  await tx.coverageItem.deleteMany({ where: { shopId, locale, resourceType } });
+  await tx.coverageCount.deleteMany({ where: { shopId, locale, resourceType } });
+}
+
 /** Recomputes the counts of one language and type from its items (after a scan). */
 export async function rebuildCountsTx(tx: TenantTx, shopId: string, locale: string, resourceType: string) {
   await lock(tx, shopId, locale);

@@ -13,8 +13,9 @@ import { getQueues, getWorkerStatus } from "../.server/queue/client";
 import { ProgressBar } from "../components/ProgressBar";
 import { CoverageMeter, itemsHref, percentLabel } from "../components/Coverage";
 import { CountryStatusBar } from "../components/CountryStatus";
-import type { CountryCoverage, MissingReason } from "../lib/country-coverage";
+import type { MissingReason } from "../lib/country-coverage";
 import type { I18n, MessageKey } from "../i18n/i18n";
+import { gapEntry, gapLine, languageList, upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -39,16 +40,8 @@ type Step = NonNullable<Data["next"]>;
 const POLL_MS: Partial<Record<MeasurementState, number>> = { queued: 3_000, running: 3_000, waiting: 30_000 };
 const MEASURING: ReadonlySet<MeasurementState> = new Set(["queued", "waiting", "running"]);
 
-/** French and Spanish language names come lower-case from Intl. */
-function upperFirst(text: string): string {
-  return text ? text[0]!.toLocaleUpperCase() + text.slice(1) : text;
-}
-
-/** "Danish, Dutch, English and 9 more". */
-function nameList(i18n: I18n, names: readonly string[], shown = 3): string {
-  const list = names.slice(0, shown).join(", ");
-  return names.length > shown ? i18n.t("overview.countries.missing.more", { list, count: names.length - shown }) : list;
-}
+/** Visually hidden, still read out (a live region repeating text that is on screen). */
+const VISUALLY_HIDDEN = { position: "absolute", width: 1, height: 1, margin: -1, padding: 0, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 } as const;
 
 const COUNTRY_DETAIL: Record<MissingReason, MessageKey> = {
   "not-in-market": "overview.next.countries.notInMarket",
@@ -80,7 +73,8 @@ function primaryName(data: Data, i18n: I18n): string {
 function stepView(step: Step, data: Data, i18n: I18n): StepView {
   const { t, language } = i18n;
   const names = new Map(data.progress.map((l) => [l.locale, l.name]));
-  const languageName = (locale: string, name?: string | null) => upperFirst(language(locale, name ?? names.get(locale)));
+  // Inside sentences: as written mid-sentence.
+  const languageName = (locale: string, name?: string | null) => language(locale, name ?? names.get(locale));
   switch (step.id) {
     case "add-language":
       return {
@@ -132,7 +126,7 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
         action: { href: itemsHref({ lang: step.locale, state: "incomplete" }), label: t("coverage.next.action.missing") },
       };
     case "countries": {
-      const languages = nameList(i18n, step.locales.map((l) => languageName(l.locale, l.name)));
+      const languages = languageList(i18n, step.locales.map((l) => languageName(l.locale, l.name)));
       const addSome = step.reason === "not-added" && step.free < step.notAdded;
       return {
         title: t("overview.next.countries.label", { count: step.countries }),
@@ -171,12 +165,12 @@ function NextStepSection({ data, i18n }: { data: Data; i18n: I18n }) {
   const status = useRef<HTMLDivElement>(null);
   const step = data.next;
   const measuring = step?.id === "measure" && MEASURING.has(data.measurement.state);
-  // "The measurement is done", once a measurement followed on this page completes.
+  // How a measurement followed on this page ended (done, failed, stuck), said in the live region.
   const [wasMeasuring, setWasMeasuring] = useState(measuring);
-  const [finished, setFinished] = useState(false);
+  const [ended, setEnded] = useState<MeasurementState | null>(null);
   if (measuring !== wasMeasuring) {
     setWasMeasuring(measuring);
-    setFinished(!measuring && data.measurement.state === "done");
+    setEnded(measuring ? null : data.measurement.state);
   }
 
   // The button that started the measurement is gone: keep the focus nearby.
@@ -196,9 +190,12 @@ function NextStepSection({ data, i18n }: { data: Data; i18n: I18n }) {
   // Changes only with the state, so screen readers hear each change once (the part count stays outside).
   const live = measuring
     ? ({ queued: t("overview.scan.queued"), waiting: data.workerStopped ? t("overview.scan.stopped") : t("overview.scan.waiting"), running: t("overview.scan.runningHint") } as Partial<Record<MeasurementState, string>>)[m.state]
-    : finished
+    : ended === "done"
       ? t("overview.scan.done")
       : "";
+  // Failed or stuck: the card's title says it; the live region repeats it for screen readers only.
+  const endedQuietly =
+    !measuring && step.id === "measure" && (ended === "failed" || ended === "stalled") && typeof view.title === "string" ? view.title : null;
   const action = view.action;
   return (
     <s-section heading={t("coverage.next.heading")}>
@@ -216,7 +213,7 @@ function NextStepSection({ data, i18n }: { data: Data; i18n: I18n }) {
                 </s-stack>
               ) : null}
               <div role="status" tabIndex={-1} ref={status} style={{ outline: "none" }}>
-                {live ? <s-text color="subdued">{live}</s-text> : null}
+                {live ? <s-text color="subdued">{live}</s-text> : endedQuietly ? <span style={VISUALLY_HIDDEN}>{endedQuietly}</span> : null}
               </div>
             </s-stack>
             {!action ? null : "measure" in action ? (
@@ -249,7 +246,8 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
   useEffect(() => {
     if (remeasurer.state === "idle" && remeasurer.data?.ok) footerStatus.current?.focus();
   }, [remeasurer.state, remeasurer.data]);
-  const nameOf = (l: { locale: string; name: string | null }) => upperFirst(language(l.locale, l.name));
+  const rawName = (l: { locale: string; name: string | null }) => language(l.locale, l.name);
+  const nameOf = (l: { locale: string; name: string | null }) => upperFirst(rawName(l));
   const share = data.storeShare;
   const anyMeasured = data.progress.some((l) => l.measured);
   // Published first (what customers see), measured before unmeasured, the least translated on top.
@@ -289,7 +287,7 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
     );
   }
 
-  const alphabetical = (list: typeof data.progress) => list.map(nameOf).sort((a, b) => a.localeCompare(b, i18n.locale));
+  const alphabetical = (list: typeof data.progress) => list.map(rawName).sort((a, b) => a.localeCompare(b, i18n.locale));
   const live = alphabetical(data.progress.filter((l) => l.published));
   const hidden = alphabetical(data.progress.filter((l) => !l.published));
   return (
@@ -332,7 +330,7 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
                       {row.published ? null : <s-badge>{t("overview.languages.hidden")}</s-badge>}
                     </s-stack>
                     {counted && row.counts ? (
-                      <CoverageMeter counts={row.counts} complete={row.complete} total={row.total} label={t("overview.languages.progressLabel", { language: name })} i18n={i18n} />
+                      <CoverageMeter counts={row.counts} complete={row.complete} total={row.total} label={t("overview.languages.progressLabel", { language: rawName(row) })} i18n={i18n} />
                     ) : (
                       <s-text color="subdued">{row.measured ? t("coverage.types.empty") : t("overview.languages.notMeasured")}</s-text>
                     )}
@@ -379,11 +377,6 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
   );
 }
 
-/** "Bulgarian (Bulgaria)", "Italian (Italy, Switzerland)": the language and the countries it would reach. */
-function gapEntry(i18n: I18n, name: string, countries: readonly CountryCoverage[]): string {
-  return `${name} (${nameList(i18n, countries.map((c) => i18n.country(c.code, c.name)))})`;
-}
-
 function CountriesSection({ data, i18n }: { data: Data; i18n: I18n }) {
   const { t, language } = i18n;
   const access = useFetcher();
@@ -422,7 +415,7 @@ function CountriesSection({ data, i18n }: { data: Data; i18n: I18n }) {
   // "In their language" only when every language a country is offered has been measured.
   const measured = countries.rows.every((c) => c.status !== "ok" || c.percent !== null);
   const names = new Map(data.progress.map((l) => [l.locale, l.name]));
-  const nameOf = (locale: string) => upperFirst(language(locale, names.get(locale)));
+  const nameOf = (locale: string) => language(locale, names.get(locale));
   const reasons = (["not-added", "unpublished", "not-in-market"] as const).filter((r) => countries.missing.some((m) => m.reason === r));
   const notAdded = countries.missing.filter((m) => m.reason === "not-added").length;
   const capacity =
@@ -440,12 +433,7 @@ function CountriesSection({ data, i18n }: { data: Data; i18n: I18n }) {
             <s-heading>{t("overview.countries.missing.heading")}</s-heading>
             {reasons.map((reason) => (
               <s-paragraph key={reason}>
-                {t(GAP_LINE[reason], {
-                  languages: countries.missing
-                    .filter((m) => m.reason === reason)
-                    .map((m) => gapEntry(i18n, nameOf(m.locale), m.countries))
-                    .join(", "),
-                })}
+                {t(GAP_LINE[reason], { languages: gapLine(i18n, countries.missing.filter((m) => m.reason === reason).map((m) => gapEntry(i18n, nameOf(m.locale), m.countries))) })}
               </s-paragraph>
             ))}
             {capacity ? <s-text color="subdued">{capacity}</s-text> : null}

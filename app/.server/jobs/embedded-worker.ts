@@ -27,6 +27,8 @@ export const STABLE_AFTER_MS = 60_000;
 export const STOP_TIMEOUT_MS = 20_000;
 /** Last resort after SIGTERM: the web process exits even if something hangs. */
 export const HARD_EXIT_MS = 25_000;
+/** Railway's draining time beyond this is not taken (the timers would overflow from about 24 days). */
+export const MAX_DRAINING_MS = 60 * 60_000;
 
 const ON = new Set(["on", "true", "1", "yes"]);
 const OFF = new Set(["off", "false", "0", "no"]);
@@ -67,7 +69,8 @@ export function workerChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
  */
 export function stopTimeouts(env: NodeJS.ProcessEnv): { stopMs: number; exitMs: number } {
   const drainingMs = Number(env.RAILWAY_DEPLOYMENT_DRAINING_SECONDS?.trim() || 0) * 1000;
-  if (!Number.isFinite(drainingMs)) return { stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS };
+  // Above an hour (or not a number) it is a mistake; a timer that long would also overflow.
+  if (!Number.isFinite(drainingMs) || drainingMs > MAX_DRAINING_MS) return { stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS };
   return { stopMs: Math.max(STOP_TIMEOUT_MS, drainingMs - 5_000), exitMs: Math.max(HARD_EXIT_MS, drainingMs - 2_000) };
 }
 
@@ -237,7 +240,7 @@ const STATE = Symbol.for("linguva.embeddedWorker");
  * Called once when the web server's bundle loads (entry.server). Never
  * throws into the web process; a second call (hot reload) does nothing.
  */
-export function startEmbeddedWorker(env: NodeJS.ProcessEnv = process.env, dev: boolean = import.meta.env.DEV): void {
+export function startEmbeddedWorker(env: NodeJS.ProcessEnv = process.env, dev: boolean = import.meta.env?.DEV === true): void {
   const holder = globalThis as { [STATE]?: true };
   if (holder[STATE]) return;
   holder[STATE] = true;

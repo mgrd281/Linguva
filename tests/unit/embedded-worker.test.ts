@@ -54,6 +54,9 @@ describe("time to stop after SIGTERM", () => {
     expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "120" })).toEqual({ stopMs: 115_000, exitMs: 118_000 });
     expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: " 26 " })).toEqual({ stopMs: 21_000, exitMs: HARD_EXIT_MS });
     expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "two minutes" })).toEqual({ stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS });
+    // An hour at most: a mistyped huge value would overflow the timers and end the process at once.
+    expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "3600" })).toEqual({ stopMs: 3_595_000, exitMs: 3_598_000 });
+    expect(stopTimeouts({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "3000000" })).toEqual({ stopMs: STOP_TIMEOUT_MS, exitMs: HARD_EXIT_MS });
   });
 });
 

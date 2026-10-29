@@ -43,7 +43,9 @@ import { isMachineTranslatable, segmentField } from "./translate-fields";
 import { listRevisions } from "./revisions";
 import { removeTranslation, restoreRevision } from "./history";
 import { HANDLE_PROBLEM_MESSAGES, validateHandle } from "../../lib/handles";
-import { addSmartExclusion, isSmartExcluded, liftCausePause, removeSmartExclusion } from "../smart/config";
+import { addSmartExclusion, isSmartExcluded, removeSmartExclusion } from "../smart/config";
+import { settleAfterConsent } from "../smart/runs";
+import { prisma as defaultClient } from "../lib/db";
 import type { TranslationEdit } from "./product-translation-service";
 import type { TranslatableResourceData } from "../shopify/translations-api";
 import {
@@ -310,7 +312,8 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
 
   if (intent === "grant-consent") {
     await setAiConsent({ shopId, granted: true, actorId });
-    await liftCausePause(shopId, "CONSENT");
+    // The smart schedule waits for consent no longer than needed.
+    await settleAfterConsent({ prisma: defaultClient, adminFor: async () => admin, billingFor: ctx.billing ? async () => ctx.billing! : undefined }, { id: shopId, shopDomain: ctx.shopDomain ?? "" });
     return { kind: "consent" } satisfies EditorActionResult;
   }
 

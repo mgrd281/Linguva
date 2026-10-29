@@ -81,7 +81,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (intent === "cancel") return { ok: await cancelJob(shop.id, job.id) };
   if (intent === "retry") {
     try {
-      return { ok: true, retried: await retryBulkJob(shop.id, job.id) };
+      const { retried, busy } = await retryBulkJob(shop.id, job.id);
+      return { ok: !busy, retried, busy };
     } catch (error) {
       if (error instanceof BackgroundJobsUnavailableError) return { ok: false };
       throw error;
@@ -204,6 +205,7 @@ export default function JobDetail() {
         </s-stack>
       </s-section>
 
+      {fetcher.data && "busy" in fetcher.data && fetcher.data.busy ? <s-banner tone="warning">{t("jobs.detail.retryBusy")}</s-banner> : null}
       <s-stack direction="inline" gap="base">
         {active ? (
           <>

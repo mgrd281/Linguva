@@ -22,10 +22,10 @@ import { currentShopLocales, forgetCurrentLocales } from "../../app/.server/loca
 import { storeMemory } from "../../app/.server/memory/translation-memory";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { getShopSettings, setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
-import { addSmartExclusion, getSmartConfig, isSmartExcluded, liftCausePause, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
+import { addSmartExclusion, getSmartConfig, isSmartExcluded, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
 import { loadSmartCoverageNote } from "../../app/.server/smart/panel";
 import { loadEditorData, runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
-import { requestSmartRun, settleSmartPause, smartTick, type SmartDeps } from "../../app/.server/smart/runs";
+import { requestSmartRun, retrySmartRun, smartTick, type SmartDeps } from "../../app/.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsValue } from "../../app/.server/smart/validate";
 import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
@@ -168,8 +168,9 @@ describe("the scheduler", () => {
     failing = false;
     expect((await runs(shop.id)).map((r) => r.status)).toEqual(["QUEUED"]);
     expect(await hint(shop.id)).toEqual(new Date("2026-10-29T22:01:30Z"));
-    // createdAt comes from the database clock: put it at the simulated time, so the test holds on any day.
-    await ownerDb.smartAutoRun.updateMany({ where: { shopId: shop.id }, data: { createdAt: new Date("2026-10-29T22:00:30Z") } });
+    // createdAt comes from the database clock: put it just before the simulated tick (the run must be more
+    // than a minute old), so the test holds on any day. Under the tenant: FORCE RLS applies to the owner too.
+    await withTenant(shop.id, (tx) => tx.smartAutoRun.updateMany({ where: { shopId: shop.id }, data: { createdAt: new Date("2026-10-29T22:00:29Z") } }), app);
     await smartTick(deps, new Date("2026-10-29T22:01:30Z"));
     expect((await runs(shop.id)).map((r) => r.status)).toEqual(["RUNNING"]);
     expect(pages).toHaveLength(1);
@@ -248,7 +249,8 @@ describe("the scheduler", () => {
       { locale: "en", name: "English", primary: false, published: true },
     ];
     const config = (await getSmartConfig(shop.id, app))!;
-    await saveSmartSettings({ shopId: shop.id, actorId: "7", value: daily({ locales: ["en"] }), version: config.version, primaryLocale: "de" }, app);
+    // At the simulated time, so the next check is the 23:00 one on any day.
+    await saveSmartSettings({ shopId: shop.id, actorId: "7", value: daily({ locales: ["en"] }), version: config.version, primaryLocale: "de", now: new Date("2026-10-29T12:00:00Z") }, app);
     await smartTick(deps, new Date("2026-10-29T22:00:30Z"));
     expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, pauseReason: null });
     expect((await runs(shop.id)).map((r) => r.status)).toEqual(["RUNNING"]);
@@ -442,26 +444,72 @@ describe("when the tick looks again", () => {
     expect(pages).toHaveLength(1);
   });
 
-  it("giving consent lifts a pause for consent at once; the merchant's own pause stays", async () => {
-    const { shop } = await setup();
+  /** Allowing AI processing from a product's editor (resource-editor.ts, intent grant-consent). */
+  async function grantInEditor(store: FakeShopifyStore, shopId: string) {
+    const form = new FormData();
+    form.set("intent", "grant-consent");
+    const billing = { configured: true, state: "ACTIVE", entitlements: PLANS.business, subscription: null, stale: false, mustChoosePlan: false } as const;
+    return runEditorAction(
+      { admin: store.asAdmin(), shopId, actorId: "7", kind: "PRODUCT", resourceId: P1, target: { locale: "de", name: "German", rtl: false }, sourceName: "English", billing, targetLocales: ["de"] },
+      form,
+    );
+  }
+
+  it("giving consent ends a pause for consent at once; the merchant's own pause stays", async () => {
+    const { shop, store } = await setup();
     const t0 = new Date("2026-10-29T12:00:00Z");
     await enabled(shop.id, daily(), t0);
     await smartPauseAfterStop(shop.id, "CONSENT_REQUIRED", t0, app);
-    expect(await liftCausePause(shop.id, "CONSENT", t0, app)).toBe(true);
+    expect(await hint(shop.id)).toEqual(new Date("2026-10-29T12:15:00Z"));
+    expect(await grantInEditor(store, shop.id)).toEqual({ kind: "consent" });
     expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, pauseReason: null });
     expect(await hint(shop.id)).toEqual(new Date("2026-10-29T22:00:00Z"));
     await pauseSmart({ shopId: shop.id, actorId: "7", now: t0 }, app);
-    expect(await liftCausePause(shop.id, "CONSENT", t0, app)).toBe(false);
+    expect(await grantInEditor(store, shop.id)).toEqual({ kind: "consent" });
     expect(await getSmartConfig(shop.id, app)).toMatchObject({ pauseReason: "MANUAL" });
   });
 
-  it("Retry agrees with the page: a pause whose cause is gone is lifted before it checks", async () => {
-    const { shop, deps } = await setup();
+  it("giving consent leaves the pause to a new main language that the consent pause was covering", async () => {
+    const { shop, store } = await setup();
     const t0 = new Date("2026-10-29T12:00:00Z");
     await enabled(shop.id, daily(), t0);
+    // German became the main language in Shopify, then a job stopped for consent first.
+    store.locales = [
+      { locale: "de", name: "German", primary: true, published: true },
+      { locale: "en", name: "English", primary: false, published: true },
+    ];
+    forgetCurrentLocales();
+    await smartPauseAfterStop(shop.id, "CONSENT_REQUIRED", t0, app);
+    expect(await grantInEditor(store, shop.id)).toEqual({ kind: "consent" });
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pauseReason: "PRIMARY_LANGUAGE" });
+  });
+
+  it("Retry agrees with the page: a pause whose cause is gone is lifted first; a real cause refuses", async () => {
+    const { shop, deps, setPlan } = await setup();
+    const t0 = new Date("2026-10-29T12:00:00Z");
+    await enabled(shop.id, daily(), t0);
+    // A check's job with one failed item.
+    const { run } = await withTenant(
+      shop.id,
+      async (tx) => {
+        const run = await tx.smartAutoRun.create({ data: { shopId: shop.id, trigger: "MANUAL", status: "COMPLETED", locales: ["de"], resourceTypes: ["PRODUCT"], fieldGroups: [], idempotencyKey: "retry-run-1" } });
+        const job = await tx.translationJob.create({
+          data: { shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: SMART_REQUESTED_BY, idempotencyKey: "retry-job-1", status: "COMPLETED", discoveryDone: true, totalItems: 1, failedItems: 1, smartRunId: run.id },
+        });
+        await tx.translationJobItem.create({ data: { shopId: shop.id, jobId: job.id, resourceGid: P1, status: "DEAD" } });
+        return { run };
+      },
+      app,
+    );
     await smartPauseAfterStop(shop.id, "PLAN_SMART", t0, app);
-    const config = await settleSmartPause(deps, { id: shop.id, shopDomain: shop.shopDomain }, t0);
-    expect(config).toMatchObject({ enabled: true, pausedAt: null, pauseReason: null });
+    const queued: string[] = [];
+    const shopRef = { id: shop.id, shopDomain: shop.shopDomain };
+    expect(await retrySmartRun(deps, shopRef, run.id, async (ids) => void queued.push(...ids), t0)).toEqual({ ok: true, count: 1 });
+    expect(queued).toHaveLength(1);
+    // The plan really lacks the schedule: refused, nothing queued.
+    setPlan(PLANS.pro);
+    expect(await retrySmartRun(deps, shopRef, run.id, async (ids) => void queued.push(...ids), t0)).toEqual({ ok: false, error: "NOT_ON" });
+    expect(queued).toHaveLength(1);
   });
 });
 

@@ -138,9 +138,25 @@ export function isAutomaticJob(job: Pick<TranslationJob, "requestedBy" | "smartR
  * once its running items are done (they keep their resources busy).
  */
 export async function handOverAutomaticJobTx(tx: TenantTx, from: TranslationJob, to: TranslationJob) {
-  const moved = await tx.translationJobItem.updateMany({ where: { shopId: from.shopId, jobId: from.id, status: "PENDING" }, data: { jobId: to.id } });
+  // A resource the new job already holds (another automatic job's item, handed over first) waits
+  // there once: this job's item for it is left out rather than moved twice.
+  const held = await tx.translationJobItem.findMany({ where: { shopId: to.shopId, jobId: to.id }, select: { resourceGid: true } });
+  const holds = { resourceGid: { in: held.map((i) => i.resourceGid) } };
+  const moved = await tx.translationJobItem.updateMany({
+    where: { shopId: from.shopId, jobId: from.id, status: "PENDING", ...(held.length ? { NOT: holds } : {}) },
+    data: { jobId: to.id },
+  });
+  const twice = held.length
+    ? await tx.translationJobItem.updateMany({
+        where: { shopId: from.shopId, jobId: from.id, status: "PENDING", ...holds },
+        data: { status: "SKIPPED", errorCode: "TAKEN_OVER", finishedAt: new Date() },
+      })
+    : { count: 0 };
   if (moved.count) await tx.translationJob.update({ where: { id: to.id }, data: { totalItems: { increment: moved.count } } });
-  const left = await tx.translationJob.update({ where: { id: from.id }, data: { totalItems: { decrement: moved.count }, discoveryDone: true } });
+  const left = await tx.translationJob.update({
+    where: { id: from.id },
+    data: { totalItems: { decrement: moved.count }, skippedItems: { increment: twice.count }, discoveryDone: true },
+  });
   await maybeComplete(tx, left);
   return moved.count;
 }
@@ -447,13 +463,21 @@ export async function retryJobItems(
   shopId: string,
   jobId: string,
   client: PrismaClient = defaultClient,
-): Promise<{ itemIds: string[]; rediscover: boolean }> {
+): Promise<{ itemIds: string[]; rediscover: boolean; busy?: true }> {
   return withTenant(
     shopId,
     async (tx) => {
       const job = await tx.translationJob.findFirst({ where: { id: jobId, shopId } });
       // A job the merchant cancelled stays cancelled.
       if (!job || job.status === "CANCELLED") return { itemIds: [], rediscover: false };
+      // One active job per shop, type and language, under the lock every job creation takes: while
+      // another one runs (one that took over from this automatic job, say), this one stays finished.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`job:${shopId}:${job.resourceType}:${job.targetLocale}`}, 0))`;
+      const other = await tx.translationJob.findFirst({
+        where: { shopId, resourceType: job.resourceType, targetLocale: job.targetLocale, status: { in: [...ACTIVE_JOB_STATUSES] }, id: { not: job.id } },
+        select: { id: true },
+      });
+      if (other) return { itemIds: [], rediscover: false, busy: true as const };
       const statuses: TranslationJobItemStatus[] =
         job.status === "FAILED" ? ["FAILED", "DEAD", "CANCELLED"] : ["FAILED", "DEAD"];
       const items = await tx.translationJobItem.findMany({

@@ -4,6 +4,7 @@ import {
   kindOfGid,
   providerContext,
   resourceGid,
+  stillWithoutAccess,
 } from "../../app/lib/resource-kinds";
 
 describe("resource kinds", () => {
@@ -28,5 +29,14 @@ describe("resource kinds", () => {
     expect(providerContext("gid://shopify/Collection/3", "Sale")).toBe("Collection: Sale");
     expect(providerContext("gid://shopify/Product/3", "Jacket")).toBe("Product: Jacket");
     expect(providerContext("gid://shopify/Product/3", "")).toBeUndefined();
+  });
+});
+
+describe("stillWithoutAccess", () => {
+  it("drops a type whose access was allowed since the measurement, keeps the rest", () => {
+    const denied = ["MENU", "METAOBJECT", "PRODUCT"];
+    expect(stillWithoutAccess(denied, [])).toEqual(["MENU", "METAOBJECT", "PRODUCT"]);
+    expect(stillWithoutAccess(denied, ["read_online_store_navigation"])).toEqual(["METAOBJECT", "PRODUCT"]);
+    expect(stillWithoutAccess(denied, ["read_online_store_navigation", "read_metaobjects"])).toEqual(["PRODUCT"]);
   });
 });

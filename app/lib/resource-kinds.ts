@@ -102,6 +102,18 @@ export function isContentType(value: string): value is ContentType {
   return Object.hasOwn(CONTENT_TYPES, value);
 }
 
+/**
+ * The types of a measurement without access that still lack it: a type whose
+ * optional scope was granted since is read by the next measurement (a type
+ * that needs no scope stays: something else refused it).
+ */
+export function stillWithoutAccess(types: readonly string[], granted: readonly string[]): string[] {
+  return types.filter((type) => {
+    const scope = isContentType(type) ? CONTENT_TYPES[type].scope : null;
+    return !scope || !granted.includes(scope);
+  });
+}
+
 export function contentTypeBySlug(slug: string): ContentType | null {
   const entry = Object.entries(CONTENT_TYPES).find(([, meta]) => meta.slug === slug);
   return entry ? (entry[0] as ContentType) : null;

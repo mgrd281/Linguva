@@ -125,7 +125,7 @@ describe("percentages from completed measurements only", () => {
     // The headline equals the Coverage page's whole-store figure.
     const summary = await loadCoverageSummary(shop.id, app);
     const whole = storeWide(summary.counts, ["de"]);
-    expect(overview.storeShare).toEqual({ complete: whole.complete, total: whole.total, languages: 1 });
+    expect(overview.storeShare).toEqual({ complete: whole.complete, total: whole.total, languages: 1, published: 1 });
     expect(overview.next?.id).not.toBe("measure");
   });
 
@@ -153,6 +153,38 @@ describe("percentages from completed measurements only", () => {
     expect(overview.progress[0]).toMatchObject({ measured: true, percent: measured.percent });
     expect(overview.measurement.state).toBe("failed");
     expect(await withTenant(shop.id, (tx) => tx.coverageReport.count({ where: { status: "COMPLETED" } }), app)).toBe(1);
+  });
+
+  it("says how many published languages the store's share covers, and marks content the measurement skipped", async () => {
+    const { store, shop, deps } = await measuredStore();
+    const { report } = await start(shop.id, "m");
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    store.locales = [...store.locales, { locale: "fr", name: "French", primary: false, published: true }];
+    let overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.storeShare).toMatchObject({ languages: 1, published: 2 });
+    expect(overview.progress.find((l) => l.locale === "de")).toMatchObject({ measured: true, partial: false });
+
+    // A segment the measurement had to skip (errors): the language stays measured, marked partial.
+    await ownerDb.$transaction([
+      ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shop.id}, true)`,
+      ownerDb.$executeRaw`UPDATE "CoverageSegment" SET "status" = 'FAILED' WHERE "shopId" = ${shop.id}::uuid AND "locale" = 'de' AND "resourceType" = 'PRODUCT'`,
+    ]);
+    overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress.find((l) => l.locale === "de")).toMatchObject({ measured: true, partial: true });
+    expect(overview.progress.find((l) => l.locale === "fr")).toMatchObject({ measured: false, partial: false });
+  });
+
+  it("counts translations already live in the store (made anywhere) as past the first translation", async () => {
+    const { store, shop, deps } = await measuredStore();
+    store.translate("gid://shopify/Product/1", "de", "title", "Produkt 1 Jacke");
+    const { report } = await start(shop.id, "live");
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    const overview = await loadOverview(store.asAdmin(), shop, app, { aiAvailable: false });
+    expect(steps(overview)["first-translation"]).toBe(true);
+    // The least translated language is the next step, not "publish your first translation".
+    expect(overview.next).toMatchObject({ id: "translate", locale: "de" });
   });
 
   it("asks to measure again for a language published after the measurement, and says when a report stalled", async () => {

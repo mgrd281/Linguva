@@ -73,6 +73,13 @@ export async function loadOverview(
   const consent = hasCurrentAiConsent(settings);
   const firstTarget = targets[0]?.locale;
 
+  // Percentages only from the newest completed measurement, for the languages it covered:
+  // a first measurement under way has read only some types, so its numbers would mislead.
+  const measuredLocales = new Set(coverage.lastCompleted?.locales ?? []);
+  const headline = headlineByLocale(coverage.counts);
+  // A store with live translations (measured, made anywhere) is past its first translation.
+  const liveTranslations = [...measuredLocales].some((locale) => (headline.get(locale)?.complete ?? 0) > 0);
+
   const allSteps: ChecklistStep[] = [
     {
       id: "language",
@@ -95,7 +102,7 @@ export async function loadOverview(
       id: "first-translation",
       label: { key: "overview.checklist.firstTranslation.label" },
       detail: { key: aiAvailable ? "overview.checklist.firstTranslation.detail" : "overview.checklist.firstTranslation.detailManual" },
-      done: published > 0,
+      done: published > 0 || liveTranslations,
       href: firstTarget ? `/app/products?lang=${encodeURIComponent(firstTarget)}` : "/app/products",
       action: { key: "overview.checklist.firstTranslation.action" },
     },
@@ -122,10 +129,8 @@ export async function loadOverview(
   // Without an AI provider there is no consent to give and no bulk drafts to review.
   const checklist = aiAvailable ? allSteps : allSteps.filter((s) => s.id !== "consent" && s.id !== "review");
 
-  // Percentages only from the newest completed measurement, for the languages it covered:
-  // a first measurement under way has read only some types, so its numbers would mislead.
-  const measuredLocales = new Set(coverage.lastCompleted?.locales ?? []);
-  const headline = headlineByLocale(coverage.counts);
+  // Content the measurement had to skip after errors: its figures leave it out.
+  const unread = new Set(coverage.segments.filter((s) => s.status === "FAILED").map((s) => s.locale));
   const progress = targets.map((l) => {
     const measured = measuredLocales.has(l.locale);
     const tally = measured ? headline.get(l.locale) : undefined;
@@ -134,6 +139,7 @@ export async function loadOverview(
       name: l.name,
       published: l.published,
       measured,
+      partial: measured && unread.has(l.locale),
       percent: tally?.percent ?? null,
       counts: tally?.counts ?? null,
       complete: tally?.complete ?? 0,
@@ -144,7 +150,8 @@ export async function loadOverview(
   const shared = progress.filter((l) => l.published && l.measured && l.total > 0);
   const sum = emptyCounts();
   for (const l of shared) addCounts(sum, l.counts!);
-  const storeShare = shared.length ? { complete: sum.complete, total: totalOf(sum), languages: shared.length } : null;
+  const publishedLanguages = progress.filter((l) => l.published).length;
+  const storeShare = shared.length ? { complete: sum.complete, total: totalOf(sum), languages: shared.length, published: publishedLanguages } : null;
 
   // Countries the shop sells to, and whether they can read it in their language.
   const countries = !markets

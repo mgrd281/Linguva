@@ -20,12 +20,14 @@ export type NextStep =
       reason: MissingReason;
       /** The languages behind the reason, most countries first. */
       locales: Array<{ locale: string; name: string | null; countries: number }>;
-      /** Countries without one of their languages. */
+      /** Countries this fix reaches (without one of their languages). */
       countries: number;
       /** Languages not added to the store (all reasons), and free places under Shopify's limit. */
       notAdded: number;
       free: number;
     }
+  /** Everything else is done, but the last measurement couldn't read some content. */
+  | { id: "unread" }
   | { id: "done" };
 
 export interface NextStepInput {
@@ -37,8 +39,8 @@ export interface NextStepInput {
   jobsAvailable: boolean;
   /** Languages of the newest completed measurement (empty: never measured). */
   measuredLocales: readonly string[];
-  /** Per target language; measured rows carry their counts. */
-  progress: ReadonlyArray<{ locale: string; name: string | null; published: boolean; measured: boolean; complete: number; total: number }>;
+  /** Per target language; measured rows carry their counts; partial: the measurement skipped some of its content. */
+  progress: ReadonlyArray<{ locale: string; name: string | null; published: boolean; measured: boolean; partial?: boolean; complete: number; total: number }>;
   /** Countries of the active markets, or null when unknown (no access, error). */
   countries: { rows: readonly CountryCoverage[]; missing: ReadonlyArray<{ locale: string; reason: MissingReason; countries: readonly CountryCoverage[] }> } | null;
   /** Languages the store can still add (Shopify allows MAX_ENABLED_LOCALES). */
@@ -61,7 +63,6 @@ function lowest(input: NextStepInput, below: number) {
 function countriesStep(input: NextStepInput): NextStep | null {
   const countries = input.countries;
   if (!countries || !countries.missing.length) return null;
-  const affected = countries.rows.filter((c) => c.status === "missing" || c.status === "partial").length;
   const notAdded = countries.missing.filter((m) => m.reason === "not-added").length;
   for (const reason of REASONS) {
     // Adding needs a free place under Shopify's limit.
@@ -73,7 +74,8 @@ function countriesStep(input: NextStepInput): NextStep | null {
       id: "countries",
       reason,
       locales: entries.map((m) => ({ locale: m.locale, name: names.get(m.locale) ?? null, countries: m.countries.length })),
-      countries: affected,
+      // The countries of this reason only: the card names them ("in the market of these countries").
+      countries: new Set(entries.flatMap((m) => m.countries.map((c) => c.code))).size,
       notAdded,
       free: input.remainingLocales,
     };
@@ -96,5 +98,9 @@ export function nextStep(input: NextStepInput): NextStep | null {
   if (countries) return countries;
   const rest = lowest(input, 100);
   if (rest) return rest;
+  // Skipped content may be untranslated: never "all caught up" over it.
+  if (input.progress.some((p) => p.published && p.partial)) return { id: "unread" };
+  // Nor over a published language that was never measured (no background jobs to measure it).
+  if (unmeasured) return null;
   return measured.size > 0 ? { id: "done" } : null;
 }

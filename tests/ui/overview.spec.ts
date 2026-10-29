@@ -83,6 +83,8 @@ test("a measurement that never started can be started again, in German, without 
   await openApp(page, "stalled", "/app", { locale: "de" });
   const next = page.locator('s-section[heading="Nächster Schritt"]');
   await expect(next.getByText(/^Die Messung kommt seit .+ nicht voran$/)).toBeVisible();
+  // No worker runs in these tests (no heartbeat): the card says so instead of "start it again".
+  await expect(next.getByText(/^Hintergrundaufgaben laufen gerade nicht/)).toBeVisible();
   await expect(next.locator('s-button[variant="primary"]', { hasText: "Erneut messen" })).toHaveCount(1);
   await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
   // No measuring bar stuck at 0: the only bar on the page is the AI usage in the sidebar.
@@ -109,4 +111,33 @@ test("a measurement that never started can be started again, in German, without 
   expect(requests).toEqual([]);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
+});
+
+test("a stuck newer measurement keeps the figures and can be started again from the languages", async ({ page }) => {
+  await openApp(page, "remeasure", "/app");
+  const languages = page.locator('s-section[heading="Your languages"]');
+  await expect(languages.getByRole("listitem")).toHaveCount(1);
+  await expect(languages.getByText("A newer measurement didn't complete; these figures are from the last complete one.")).toBeVisible();
+  // A secondary action: the next step keeps the page's only primary button.
+  await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+  await languages.getByRole("button", { name: "Measure again" }).click();
+  const status = languages.locator('div[role="status"]');
+  await expect(status).toContainText("Starting…");
+  await expect(status).toBeFocused();
+  await expect(languages.getByRole("button", { name: "Measure again" })).toHaveCount(0);
+  await expectAccessible(page);
+});
+
+test("the Coverage page lets a stuck measurement be started again, without following it", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes(".data")) requests.push(request.url());
+  });
+  await openApp(page, "stalled", "/app/coverage", { locale: "de" });
+  await expect(page.getByText(/^Die Messung kommt seit .+ nicht voran$/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Shop (erneut )?prüfen$/ })).toBeEnabled();
+  await expect(page.getByRole("progressbar", { name: /Prüfung|Messung|Scan/ })).toHaveCount(0);
+  await page.waitForTimeout(4_000);
+  expect(requests).toEqual([]);
+  await expectAccessible(page);
 });

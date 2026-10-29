@@ -33,24 +33,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Percentages only for the languages of the newest completed measurement (as on the Overview).
     const measured = new Set(coverage.lastCompleted?.locales ?? []);
     const headline = headlineByLocale(coverage.counts);
+    const rows =
+      countries.access && "markets" in countries
+        ? analyzeCountries(
+            countries.markets,
+            {
+              primary: locales.primary?.locale ?? null,
+              published: locales.locales.filter((l) => !l.primary && l.published).map((l) => l.locale),
+              enabled: targets,
+            },
+            new Map(targets.map((l) => [l, measured.has(l) ? (headline.get(l)?.percent ?? null) : null])),
+          )
+        : null;
     return {
       access: true as const,
       markets,
       names: Object.fromEntries(locales.locales.map((l) => [l.locale, l.name])),
       findings: analyzeMarkets(markets, locales.locales, planLocales),
-      countries:
-        countries.access && "markets" in countries
-          ? analyzeCountries(
-              countries.markets,
-              {
-                primary: locales.primary?.locale ?? null,
-                published: locales.locales.filter((l) => !l.primary && l.published).map((l) => l.locale),
-                enabled: targets,
-              },
-              new Map(targets.map((l) => [l, measured.has(l) ? (headline.get(l)?.percent ?? null) : null])),
-            )
-          : null,
-      measured: measured.size > 0,
+      countries: rows,
+      // "In their language" only when every language a country is offered has been measured.
+      measured: rows ? rows.every((c) => c.status !== "ok" || c.percent !== null) : false,
     };
   } catch (error) {
     // The merchant revoked the scope since it was granted.

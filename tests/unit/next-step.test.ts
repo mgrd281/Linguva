@@ -51,6 +51,9 @@ describe("next step", () => {
 
   it("never offers measuring without background jobs", () => {
     expect(nextStep(input({ jobsAvailable: false, measuredLocales: [], progress: [row(fr, 0, 0, false)] }))).toBeNull();
+    // Nor "all caught up" while a published language was never measured.
+    const de = { locale: "de", name: "German", published: true };
+    expect(nextStep(input({ jobsAvailable: false, targets: [fr, de], progress: [row(fr, 10, 10), row(de, 0, 0, false)] }))).toBeNull();
     expect(nextStep(input({ jobsAvailable: false, measuredLocales: [], progress: [row(fr, 0, 0, false)], pendingDrafts: 2 }))).toEqual({ id: "review", count: 2 });
   });
 
@@ -86,7 +89,8 @@ describe("next step", () => {
   it("picks the cheapest fix for countries: offer in the market, then publish, then add", () => {
     const shop = { primary: "en", published: ["fr"], enabled: ["fr", "es"] };
     const all = countries([market(["CZ", "ES"]), market(["FR"], [{ locale: "en", published: true }])], shop);
-    expect(nextStep(input({ countries: all }))).toMatchObject({ id: "countries", reason: "not-in-market", locales: [{ locale: "fr", countries: 1 }], countries: 3 });
+    // The card counts the countries of the fix it names (France), not every country with a gap.
+    expect(nextStep(input({ countries: all }))).toMatchObject({ id: "countries", reason: "not-in-market", locales: [{ locale: "fr", countries: 1 }], countries: 1 });
     const noMarketGap = countries([market(["CZ", "ES"])], shop);
     expect(nextStep(input({ countries: noMarketGap }))).toMatchObject({ id: "countries", reason: "unpublished", locales: [{ locale: "es" }] });
     const onlyAdd = countries([market(["CZ", "HU"])], { primary: "en", published: ["fr"] });
@@ -97,6 +101,14 @@ describe("next step", () => {
     const onlyAdd = countries([market(["CZ", "HU", "EE"])], { primary: "en", published: ["fr"] });
     expect(nextStep(input({ countries: onlyAdd, remainingLocales: 2 }))).toMatchObject({ id: "countries", reason: "not-added", notAdded: 3, free: 2 });
     expect(nextStep(input({ countries: onlyAdd, remainingLocales: 0 }))).toEqual({ id: "done" });
+  });
+
+  it("never says all caught up while the measurement skipped some of a published language's content", () => {
+    const partial = { ...row(fr, 10, 10), partial: true };
+    expect(nextStep(input({ progress: [partial] }))).toEqual({ id: "unread" });
+    // Other steps still come first; a hidden language's skipped content doesn't count.
+    expect(nextStep(input({ progress: [{ ...row(fr, 4, 10), partial: true }] }))).toMatchObject({ id: "translate", locale: "fr" });
+    expect(nextStep(input({ targets: [fr, es], progress: [row(fr, 10, 10), { ...row(es, 10, 10), partial: true }] }))).toEqual({ id: "done" });
   });
 
   it("skips countries it can't know about", () => {

@@ -73,13 +73,24 @@ export default async function globalSetup() {
     for (const itemId of fieldsPage.itemIds) await processItem(fieldsDeps, { shopId: ids.customFields!, itemId }, 1);
 
     // A finished coverage scan (after the drafts above, so they show as drafts).
-    for (const key of ["full", "demo"] as const) {
+    for (const key of ["full", "demo", "remeasure"] as const) {
       const shopStore = UI_SHOPS[key].build();
       const coverageDeps: CoverageDeps = { prisma: app, adminFor: async () => shopStore.asAdmin(), keyPrefix: "lv:ui-test" };
       const locales = UI_SHOPS[key].locales.filter((l) => !l.primary).map((l) => l.locale);
       const { report } = await createCoverageReport({ shopId: ids[key]!, locales, requestedBy: null, idempotencyKey: `ui-coverage-${key}` }, app);
       let next: CoveragePagePayload | null = { shopId: ids[key]!, reportId: report.id, segmentIndex: 0, cursor: null };
       while (next) next = await runCoveragePage(coverageDeps, next);
+    }
+
+    // After its completed measurement, a newer one that has made no progress for an hour.
+    {
+      const locales = UI_SHOPS.remeasure.locales.filter((l) => !l.primary).map((l) => l.locale);
+      await createCoverageReport({ shopId: ids.remeasure!, locales, requestedBy: null, idempotencyKey: "ui-coverage-remeasure-stuck" }, app);
+      await owner.$transaction([
+        owner.$executeRaw`SELECT set_config('app.shop_id', ${ids.remeasure!}, true)`,
+        // Only its last progress: it stays the newest report.
+        owner.$executeRaw`UPDATE "CoverageReport" SET "updatedAt" = now() - interval '1 hour' WHERE "shopId" = ${ids.remeasure!}::uuid AND "status" = 'QUEUED'`,
+      ]);
     }
 
     // A measurement queued an hour ago that never started (no worker): the Overview offers it again.

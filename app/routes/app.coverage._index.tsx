@@ -65,7 +65,8 @@ export default function Coverage() {
   const runner = useFetcher<typeof action>();
   const fixer = useFetcher<typeof action>();
   const revalidator = useRevalidator();
-  const scanning = data.report?.status === "QUEUED" || data.report?.status === "RUNNING";
+  // A measurement that stopped moving can be started again; nothing to follow then.
+  const scanning = (data.report?.status === "QUEUED" || data.report?.status === "RUNNING") && !data.report.stalled;
   const live = scanning || data.jobs.length > 0;
 
   useEffect(() => {
@@ -120,6 +121,7 @@ export default function Coverage() {
                 {data.report && !scanning && data.report.finishedAt ? (
                   <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.report.finishedAt) })}</s-text>
                 ) : null}
+                {data.report?.stalled ? <s-text color="subdued">{t("overview.next.stalled.label", { date: i18n.dateTime(data.report.updatedAt) })}</s-text> : null}
               </s-stack>
               <s-button
                 type="submit"

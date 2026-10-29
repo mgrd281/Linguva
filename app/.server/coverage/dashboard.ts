@@ -33,7 +33,7 @@ import { isFieldGroup, isFieldState, isMetafieldCoverageType, type FieldGroup } 
 import { AccessDeniedError } from "../shopify/translations-api";
 import { translatableByIds } from "../shopify/attached-resources";
 import { isSearchableType, searchIds } from "../shopify/search-ids";
-import { COVERAGE_TYPES, segmentOf } from "./coverage";
+import { COVERAGE_TYPES, segmentOf, STALE_REPORT_MS } from "./coverage";
 import { listCoverageItems, loadCoverageSummary, type ItemStateFilter } from "./summary";
 
 /** Types with a title of their own (images and custom fields are named by their text or owner). */
@@ -112,6 +112,8 @@ export async function loadCoverageDashboard(request: Request) {
   const names = new Map(locales.locales.map((l) => [l.locale, l.name]));
   const report = summary.report;
   const active = report?.status === "QUEUED" || report?.status === "RUNNING";
+  // No progress for this long: it can be started again (createCoverageReport then replaces it).
+  const stalled = Boolean(report && active && Date.now() - Date.parse(report.updatedAt) >= STALE_REPORT_MS);
   const current = report && active ? segmentOf(report, report.segmentIndex) : null;
 
   const jobs = await withTenant(shop.id, (tx) =>
@@ -137,7 +139,9 @@ export async function loadCoverageDashboard(request: Request) {
           status: report.status,
           errorCode: report.errorCode,
           createdAt: report.createdAt,
+          updatedAt: report.updatedAt,
           finishedAt: report.finishedAt,
+          stalled,
           resourcesScanned: report.resourcesScanned,
           progress: { done: Math.min(report.segmentIndex, report.segments.length), total: report.segments.length },
           scanning: current ? { type: current.resourceType, language: names.get(current.locale) ?? current.locale } : null,

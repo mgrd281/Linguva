@@ -183,6 +183,15 @@ export const UI_SHOPS = {
     markets: [{ id: "gid://shopify/Market/11", name: "Europa", status: "ACTIVE", countries: ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "CH"] }],
     build: () => new FakeShopifyStore(3),
   },
+  remeasure: {
+    // Measured once; a newer measurement got stuck: the figures stay, and it can be started again.
+    domain: "ui-remeasure.myshopify.com",
+    gid: "gid://shopify/Shop/91013",
+    name: "Remeasure Store",
+    locales: [en, de],
+    plan: "pro",
+    build: () => new FakeShopifyStore(3),
+  },
   measure: {
     // Never scanned: the Overview offers to measure coverage.
     domain: "ui-measure.myshopify.com",

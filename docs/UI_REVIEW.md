@@ -73,12 +73,19 @@ On KARINEX the first redesign still read as busy: four tiles, a checklist, twelv
 |---|---|---|
 | Four headline tiles, a "Get started" checklist with its counter, step cards with their own buttons | One **Next step** card with the page's only primary button, chosen by a fixed order: add a language, measure, review drafts, allow AI, first translation, publish a language, the least translated language under 50 %, countries without their language, the rest under 100 %, all caught up | One question, one action; no counter that jumps backwards when a step appears |
 | A bar and "0 of 396 parts" for a measurement that hadn't started | Said in words: starting, waiting (it starts by itself), running with real progress, "hasn't moved since …" with **Measure again**, failed; the page reloads only while a measurement is under way | Never fake progress, never endless polling |
-| Percentages from any scanned part (a first measurement under way showed products-only figures) | Percentages only from the newest **completed** measurement; the headline is field-weighted, the same figure as the Coverage page's whole store | One number, the same everywhere |
+| Percentages from any scanned part (a first measurement under way showed products-only figures) | Percentages only from the newest **completed** measurement; the headline is field-weighted and says how many published languages it covers ("measured in 12 of your 13 published languages"); once every published language is measured it equals the Coverage page's whole-store figure, which also shows a measurement under way live. A language whose content the measurement partly skipped (errors) keeps its share with a note, and the page never says "all caught up" over it | Never a partial number presented as the whole |
 | Twelve three-line language blocks with flags and a green badge on every row | One line per language: its name (the link to what's missing) and the bar with the share; only hidden languages get a badge; before measuring, one sentence instead of empty rows | Shorter, scannable like a bar chart |
 | Five cards with five identical "Add language" buttons; a "mostly untranslated" list | The status bar with its key, one line per reason ("Not added to your store: Bulgarian (Bulgaria), Czech (Czechia), …"), Shopify's language limit when it limits the fix, links to the settings | The countries the owner asked about, without clutter |
 | Store card and AI usage in the sidebar | "AI translation" card only (on/off, DeepL, usage) | The store card repeated the language count |
 
 KARINEX today (stalled measurement, AI off, German): about 2,700 px → about 800 px on a desktop; after measuring, about 1,100 px.
+
+An independent review of the deployed page (2026-10-29) found a few states where the page said more than it knew; all fixed with tests:
+- A store whose translations were made outside Linguva (KARINEX, a store moving from another app) was sent to "publish your first translation" after measuring, which hid the least translated language and the countries. Measured live translations now count.
+- The countries card's title counted every country with a gap while its text named one fix ("offer Italian in the market of these countries"); it now counts that fix's countries.
+- A newer measurement stuck for 30 minutes could be restarted nowhere (the Coverage page's button stayed disabled and polled forever); both pages now offer "Measure again".
+- Without a running worker a waiting measurement said "it begins by itself"; it now says background jobs aren't running (heartbeat).
+- "Fully translated" no longer appears over content the measurement skipped or over a published language that was never measured; countries count as "in their language" only when their languages are measured; the store-wide figure names how many languages it covers; the primary language appears in the admin's language.
 
 ## 4. Tests for the changes
 

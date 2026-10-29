@@ -239,7 +239,8 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
           create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "DENIED", reportId: report.id, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
           update: { status: "DENIED", reportId: report.id, startedAt: null, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
         });
-        if (report.smartRunId) await noteSmartGapTx(tx, payload.shopId, report.smartRunId, segment);
+        // Not a gap of the smart check: nothing of the type can be read or translated (as for its
+        // estimate); its page says which chosen types need access.
       } else {
         if (payload.cursor === null) {
           await tx.coverageSegment.upsert({

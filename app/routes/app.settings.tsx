@@ -30,7 +30,7 @@ import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usag
 import { useResultToast } from "../components/app-bridge";
 import { smartErrorText, SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
 import { loadSmartPanel, smartContext } from "../.server/smart/panel";
-import { getSmartConfig, setSmartEnabled } from "../.server/smart/config";
+import { getSmartConfig, liftCausePause, setSmartEnabled } from "../.server/smart/config";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 
@@ -164,6 +164,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: false };
   }
   await setAiConsent({ shopId: shop.id, granted: intent === "grant-consent", actorId });
+  // The smart schedule waits for consent no longer than needed.
+  if (intent === "grant-consent") await liftCausePause(shop.id, "CONSENT");
   return { ok: true };
 };
 

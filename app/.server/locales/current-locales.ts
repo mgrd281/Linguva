@@ -17,7 +17,7 @@ export interface CurrentLocales {
   primary: string | null;
   /** Additional languages in the order the app lists them everywhere (by name; the plan's language limit takes the first ones). */
   targets: string[];
-  /** Read from Shopify now (false: the stored mirror, which may be older). */
+  /** Read from Shopify by this call (false: a copy up to a few minutes old, or the stored mirror). */
   fresh: boolean;
 }
 
@@ -33,9 +33,11 @@ export async function currentShopLocales(
   admin: () => Promise<Pick<AdminApiContext, "graphql">>,
   client: PrismaClient = defaultClient,
   now = Date.now(),
+  /** 0: ask Shopify now (to confirm a change before acting on it). */
+  maxAgeMs = CURRENT_LOCALES_MAX_AGE_MS,
 ): Promise<CurrentLocales> {
   const cached = cache.get(shopId);
-  if (cached && now - cached.at < CURRENT_LOCALES_MAX_AGE_MS) return cached.value;
+  if (cached && now - cached.at < maxAgeMs) return { ...cached.value, fresh: false };
   try {
     const value = fromSummary(await fetchAndSyncShopLocales(await admin(), shopId, client), true);
     cache.set(shopId, { at: now, value });

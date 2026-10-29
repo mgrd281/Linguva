@@ -43,7 +43,7 @@ import { isMachineTranslatable, segmentField } from "./translate-fields";
 import { listRevisions } from "./revisions";
 import { removeTranslation, restoreRevision } from "./history";
 import { HANDLE_PROBLEM_MESSAGES, validateHandle } from "../../lib/handles";
-import { addSmartExclusion, isSmartExcluded, removeSmartExclusion } from "../smart/config";
+import { addSmartExclusion, isSmartExcluded, liftCausePause, removeSmartExclusion } from "../smart/config";
 import type { TranslationEdit } from "./product-translation-service";
 import type { TranslatableResourceData } from "../shopify/translations-api";
 import {
@@ -310,6 +310,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
 
   if (intent === "grant-consent") {
     await setAiConsent({ shopId, granted: true, actorId });
+    await liftCausePause(shopId, "CONSENT");
     return { kind: "consent" } satisfies EditorActionResult;
   }
 

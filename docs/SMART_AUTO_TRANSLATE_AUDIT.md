@@ -92,13 +92,13 @@ Tenant isolation (RLS, FORCE, one policy per new table, checked by the migration
 ## 9. Tests added for this work
 
 - Unit: `smart-auto.test.ts` (scope, schedules, pauses, validation, items waiting), `schedule.test.ts`, `needs-work.test.ts`.
-- Integration: `smart-auto.test.ts` (29), `smart-run.test.ts` (17), `review-protection.test.ts` (7), `usage-ledger.test.ts` (the budget window).
+- Integration: `smart-auto.test.ts` (45), `smart-run.test.ts` (18), `smart-takeover.test.ts` (4), `review-protection.test.ts` (7), `usage-ledger.test.ts` (the budget window).
 - Performance: `smart-run.perf.test.ts` (5,000 products, two languages).
-- Browser: `smart-auto.spec.ts` (12, desktop and phone), screenshots on desktop, tablet and iPhone.
+- Browser: `smart-auto.spec.ts` (11 tests, 13 runs on desktop and phone), screenshots on desktop, tablet and iPhone.
 
 ## 10. Limitations
 
-- Excluding a product also excludes its custom fields, not its image alt text (coverage has no image owner).
+- Excluding a product also excludes its custom fields, not its image alt text: the scan records no owner for images (Shopify lists them on their own), so the owner rules don't reach them. For the same reason, a check's own image job and a real-time job that includes images can translate the same alt text when both run at the same moment.
 - The estimate is an upper bound: exclusions and people's outdated translations aren't subtracted. A store measured before this version shows "Measure coverage again" until its next measurement (the character counts are new).
 - Characters not sent because a text repeated within a request are not shown separately from memory reuse.
 - A check reads every language and type (so the figures stay complete), also when the schedule covers fewer; for a very large store a check takes as long as reading the store at its Shopify rate.
@@ -111,7 +111,7 @@ Tenant isolation (RLS, FORCE, one policy per new table, checked by the migration
 - In real-time mode, changes are followed between full checks for products and collections (webhooks) and pages, blog posts and blogs (the 30-minute check); the other chosen types wait for the daily full check.
 - A run interrupted by an outage continues where it stopped; what it had already read before the outage is read again at the next check, not at once.
 - The estimate follows the saved settings; a changed scope shows its figure once saved.
-- The worker's tick, its Redis lock and the real queues are exercised by the worker's own tests and on the test store, not by the smart tests (they call the tick and the processors directly).
+- The worker's tick wrapper and its Redis lock aren't covered by a test (the smart tests call the tick and the processors directly); the test-store run (§11) is where they run for real.
 
 ## 11. What still prevents a production launch
 
@@ -138,7 +138,7 @@ A separate review of the smart backend (all of `42a487d..HEAD`) reproduced each 
 | 7 | Low: items followed the settings as planned, not as they are (a type or field groups taken out, real time switched off, a language removed from the store, a new primary language, a product excluded after its custom fields were planned) | Every item checks the current settings, languages, primary language and the owner's exclusion | `smart-auto.test.ts` › items of smart jobs (5 tests) |
 | 8 | Low: Retry on the Jobs page started a full bulk discovery on a check's job | A check's job never rediscovers | `smart-auto.test.ts` › retried from the Jobs page |
 | 9 | Low: "last complete check" was set for checks that left part of their scope (a type not readable, pages read while paused, a run started while paused) | Such a run finishes as `PARTIAL`; a waiting run that was paused is skipped | `smart-run.test.ts` › read while paused, waited |
-| 10 | Low: after a downgrade, basic automatic translation couldn't be turned on (the smart schedule stayed on, and lower plans have no card to turn it off) | Turning basic on turns the schedule off on a plan without it | `smart-auto.spec.ts` › after a move to a plan without the smart schedule |
+| 10 | Low: after a downgrade, basic automatic translation couldn't be turned on (the smart schedule stayed on, and lower plans have no card to turn it off) | Turning basic on turns the schedule off on a plan without it | `smart-auto.spec.ts` › after a move to a plan without the smart schedule (also checks the schedule is off) |
 | 11 | Docs: a partial unique index for "one active run", a billing check after an hour, coverage of pages and blogs between scheduled checks | The design says what the code does: the lock, 6 hours, the next check | — |
 
 A second review (the documentation's claims against the code, the interface on desktop and phone, the four languages, and the tests named as evidence) added these, also fixed:
@@ -146,14 +146,32 @@ A second review (the documentation's claims against the code, the interface on d
 | # | Problem found | Fix | Test |
 |---|---|---|---|
 | 12 | Blocker: the editor's exclusion checkbox sent nothing (React 18 sends no `onChange` for a web component) | The checkbox submits on its input event (the same for the CSV export's options); a refusal is shown; worded for the smart schedule | `smart-auto.spec.ts` › left out from its editor |
-| 13 | Refusals of Turn on, Check now, Retry and Remove were dropped once the form was saved; Turn on was offered without AI consent | Each refusal next to its buttons, on the page and on Settings; Turn on says why it can't | `smart-auto.spec.ts` |
-| 14 | The save bar didn't come back after the first save | Cleared once per save | `smart-auto.spec.ts` |
+| 13 | Refusals of Turn on, Check now, Retry and Remove were dropped once the form was saved; Turn on was offered without AI consent | Each refusal next to its buttons, on the page and on Settings; Turn on says why it can't | — (not asserted in the browser) |
+| 14 | The save bar didn't come back after the first save | Cleared once per save | `smart-auto.spec.ts` › setting it up |
 | 15 | "Retry failed" while paused or off (the items were cancelled again) | Offered and accepted only while on | — |
-| 16 | Settings showed bulk translation's publishing, never the schedule's own | The card shows how its results go out | `smart-auto.spec.ts` |
-| 17 | "On" and a next check while no worker runs; pauses for the plan or consent shown after their cause was gone; next checks while paused | One state for every page: waiting while background jobs aren't running, such a pause over once its cause is (lifted within 15 minutes, also in manual mode), next checks only while on | `smart-auto.test.ts` (unit) › the state every page shows |
+| 16 | Settings showed bulk translation's publishing, never the schedule's own | The card shows how its results go out | `smart-auto.spec.ts` › Settings shows the smart schedule |
+| 17 | "On" and a next check while no worker runs; pauses for the plan or consent shown after their cause was gone; next checks while paused | One state for every page: waiting while background jobs aren't running, such a pause over once its cause is (lifted within 15 minutes, also in manual mode), next checks only while on | `smart-auto.test.ts` (unit) › the state every page shows; (integration) › when the tick looks again |
 | 18 | Coverage ignored that state, the selected language and the pause reason | The Coverage header uses the same state and says when the language isn't in the schedule; items wait only while it's on | — |
 | 19 | The estimate counted languages and types never measured as 0 | No figure until every chosen language and type was read | `smart-run.test.ts` › estimate |
-| 20 | On a plan without bulk translation, smart items stopped as `PLAN_REQUIRED` without pausing | `PLAN_SMART` first; both pause | `smart-auto.test.ts` |
+| 20 | On a plan without bulk translation, smart items stopped as `PLAN_REQUIRED` without pausing | `PLAN_SMART` first; both pause | `smart-auto.test.ts` › also on a plan without bulk translation |
 | 21 | In real time, a skipped check moved the 30-minute check past changes it never read | Only a completed check moves it | `smart-auto.test.ts` › periodic check |
 | 22 | Texts: the AI consent in German and French said the output is sent to DeepL; the check and the Review page had the same word in German and Spanish; plurals and other wording | Corrected (a native speaker's review is still a launch blocker) | `i18n.test.ts` |
 | 23 | Tests missing for automatic publishing, memory reuse, turning off with work in flight, coalescing, the monthly budget and the provider pause, paused and downgraded webhooks | Added | `smart-auto.test.ts` |
+
+A third review checked the fix commit itself (`691d8a5..e8b8b4d`): each finding was reproduced against PostgreSQL, then put to two or three skeptical reviewers. 18 of 22 held. 17 are fixed here, each with a test; one (row 33) is documented as a limitation. Undoing the fix for the tick's hint, the check across jobs, the copy of the shop's languages or the current settings makes its tests fail.
+
+| # | Problem found | Fix | Test |
+|---|---|---|---|
+| 24 | Major: a pause for the plan or consent set by a stopped item, or by Check now, got no 15-minute recheck (in manual mode none at all), while every page already showed "On" | One function computes the tick's hint for every write of the schedule; giving consent lifts a consent pause at once | `smart-auto.test.ts` › when the tick looks again (4 tests); Check now › lifts a pause for consent |
+| 25 | Major: saving the settings or resuming erased the one-minute recheck: in manual mode a waiting run never started and Check now answered "active" for ever | The same function: a waiting run keeps its recheck | `smart-auto.test.ts` › keep the minute's recheck |
+| 26 | Major: a check taking over the day's real-time job never translated a product whose real-time item had ended earlier, and still counted as complete | The check gets a job of its own; the automatic job's waiting items move there, its history stays its own | `smart-takeover.test.ts` › translates what the real-time job had finished |
+| 27 | Major: the same for a merchant's bulk job taking over a real-time job | The same handover | `smart-takeover.test.ts` › translates every product that needs it |
+| 28 | Minor: a check's billed, reused and failed figures included the taken-over job's earlier work | Follows from the handover: the run's job has only its own counts | `smart-takeover.test.ts` › counts only what it translated itself |
+| 29 | Minor: Retry was refused as "not on" under an "On" badge (a pause whose cause was gone) | Retry lifts such a pause first, like Check now | `smart-auto.test.ts` › Retry agrees with the page |
+| 30 | Minor: the real-time periodic check moved past a check that ended `PARTIAL` | Only a check without a code moves it | `smart-auto.test.ts` › doesn't move past a check that left part of its scope |
+| 31 | Minor: a chosen type without access made every check `PARTIAL` for ever ("the next check takes it") | Not a gap; the smart page names the type with "Allow access" | `smart-run.test.ts` › chosen type without access |
+| 32 | Minor: a stale copy of the shop's languages (up to 5 minutes, marked fresh) cancelled a language added a moment ago, and paused again after the merchant saved the languages for a new primary language | A copy is never "fresh"; a change is confirmed with Shopify before cancelling or pausing | `smart-auto.test.ts` › added a moment ago; read before the merchant saved them |
+| 33 | Minor: owner rules never reached images | Documented in §10 (the scan has no image owner) | — |
+| 34 | Major (tests): a new test depended on the real date and would fail from 2026-10-29 22:00 UTC on | The run's time is set to the simulated one | `smart-auto.test.ts` › start didn't get through |
+| 35 | Tests: the `PLAN_SMART` order, the `PLAN_REQUIRED` pause and the current-settings checks for images and outdated output had no failing test; rows 13, 14, 16 and 10 named tests that didn't assert them | Tests added (plan without bulk translation, images and outdated output, save bar, publishing, the schedule off after a downgrade); row 13 marked untested | see the rows |
+| 36 | Docs: test counts in §9 and the worker-tick claim in §10 | Corrected | — |

@@ -5,6 +5,7 @@
  * saving, pauses and what lifts them, Check now, the per-item checks and
  * budgets, real-time routing, and uninstall.
  */
+import { createHash } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -17,14 +18,14 @@ import { sweepChangedContent } from "../../app/.server/jobs/auto-sweep";
 import { retryJobItems } from "../../app/.server/jobs/bulk-jobs";
 import { classifyError } from "../../app/.server/jobs/errors";
 import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
-import { forgetCurrentLocales } from "../../app/.server/locales/current-locales";
+import { currentShopLocales, forgetCurrentLocales } from "../../app/.server/locales/current-locales";
 import { storeMemory } from "../../app/.server/memory/translation-memory";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { getShopSettings, setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
-import { addSmartExclusion, getSmartConfig, isSmartExcluded, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
+import { addSmartExclusion, getSmartConfig, isSmartExcluded, liftCausePause, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
 import { loadSmartCoverageNote } from "../../app/.server/smart/panel";
 import { loadEditorData, runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
-import { requestSmartRun, smartTick, type SmartDeps } from "../../app/.server/smart/runs";
+import { requestSmartRun, settleSmartPause, smartTick, type SmartDeps } from "../../app/.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsValue } from "../../app/.server/smart/validate";
 import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
@@ -36,6 +37,7 @@ import { FakeShopifyStore } from "../support/fake-store";
 
 const app = new PrismaClient();
 const P1 = "gid://shopify/Product/1";
+const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 beforeEach(async () => {
   await resetDatabase();
@@ -166,6 +168,8 @@ describe("the scheduler", () => {
     failing = false;
     expect((await runs(shop.id)).map((r) => r.status)).toEqual(["QUEUED"]);
     expect(await hint(shop.id)).toEqual(new Date("2026-10-29T22:01:30Z"));
+    // createdAt comes from the database clock: put it at the simulated time, so the test holds on any day.
+    await ownerDb.smartAutoRun.updateMany({ where: { shopId: shop.id }, data: { createdAt: new Date("2026-10-29T22:00:30Z") } });
     await smartTick(deps, new Date("2026-10-29T22:01:30Z"));
     expect((await runs(shop.id)).map((r) => r.status)).toEqual(["RUNNING"]);
     expect(pages).toHaveLength(1);
@@ -232,6 +236,22 @@ describe("the scheduler", () => {
     const config = (await getSmartConfig(shop.id, app))!;
     await saveSmartSettings({ shopId: shop.id, actorId: "7", value: daily({ locales: ["en"] }), version: config.version, primaryLocale: "de" }, app);
     expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, primaryLocale: "de", locales: ["en"] });
+  });
+
+  it("doesn't pause again from a copy of the languages read before the merchant saved them for the new main language", async () => {
+    const { shop, store, deps } = await setup();
+    await enabled(shop.id, daily(), new Date("2026-10-29T12:00:00Z"));
+    // The worker read the languages (English main) a moment before the switch in Shopify.
+    await currentShopLocales(shop.id, async () => store.asAdmin(), app);
+    store.locales = [
+      { locale: "de", name: "German", primary: true, published: true },
+      { locale: "en", name: "English", primary: false, published: true },
+    ];
+    const config = (await getSmartConfig(shop.id, app))!;
+    await saveSmartSettings({ shopId: shop.id, actorId: "7", value: daily({ locales: ["en"] }), version: config.version, primaryLocale: "de" }, app);
+    await smartTick(deps, new Date("2026-10-29T22:00:30Z"));
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, pauseReason: null });
+    expect((await runs(shop.id)).map((r) => r.status)).toEqual(["RUNNING"]);
   });
 
   it("pauses at the monthly budget until the 1st in its time zone, and for an hour when the provider stops", async () => {
@@ -339,6 +359,25 @@ describe("Check now", () => {
     expect(await runs(shop.id)).toHaveLength(0);
   });
 
+  it("lifts a pause for consent once consent is back, and pauses with a recheck when it is missing", async () => {
+    const { shop, deps } = await setup();
+    const manual = daily({ mode: "manual", times: [], weekdays: [] });
+    const t0 = new Date();
+    await enabled(shop.id, manual, t0);
+    const input = { shop: { id: shop.id, shopDomain: shop.shopDomain }, actorId: "7", now: t0 };
+    expect(await smartPauseAfterStop(shop.id, "CONSENT_REQUIRED", t0, app)).toBe("CONSENT");
+    // Consent is given (since the setup): Check now lifts the pause and starts.
+    expect((await requestSmartRun(deps, { ...input, idempotencyKey: "click-0001" })).status).toBe("started");
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, pauseReason: null });
+    await withTenant(shop.id, (tx) => tx.smartAutoRun.updateMany({ where: { shopId: shop.id }, data: { status: "COMPLETED" } }), app);
+    await setAiConsent({ shopId: shop.id, granted: false, actorId: null }, app);
+    const later = new Date(t0.getTime() + 10 * 60_000);
+    expect(await requestSmartRun(deps, { ...input, now: later, idempotencyKey: "click-0002" })).toMatchObject({ status: "blocked", reason: "CONSENT" });
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pauseReason: "CONSENT" });
+    // Also without a schedule, the tick looks again in 15 minutes.
+    expect(await hint(shop.id)).toEqual(new Date(later.getTime() + 15 * 60_000));
+  });
+
   it("a scheduled check while it runs is recorded as coalesced, not run twice", async () => {
     const { shop, deps } = await setup();
     await enabled(shop.id, daily(), new Date("2026-10-29T12:00:00Z"));
@@ -352,11 +391,85 @@ describe("Check now", () => {
   });
 });
 
+describe("when the tick looks again", () => {
+  const manual = () => daily({ mode: "manual", times: [], weekdays: [] });
+
+  it("a pause for consent or the plan from a stopped job is looked at again in 15 minutes, also without a schedule", async () => {
+    const { shop, deps, setPlan } = await setup();
+    const t0 = new Date("2026-10-29T12:00:00Z");
+    await enabled(shop.id, manual(), t0);
+    expect(await hint(shop.id)).toBeNull();
+    expect(await smartPauseAfterStop(shop.id, "CONSENT_REQUIRED", t0, app)).toBe("CONSENT");
+    expect(await hint(shop.id)).toEqual(new Date("2026-10-29T12:15:00Z"));
+    // Consent is given: the tick lifts the pause, and without a schedule there is nothing more to look at.
+    await smartTick(deps, new Date("2026-10-29T12:15:00Z"));
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, pauseReason: null });
+    expect(await hint(shop.id)).toBeNull();
+
+    setPlan(PLANS.pro);
+    expect(await smartPauseAfterStop(shop.id, "PLAN_SMART", new Date("2026-10-29T13:00:00Z"), app)).toBe("PLAN");
+    await smartTick(deps, new Date("2026-10-29T13:15:00Z"));
+    // Still without the smart schedule: the pause stays and is looked at again.
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pauseReason: "PLAN" });
+    expect(await hint(shop.id)).toEqual(new Date("2026-10-29T13:30:00Z"));
+    setPlan(PLANS.business);
+    await smartTick(deps, new Date("2026-10-29T13:30:00Z"));
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, pauseReason: null });
+  });
+
+  it("saving the settings, pausing and resuming keep the minute's recheck of a run that waits", async () => {
+    const { shop, deps, pages } = await setup();
+    const t0 = new Date("2026-10-29T12:00:00Z");
+    await enabled(shop.id, manual(), t0);
+    // A Check now that waited for the merchant's own measurement, which has finished meanwhile.
+    await withTenant(
+      shop.id,
+      (tx) =>
+        tx.smartAutoRun.create({
+          data: { shopId: shop.id, trigger: "MANUAL", status: "WAITING", locales: ["de"], resourceTypes: ["PRODUCT"], fieldGroups: [], includeAttached: false, publishMode: "DRAFT", replaceOutdatedMachine: true },
+        }),
+      app,
+    );
+    const t1 = new Date("2026-10-29T12:05:00Z");
+    const saved = await saveSmartSettings({ shopId: shop.id, actorId: "7", value: manual(), version: 1, primaryLocale: "en", now: t1 }, app);
+    expect(saved).not.toBeNull();
+    expect(await hint(shop.id)).toEqual(new Date("2026-10-29T12:06:00Z"));
+    await pauseSmart({ shopId: shop.id, actorId: "7", now: t1 }, app);
+    await resumeSmart({ shopId: shop.id, actorId: "7", now: t1 }, app);
+    expect(await hint(shop.id)).toEqual(new Date("2026-10-29T12:06:00Z"));
+    await smartTick(deps, new Date("2026-10-29T12:06:00Z"));
+    expect((await runs(shop.id)).map((r) => r.status)).toEqual(["RUNNING"]);
+    expect(pages).toHaveLength(1);
+  });
+
+  it("giving consent lifts a pause for consent at once; the merchant's own pause stays", async () => {
+    const { shop } = await setup();
+    const t0 = new Date("2026-10-29T12:00:00Z");
+    await enabled(shop.id, daily(), t0);
+    await smartPauseAfterStop(shop.id, "CONSENT_REQUIRED", t0, app);
+    expect(await liftCausePause(shop.id, "CONSENT", t0, app)).toBe(true);
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pausedAt: null, pauseReason: null });
+    expect(await hint(shop.id)).toEqual(new Date("2026-10-29T22:00:00Z"));
+    await pauseSmart({ shopId: shop.id, actorId: "7", now: t0 }, app);
+    expect(await liftCausePause(shop.id, "CONSENT", t0, app)).toBe(false);
+    expect(await getSmartConfig(shop.id, app)).toMatchObject({ pauseReason: "MANUAL" });
+  });
+
+  it("Retry agrees with the page: a pause whose cause is gone is lifted before it checks", async () => {
+    const { shop, deps } = await setup();
+    const t0 = new Date("2026-10-29T12:00:00Z");
+    await enabled(shop.id, daily(), t0);
+    await smartPauseAfterStop(shop.id, "PLAN_SMART", t0, app);
+    const config = await settleSmartPause(deps, { id: shop.id, shopDomain: shop.shopDomain }, t0);
+    expect(config).toMatchObject({ enabled: true, pausedAt: null, pauseReason: null });
+  });
+});
+
 describe("items of smart jobs", () => {
   /** An item of a check's job (realtime: of a real-time job instead, which has no run). */
   async function smartItem(
     shopId: string,
-    over: { fieldGroups?: string[]; resourceType?: string; targetLocale?: string; publishMode?: "DRAFT" | "AUTO_PUBLISH" } = {},
+    over: { fieldGroups?: string[]; resourceType?: string; targetLocale?: string; publishMode?: "DRAFT" | "AUTO_PUBLISH"; includeAttached?: boolean; replaceOutdatedMachine?: boolean } = {},
     resourceGid = P1,
     realtime = false,
   ) {
@@ -419,6 +532,38 @@ describe("items of smart jobs", () => {
     expect(classifyError(error)).toEqual({ kind: "job-stop", code: "PLAN_SMART" });
   });
 
+  it("stop with the smart schedule's own reason also on a plan without bulk translation, and either plan stop pauses for the plan", async () => {
+    const { shop, store } = await setup();
+    await enabled(shop.id);
+    const { item } = await smartItem(shop.id);
+    const error = await processItem(jobDeps(store, PLANS.free), { shopId: shop.id, itemId: item.id }, 1).catch((e) => e);
+    expect(classifyError(error)).toEqual({ kind: "job-stop", code: "PLAN_SMART" });
+    expect(await smartPauseAfterStop(shop.id, "PLAN_REQUIRED", new Date(), app)).toBe("PLAN");
+  });
+
+  it("follow the settings as they are now for images and outdated machine output too", async () => {
+    const { shop, store } = await setup();
+    // Linguva's own machine translation of product 1's description, outdated since.
+    store.translate(P1, "de", "body_html", "<p>Warme <b>Jacke</b> Nummer 1.</p>");
+    await withTenant(
+      shop.id,
+      (tx) =>
+        tx.translationRevision.create({
+          data: { shopId: shop.id, resourceGid: P1, locale: "de", key: "body_html", value: "<p>Warme <b>Jacke</b> Nummer 1.</p>", sourceDigest: sha("<p>Warm <b>jacket</b> number 1.</p>"), origin: "AI", provider: "mock" },
+        }),
+      app,
+    );
+    store.updateSource(P1, "body_html", "<p>Warm <b>jacket</b> number 1, now waterproof.</p>");
+    store.addImage(P1, "Blue jacket");
+    // Planned while images were included and outdated machine output replaced; both turned off since.
+    await enabled(shop.id, daily({ includeAttached: false, replaceOutdatedMachine: false }));
+    const { item } = await smartItem(shop.id, { includeAttached: true, replaceOutdatedMachine: true });
+    expect(await processItem(jobDeps(store), { shopId: shop.id, itemId: item.id }, 1)).toMatchObject({ status: "SUCCEEDED" });
+    const drafts = await withTenant(shop.id, (tx) => tx.translationDraft.findMany({ where: { shopId: shop.id, status: "PENDING" } }), app);
+    // The missing title only: the outdated description and the image's alt text stay as they are.
+    expect(drafts.map((d) => `${d.resourceGid}|${d.key}`)).toEqual([`${P1}|title`]);
+  });
+
   it("translate only the chosen field groups, count as smart usage, and stop at the daily budget", async () => {
     const { shop, store } = await setup();
     await enabled(shop.id, daily({ dailyBudget: 1000 }));
@@ -463,6 +608,16 @@ describe("items of smart jobs", () => {
     const { item } = await smartItem(shop.id, { targetLocale: "fr" });
     expect(await processItem(jobDeps(store), { shopId: shop.id, itemId: item.id }, 1)).toEqual({ status: "CANCELLED", errorCode: "LANGUAGE_GONE" });
     expect(await getOriginUsageSince(shop.id, "smart", new Date("2026-01-01T00:00:00Z"), app)).toBe(0);
+  });
+
+  it("translate into a language added a moment ago: a copy of the languages minutes old is checked with Shopify first", async () => {
+    const { shop, store } = await setup();
+    await enabled(shop.id, daily({ locales: ["de", "fr"] }));
+    // The worker read the languages a minute ago, before French was added in Shopify.
+    await currentShopLocales(shop.id, async () => store.asAdmin(), app);
+    store.locales = [...store.locales, { locale: "fr", name: "French", primary: false, published: true }];
+    const { item } = await smartItem(shop.id, { targetLocale: "fr" });
+    expect(await processItem(jobDeps(store), { shopId: shop.id, itemId: item.id }, 1)).toMatchObject({ status: "SUCCEEDED" });
   });
 
   it("translate nothing from a new primary language: the job stops and the schedule pauses until the languages are saved", async () => {
@@ -639,6 +794,28 @@ describe("webhooks and the periodic check", () => {
     const resumed = recordQueue();
     expect(await sweepChangedContent(sweepDeps, resumed.queue, new Date(now.getTime() + 12 * 60_000))).toMatchObject({ shops: 1, queued: 1 });
     expect(resumed.added).toEqual([expect.objectContaining({ resourceGid: "gid://shopify/Page/1" })]);
+  });
+
+  it("the periodic check doesn't move past a check that left part of its scope (PARTIAL)", async () => {
+    const { shop, store, deps } = await setup();
+    store.addContent(1);
+    const sweepDeps = { prisma: app, adminFor: deps.adminFor, billingFor: deps.billingFor };
+    const t0 = new Date();
+    await enabled(shop.id, daily({ mode: "realtime", times: [180] }), t0);
+    // A page changes; the check after it read the page while paused and planned nothing for it.
+    store.touch("gid://shopify/Page/1", new Date(t0.getTime() + 5 * 60_000));
+    const started = new Date(t0.getTime() + 20 * 60_000);
+    await withTenant(
+      shop.id,
+      (tx) =>
+        tx.smartAutoRun.create({
+          data: { shopId: shop.id, trigger: "SCHEDULED", occurrenceAt: started, status: "COMPLETED", errorCode: "PARTIAL", startedAt: started, finishedAt: new Date(started.getTime() + 5 * 60_000), locales: ["de"], resourceTypes: ["PAGE"], fieldGroups: [] },
+        }),
+      app,
+    );
+    const { queue, added } = recordQueue();
+    expect(await sweepChangedContent(sweepDeps, queue, new Date(t0.getTime() + 30 * 60_000))).toMatchObject({ shops: 1, queued: 1 });
+    expect(added).toEqual([expect.objectContaining({ resourceGid: "gid://shopify/Page/1" })]);
   });
 });
 

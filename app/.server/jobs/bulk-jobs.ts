@@ -84,43 +84,23 @@ export async function createBulkJob(
         where: { shopId_idempotencyKey: { shopId: input.shopId, idempotencyKey: input.idempotencyKey } },
       });
       if (repeated) return { job: repeated, created: false };
-      const active = await tx.translationJob.findFirst({
+      const active = await tx.translationJob.findMany({
         where: {
           shopId: input.shopId,
           resourceType: input.resourceType,
           targetLocale: input.targetLocale,
           status: { in: [...ACTIVE_JOB_STATUSES] },
         },
+        orderBy: { createdAt: "asc" },
       });
       const fieldScope = input.fieldScope ?? "ALL";
       const includeAttached = Boolean(input.includeAttached) && fieldScope === "ALL" && ATTACHED_BULK_TYPES.has(input.resourceType);
-      const automatic = active && (active.requestedBy === AUTO_REQUESTED_BY || (active.requestedBy === SMART_REQUESTED_BY && !active.smartRunId));
-      if (automatic && fieldScope === "ALL") {
-        // An automatic job (also the smart schedule's real-time one) holds a few changed
-        // resources: it becomes the requested bulk job (its items stay, discovery adds the
-        // rest). Not for a narrower job (search listings only): its pending items would
-        // lose their other fields; the automatic job finishes first. A smart check's job
-        // is kept, like any other active job.
-        const settings = await tx.shopSettings.findUnique({ where: { shopId: input.shopId } });
-        const job = await tx.translationJob.update({
-          where: { id: active.id },
-          data: {
-            requestedBy: input.requestedBy,
-            idempotencyKey: input.idempotencyKey,
-            overwriteProtected: input.overwriteProtected ?? false,
-            fieldScope,
-            includeAttached,
-            // A bulk job's own rules from now on (the smart schedule's may differ).
-            publishMode: settings?.bulkPublishMode ?? "DRAFT",
-            fieldGroups: [],
-            replaceOutdatedMachine: true,
-            discoveryDone: false,
-            discoveryCursor: null,
-          },
-        });
-        return { job, created: true };
-      }
-      if (active) return { job: active, created: false };
+      // A merchant's job or a smart check's job is kept, like any other active job.
+      const other = active.find((job) => !isAutomaticJob(job));
+      if (other) return { job: other, created: false };
+      // A narrower job (search listings only) would leave the automatic job's pending items
+      // without their other fields: the automatic job finishes first.
+      if (active.length && fieldScope !== "ALL") return { job: active[0]!, created: false };
       const settings = await tx.shopSettings.findUnique({ where: { shopId: input.shopId } });
       const job = await tx.translationJob.create({
         data: {
@@ -136,10 +116,33 @@ export async function createBulkJob(
           includeAttached,
         },
       });
+      // An automatic job (also the smart schedule's real-time one) hands over what it holds.
+      for (const automatic of active) await handOverAutomaticJobTx(tx, automatic, job);
       return { job, created: true };
     },
     client,
   );
+}
+
+/** A job of automatic translation (webhooks), also the smart schedule's real-time one (no run). */
+export function isAutomaticJob(job: Pick<TranslationJob, "requestedBy" | "smartRunId">): boolean {
+  return job.requestedBy === AUTO_REQUESTED_BY || (job.requestedBy === SMART_REQUESTED_BY && !job.smartRunId);
+}
+
+/**
+ * An automatic job hands over to the job taking its place (a merchant's
+ * bulk job or a smart check's): its items that haven't started move there
+ * and run once, under that job's rules. What it did before stays its own,
+ * so the new job counts only its own work and translates every resource it
+ * finds, also one the automatic job finished earlier today. It completes
+ * once its running items are done (they keep their resources busy).
+ */
+export async function handOverAutomaticJobTx(tx: TenantTx, from: TranslationJob, to: TranslationJob) {
+  const moved = await tx.translationJobItem.updateMany({ where: { shopId: from.shopId, jobId: from.id, status: "PENDING" }, data: { jobId: to.id } });
+  if (moved.count) await tx.translationJob.update({ where: { id: to.id }, data: { totalItems: { increment: moved.count } } });
+  const left = await tx.translationJob.update({ where: { id: from.id }, data: { totalItems: { decrement: moved.count }, discoveryDone: true } });
+  await maybeComplete(tx, left);
+  return moved.count;
 }
 
 /** Returns the job only if it belongs to the shop (RLS + explicit filter). */

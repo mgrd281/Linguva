@@ -7,7 +7,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { UI_ENV, UI_SHOPS } from "./fixtures/shops";
-import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp, sessionToken, setWorkerRunning } from "./helpers";
+import { clickSaveBarButton, expectAccessible, expectNoHorizontalScroll, expectToast, openApp, saveBarShown, sessionToken, setWorkerRunning } from "./helpers";
 
 // The smart schedule runs in the worker: these pages are tested with background jobs running.
 test.beforeAll(() => setWorkerRunning(true));
@@ -26,6 +26,8 @@ test("Settings shows the smart schedule with real values and its actions @respon
   await expect(section.getByText(/23:00 \(Europe\/Berlin\)/).first()).toBeVisible();
   await expect(section.getByText("3 changes, fields to translate: 12")).toBeVisible();
   await expect(section.getByText("0 items")).toBeVisible();
+  // The schedule's own publishing, not bulk translation's.
+  await expect(section.getByText("Drafts for review", { exact: true })).toBeVisible();
   await expect(section.getByRole("button", { name: "Check now" })).toBeVisible();
   await expect(section.getByRole("button", { name: "Pause" })).toBeVisible();
   await expect(section.getByRole("link", { name: "Schedule and options" }).or(section.getByRole("button", { name: "Schedule and options" }))).toBeVisible();
@@ -85,6 +87,12 @@ test("setting it up: the schedule picker updates the next checks live, then it i
 
   await page.getByRole("button", { name: "Save" }).last().click();
   await expectToast(page, "Saved. The next check follows these settings.");
+  // Saved: the save bar is gone, and the next change brings it back.
+  await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(false);
+  await page.getByRole("checkbox", { name: "Friday", exact: true }).check();
+  await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
+  await clickSaveBarButton(page, "smart-auto-save-bar", 1);
+  await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(false);
   await page.reload();
   await expect(page.getByRole("radio", { name: /^On chosen weekdays/ })).toBeChecked();
   await expect(page.getByRole("checkbox", { name: "Monday", exact: true })).toBeChecked();
@@ -161,6 +169,9 @@ test("after a move to a plan without the smart schedule, basic automatic transla
   await page.reload();
   await expect(section.getByRole("button", { name: "Turn off" })).toBeVisible();
   await expect(section.getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
+  // The two never run together: the smart schedule was turned off.
+  await openApp(page, "smartDowngraded", "/app/settings/automatic");
+  await expect(page.locator("s-page s-section").first().locator("s-badge").first()).toHaveText("Off");
 });
 
 test("an item is left out of the smart schedule from its editor, and taken back in on the smart page", async ({ page }) => {

@@ -78,9 +78,11 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
       // translated either), or there is no figure: a language added since would otherwise add nothing.
       const segments = await tx.coverageSegment.findMany({
         where: { shopId, locale: { in: locales }, resourceType: { in: types }, status: { in: ["SCANNED", "DENIED"] } },
-        select: { locale: true, resourceType: true },
+        select: { locale: true, resourceType: true, status: true },
       });
       const read = new Set(segments.map((s) => `${s.locale}|${s.resourceType}`));
+      // Chosen types Linguva has no access to: checks leave them out until access is allowed.
+      const noAccess = [...new Set(segments.filter((s) => s.status === "DENIED").map((s) => s.resourceType))];
       const scopeRead = locales.length > 0 && locales.every((l) => types.every((t) => read.has(`${l}|${t}`)));
       const measured = (await tx.coverageSegment.count({ where: { shopId, status: "SCANNED" } })) > 0;
       const pending = await tx.coverageCount.aggregate({
@@ -102,7 +104,7 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
           WHERE "shopId" = ${shopId}::uuid AND "locale" = ANY(${locales}::text[]) AND "resourceType" = ANY(${types}::text[])
             AND cardinality("sourceChars") < cardinality("sourceKeys")
         ) AS "older"`;
-      return { config, runs, jobs, translating, measured, scopeRead, older: Boolean(older?.older), pendingChars: Number(pending._sum.chars ?? 0) };
+      return { config, runs, jobs, translating, measured, scopeRead, noAccess, older: Boolean(older?.older), pendingChars: Number(pending._sum.chars ?? 0) };
     },
     client,
   );
@@ -183,6 +185,8 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
     estimate: data.scopeRead && !data.older ? data.pendingChars : null,
     /** No estimate although something was measured: a chosen language or type wasn't read in full, or only before character counts: measure again. */
     remeasure: data.measured && (!data.scopeRead || data.older),
+    /** Chosen content types Linguva can't read (an optional permission not granted): checks leave them out. */
+    noAccess: data.noAccess,
     usage: { today: usedToday, month: usedMonth },
     exclusions: exclusions.map((e) => ({
       resourceGid: e.resourceGid,

@@ -10,7 +10,7 @@ import type { CoverageReport, PrismaClient, SmartAutoRun, TranslationJob } from 
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import type { CoverageChange } from "../coverage/items";
-import { ACTIVE_JOB_STATUSES, AUTO_REQUESTED_BY, completeIfDone } from "../jobs/bulk-jobs";
+import { ACTIVE_JOB_STATUSES, completeIfDone, handOverAutomaticJobTx, isAutomaticJob } from "../jobs/bulk-jobs";
 import { planResourceWork } from "../jobs/needs-work";
 import { pendingDraftDigests } from "../review/drafts";
 import { isEditableAttachedField } from "../translation/attached-editor";
@@ -189,8 +189,8 @@ export async function writeSmartPlanTx(tx: TenantTx, shopId: string, plan: Smart
  * The run's job for a type and language, under the lock every job creation
  * takes, so smart checks keep the rule too: one active job per shop, type and
  * language (createBulkJob). An automatic job holding a few changed resources
- * becomes the run's job (its items stay, as when a bulk job takes one over).
- * Any other active job keeps them, as does a merchant's job that includes
+ * hands its waiting items over to the run's new job (handOverAutomaticJobTx,
+ * as to a merchant's bulk job). Any other active job keeps them, as does a merchant's job that includes
  * the images and custom fields of their owner: null, and the next check
  * picks up whatever it left. Null as well once the run's job was stopped.
  */
@@ -206,11 +206,9 @@ async function runJobTx(tx: TenantTx, shopId: string, run: SmartAutoRun, plan: S
     where: { shopId, targetLocale: plan.locale, status: { in: [...ACTIVE_JOB_STATUSES] }, resourceType: { in: owner ? [plan.resourceType, owner] : [plan.resourceType] } },
     orderBy: { createdAt: "asc" },
   });
-  const automatic = (job: TranslationJob) => job.requestedBy === AUTO_REQUESTED_BY || (job.requestedBy === SMART_REQUESTED_BY && !job.smartRunId);
   const keeps = (job: TranslationJob) =>
-    job.resourceType === plan.resourceType ? !(automatic(job) && job.fieldScope === "ALL" && !job.overwriteProtected) : job.includeAttached && !automatic(job);
+    job.resourceType === plan.resourceType ? !(isAutomaticJob(job) && job.fieldScope === "ALL" && !job.overwriteProtected) : job.includeAttached && !isAutomaticJob(job);
   if (jobs.some(keeps)) return null;
-  const active = jobs.find((j) => j.resourceType === plan.resourceType);
   const data = {
     requestedBy: SMART_REQUESTED_BY,
     idempotencyKey,
@@ -224,8 +222,11 @@ async function runJobTx(tx: TenantTx, shopId: string, run: SmartAutoRun, plan: S
     // Done when the run's measurement has read everything (finishSmartScanTx).
     discoveryDone: false,
   };
-  if (active) return tx.translationJob.update({ where: { id: active.id }, data: { ...data, finishedAt: null } });
-  return tx.translationJob.create({ data: { shopId, resourceType: plan.resourceType, targetLocale: plan.locale, ...data, startedAt: now } });
+  const job = await tx.translationJob.create({ data: { shopId, resourceType: plan.resourceType, targetLocale: plan.locale, ...data, startedAt: now } });
+  // An automatic job of this type and language hands over its waiting items; what it did
+  // before stays its own (the run counts and translates only its own work).
+  for (const automatic of jobs.filter((j) => j.resourceType === plan.resourceType)) await handOverAutomaticJobTx(tx, automatic, job);
+  return job;
 }
 
 /**

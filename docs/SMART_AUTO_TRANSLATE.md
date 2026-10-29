@@ -120,7 +120,7 @@ New tenant tables:
 
 Every 60 s the worker runs the tick, as its other periodic work: one worker per minute takes the Redis lock `smart-tick-lock`, and a second one (a deploy overlap) would still start each occurrence once (unique occurrence, per-shop advisory lock). Before deciding, the tick finishes runs whose measurement ended without finishing them (`repairSmartRuns`, also in the 5-minute sweep).
 
-A run's start comes after the commit that created it, so the tick and Check now set the shop's hint to at most a minute later: should the start not get through (a database timeout, a restart), the next tick starts the QUEUED run, also in manual mode, where no schedule would bring the tick back. A run that waited and was paused meanwhile is recorded as SKIPPED (`PAUSED`) instead of started. Each tick:
+A run's start comes after the commit that created it, so the shop's hint is at most a minute away while a run is QUEUED or WAITING: should the start not get through (a database timeout, a restart), the next tick starts it, also in manual mode, where no schedule would bring the tick back. One function computes the hint for every write of the schedule (the tick, saving, turning on or off, pausing for a stop, resuming, Check now): the next scheduled check, a minute while a run waits or hasn't started, and 15 minutes while paused for the plan or consent, so such a pause lifts soon after its cause, also in manual mode; giving consent lifts a consent pause at once. Saving or resuming never drops a recheck. A run that waited and was paused meanwhile is recorded as SKIPPED (`PAUSED`) instead of started. Each tick:
 
 1. Lists up to 100 ACTIVE `Shop` rows with `smartNextRunAt <= now` (oldest first). It also starts WAITING runs whose blocking measurement has finished.
 2. **Outside any transaction**, per shop, it reads the facts:
@@ -151,7 +151,7 @@ A run's start comes after the commit that created it, so the tick and Check now 
 - the coverage type must be in scope (own types, plus image and custom-field types when `includeAttached` is on);
 - excluded resources are skipped;
 - `planResourceWork` runs with `latestRevisions`, `pendingDraftDigests`, the run's `fieldGroups` and `keepOutdatedMachine`;
-- a resource that already has a PENDING or RUNNING item in another **active** job for the same language is skipped (it is handled there); an image or custom field also when its owner has one in a job that includes them. Leftovers of a stopped job don't count.
+- a resource that already has a PENDING or RUNNING item in another **active** job for the same language is skipped (it is handled there); a custom field also when its owner has one in a job that includes them (images not yet: the scan records no owner for them, see the limitations). Leftovers of a stopped job don't count.
 
 **Items per exact resource.**
 - Each resource that needs work gets an item for its own GID, also an image or a metafield.
@@ -159,11 +159,11 @@ A run's start comes after the commit that created it, so the tick and Check now 
 - Attached content needs no owner lookup. Its "failed" overlay works per resource, too.
 
 **One active job per type and language.** The run's job is found or created under the lock every job creation takes (`job:<shop>:<type>:<locale>`, as `createBulkJob` and real-time checks), so the rule holds for smart checks too:
-- an automatic job (basic, or the smart schedule's real-time one) for the type and language becomes the run's job; its items stay, as when a bulk job takes one over;
+- an automatic job (basic, or the smart schedule's real-time one) for the type and language hands over to the run's new job: its items that haven't started move there and run once under the run's rules; what it did earlier stays its own (the run counts and translates only its own work, also a resource the automatic job finished earlier that day). It completes once its running items are done, which keep their resources busy meanwhile;
 - any other active job (a merchant's bulk job, another run's) keeps the type and language, as does a merchant's job that includes the images and custom fields of their owner: the run plans nothing for them, and its counts say what it translated itself. The next check picks up whatever is left;
 - once the run's own job was stopped (Jobs page, a limit), nothing more is added to it.
 
-A merchant's bulk request takes over a real-time job like a basic automatic one (with the bulk job's own rules from then on), and answers with a check's job while one is active.
+A merchant's bulk request takes over from a real-time job like from a basic automatic one: a new bulk job with its own rules, the waiting items moved over. It answers with a check's job while one is active. While an automatic job finishes its running items beside the job that took over, a change of a resource waiting or running in either never gets a second item.
 
 **Writes, atomic with the checkpoint.** Inside the page's transaction:
 - the job as above, and the items (unique per job and resource);
@@ -177,7 +177,7 @@ A repeated page job can't double-count, because the checkpoint advance is condit
 - Smart jobs are created with `discoveryDone = false` while their run's scan goes on. The report's last page sets `discoveryDone = true` on all of the run's jobs and completes the empty ones.
 - `requeueStalledDiscovery` ignores smart jobs: they have no discovery chain.
 
-**Finish.** The run is COMPLETED when its report has finished and all of its jobs have; `lastSuccessAt` ("last complete check") is set then, unless part of its scope wasn't planned: a type in scope that couldn't be read (no access, skipped after its retries) or pages read while paused. Such a run finishes with `PARTIAL`, and the next check takes the rest. The check runs at the report's last page and whenever a smart job completes. A failed report makes the run FAILED, while items already queued finish.
+**Finish.** The run is COMPLETED when its report has finished and all of its jobs have; `lastSuccessAt` ("last complete check") is set then, unless part of its scope wasn't planned: a type in scope that couldn't be read (skipped after its retries) or pages read while paused. Such a run finishes with `PARTIAL`, and the next check takes the rest; the real-time periodic check doesn't move past it. A chosen type Linguva has no access to (an optional permission) isn't a gap: nothing of it can be read or translated, the estimate counts it the same way, and the smart page names it with "Allow access". The check runs at the report's last page and whenever a smart job completes. A failed report makes the run FAILED, while items already queued finish.
 
 **Retry** on the Jobs page resumes a check's job without a discovery of its own: its run's measurement fills it.
 
@@ -191,8 +191,8 @@ Every item checks the settings as they are now, not as they were when it was pla
 - the `smartAuto` entitlement — missing: the job stops with `PLAN_SMART` and the config pauses with `PLAN`;
 - the config is enabled and not paused — otherwise the item is CANCELLED `PAUSED` or `SMART_OFF`;
 - the language is still chosen, the type is still in scope, the field groups still share one, and a real-time item's schedule is still real time — otherwise `OUT_OF_SCOPE` (the next check follows the settings);
-- the language is still in the store and within the plan's languages (`currentShopLocales`) — otherwise `LANGUAGE_GONE`, before anything is sent;
-- the resource isn't excluded, nor (an image or custom field) its owner — otherwise SKIPPED `EXCLUDED`;
+- the language is still in the store and within the plan's languages (`currentShopLocales`; a copy minutes old that lacks it is confirmed with Shopify first) — otherwise `LANGUAGE_GONE`, before anything is sent;
+- the resource isn't excluded, nor (a custom field) its owner — otherwise SKIPPED `EXCLUDED`;
 - after the read: the resource's source language is the primary language the settings were saved with — otherwise the job stops with `PRIMARY_LANGUAGE` and the config pauses until the languages are saved again.
 
 Planning:
@@ -331,7 +331,7 @@ Actions: Turn on/off, Pause/Resume, Check now, and Change schedule and options.
 |---|---|
 | Worker restart during a run | Coverage stall repair re-queues the page (10 min); PENDING items without a queue job are re-queued; the run continues |
 | Two workers tick at the same time | One job per slot (job scheduler); a unique occurrence row under the per-shop advisory lock; one active run per shop |
-| A run's start doesn't get through | The hint brings the tick back within a minute; it starts the QUEUED run (also in manual mode) |
+| A run's start doesn't get through | The hint brings the tick back within a minute; it starts the QUEUED run (also in manual mode, also after a save or resume) |
 | A merchant's bulk job for the same type and language | The check leaves it to that job; a real-time check waits for it (§5.2, §5.5) |
 | Shopify 5xx or throttling | Retried with backoff; throttling waits without spending an attempt; a type that keeps failing is skipped and shown as "not fully read" |
 | Provider down | Item retries, then DEAD; the run shows failed items with "Retry failed" |

@@ -73,11 +73,17 @@ export async function sweepChangedContent(
         if (smart.mode !== "realtime" || smartPaused(smart, now) || !hasCurrentAiConsent(settings)) continue;
         const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
         if (billing?.configured && !billing.entitlements.smartAuto) continue;
-        // Never before its last complete check started (that one read everything); a skipped or
-        // failed check moves nothing.
+        // Never before its last complete check started (that one read and planned everything); a
+        // skipped or failed check moves nothing, nor one that left part of its scope (PARTIAL) or
+        // was stopped by a limit.
         const lastCheck = await withTenant(
           shop.id,
-          (tx) => tx.smartAutoRun.findFirst({ where: { shopId: shop.id, status: "COMPLETED", startedAt: { not: null } }, orderBy: { startedAt: "desc" }, select: { startedAt: true } }),
+          (tx) =>
+            tx.smartAutoRun.findFirst({
+              where: { shopId: shop.id, status: "COMPLETED", errorCode: null, startedAt: { not: null } },
+              orderBy: { startedAt: "desc" },
+              select: { startedAt: true },
+            }),
           deps.prisma,
         );
         const fromCheck = lastCheck?.startedAt ? new Date(lastCheck.startedAt.getTime() - OVERLAP_MS) : null;

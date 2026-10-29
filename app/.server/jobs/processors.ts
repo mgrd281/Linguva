@@ -25,7 +25,7 @@ import { releaseUsage, reserveUsage, settleUsage, type UsageBudget } from "../us
 import { smartPaused } from "../smart/config";
 import { budgetWindows, SMART_REQUESTED_BY, smartCoverageTypes } from "../../lib/smart-auto";
 import { allowedTargetLocales } from "../billing/subscription";
-import { currentShopLocales } from "../locales/current-locales";
+import { currentShopLocales, type CurrentLocales } from "../locales/current-locales";
 import { AUTO_REQUESTED_BY, finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
@@ -336,9 +336,11 @@ export async function processItem(
   if (smart) {
     // Only into a language the store and the plan still have (as Shopify says now: with only the
     // stored copy, Shopify is having trouble and the read below decides whether the item waits).
-    const locales = await currentShopLocales(payload.shopId, async () => admin, deps.prisma);
-    const allowed = billing ? allowedTargetLocales(billing.entitlements, locales.targets) : locales.targets;
-    if (locales.fresh && !allowed.includes(job.targetLocale)) {
+    const allowedIn = (current: CurrentLocales) => (billing ? allowedTargetLocales(billing.entitlements, current.targets) : current.targets);
+    let locales = await currentShopLocales(payload.shopId, async () => admin, deps.prisma);
+    // A copy may be minutes old (a language added a moment ago): Shopify confirms before anything is cancelled.
+    if (!locales.fresh && !allowedIn(locales).includes(job.targetLocale)) locales = await currentShopLocales(payload.shopId, async () => admin, deps.prisma, Date.now(), 0);
+    if (locales.fresh && !allowedIn(locales).includes(job.targetLocale)) {
       await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: "LANGUAGE_GONE" }, deps.prisma);
       return { status: "CANCELLED", errorCode: "LANGUAGE_GONE" };
     }

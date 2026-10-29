@@ -19,6 +19,10 @@ export type { SmartAutoConfig };
 
 const ACTIVE_RUN = ["QUEUED", "WAITING", "RUNNING"] as const;
 const ACTIVE_JOB = ["PENDING", "DISCOVERING", "RUNNING"] as const;
+/** A run waiting for a measurement the merchant started, or one whose start didn't get through, is tried again this soon. */
+export const WAITING_RECHECK_MS = 60_000;
+/** A pause for the plan or consent is looked at again this often, so it lifts soon after its cause. */
+export const CAUSE_RECHECK_MS = 15 * 60_000;
 
 export async function getSmartConfig(shopId: string, client: PrismaClient = defaultClient): Promise<SmartAutoConfig | null> {
   return withTenant(shopId, (tx) => tx.smartAutoConfig.findUnique({ where: { shopId } }), client);
@@ -41,8 +45,29 @@ export function smartPaused(config: Pick<SmartAutoConfig, "pausedAt" | "pausedUn
   return Boolean(config.pausedAt) && (!config.pausedUntil || config.pausedUntil > now);
 }
 
-async function setDueHint(tx: TenantTx, shopId: string, at: Date | null) {
+/**
+ * When the tick looks at the shop next (Shop.smartNextRunAt, the index it
+ * reads): the next scheduled check; a minute after a run that waits or hasn't
+ * started yet; and 15 minutes into a pause for the plan or consent, so it
+ * lifts soon after its cause, also in manual mode. Every write of the
+ * schedule goes through here, so saving or resuming never drops a recheck.
+ * Off: never.
+ */
+export async function refreshDueHint(tx: TenantTx, shopId: string, now: Date, known?: SmartAutoConfig | null): Promise<Date | null> {
+  const config = known === undefined ? await tx.smartAutoConfig.findUnique({ where: { shopId } }) : known;
+  let at: Date | null = null;
+  if (config?.enabled) {
+    const pending = await tx.smartAutoRun.findFirst({ where: { shopId, status: { in: ["QUEUED", "WAITING"] } }, select: { id: true } });
+    const causePause = config.pausedAt && (config.pauseReason === "PLAN" || config.pauseReason === "CONSENT");
+    const candidates = [
+      config.nextRunAt,
+      pending ? new Date(now.getTime() + WAITING_RECHECK_MS) : null,
+      causePause ? new Date(now.getTime() + CAUSE_RECHECK_MS) : null,
+    ].filter((d): d is Date => d !== null);
+    at = candidates.length ? new Date(Math.min(...candidates.map((d) => d.getTime()))) : null;
+  }
   await tx.shop.update({ where: { id: shopId }, data: { smartNextRunAt: at } });
+  return at;
 }
 
 async function audit(client: PrismaClient, shopId: string, actorId: string | null, action: string, metadata: Record<string, unknown> = {}) {
@@ -98,8 +123,8 @@ export async function saveSmartSettings(
       const config = existing
         ? await tx.smartAutoConfig.update({ where: { shopId: input.shopId }, data: { ...data, version: { increment: 1 } } })
         : await tx.smartAutoConfig.create({ data: { shopId: input.shopId, ...data, version: 1 } });
-      // Also while paused: the tick records the skipped checks.
-      await setDueHint(tx, input.shopId, config.enabled ? config.nextRunAt : null);
+      // Also while paused: the tick records the skipped checks (and a waiting run keeps its recheck).
+      await refreshDueHint(tx, input.shopId, now, config);
       // Real time from now on: the periodic check follows changes made after this (earlier ones wait for the next full check).
       if (enabled && v.mode === "realtime" && existing?.mode !== "realtime") await startFollowingChanges(tx, input.shopId, now);
       return config;
@@ -142,8 +167,8 @@ export async function setSmartEnabled(
           ? { enabled: true, pausedAt: null, pauseReason: null, pausedUntil: null, nextRunAt: nextCheck(existing, now), updatedBy: input.actorId }
           : { enabled: false, nextRunAt: null, pausedAt: null, pauseReason: null, pausedUntil: null, updatedBy: input.actorId },
       });
-      await setDueHint(tx, input.shopId, config.enabled ? config.nextRunAt : null);
       if (!input.enabled) await cancelSmartWork(tx, input.shopId, "SMART_OFF", now);
+      await refreshDueHint(tx, input.shopId, now, config);
       return config;
     },
     client,
@@ -210,13 +235,37 @@ export async function resumeSmart(input: { shopId: string; actorId: string | nul
         where: { shopId: input.shopId },
         data: { pausedAt: null, pauseReason: null, pausedUntil: null, nextRunAt: next, updatedBy: input.actorId },
       });
-      await setDueHint(tx, input.shopId, updated.nextRunAt);
+      await refreshDueHint(tx, input.shopId, now, updated);
       return updated;
     },
     client,
   );
   if (config) await audit(client, input.shopId, input.actorId, "smart_auto.resumed");
   return config;
+}
+
+/**
+ * Lifts a pause for the plan or consent where its cause goes away (consent
+ * given), so real-time changes and Retry work again at once; otherwise the
+ * tick lifts it within 15 minutes. Another pause, the merchant's own above
+ * all, stays.
+ */
+export async function liftCausePause(shopId: string, reason: "PLAN" | "CONSENT", now = new Date(), client: PrismaClient = defaultClient) {
+  const lifted = await withTenant(
+    shopId,
+    async (tx) => {
+      await lockSmart(tx, shopId);
+      const updated = await tx.smartAutoConfig.updateMany({
+        where: { shopId, pauseReason: reason, pausedAt: { not: null } },
+        data: { pausedAt: null, pauseReason: null, pausedUntil: null },
+      });
+      if (updated.count) await refreshDueHint(tx, shopId, now);
+      return updated.count > 0;
+    },
+    client,
+  );
+  if (lifted) await audit(client, shopId, null, "smart_auto.resumed", { reason });
+  return lifted;
 }
 
 /** Job stops that pause Smart Auto-Translate, and the reason recorded. */
@@ -253,10 +302,12 @@ export async function smartPauseAfterStop(shopId: string, code: string, now = ne
       // A pause already in place that lasts at least as long stays (the merchant's own pause
       // never turns into one that lifts by itself at midnight).
       if (smartPaused(config, now) && (!config.pausedUntil || (until !== null && config.pausedUntil.getTime() >= until))) return false;
-      await tx.smartAutoConfig.update({
+      const updated = await tx.smartAutoConfig.update({
         where: { shopId },
         data: { pausedAt: now, pauseReason: reason, pausedUntil: until === null ? null : new Date(until) },
       });
+      // A pause for the plan or consent is looked at again soon, so it lifts once its cause is gone.
+      await refreshDueHint(tx, shopId, now, updated);
       return true;
     },
     client,

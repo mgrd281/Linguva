@@ -22,7 +22,7 @@ import { requireShop } from "../.server/shopify/require-shop";
 import { fetchShopTimeZone } from "../.server/shopify/shop-time-zone";
 import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled, smartPaused } from "../.server/smart/config";
 import { loadSmartPanel, smartContext } from "../.server/smart/panel";
-import { requestSmartRun } from "../.server/smart/runs";
+import { requestSmartRun, settleSmartPause } from "../.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsProblem } from "../.server/smart/validate";
 import { withTenant } from "../.server/tenancy/with-tenant";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
@@ -30,6 +30,7 @@ import { smartErrorText, SmartPreview, SmartStateBadge, SmartStateBanner, smartT
 import { groupLabel, itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
+import { CONTENT_TYPES, isContentType } from "../lib/resource-kinds";
 import { formatTime, MAX_TIMES_PER_DAY, nextOccurrence, normaliseSchedule, parseTime, WEEKDAYS } from "../lib/schedule";
 import { checkSpec, REALTIME_CHECK_MINUTE, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_PERSONAL_DATA_TYPES, SMART_TYPES } from "../lib/smart-auto";
 
@@ -174,8 +175,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionRes
     if (!/^[0-9a-f-]{36}$/i.test(runId)) return { ok: false, error: "INVALID" };
     const queues = getQueues();
     if (!queues) return { ok: false, error: "UNAVAILABLE" };
-    // Retried items would only be cancelled while it is off, paused or without consent.
-    const config = await getSmartConfig(shop.id);
+    // Retried items would only be cancelled while it is off, paused or without consent. A pause
+    // whose cause is gone (shown as on) is lifted first, so this agrees with the page.
+    const config = await settleSmartPause({ prisma, adminFor: async () => admin, billingFor: async () => billing }, shop);
     if (!config?.enabled || smartPaused(config) || !hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "NOT_ON" };
     // Only this shop's jobs of that run (read under its tenant).
     const jobs = await withTenant(shop.id, (tx) => tx.translationJob.findMany({ where: { shopId: shop.id, smartRunId: runId, failedItems: { gt: 0 } }, select: { id: true } }));
@@ -296,6 +298,10 @@ export default function SmartAutomatic() {
   const notConfigured = !config;
   const cantTurnOn = !data.consent ? "CONSENT" : !data.available ? "UNAVAILABLE" : null;
 
+  // Where access to the first chosen type without it is allowed (its content page asks for the scope).
+  const accessType = panel.noAccess.find(isContentType);
+  const accessHref = accessType ? `/app/content/${CONTENT_TYPES[accessType].slug}` : null;
+
   return (
     <s-page heading={t("automatic.page.heading")}>
       <s-link slot="breadcrumb-actions" href="/app/settings">
@@ -317,6 +323,14 @@ export default function SmartAutomatic() {
           ) : null}
           <SmartStateBanner status={panel.status} zone={panel.zone} />
           <SmartPreview data={panel} languageNames={languageNames} />
+          {panel.noAccess.length ? (
+            <s-banner tone="warning" heading={t("automatic.noAccess.heading")}>
+              <s-paragraph>
+                {t("automatic.noAccess.body", { types: panel.noAccess.map((type) => kindLabel(i18n, type)).join(", ") })}{" "}
+                {accessHref ? <s-link href={accessHref}>{t("coverage.types.allowAccess")}</s-link> : null}
+              </s-paragraph>
+            </s-banner>
+          ) : null}
           <s-stack direction="inline" gap="small">
             {panel.status.state === "off" ? (
               <s-button variant="primary" disabled={!data.entitled || notConfigured || cantTurnOn !== null} onClick={() => act("turn-on")} {...loading("turn-on")}>

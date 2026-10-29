@@ -243,7 +243,18 @@ async function autoItem(client: PrismaClient, payload: AutoTranslatePayload, loc
       // Same lock as bulk job creation: one active job per shop, type and language.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`job:${payload.shopId}:${payload.resourceType}:${locale}`}, 0))`;
       const scope = { shopId: payload.shopId, resourceType: payload.resourceType, targetLocale: locale };
-      let job = await tx.translationJob.findFirst({ where: { ...scope, status: { in: [...ACTIVE_JOB_STATUSES] } } });
+      // The newest active job: one that took over from an automatic job comes after it.
+      const active = await tx.translationJob.findMany({ where: { ...scope, status: { in: [...ACTIVE_JOB_STATUSES] } }, orderBy: { createdAt: "desc" } });
+      // While an automatic job hands over, its running items still finish there: never a second
+      // item for a resource that is waiting or being translated in either job.
+      if (active.length > 1) {
+        const open = await tx.translationJobItem.findFirst({
+          where: { shopId: payload.shopId, jobId: { in: active.map((j) => j.id) }, resourceGid: payload.resourceGid, status: { in: ["PENDING", "RUNNING"] } },
+          select: { status: true },
+        });
+        if (open) return open.status === "PENDING" ? null : ("busy" as const);
+      }
+      let job = active[0] ?? null;
       // Never join a job that only translates search listings or may replace protected translations.
       if (job && (job.fieldScope !== "ALL" || job.overwriteProtected)) return "busy" as const;
       // The smart schedule's budgets, fields and publishing hold for its jobs only: it waits for any other.

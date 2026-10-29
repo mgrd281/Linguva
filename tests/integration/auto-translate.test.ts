@@ -271,7 +271,7 @@ describe("automatic translation checks", () => {
     expect(item.jobId).toBe(plain.id);
   });
 
-  it("turn into the requested bulk job when the merchant starts one meanwhile", async () => {
+  it("hand their waiting items to the bulk job the merchant starts meanwhile", async () => {
     const { shop } = await setup();
     await createAutoItems(app, { shopId: shop.id, resourceGid: P1, resourceType: "PRODUCT" });
     const [auto] = await jobs(shop.id);
@@ -279,9 +279,15 @@ describe("automatic translation checks", () => {
       { shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: "user-1", includeAttached: true },
       app,
     );
-    // Created: the caller starts discovery for all products; the waiting item stays.
+    // Created: the caller starts discovery for all products; the waiting item moved over and runs once.
     expect(created).toBe(true);
-    expect(job).toMatchObject({ id: auto!.id, requestedBy: "1", discoveryDone: false, includeAttached: true, overwriteProtected: false, totalItems: 1 });
+    expect(job).toMatchObject({ requestedBy: "1", discoveryDone: false, includeAttached: true, overwriteProtected: false });
+    expect(job.id).not.toBe(auto!.id);
+    const after = await withTenant(shop.id, (tx) => tx.translationJob.findMany({ where: { shopId: shop.id }, include: { items: true }, orderBy: { createdAt: "asc" } }), app);
+    expect(after.map((j) => [j.id, j.status, j.totalItems, j.items.map((i) => i.resourceGid)])).toEqual([
+      [auto!.id, "COMPLETED", 0, []],
+      [job.id, "PENDING", 1, [P1]],
+    ]);
   });
 
   it("stay within their store", async () => {

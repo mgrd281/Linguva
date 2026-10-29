@@ -293,6 +293,19 @@ describe("a scheduled run", () => {
     expect((await getSmartConfig(shop.id, app))!.lastSuccessAt).toBeNull();
   });
 
+  it("leaves a chosen type without access out, says so on its page, and is still complete", async () => {
+    const { shop, store, deps, pages, coverage, jobs } = await setup(2);
+    store.deniedTypes.add("MENU");
+    await turnOn(shop.id, value({ resourceTypes: ["PRODUCT", "MENU"] }));
+    await smartTick(deps, DUE);
+    const { queued } = await measure(coverage, pages[0]!);
+    for (const itemId of queued) await processItem(jobs, { shopId: shop.id, itemId }, 1);
+    expect((await runRows(shop.id))[0]).toMatchObject({ status: "COMPLETED", errorCode: null });
+    expect((await getSmartConfig(shop.id, app))!.lastSuccessAt).not.toBeNull();
+    const panel = await loadSmartPanel(shop.id, { entitled: true, consent: true, available: true, allowed: ["de"], shopTimeZone: "Europe/Berlin" }, app);
+    expect(panel.noAccess).toEqual(["MENU"]);
+  });
+
   it("is skipped, not started, when it waited for a measurement and the schedule was paused meanwhile", async () => {
     const { shop, deps } = await setup(2);
     await turnOn(shop.id);
@@ -358,7 +371,7 @@ describe("beside other jobs: one active job per type and language", () => {
     expect((await runRows(shop.id))[0]).toMatchObject({ status: "COMPLETED", resourcesChecked: 3, resourcesChanged: 0, itemsQueued: 0 });
   });
 
-  it("takes over the real-time job of the same type and language, its items kept", async () => {
+  it("takes over from the real-time job of the same type and language: its waiting items move to the check's job", async () => {
     const { shop, deps, pages, coverage } = await setup(3);
     await turnOn(shop.id, value({ mode: "realtime" }));
     const change = await createAutoItems(app, { shopId: shop.id, resourceGid: P(1), resourceType: "PRODUCT" }, deps.billingFor);
@@ -370,10 +383,14 @@ describe("beside other jobs: one active job per type and language", () => {
     const [job, ...more] = await activeJobs(shop.id);
     expect(more).toHaveLength(0);
     const [run] = await runRows(shop.id);
-    expect(job).toMatchObject({ id: realtime!.id, smartRunId: run!.id, requestedBy: SMART_REQUESTED_BY, discoveryDone: true });
-    // Product 1 once (the real-time item, still waiting), the other two added by the check.
+    expect(job).toMatchObject({ smartRunId: run!.id, requestedBy: SMART_REQUESTED_BY, discoveryDone: true });
+    expect(job!.id).not.toBe(realtime!.id);
+    // Product 1 once (the real-time item, still waiting, moved over), the other two added by the check.
     expect(job!.items.map((i) => i.resourceGid).sort()).toEqual([P(1), P(2), P(3)]);
     expect(run).toMatchObject({ resourcesChanged: 2, itemsQueued: 2 });
+    // The real-time job kept nothing to do and is done.
+    const before = await withTenant(shop.id, (tx) => tx.translationJob.findUniqueOrThrow({ where: { id: realtime!.id } }), app);
+    expect(before).toMatchObject({ status: "COMPLETED", smartRunId: null, totalItems: 0 });
   });
 
   it("leaves the images to a merchant's job that includes them", async () => {
@@ -418,7 +435,10 @@ describe("beside other jobs: one active job per type and language", () => {
     const [realtime] = await activeJobs(shop.id);
     expect(realtime).toMatchObject({ requestedBy: SMART_REQUESTED_BY, fieldGroups: ["title"] });
     const taken = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: `bulk-${++keys}` }, app);
-    expect(taken).toMatchObject({ created: true, job: { id: realtime!.id, requestedBy: "1", fieldGroups: [], publishMode: "DRAFT", discoveryDone: false } });
+    // A job of its own, with the bulk rules; the real-time item moved over and runs once.
+    expect(taken).toMatchObject({ created: true, job: { requestedBy: "1", fieldGroups: [], publishMode: "DRAFT", discoveryDone: false } });
+    expect(taken.job.id).not.toBe(realtime!.id);
+    expect((await activeJobs(shop.id)).map((j) => [j.id, j.items.map((i) => i.resourceGid)])).toEqual([[taken.job.id, [P(1)]]]);
   });
 });
 

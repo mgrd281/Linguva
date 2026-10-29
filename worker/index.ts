@@ -26,8 +26,16 @@ const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 async function main() {
   const config = getConfig();
   if (!config.REDIS_URL) throw new Error("REDIS_URL is required for the worker");
+  const mode = process.env.LINGUVA_WORKER_MODE === "embedded" ? "embedded" : "standalone";
   // Refuses to process jobs if the database could leak data between shops.
   await ensureDatabasePosture();
+  // Inside the web process: it may have gone while this one was starting (the channel is closed
+  // already). Stop before taking any job or lock; nothing below waits until the listener is set.
+  if (mode === "embedded" && process.connected === false) {
+    logger.info({ signal: "web process gone" }, "worker shutting down");
+    await prisma.$disconnect();
+    process.exit(0);
+  }
 
   const connection = createRedis(config.REDIS_URL);
   const prefix = keyPrefix(config.NODE_ENV);
@@ -92,7 +100,6 @@ async function main() {
   const autoTimer = setInterval(autoSweep, AUTO_SWEEP_INTERVAL_MS);
   void autoSweep();
 
-  const mode = process.env.LINGUVA_WORKER_MODE === "embedded" ? "embedded" : "standalone";
   // Tells the web process (and GET /healthz/worker) that jobs are being processed.
   const heartbeat = startHeartbeat(connection, {
     prefix,
@@ -126,13 +133,9 @@ async function main() {
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
   // Inside the web process (embedded): stop once it is gone, also after kill -9 or running out of memory.
-  if (mode === "embedded") {
-    // It may have gone while this process was starting: the channel is closed already (connected false).
-    if (process.connected === false) void shutdown("web process gone");
-    else if (process.channel) {
-      process.channel.unref();
-      process.on("disconnect", () => void shutdown("web process gone"));
-    }
+  if (mode === "embedded" && process.channel) {
+    process.channel.unref();
+    process.on("disconnect", () => void shutdown("web process gone"));
   }
 }
 

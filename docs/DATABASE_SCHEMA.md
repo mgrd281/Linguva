@@ -78,7 +78,7 @@ CREATE POLICY tenant_isolation ON "TranslationEntry"
 - `withTenant(shopId, fn)` opens an interactive Prisma transaction and runs `SELECT set_config('app.shop_id', $1, true)` before `fn`. The setting is transaction-local, so pooled connections can't leak a tenant.
 - With no tenant set, `current_setting` returns NULL and the policy matches **zero rows** (fail closed).
 - Cross-tenant jobs (sweepers, reconciliation) iterate shops and enter `withTenant` per shop. They never use a bypass role.
-- **Risk:** RLS + Prisma requires every tenant query to run inside `withTenant`. A lint rule plus an integration test suite that runs with RLS enabled covers this. Pooler mode (PgBouncer transaction mode) is compatible because the setting is transaction-local.
+- **Risk:** RLS + Prisma requires every tenant query to run inside `withTenant`. There is no lint rule: RLS fails closed (outside `withTenant` a query returns nothing and a write fails), and the integration and security suites run as the runtime role with RLS enforced. Pooler mode (PgBouncer transaction mode) is compatible because the setting is transaction-local.
 
 ## 4. Retention and deletion
 

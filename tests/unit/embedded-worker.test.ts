@@ -4,6 +4,7 @@
  * stops it, with a simulated child process and clock.
  */
 import { describe, expect, it } from "vitest";
+import { dropMigrationDatabaseUrl } from "../../app/.server/lib/config";
 import {
   createWorkerSupervisor,
   embeddedWorkerSetting,
@@ -62,11 +63,15 @@ describe("time to stop after SIGTERM", () => {
 });
 
 describe("the worker's environment", () => {
-  it("drops the owner role's database URL and marks the process, without changing the web's environment", () => {
+  it("never holds the owner role's database URL: the web drops it at start, the child's copy again", () => {
     const env = { DATABASE_URL: "postgres://app", MIGRATION_DATABASE_URL: "postgres://owner", DEEPL_API_KEY: "k" };
+    // The child's copy goes without it and is marked, whatever the web's environment still holds.
     const child = workerChildEnv(env);
     expect(child).toEqual({ DATABASE_URL: "postgres://app", DEEPL_API_KEY: "k", LOG_SERVICE: "linguva-worker", LINGUVA_WORKER_MODE: "embedded" });
-    expect(env.MIGRATION_DATABASE_URL).toBe("postgres://owner");
+    // The web process itself drops it before it starts the worker (entry.server; deploy-config.test.ts).
+    dropMigrationDatabaseUrl(env);
+    expect(env).toEqual({ DATABASE_URL: "postgres://app", DEEPL_API_KEY: "k" });
+    expect(workerChildEnv(env)).toEqual(child);
   });
 });
 

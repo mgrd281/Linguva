@@ -7,11 +7,12 @@ import { action as customersRedact } from "../../app/routes/webhooks.customers.r
 import { action as shopRedact } from "../../app/routes/webhooks.shop.redact";
 import { action as content } from "../../app/routes/webhooks.content";
 import { purgeWebhookLog, WEBHOOK_LOG_RETENTION_DAYS } from "../../app/.server/webhooks/process-webhook";
-import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
+import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { syncShopLocales } from "../../app/.server/locales/shop-locales";
 import { countAsOwner, ownerDb, resetDatabase } from "../support/db";
 import { signedWebhookRequest } from "../support/webhooks";
 import { resetConfigCache } from "../../app/.server/lib/config";
+import { logger } from "../../app/.server/lib/logger";
 
 const app = new PrismaClient();
 const SHOP = "webhooks.myshopify.com";
@@ -120,8 +121,10 @@ describe("compliance webhooks", () => {
     const { shop } = await upsertInstalledShop({ shopDomain: SHOP }, app);
     const other = await upsertInstalledShop({ shopDomain: "keep.myshopify.com" }, app);
     await syncShopLocales(shop.id, [{ locale: "de", name: "German", primary: true, published: true, rtl: false }], app);
-    await app.session.create({ data: { id: `offline_${SHOP}`, shop: SHOP, state: "", accessToken: "v1.a.b.c.d" } });
     await app.auditLog.createMany({ data: [{ shopId: shop.id, actorType: "SYSTEM", action: "test" }] });
+    // Shopify sends shop/redact 48 hours after the uninstall. A session left for the domain goes too.
+    await markShopUninstalled(SHOP, app);
+    await app.session.create({ data: { id: `offline_${SHOP}`, shop: SHOP, state: "", accessToken: "v1.a.b.c.d" } });
 
     const response = await call(
       shopRedact as Action,
@@ -140,6 +143,43 @@ describe("compliance webhooks", () => {
     // Other tenants are untouched.
     expect(await countAsOwner("ShopSettings", other.shop.id)).toBe(1);
     expect(await app.privacyRequest.count({ where: { topic: "SHOP_REDACT", status: "COMPLETED" } })).toBe(1);
+  });
+
+  it("a replayed shop/redact (same signed body, new webhook id) after a reinstall deletes nothing", async () => {
+    // Shopify's genuine delivery 48 hours after an uninstall erases the shop; someone keeps a copy.
+    await upsertInstalledShop({ shopDomain: SHOP }, app);
+    await call(uninstalled as Action, signedWebhookRequest({ path: "/webhooks/app/uninstalled", topic: "app/uninstalled", shop: SHOP, body: { domain: SHOP } }));
+    const body = { shop_id: 1, shop_domain: SHOP };
+    const genuine = signedWebhookRequest({ path: "/webhooks/shop/redact", topic: "shop/redact", shop: SHOP, body, webhookId: "redact-1" });
+    const capturedHmac = genuine.headers.get("X-Shopify-Hmac-Sha256")!;
+    expect((await call(shopRedact as Action, genuine)).status).toBe(200);
+    expect(await app.shop.count({ where: { shopDomain: SHOP } })).toBe(0);
+
+    // The merchant installs Linguva again and works with it.
+    const { shop } = await upsertInstalledShop({ shopDomain: SHOP }, app);
+    await syncShopLocales(shop.id, [{ locale: "de", name: "German", primary: true, published: true, rtl: false }], app);
+    await app.session.create({ data: { id: `offline_${SHOP}`, shop: SHOP, state: "", accessToken: "v1.a.b.c.d" } });
+    const warn = vi.spyOn(logger, "warn");
+
+    // The HMAC covers only the body, so the copy passes it with any webhook id.
+    const replay = signedWebhookRequest({ path: "/webhooks/shop/redact", topic: "shop/redact", shop: SHOP, body, webhookId: "redact-2", hmac: capturedHmac });
+    expect((await call(shopRedact as Action, replay)).status).toBe(200);
+
+    expect(await app.shop.findUnique({ where: { shopDomain: SHOP } })).toMatchObject({ id: shop.id, status: "ACTIVE" });
+    expect(await app.session.count({ where: { shop: SHOP } })).toBe(1);
+    for (const table of ["ShopSettings", "ShopLocale", "ShopInstallation"]) {
+      expect(await countAsOwner(table, shop.id)).toBeGreaterThan(0);
+    }
+    expect(await app.webhookEvent.count({ where: { shopDomain: SHOP } })).toBe(2);
+    // Recorded for the operator, not completed: a replay, or an uninstall that never reached the app.
+    expect(await app.privacyRequest.findUnique({ where: { webhookId: "redact-2" } })).toMatchObject({
+      topic: "SHOP_REDACT",
+      status: "RECEIVED",
+      completedAt: null,
+      resolution: "SHOP_ACTIVE_NOT_DELETED",
+    });
+    expect(warn).toHaveBeenCalledWith({ webhookId: "redact-2", shopId: shop.id }, expect.stringMatching(/nothing deleted/));
+    warn.mockRestore();
   });
 });
 

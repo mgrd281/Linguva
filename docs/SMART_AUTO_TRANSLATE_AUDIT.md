@@ -175,3 +175,22 @@ A third review checked the fix commit itself (`691d8a5..e8b8b4d`): each finding 
 | 34 | Major (tests): a new test depended on the real date and would fail from 2026-10-29 22:00 UTC on | The run's time is set to the simulated one | `smart-auto.test.ts` › start didn't get through |
 | 35 | Tests: the `PLAN_SMART` order, the `PLAN_REQUIRED` pause and the current-settings checks for images and outdated output had no failing test; rows 13, 14, 16 and 10 named tests that didn't assert them | Tests added (plan without bulk translation, images and outdated output, save bar, publishing, the schedule off after a downgrade); row 13 marked untested | see the rows |
 | 36 | Docs: test counts in §9 and the worker-tick claim in §10 | Corrected | — |
+
+A fourth review checked that commit (`e8b8b4d..d664ab7`) the same way: five lenses, each finding reproduced against PostgreSQL, then put to a skeptical reviewer. All 14 held; all are fixed in `cec9c1a`, the behaviour fixes each with a test that fails when the fix is undone.
+
+| # | Problem found | Fix | Test |
+|---|---|---|---|
+| 37 | Major: a merchant's bulk job taking over an automatic job added a second item for a product the automatic job was still translating (translated and billed twice) | Discovery leaves a resource with an open item in another active job to that job | `smart-takeover.test.ts` › adds no second item |
+| 38 | Minor: two active automatic jobs waiting for the same product (one reopened by Retry) made the takeover fail with a unique-constraint error | One item moves, the other is recorded as handed over (`TAKEN_OVER`); Retry waits while another job of its type and language runs | `smart-takeover.test.ts` › hand over one item |
+| 39 | Minor: an item a worker read just before a handover was billed and drafted under the old job but counted in the new one | The worker reads the item's job again after claiming it | `smart-takeover.test.ts` › bills and drafts an item where it is counted |
+| 40 | Minor (regression): giving consent lifted a consent pause that was covering a new primary language | Consent settles the pause with the tick's rule | `smart-auto.test.ts` › leaves the pause to a new main language |
+| 41 | Tests: rows 24 and 29 named tests that called the helpers directly; the routes' wiring was untested | The editor's consent goes through `runEditorAction`, Retry through `retrySmartRun` | `smart-auto.test.ts` › giving consent ends a pause; Retry agrees with the page |
+| 42 | Tests: row 34's fix wrote under FORCE RLS without a tenant (no effect); the test still failed from 22:00 UTC | Written under the tenant, a second before the simulated tick | `smart-auto.test.ts` › start didn't get through |
+| 43 | Tests: row 32's test saved with the real clock and failed from 22:00 UTC | Saved at the simulated time | `smart-auto.test.ts` › read before the merchant saved them |
+| 44 | Docs: §5.1 step 3 said a look at a shop that isn't due stops and the hint is always the next occurrence | Rewritten to the one hint rule | — |
+| 45 | Docs: the design doc and `current-locales.ts` still described the copy of the shop's languages as fresh | Corrected (a copy is never fresh; a change is confirmed with Shopify) | — |
+| 46 | Docs: QUALITY_AUDIT said every finding of the second and third reviews has a test | Rows 13, 15 and 18 named as without one | — |
+| 47 | Minor: the "no access" notice stayed after the merchant allowed access, until the next check | Hidden for types whose scope is granted (`stillWithoutAccess`) | `resource-kinds.test.ts` › stillWithoutAccess |
+| 48 | Minor: the notice's Spanish used singular pronouns for a list | "los omiten", "quítalos" | — |
+| 49 | Minor: the notice's French called the schedule "planning" | "planification", as everywhere else | — |
+| 50 | Minor: the types were joined with a bare comma | The app's list format | — |

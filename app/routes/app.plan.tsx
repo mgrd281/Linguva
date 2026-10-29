@@ -2,7 +2,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { shopBilling } from "../.server/billing/billing";
+import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { getConfig } from "../.server/lib/config";
 import { getDailyUsage, getMonthlyUsage } from "../.server/usage/usage-ledger";
 import { estimatedCostUsd, PLANS, planSelectionUrl } from "../lib/plans";
@@ -33,6 +33,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       : null,
     choosePlanUrl: billing.configured && appHandle ? planSelectionUrl(shop.shopDomain, appHandle) : null,
     usage: { month: await getMonthlyUsage(shop.id), today: await getDailyUsage(shop.id) },
+    // The allowance actually enforced (without billing: the server's configured limit, not the plan table's).
+    limits: aiLimitsFor(getConfig(), billing),
     // The internal provider cost is for the owner's own stores only; no other shop receives it.
     costPerMillion: billing.state === "COMPLIMENTARY" ? getConfig().AI_COST_USD_PER_MILLION_CHARS : null,
   };
@@ -95,7 +97,7 @@ export default function Plan() {
             <s-paragraph>{t("plan.current.pending", { plan: planName(data.subscription.pendingPlanHandle) })}</s-paragraph>
           ) : null}
           <s-paragraph>
-            {t("plan.current.usage", { month: data.usage.month, limit: e.monthlyChars, today: data.usage.today })}
+            {t("plan.current.usage", { month: data.usage.month, limit: data.limits.limit, today: data.usage.today })}
           </s-paragraph>
           <s-paragraph>
             {t("plan.current.features", {

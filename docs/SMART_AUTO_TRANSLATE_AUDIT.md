@@ -115,3 +115,4 @@ Tenant isolation (RLS, FORCE, one policy per new table, checked by the migration
 5. `shopify app deploy` for the new webhook topics.
 6. Visual baselines for the changed Settings and Plan pages from the CI render.
 7. A native speaker's review of the French and Spanish texts.
+8. The owner's decision on the AI consent: its text now also names automatic and scheduled translation and automatic publishing; raising `AI_CONSENT_VERSION` would ask every store to confirm again (it was not raised, so nothing stops on the stores already using Linguva).

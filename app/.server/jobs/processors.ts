@@ -27,7 +27,7 @@ import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
 import { listAttachedResources } from "../shopify/attached-resources";
 import { isEditableAttachedField } from "../translation/attached-editor";
-import { noteCoverageRead } from "../coverage/items";
+import { noteCoverageRead, noteResourceGone } from "../coverage/items";
 import type { Entitlements } from "../../lib/plans";
 
 export type Admin = Pick<AdminApiContext, "graphql">;
@@ -270,6 +270,8 @@ export async function processItem(
   const resource = await getTranslatableResource(admin, item.resourceGid, job.targetLocale);
   if (!resource) {
     await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "RESOURCE_GONE" }, deps.prisma);
+    // Deleted in Shopify: it leaves coverage in every language, with the custom fields it owns.
+    await noteResourceGone(payload.shopId, item.resourceGid, deps.prisma);
     return { status: "SKIPPED", errorCode: "RESOURCE_GONE" };
   }
   // The language became the store's primary language: there is nothing to translate into.

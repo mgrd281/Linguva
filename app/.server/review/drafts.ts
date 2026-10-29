@@ -3,7 +3,8 @@ import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
 import type { SegmentPair } from "../memory/alignment";
 import { refreshCoverageOverlays } from "../coverage/items";
-import { withTenant } from "../tenancy/with-tenant";
+import { storedTargetLocales } from "../locales/shop-locales";
+import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import { ResourceNotFoundError, saveResourceTranslations } from "../translation/product-translation-service";
 import { RESOURCE_KINDS } from "../../lib/resource-kinds";
 
@@ -127,6 +128,16 @@ export async function listPendingDrafts(
   );
 }
 
+/**
+ * Pending drafts count and are listed only for the store's current
+ * additional languages: one removed (or now the primary language) can't be
+ * published into. Every language before the first sync.
+ */
+async function currentLanguages(tx: TenantTx, shopId: string): Promise<Prisma.TranslationDraftWhereInput> {
+  const targets = await storedTargetLocales(tx, shopId);
+  return targets ? { locale: { in: targets } } : {};
+}
+
 /** Escapes LIKE wildcards; Prisma's `contains` passes them through. */
 export function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -159,6 +170,11 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
   const take = Math.min(Math.max(filter.take ?? 50, 1), MAX_DRAFTS_PER_ACTION);
   const search = filter.search?.trim().slice(0, 100);
   const pattern = search ? escapeLike(search) : null;
+  // A type covers its own fields and those of its images and custom fields.
+  const type: Prisma.TranslationDraftWhereInput[] =
+    filter.resourceType && GID_PREFIX[filter.resourceType]
+      ? [{ OR: [{ resourceGid: { startsWith: GID_PREFIX[filter.resourceType] } }, { parentGid: { startsWith: GID_PREFIX[filter.resourceType] } }] }]
+      : [];
   const base: Prisma.TranslationDraftWhereInput = {
     shopId,
     status: "PENDING",
@@ -171,19 +187,6 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
         : filter.group === "content"
           ? { key: { notIn: [...SEO_KEYS_LIST, "handle"] } }
           : {}),
-    // A type covers its own fields and those of its images and custom fields.
-    ...(filter.resourceType && GID_PREFIX[filter.resourceType]
-      ? {
-          AND: [
-            {
-              OR: [
-                { resourceGid: { startsWith: GID_PREFIX[filter.resourceType] } },
-                { parentGid: { startsWith: GID_PREFIX[filter.resourceType] } },
-              ],
-            },
-          ],
-        }
-      : {}),
     ...(filter.flagged ? { NOT: [{ issues: { equals: Prisma.DbNull } }, { issues: { equals: [] } }] } : {}),
   };
   const scan: Prisma.TranslationDraftWhereInput = pattern
@@ -207,7 +210,7 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
         const ids = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM linguva_draft_search(${search}, ${SEARCH_MATCHES + 1}::int)`;
         if (ids.length <= SEARCH_MATCHES) text = { id: { in: ids.map((r) => r.id) } };
       }
-      const where = { ...base, ...text };
+      const where = { ...base, ...text, AND: [...type, await currentLanguages(tx, shopId)] };
       const [found, count] = await Promise.all([
         tx.translationDraft.findMany({
           where,
@@ -230,13 +233,13 @@ export async function searchPendingDrafts(shopId: string, filter: DraftPageFilte
   return { drafts, nextCursor: rows.length > take ? rows[take - 1]!.id : null, total };
 }
 
-/** Languages that have pending drafts, for the review filter. */
+/** Languages that have pending drafts, for the review filter (current languages only). */
 export async function listDraftLocales(shopId: string, client: PrismaClient = defaultClient): Promise<string[]> {
   const rows = await withTenant(
     shopId,
-    (tx) =>
+    async (tx) =>
       tx.translationDraft.findMany({
-        where: { shopId, status: "PENDING" },
+        where: { shopId, status: "PENDING", ...(await currentLanguages(tx, shopId)) },
         distinct: ["locale"],
         select: { locale: true },
         orderBy: { locale: "asc" },
@@ -247,10 +250,11 @@ export async function listDraftLocales(shopId: string, client: PrismaClient = de
   return rows.map((r) => r.locale);
 }
 
+/** Drafts waiting for review in the store's current languages. */
 export async function countPendingDrafts(shopId: string, client: PrismaClient = defaultClient) {
   return withTenant(
     shopId,
-    (tx) => tx.translationDraft.count({ where: { shopId, status: "PENDING" } }),
+    async (tx) => tx.translationDraft.count({ where: { shopId, status: "PENDING", ...(await currentLanguages(tx, shopId)) } }),
     client,
   );
 }

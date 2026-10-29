@@ -503,6 +503,9 @@ model TranslationDraft {
   issues        Json?
   provider      String?
   status        DraftStatus @default(PENDING)
+  // Why the app retired a draft no one reviewed (LOCALE_GONE: its language is
+  // no longer one of the store's additional languages); NULL otherwise.
+  staleReason   String?
   reviewedAt    DateTime?   @db.Timestamptz(3)
   reviewedBy    String?
   createdAt     DateTime    @default(now()) @db.Timestamptz(3)
@@ -570,6 +573,9 @@ model CoverageItem {
   parentGid         String?
   /// Keys whose original has text (only these are counted).
   sourceKeys        String[]
+  /// Start of Shopify's digest of each of those originals, in the same order
+  /// ("" when unknown): a pending draft made for another original isn't a draft.
+  sourceDigests     String[] @default([])
   /// Keys with a live translation that isn't outdated.
   currentKeys       String[]
   outdatedKeys      String[]
@@ -602,6 +608,8 @@ model CoverageItem {
   @@unique([shopId, locale, resourceGid])
   @@index([shopId, locale, resourceType, id])
   @@index([shopId, resourceGid])
+  /// A deleted product's or collection's custom fields go with it.
+  @@index([shopId, parentGid])
 }
 
 /// Number of fields per language, type, field group and state; maintained

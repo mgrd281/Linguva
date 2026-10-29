@@ -36,7 +36,7 @@ import { setAiConsent } from "../../app/.server/settings/shop-settings";
 import { syncShopLocales } from "../../app/.server/locales/shop-locales";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
 import { removeTranslation } from "../../app/.server/translation/history";
-import { approveDrafts, rejectDrafts, saveDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
+import { approveDrafts, countPendingDrafts, listDraftLocales, rejectDrafts, saveDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
 import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { headlineByLocale, byType, unreadMessage, unreadSegment } from "../../app/lib/coverage-view";
@@ -379,6 +379,27 @@ describe("coverage stays current", () => {
     await expectCountsConsistent(shop.id);
   });
 
+  it("doesn't count a pending draft made for an older original as a draft", async () => {
+    const { shop, store, deps } = await setup(1, 0);
+    await runAll(deps, shop.id, ["de"]);
+    const draft = {
+      jobId: null, resourceGid: P1, resourceTitle: null, locale: "de", key: "title", sourceDigest: digest("Product 1 jacket"), sourceValue: "Product 1 jacket", value: "Jacke", segmentPairs: [], issues: [], provider: "test",
+    };
+    await saveDrafts(shop.id, [draft], app);
+    expect(await fieldsOf(shop.id, "de", P1)).toContain("title:draft");
+    // The title changes in Shopify: the draft is for the old one (approving it would be refused).
+    store.updateSource(P1, "title", "Product 1 jacket, new name");
+    await refreshCoverageResource(deps, { shopId: shop.id, resourceGid: P1 });
+    expect(await fieldsOf(shop.id, "de", P1)).toContain("title:missing");
+    // Saved after the change for the old original (an older CSV, a job that read before it): not a draft either.
+    await saveDrafts(shop.id, [{ ...draft, value: "Jacke (alt)" }], app);
+    expect(await fieldsOf(shop.id, "de", P1)).toContain("title:missing");
+    // One for the current original is.
+    await saveDrafts(shop.id, [{ ...draft, sourceDigest: digest("Product 1 jacket, new name"), sourceValue: "Product 1 jacket, new name" }], app);
+    expect(await fieldsOf(shop.id, "de", P1)).toContain("title:draft");
+    await expectCountsConsistent(shop.id);
+  });
+
   it("shows a failed attempt until a later attempt succeeds", async () => {
     const { shop, deps } = await setup(1, 0);
     await runAll(deps, shop.id, ["de"]);
@@ -428,6 +449,22 @@ describe("coverage stays current", () => {
     store.products.delete(P2);
     await refreshCoverageResource(deps, { shopId: shop.id, resourceGid: P2 });
     expect((await listCoverageItems(shop.id, { locale: "de", resourceType: "PRODUCT", state: "missing" }, app)).items.map((i) => i.resourceGid)).toEqual([P1]);
+    await expectCountsConsistent(shop.id);
+  });
+
+  it("removes a product a job finds deleted, in every language and with its custom fields", async () => {
+    const { shop, store, deps } = await setup(2, 0);
+    const care = store.addMetafield(P1, { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Wash cold" });
+    await runAll(deps, shop.id, ["de", "fr"]);
+    expect(await fieldsOf(shop.id, "fr", care)).toEqual(["value:missing"]);
+    store.products.delete(P1);
+    await setAiConsent({ shopId: shop.id, granted: true, actorId: null }, app);
+    expect(await runJobItem(shop.id, store, { resourceType: "PRODUCT", resourceGid: P1, locale: "de" })).toEqual({ status: "SKIPPED", errorCode: "RESOURCE_GONE" });
+    for (const locale of ["de", "fr"]) {
+      expect(await fieldsOf(shop.id, locale, P1)).toBeUndefined();
+      expect(await fieldsOf(shop.id, locale, care)).toBeUndefined();
+      expect(await fieldsOf(shop.id, locale, P2)).toBeDefined();
+    }
     await expectCountsConsistent(shop.id);
   });
 
@@ -511,6 +548,52 @@ describe("coverage stays current", () => {
     expect(all).toEqual([4, 5, 6, 7].map((i) => `gid://shopify/Product/${i}`));
     // Descriptions are missing everywhere.
     expect((await listCoverageItems(shop.id, { locale: "de", fieldGroup: "description", state: "missing", limit: 100 }, app)).items).toHaveLength(7);
+  });
+});
+
+describe("languages that are no longer the store's additional languages", () => {
+  const en = { locale: "en", name: "English", primary: true, published: true, rtl: false };
+  const de = { locale: "de", name: "German", primary: false, published: true, rtl: false };
+  const fr = { locale: "fr", name: "French", primary: false, published: true, rtl: false };
+  const draftFor = (locale: string, key = "title") => ({
+    jobId: null, resourceGid: P1, resourceTitle: null, locale, key, sourceDigest: digest("Product 1 jacket"), sourceValue: "Product 1 jacket", value: `[${locale}] Jacke`, segmentPairs: [], issues: [], provider: "test",
+  });
+  const rowsOf = (shopId: string, locale: string) =>
+    withTenant(shopId, async (tx) => [await tx.coverageItem.count({ where: { locale } }), await tx.coverageCount.count({ where: { locale } }), await tx.coverageSegment.count({ where: { locale } })], app);
+
+  it("lose their coverage and their pending drafts when one is removed or becomes the primary language", async () => {
+    const { shop, deps } = await setup(2, 0);
+    await syncShopLocales(shop.id, [en, de, fr], app);
+    await runAll(deps, shop.id, ["de", "fr"]);
+    await saveDrafts(shop.id, [draftFor("de"), draftFor("fr")], app);
+    expect((await rowsOf(shop.id, "fr")).every((n) => n > 0)).toBe(true);
+    // The same languages again change nothing.
+    await syncShopLocales(shop.id, [en, de, fr], app);
+    expect(await countPendingDrafts(shop.id, app)).toBe(2);
+
+    // French is removed in Shopify.
+    await syncShopLocales(shop.id, [en, de], app);
+    expect(await rowsOf(shop.id, "fr")).toEqual([0, 0, 0]);
+    expect((await rowsOf(shop.id, "de")).every((n) => n > 0)).toBe(true);
+    const drafts = await withTenant(shop.id, (tx) => tx.translationDraft.findMany({ select: { locale: true, status: true, staleReason: true }, orderBy: { locale: "asc" } }), app);
+    expect(drafts).toEqual([
+      { locale: "de", status: "PENDING", staleReason: null },
+      { locale: "fr", status: "STALE", staleReason: "LOCALE_GONE" },
+    ]);
+    expect(await countPendingDrafts(shop.id, app)).toBe(1);
+    expect(await listDraftLocales(shop.id, app)).toEqual(["de"]);
+    // A job still running for French saves another draft: neither counted nor listed.
+    await saveDrafts(shop.id, [draftFor("fr", "body_html")], app);
+    expect(await countPendingDrafts(shop.id, app)).toBe(1);
+    expect((await searchPendingDrafts(shop.id, {}, app)).total).toBe(1);
+    expect(await listDraftLocales(shop.id, app)).toEqual(["de"]);
+
+    // German becomes the primary language (English an additional one): its coverage and drafts go too.
+    await syncShopLocales(shop.id, [{ ...en, primary: false }, { ...de, primary: true }], app);
+    expect(await rowsOf(shop.id, "de")).toEqual([0, 0, 0]);
+    expect(await countPendingDrafts(shop.id, app)).toBe(0);
+    expect(await withTenant(shop.id, (tx) => tx.translationDraft.count({ where: { status: "PENDING", locale: "de" } }), app)).toBe(0);
+    await expectCountsConsistent(shop.id);
   });
 });
 

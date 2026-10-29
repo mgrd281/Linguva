@@ -209,6 +209,18 @@ Development-only tools (not shipped, not run on user input) also have advisories
 | Row-level security | Unchanged: `ShopSettings` and `TranslationJobItem` keep `ENABLE` + `FORCE ROW LEVEL SECURITY` and their `tenant_isolation` policies; the worker writes them per shop through `withTenant`. No new grants, functions or roles. |
 | Cross-tenant risk | None added: the pause is set from the stopped job's own shop (the queue payload's tenant, re-read under RLS). |
 
+## 5p. Database change review: coverage freshness (migration 20261102120000)
+
+| Change | Review |
+|---|---|
+| `CoverageItem.sourceDigests TEXT[]` (default empty) with a CHECK (hex digits only) | The first 16 hex characters of Shopify's own digest (`translatableContent.digest`) of each counted original, in `sourceKeys` order; written only by the coverage sync, normalised to lower-case hex (anything else is kept as an empty entry). Compared with a pending draft's `sourceDigest`, which drafts already keep in full, so a draft made for an older original no longer counts as a draft. No merchant text: the CHECK refuses anything but hex digits, and `tests/security/coverage-security.test.ts` still finds none of the store's words in any coverage row |
+| Index `CoverageItem(shopId, parentGid)` | No data change; finds the custom fields of a deleted product or collection |
+| `TranslationDraft.staleReason TEXT NULL` with a CHECK (an upper-case code of at most 40 characters) | A reason code, no merchant content. Set only when the language sync retires PENDING drafts of a language that is no longer one of the store's additional languages (`LOCALE_GONE`); drafts are never deleted (the runtime role has no DELETE on `TranslationDraft`) |
+| New webhook topics `products/delete`, `collections/delete` (`/webhooks/content/delete`) | Same route action as the other webhooks (`webhookAction`): HMAC verified by the Shopify library (401 otherwise, tested), duplicate deliveries suppressed, stores the deployment doesn't serve dropped. The shop comes from the verified delivery; the GID is built from the payload's numeric id for the topic's type (or its `admin_graphql_api_id` when it has that type). The handler only removes that shop's coverage rows of the resource and of the custom fields it owns, in the shop's tenant transaction; nothing is stored. The subscriptions take effect after `shopify app deploy` |
+| Coverage rows of languages that are no longer targets | When the language sync sees the store's additional languages change, items, counts and scan states of every other language are deleted in the shop's tenant transaction, under the per-language advisory lock every count writer takes |
+| Row-level security | Unchanged: `CoverageItem` keeps `ENABLE` + `FORCE ROW LEVEL SECURITY`, `TranslationDraft` its RLS as in §5l, and both their `tenant_isolation` policies, which cover the new columns. No new grants, functions or roles |
+| Cross-tenant risk | None added: every new write runs inside the shop's own tenant context (`withTenant`), with ids from the shop's verified webhook, its own Admin API or its own rows |
+
 ## 5n. Hosted stages: staging isolation and release guard (no database change)
 
 Hosting on Railway (docs/RAILWAY_STAGING.md) adds configuration guards, one public route and a container image; no migration.

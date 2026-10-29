@@ -46,6 +46,13 @@ api_version = "2026-10"
   uri = "/webhooks/content"
   include_fields = ["admin_graphql_api_id", "updated_at"]
 
+  # Handled by: /app/routes/webhooks.content.delete.tsx
+  # A deleted product or collection leaves the coverage report right away (payload: its id).
+  # New topics take effect after `shopify app deploy`.
+  [[webhooks.subscriptions]]
+  topics = ["products/delete", "collections/delete"]
+  uri = "/webhooks/content/delete"
+
   # Mandatory compliance topics for public apps.
   # See: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
   [[webhooks.subscriptions]]

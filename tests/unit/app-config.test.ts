@@ -13,6 +13,11 @@ describe("shopify.app.toml", () => {
     expect(existsSync(route)).toBe(true);
   });
 
+  it("removes deleted products and collections from coverage, with a route for their topics", () => {
+    expect(toml).toContain('topics = ["products/delete", "collections/delete"]\n  uri = "/webhooks/content/delete"');
+    expect(existsSync("app/routes/webhooks.content.delete.tsx")).toBe(true);
+  });
+
   it("uses the current stable webhook API version", () => {
     expect(toml).toMatch(/api_version = "2026-10"/);
   });

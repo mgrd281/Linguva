@@ -6,10 +6,16 @@ import { action as dataRequest } from "../../app/routes/webhooks.customers.data_
 import { action as customersRedact } from "../../app/routes/webhooks.customers.redact";
 import { action as shopRedact } from "../../app/routes/webhooks.shop.redact";
 import { action as content } from "../../app/routes/webhooks.content";
+import { action as contentDelete } from "../../app/routes/webhooks.content.delete";
 import { purgeWebhookLog, WEBHOOK_LOG_RETENTION_DAYS } from "../../app/.server/webhooks/process-webhook";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { syncShopLocales } from "../../app/.server/locales/shop-locales";
+import { createCoverageReport, runCoveragePage, type CoverageDeps, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
+import { loadCoverageSummary } from "../../app/.server/coverage/summary";
+import { withTenant } from "../../app/.server/tenancy/with-tenant";
+import { byType } from "../../app/lib/coverage-view";
 import { countAsOwner, ownerDb, resetDatabase } from "../support/db";
+import { FakeShopifyStore } from "../support/fake-store";
 import { signedWebhookRequest } from "../support/webhooks";
 import { resetConfigCache } from "../../app/.server/lib/config";
 
@@ -41,6 +47,7 @@ describe("webhook authentication", () => {
     ["shop/redact", "/webhooks/shop/redact", shopRedact],
     ["app/uninstalled", "/webhooks/app/uninstalled", uninstalled],
     ["products/update", "/webhooks/content", content],
+    ["products/delete", "/webhooks/content/delete", contentDelete],
   ])("returns 401 for %s with an invalid HMAC and does nothing", async (topic, path, handler) => {
     const response = await call(
       handler as Action,
@@ -212,6 +219,48 @@ describe("content webhooks (automatic translation)", () => {
     );
     expect(response.status).toBe(200);
     expect(await app.webhookEvent.findUniqueOrThrow({ where: { webhookId: "content-1" } })).toMatchObject({ status: "PROCESSED", topic: "PRODUCTS_UPDATE" });
+  });
+});
+
+describe("deleted products and collections (coverage)", () => {
+  async function scanned() {
+    const { shop } = await upsertInstalledShop({ shopDomain: SHOP }, app);
+    const store = new FakeShopifyStore(2).addCollections(1);
+    const care = store.addMetafield("gid://shopify/Product/1", { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Wash cold" });
+    const deps: CoverageDeps = { prisma: app, adminFor: async () => store.asAdmin(), keyPrefix: "lv:test:wh" };
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de", "fr"], requestedBy: null, idempotencyKey: "wh-scan" }, app);
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    return { shop, care };
+  }
+  const items = (shopId: string) =>
+    withTenant(shopId, async (tx) => (await tx.coverageItem.findMany({ select: { locale: true, resourceGid: true } })).map((i) => `${i.locale} ${i.resourceGid}`).sort(), app);
+  const send = (topic: string, body: unknown) => call(contentDelete as Action, signedWebhookRequest({ path: "/webhooks/content/delete", topic, shop: SHOP, body }));
+
+  it("remove a deleted product with its custom fields in every language, and a deleted collection, at once", async () => {
+    const { shop, care } = await scanned();
+    // products/delete sends only the product's numeric id.
+    expect((await send("products/delete", { id: 1 })).status).toBe(200);
+    expect(await items(shop.id)).toEqual(["de gid://shopify/Collection/1", "de gid://shopify/Product/2", "fr gid://shopify/Collection/1", "fr gid://shopify/Product/2"]);
+    expect(await items(shop.id)).not.toContain(`de ${care}`);
+    expect((await send("collections/delete", { id: 1, published_scope: "web", admin_graphql_api_id: "gid://shopify/Collection/1" })).status).toBe(200);
+    expect(await items(shop.id)).toEqual(["de gid://shopify/Product/2", "fr gid://shopify/Product/2"]);
+    // The counts follow: product 2's title, description and URL; no custom field, no collection.
+    const { counts } = await loadCoverageSummary(shop.id, app);
+    for (const locale of ["de", "fr"]) {
+      expect(byType(counts, locale).get("PRODUCT")?.counts).toMatchObject({ missing: 3 });
+      expect(byType(counts, locale).has("PRODUCT_METAFIELD")).toBe(false);
+      expect(byType(counts, locale).has("COLLECTION")).toBe(false);
+    }
+  });
+
+  it("ignore a payload without a valid id for the topic's type", async () => {
+    const { shop } = await scanned();
+    const before = await items(shop.id);
+    for (const body of [{ id: "1; DROP" }, { id: -1 }, { admin_graphql_api_id: "gid://shopify/Collection/1" }, {}]) {
+      expect((await send("products/delete", body)).status).toBe(200);
+    }
+    expect(await items(shop.id)).toEqual(before);
   });
 });
 

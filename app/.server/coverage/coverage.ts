@@ -11,11 +11,12 @@ import { prisma as defaultClient } from "../lib/db";
 import { AccessDeniedError, getTranslatableResource, listTranslatableResources, type TranslatableResourceData } from "../shopify/translations-api";
 import { listOwnerMetafields, METAFIELD_OWNER_TYPES, type MetafieldOwnerType } from "../shopify/metafield-owners";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { storedTargetLocales } from "../locales/shop-locales";
 import { shopKey } from "../queue/redis";
 import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, kindOfGid, RESOURCE_KINDS, type TranslatableKind } from "../../lib/resource-kinds";
-import { dropCoverageItemsTx, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
+import { dropDeletedResource, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
 
 /** Custom fields of each owner type ("PRODUCT_METAFIELD", …). */
 export const METAFIELD_COVERAGE_TYPES = METAFIELD_OWNER_TYPES.map((owner) => `${owner}_METAFIELD` as const);
@@ -311,13 +312,11 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
   const segments = await withTenant(
     payload.shopId,
     async (tx) => {
-      const [rows, locales] = await Promise.all([
+      const [rows, targets] = await Promise.all([
         tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: { in: ["SCANNED", "SCANNING", "FAILED"] } } }),
-        tx.shopLocale.findMany({ where: { shopId: payload.shopId }, select: { locale: true, primary: true } }),
+        storedTargetLocales(tx, payload.shopId),
       ]);
-      // The languages of the last sync (nothing to tell targets apart before the first one).
-      const targets = locales.length ? new Set(locales.filter((l) => !l.primary).map((l) => l.locale)) : null;
-      return rows.filter((s) => !targets || targets.has(s.locale));
+      return rows.filter((s) => !targets || targets.includes(s.locale));
     },
     deps.prisma,
   );
@@ -328,21 +327,14 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
     await throttle(deps, payload.shopId);
     const at = new Date();
     const data = await getTranslatableResource(admin, payload.resourceGid, segment.locale);
-    await withTenant(
+    if (!data) {
+      // Deleted in Shopify: gone in every language, with the custom fields it owns.
+      await dropDeletedResource(payload.shopId, payload.resourceGid, deps.prisma);
+      break;
+    }
+    refreshed += await withTenant(
       payload.shopId,
-      async (tx) => {
-        if (data) {
-          refreshed += await syncCoverageTx(
-            tx,
-            payload.shopId,
-            segment.locale,
-            [{ resourceGid: payload.resourceGid, resourceType, observed: { data, at } }],
-            { create: true, seen: true },
-          );
-        } else {
-          await dropCoverageItemsTx(tx, payload.shopId, segment.locale, [payload.resourceGid]);
-        }
-      },
+      (tx) => syncCoverageTx(tx, payload.shopId, segment.locale, [{ resourceGid: payload.resourceGid, resourceType, observed: { data, at } }], { create: true, seen: true }),
       deps.prisma,
     );
   }

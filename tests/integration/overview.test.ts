@@ -239,6 +239,23 @@ describe("percentages from completed measurements only", () => {
     expect(overview.next).toEqual({ id: "access", types: 2, href: "/app/content/menus" });
   });
 
+  it("measures a language again before it counts when it was removed and added back (its figures went with it)", async () => {
+    const { store, shop, deps } = await measuredStore();
+    const { report } = await start(shop.id, "before");
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    expect((await loadOverview(store.asAdmin(), shop, app)).progress[0]).toMatchObject({ locale: "de", measured: true });
+    const german = store.locales[1]!;
+    // Removed in Shopify (a page load syncs the languages), then added back.
+    store.locales = [store.locales[0]!];
+    expect((await loadOverview(store.asAdmin(), shop, app)).next).toEqual({ id: "add-language" });
+    store.locales = [store.locales[0]!, german];
+    const overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress[0]).toMatchObject({ locale: "de", measured: false, percent: null });
+    expect(overview.storeShare).toBeNull();
+    expect(overview.next).toEqual({ id: "measure" });
+  });
+
   it("counts translations already live in the store (made anywhere) as past the first translation", async () => {
     const { store, shop, deps } = await measuredStore();
     store.translate("gid://shopify/Product/1", "de", "title", "Produkt 1 Jacke");

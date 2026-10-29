@@ -12,7 +12,7 @@ import {
   percentText,
 } from "../../app/lib/coverage-rules";
 import { byFieldGroup, byType, headlineByLocale, storeWide, type CountInput } from "../../app/lib/coverage-view";
-import { baseFromShopify, deriveStates, seoTitleHash } from "../../app/.server/coverage/items";
+import { baseFromShopify, currentOverlay, deriveStates, digestTag, seoTitleHash } from "../../app/.server/coverage/items";
 import { reliableEta } from "../../app/lib/eta";
 
 const field = (key: string, value: string | null) => ({ key, value, digest: value ? "d" : null, locale: "en", type: "SINGLE_LINE_TEXT_FIELD" });
@@ -75,6 +75,22 @@ describe("derived states", () => {
     const { counts, fieldStates } = deriveStates("PRODUCT", base, { ...noOverlay, failed: true });
     expect(counts).toEqual({ complete: 1, review: 0, draft: 0, failed: 3, outdated: 0, missing: 0 });
     expect(fieldStates).toEqual(["title:complete", "description:failed", "seo_title:failed", "url:failed"]);
+  });
+
+  it("doesn't count a pending draft made for an older original as a draft", () => {
+    const [v1, v2] = ["a".repeat(64), "b".repeat(64)];
+    const base = baseFromShopify({ content: [{ key: "title", value: "Jacket, new name", digest: v2, locale: "en", type: "SINGLE_LINE_TEXT_FIELD" }], translations: [] });
+    expect(base.sourceDigests).toEqual([digestTag(v2)]);
+    // Made for the old title: approving it would be refused, so the title is missing.
+    const old = { ...noOverlay, draftKeys: ["title"], reviewKeys: ["title"], draftDigests: { title: digestTag(v1) } };
+    expect(deriveStates("PRODUCT", base, currentOverlay(base, old)).counts).toMatchObject({ draft: 0, review: 0, missing: 1 });
+    // Made for the current title: a draft.
+    expect(deriveStates("PRODUCT", base, currentOverlay(base, { ...old, reviewKeys: [], draftDigests: { title: digestTag(v2) } })).counts).toMatchObject({ draft: 1 });
+    // An item kept before digests were (or a digest Shopify didn't give): counted as before.
+    const before = { ...base, sourceDigests: [] };
+    expect(deriveStates("PRODUCT", before, currentOverlay(before, { ...old, reviewKeys: [] })).counts).toMatchObject({ draft: 1 });
+    // Only hex digits are kept (the column refuses anything else).
+    expect([digestTag("ABCDEF0123456789ff"), digestTag("not a digest at all"), digestTag(null)]).toEqual(["abcdef0123456789", "", ""]);
   });
 
   it("separates drafts that need review (quality notes) from plain drafts", () => {

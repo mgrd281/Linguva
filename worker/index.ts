@@ -1,6 +1,8 @@
 /**
  * Background worker: bulk translation discovery and item processing.
- * Runs as its own process (`pnpm worker` / `node build/worker/index.js`).
+ * Runs as its own process (`pnpm worker` / `node build/worker/index.js`):
+ * as a separate service, or as a child of the web process
+ * (LINGUVA_WORKER_MODE=embedded, app/.server/jobs/embedded-worker.ts).
  */
 import { unauthenticated } from "../app/shopify.server";
 import { aiUsageLimits, getConfig } from "../app/.server/lib/config";
@@ -10,10 +12,11 @@ import { billingDeps } from "../app/.server/billing/billing";
 import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider } from "../app/.server/providers";
-import { createQueues, createWorkers, requeueStalledItems } from "../app/.server/jobs/queues";
+import { createQueues, createWorkers, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
 import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
 import { createRedis, keyPrefix } from "../app/.server/queue/redis";
+import { startHeartbeat } from "../app/.server/queue/heartbeat";
 import { TokenBucket } from "../app/.server/queue/rate-limiter";
 import { withShopifyTimeout } from "../app/.server/shopify/admin-timeout";
 import { purgeWebhookLog } from "../app/.server/webhooks/process-webhook";
@@ -59,6 +62,12 @@ async function main() {
     try {
       const requeued = await requeueStalledItems(deps, queues);
       if (requeued) logger.warn({ requeued }, "re-enqueued stalled items");
+      // One worker at a time (a separate worker and an embedded one, or a deploy overlap).
+      const lock = await connection.set(`${prefix}:coverage-requeue-lock`, String(process.pid), "PX", SWEEP_INTERVAL_MS - 60_000, "NX");
+      if (lock === "OK") {
+        const reports = await requeueStalledReports(deps, queues);
+        if (reports) logger.warn({ reports }, "continued stalled coverage reports");
+      }
       const purged = await purgeWebhookLog(prisma);
       if (purged) logger.info({ purged }, "old webhook log entries deleted");
     } catch (error) {
@@ -83,13 +92,28 @@ async function main() {
   const autoTimer = setInterval(autoSweep, AUTO_SWEEP_INTERVAL_MS);
   void autoSweep();
 
-  logger.info({ provider: deps.provider?.id ?? "none", concurrency: config.WORKER_CONCURRENCY }, "worker started");
+  const mode = process.env.LINGUVA_WORKER_MODE === "embedded" ? "embedded" : "standalone";
+  // Tells the web process (and GET /healthz/worker) that jobs are being processed.
+  const heartbeat = startHeartbeat(connection, {
+    prefix,
+    healthy: () => [workers.discovery, workers.items, workers.coverage, workers.auto].every((w) => w.isRunning()),
+    info: {
+      startedAt: new Date().toISOString(),
+      mode,
+      pid: process.pid,
+      commit: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+      provider: deps.provider?.id ?? "none",
+    },
+  });
+
+  logger.info({ provider: deps.provider?.id ?? "none", concurrency: config.WORKER_CONCURRENCY, mode }, "worker started");
 
   let stopping = false;
   const shutdown = async (signal: string) => {
     if (stopping) return;
     stopping = true;
     logger.info({ signal }, "worker shutting down");
+    heartbeat.stop();
     clearInterval(timer);
     clearInterval(autoTimer);
     // Lets active jobs finish; unfinished ones are picked up again after restart.

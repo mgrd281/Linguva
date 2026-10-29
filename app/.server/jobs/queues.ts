@@ -184,12 +184,17 @@ export async function enqueueItems(
   );
 }
 
-/** Enqueues one coverage page; the job id makes a repeated enqueue a no-op. */
-export async function enqueueCoveragePage(queues: Queues, payload: CoveragePagePayload) {
+/** Queue job id of a coverage page; `round` marks a re-enqueue of the same page. */
+export function coveragePageJobId(payload: CoveragePagePayload, round?: string): string {
   const page = createHash("sha256").update(payload.cursor ?? "start").digest("hex").slice(0, 16);
+  return `coverage_${payload.reportId}_${payload.segmentIndex}_${page}${round ? `_${round}` : ""}`;
+}
+
+/** Enqueues one coverage page; the job id makes a repeated enqueue a no-op. */
+export async function enqueueCoveragePage(queues: Queues, payload: CoveragePagePayload, round?: string) {
   await queues.coverage.add("coverage", payload, {
     ...queues.discoveryJobOptions,
-    jobId: `coverage_${payload.reportId}_${payload.segmentIndex}_${page}`,
+    jobId: coveragePageJobId(payload, round),
   });
 }
 
@@ -409,6 +414,51 @@ export function createWorkers(
 
 const STALL_THRESHOLD_MS = 15 * 60 * 1000;
 const LIVE_QUEUE_STATES = new Set(["waiting", "delayed", "active", "prioritized", "waiting-children"]);
+/** A coverage report without progress for this long is checked for a lost queue job. */
+export const REPORT_STALL_MS = 10 * 60 * 1000;
+
+async function queueState(queue: Queues["coverage"], id: string): Promise<string> {
+  const job = await queue.getJob(id);
+  return job ? await job.getState() : "missing";
+}
+
+/**
+ * Continues coverage reports whose chain of page jobs broke: the process was
+ * killed between saving a page and queueing the next one (a redeploy), the
+ * first job never got queued, or Redis lost it. A report that hasn't moved
+ * for REPORT_STALL_MS and has no live job for its current page gets that
+ * page queued again. Safe to repeat: a page only counts at the report's
+ * current position (runCoveragePage), so a duplicate job does nothing.
+ * At most one re-enqueue per page and REPORT_STALL_MS window. Iterates shops
+ * and enters each tenant separately.
+ */
+export async function requeueStalledReports(deps: JobDependencies, queues: Queues, now = new Date()) {
+  const shops = await deps.prisma.shop.findMany({ where: { status: "ACTIVE" }, select: { id: true } });
+  const cutoff = new Date(now.getTime() - REPORT_STALL_MS);
+  const window = Math.floor(now.getTime() / REPORT_STALL_MS);
+  let total = 0;
+  for (const shop of shops) {
+    const reports = await withTenant(
+      shop.id,
+      (tx) =>
+        tx.coverageReport.findMany({
+          where: { shopId: shop.id, status: { in: ["QUEUED", "RUNNING"] }, updatedAt: { lt: cutoff } },
+          select: { id: true, segmentIndex: true, cursor: true, segments: true },
+        }),
+      deps.prisma,
+    );
+    for (const report of reports) {
+      if (report.segmentIndex >= report.segments.length) continue;
+      const payload: CoveragePagePayload = { shopId: shop.id, reportId: report.id, segmentIndex: report.segmentIndex, cursor: report.cursor };
+      const ids = [coveragePageJobId(payload), coveragePageJobId(payload, `r${window}`), coveragePageJobId(payload, `r${window - 1}`)];
+      const states = await Promise.all(ids.map((id) => queueState(queues.coverage, id)));
+      if (states.some((state) => LIVE_QUEUE_STATES.has(state))) continue;
+      await enqueueCoveragePage(queues, payload, `r${window}`);
+      total++;
+    }
+  }
+  return total;
+}
 
 /**
  * Re-enqueues items that have no live queue job any more (for example after

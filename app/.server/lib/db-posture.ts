@@ -123,12 +123,20 @@ let verified: Promise<void> | undefined;
 /**
  * Verifies the posture once per process. In production a failed check
  * stops the process from serving (fail closed); elsewhere it only warns.
+ * A check that couldn't run (the database didn't answer) is tried again on
+ * the next call instead of failing every later request.
  */
 export function verifyDatabasePostureOnce(client: PrismaClient, options: { production: boolean; log: (msg: string, issues: PostureIssue[]) => void }) {
-  verified ??= checkDatabasePosture(client).then((issues) => {
-    if (!issues.length) return;
-    options.log("database security posture check failed", issues);
-    if (options.production) throw new Error(`Database security posture check failed: ${issues.map((i) => i.code).join(", ")}`);
-  });
+  verified ??= checkDatabasePosture(client).then(
+    (issues) => {
+      if (!issues.length) return;
+      options.log("database security posture check failed", issues);
+      if (options.production) throw new Error(`Database security posture check failed: ${issues.map((i) => i.code).join(", ")}`);
+    },
+    (error: unknown) => {
+      verified = undefined;
+      throw error;
+    },
+  );
   return verified;
 }

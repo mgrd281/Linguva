@@ -12,7 +12,18 @@ import {
 } from "../../app/.server/coverage/coverage";
 import { loadCoverageSummary, listCoverageItems } from "../../app/.server/coverage/summary";
 import { rebuildCountsTx, syncCoverage } from "../../app/.server/coverage/items";
-import { createQueues, createWorkers, enqueueCoveragePage, type Queues, type WorkerSet } from "../../app/.server/jobs/queues";
+import { Worker } from "bullmq";
+import {
+  coveragePageJobId,
+  createQueues,
+  createWorkers,
+  enqueueCoveragePage,
+  QUEUE_NAMES,
+  REPORT_STALL_MS,
+  requeueStalledReports,
+  type Queues,
+  type WorkerSet,
+} from "../../app/.server/jobs/queues";
 import type { JobDependencies } from "../../app/.server/jobs/processors";
 import { finishItem } from "../../app/.server/jobs/bulk-jobs";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
@@ -58,6 +69,14 @@ async function runAll(deps: CoverageDeps, shopId: string, locales = ["de", "fr"]
 }
 
 const reportRow = (shopId: string, id: string) => withTenant(shopId, (tx) => tx.coverageReport.findUniqueOrThrow({ where: { id } }), app);
+
+/** Makes the shop's reports look untouched for `ms` (as after a lost queue job). */
+async function ageReports(shopId: string, ms: number) {
+  await ownerDb.$transaction([
+    ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shopId}, true)`,
+    ownerDb.$executeRawUnsafe(`UPDATE "CoverageReport" SET "updatedAt" = now() - interval '${Math.ceil(ms / 1000)} seconds'`),
+  ]);
+}
 
 async function typeCounts(shopId: string, locale: string, type: string) {
   const summary = await loadCoverageSummary(shopId, app);
@@ -361,6 +380,53 @@ describe("coverage scan in the worker (BullMQ + Redis)", () => {
     expect(summary.segments.find((s) => s.resourceType === "ARTICLE")).toMatchObject({ status: "SCANNED" });
     // 2 collections × title, description, URL, SEO title.
     expect(await typeCounts(shop.id, "de", "COLLECTION")).toMatchObject({ missing: 8 });
+  }, 40_000);
+
+  it("continues a report whose first page job never ran, once, and leaves a recent one alone", async () => {
+    const { shop, store } = await setup(9, 2);
+    const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: null, monthlyLimit: 0, keyPrefix: prefix };
+    // Queued in the database, but the job never reached Redis (or Redis lost it).
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "lost" }, app);
+    expect(await requeueStalledReports(deps, queues)).toBe(0);
+    await ageReports(shop.id, REPORT_STALL_MS + 60_000);
+    expect(await requeueStalledReports(deps, queues)).toBe(1);
+    // The next sweep sees the job waiting and adds no second one.
+    expect(await requeueStalledReports(deps, queues)).toBe(0);
+    workers = createWorkers(deps, queues, { connection: redis, prefix, concurrency: 2 });
+    await waitFor(async () => (await reportRow(shop.id, report.id)).status === "COMPLETED", 30_000);
+    expect(await reportRow(shop.id, report.id)).toMatchObject({ resourcesScanned: 11 });
+  }, 40_000);
+
+  it("repairs a chain cut between saving a page and queueing the next (a redeploy)", async () => {
+    const { shop, store } = await setup(9, 0);
+    const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: null, monthlyLimit: 0, keyPrefix: prefix };
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "cut" }, app);
+    // The first page is saved; the process dies before the next page is queued.
+    expect(await runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null })).not.toBeNull();
+    await ageReports(shop.id, REPORT_STALL_MS + 60_000);
+    expect(await requeueStalledReports(deps, queues)).toBe(1);
+    workers = createWorkers(deps, queues, { connection: redis, prefix, concurrency: 2 });
+    await waitFor(async () => (await reportRow(shop.id, report.id)).status === "COMPLETED", 30_000);
+    // Every product once, the first page not counted twice.
+    expect(await reportRow(shop.id, report.id)).toMatchObject({ resourcesScanned: 9 });
+  }, 40_000);
+
+  it("leaves a report alone while its page job waits, and re-queues under a new id one that ended without moving it", async () => {
+    const { shop, store } = await setup(5, 0);
+    const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: null, monthlyLimit: 0, keyPrefix: prefix };
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "live" }, app);
+    const payload: CoveragePagePayload = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    await enqueueCoveragePage(queues, payload);
+    await ageReports(shop.id, REPORT_STALL_MS + 60_000);
+    // Waiting in a long queue is not lost.
+    expect(await requeueStalledReports(deps, queues)).toBe(0);
+    // A job that ended without doing the page (a stand-in processor here): the same id can't be queued again.
+    const standIn = new Worker(QUEUE_NAMES.coverage, async () => "skipped", { connection: redis, prefix });
+    await waitFor(async () => (await (await queues.coverage.getJob(coveragePageJobId(payload)))?.getState()) === "completed", 10_000);
+    await standIn.close();
+    expect(await requeueStalledReports(deps, queues)).toBe(1);
+    workers = createWorkers(deps, queues, { connection: redis, prefix, concurrency: 2 });
+    await waitFor(async () => (await reportRow(shop.id, report.id)).status === "COMPLETED", 30_000);
   }, 40_000);
 
   it("scans every page and completes, retrying a transient Shopify failure", async () => {

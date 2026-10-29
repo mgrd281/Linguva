@@ -8,8 +8,13 @@ import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 import { addSecurityHeaders } from "./.server/lib/security-headers";
 import { logger } from "./.server/lib/logger";
+import { startEmbeddedWorker } from "./.server/jobs/embedded-worker";
 
 export const streamTimeout = 5000;
+
+// Background jobs inside this process's container when no worker service
+// exists (on by default in production only; docs/RAILWAY_STAGING.md §8b).
+startEmbeddedWorker();
 
 /**
  * Unexpected loader and action errors: logged for operations (the page only

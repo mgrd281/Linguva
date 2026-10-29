@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Checks a built Linguva image the way staging runs it (docs/RAILWAY_STAGING.md):
-# migrations as the owner role, the web app and the worker in staging mode
-# against a fresh database, then the smoke checks (pnpm ops:smoke).
+# Checks a built Linguva image the way Railway runs it (docs/RAILWAY_STAGING.md):
+# migrations as the owner role; the web app and the worker in staging mode
+# against a fresh database, then the smoke checks (pnpm ops:smoke); and the
+# web app in production mode, which runs the worker itself (§8b): it starts,
+# survives a killed worker and stops cleanly.
 # Needs PostgreSQL with the local roles (scripts/db/init-roles.sql) and Redis
 # on localhost. Throwaway secrets only; nothing leaves the machine.
 #
@@ -11,7 +13,8 @@ IMAGE=${1:?image tag}
 PORT=${IMAGE_CHECK_PORT:-3999}
 DB=linguva_imagecheck
 ENV_FILE=$(mktemp)
-trap 'docker rm -f lv-check-web lv-check-worker >/dev/null 2>&1 || true; rm -f "$ENV_FILE"' EXIT
+PROD_PORT=$((PORT - 1))
+trap 'docker rm -f lv-check-web lv-check-worker lv-check-embedded >/dev/null 2>&1 || true; rm -f "$ENV_FILE"' EXIT
 
 cat > "$ENV_FILE" <<VARS
 NODE_ENV=production
@@ -47,3 +50,32 @@ docker exec lv-check-web whoami | grep -qx node && echo "✓ runs as the unprivi
 
 echo "▸ Smoke checks"
 node build/ops/smoke.js --url "http://localhost:$PORT" --refused-shop karinex.myshopify.com
+# Staging has its own worker service: the web process runs none.
+docker logs lv-check-web 2>&1 | grep -q '"embedded worker off"' || { docker logs lv-check-web; echo "✗ staging web didn't report its worker off"; exit 1; }
+if docker logs lv-check-web 2>&1 | grep -q '"worker started"'; then docker logs lv-check-web; echo "✗ staging web started a worker"; exit 1; fi
+echo "✓ staging web runs no worker of its own"
+
+echo "▸ Production mode: the web process runs the worker (no worker service)"
+# Its own Redis database, so the staging worker's heartbeat can't answer for it.
+docker run -d --name lv-check-embedded --network host --env-file "$ENV_FILE" \
+  -e LINGUVA_STAGE=production -e LINGUVA_PRODUCTION_APPROVED=yes -e TRANSLATION_PROVIDER=deepl -e ALLOWED_SHOPS= \
+  -e PORT="$PROD_PORT" -e SHOPIFY_APP_URL="http://localhost:$PROD_PORT" -e REDIS_URL=redis://localhost:6379/10 \
+  "$IMAGE" >/dev/null
+started() { docker logs lv-check-embedded 2>&1 | grep '"worker started"' | grep -c '"mode":"embedded"' || true; }
+for _ in $(seq 1 40); do [ "$(started)" -ge 1 ] && break; sleep 1; done
+[ "$(started)" -ge 1 ] || { docker logs lv-check-embedded; echo "✗ embedded worker didn't start"; exit 1; }
+docker logs lv-check-embedded 2>&1 | grep '"worker started"' | grep -q '"provider":"none"' || { echo "✗ unexpected provider"; exit 1; }
+echo "✓ embedded worker started (no provider key)"
+node build/ops/smoke.js --url "http://localhost:$PROD_PORT" --expect-worker
+
+docker exec lv-check-embedded pkill -KILL -f build/worker/index.js
+[ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PROD_PORT/healthz")" = 200 ] || { echo "✗ web went down with the worker"; exit 1; }
+for _ in $(seq 1 20); do [ "$(started)" -ge 2 ] && break; sleep 1; done
+[ "$(started)" -ge 2 ] || { docker logs lv-check-embedded; echo "✗ killed worker wasn't restarted"; exit 1; }
+docker logs lv-check-embedded 2>&1 | grep -q '"embedded worker exited"' || { echo "✗ worker exit not logged"; exit 1; }
+echo "✓ a killed worker is restarted; the web kept serving"
+
+docker stop -t 40 lv-check-embedded >/dev/null
+[ "$(docker inspect -f '{{.State.ExitCode}}' lv-check-embedded)" = 0 ] || { docker logs lv-check-embedded; echo "✗ unclean stop"; exit 1; }
+docker logs lv-check-embedded 2>&1 | grep -q '"worker shutting down"' || { echo "✗ worker wasn't stopped by the web process"; exit 1; }
+echo "✓ stops cleanly (exit 0), the worker first"

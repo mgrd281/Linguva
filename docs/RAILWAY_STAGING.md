@@ -245,10 +245,24 @@ Plan as prepared:
 
 Not there yet, each one needs the owner's approval:
 
-- **No `worker` service** in production: "Measure now" (coverage), bulk jobs and automatic translation wait in the queue until one exists (same settings as the staging worker, §6a). It adds Railway usage.
+- **Background jobs** run inside the `web` service since the commit after `a53c718` (§8b); no `worker` service is needed in production. Until that deploy, "Messen" (coverage), bulk jobs and automatic translation waited in the queue (KARINEX's first measurement waited from 2026-10-28; it continues by itself after the deploy).
 - **New code**: production runs `969ad79` until the next deploy. Railway deploys the connected branch `claude/gallant-pasteur-8opy75` itself once GitHub CI is green (auto deploy plus "Wait for CI"; found on 2026-10-28, switched off while the owner decided, switched on again by the owner the same night). Every commit of this branch that passes CI therefore reaches KARINEX; the owner can stop it with "Disable" under web, Settings, Source.
 - **Countries on the Overview** need the optional permission `read_markets`: the button "Show countries" asks for it in KARINEX (read-only, Linguva never changes markets).
 - **KARINEX's languages are already published.** Anything published from Linguva is visible to customers immediately; drafts stay invisible until published.
+
+### 8b. Background jobs inside the web service (production)
+
+Production has no `worker` service. The `web` process starts the worker itself, as a child process running the same `build/worker/index.js` a separate worker service runs (`app/.server/jobs/embedded-worker.ts`, started from `app/entry.server.tsx`):
+
+- **On by default only when `LINGUVA_STAGE=production`.** `LINGUVA_EMBEDDED_WORKER=on` or `off` decides elsewhere; any other value means off (the variable exists to switch jobs off, so a typo fails safe). Staging keeps its own worker service and runs none in `web`.
+- **The web keeps serving whatever the worker does.** A crashed or killed worker is restarted after 1 s, 2 s, 4 s … up to 5 minutes; a run of a minute or more resets the delay. Lower CPU priority and first in line for the out-of-memory killer (best effort). The child gets the web's variables without `MIGRATION_DATABASE_URL`.
+- **Redeploys:** SIGTERM reaches the worker through the web process; active jobs get the time Railway allows (draining) and are picked up again by the next worker. A coverage measurement whose chain of page jobs broke (killed between saving a page and queueing the next) continues by itself within 15 minutes (`requeueStalledReports`, part of the worker's 5-minute sweep, one worker at a time).
+- **Heartbeat:** while its queues run, the worker writes `lv:production:worker:heartbeat` to Redis every 15 s with a 45 s expiry. `GET /healthz/worker` answers 200 while it exists, else 503 (no details). Check from your machine: `pnpm ops:smoke --url https://web-production-73603.up.railway.app --expect-worker`. Railway's deploy health check stays `/healthz` (database only).
+- **Logs** (Railway, web service): `embedded worker on` → `embedded worker started` → `worker started` with `"mode":"embedded"`; after a crash `embedded worker exited` with the restart delay. Filter by `"service":"linguva-worker"`.
+- **Cost:** one more Node process in the same service, about 100–150 MB of memory (roughly 1–2 USD a month at Railway's memory price); no new service.
+- **Emergency switch**, only if asked: web, Variables, `LINGUVA_EMBEDDED_WORKER` = `off`, deploy.
+- **Payloads stay compatible** across a deploy overlap (old and new worker run together for a few seconds; each job goes to one of them).
+- **The DeepL key** goes into the `web` service's variables only; the worker inherits them.
 
 Clean-up still open (owner): Postgres-B0jH's public TCP proxy (only needed while creating the roles), the file with the production passwords on the owner's computer, and the client secret of "Linguva KARINEX" that was pasted into a chat (owner decided to keep it for now).
 
@@ -261,7 +275,7 @@ Clean-up still open (owner): Postgres-B0jH's public TCP proxy (only needed while
 | 3 | Create the "Linguva Staging" app and `shopify app deploy --config staging` (§5.5) | New Shopify app in your organization | Free |
 | 4 | Install Linguva Staging on linguva-test-lab | Store change (dev store only) | Free |
 | 5 | Everything in §8 (production, KARINEX) | Production, real store, paid AI | DeepL and Railway production usage |
-| 6 | A `worker` service in production (§8a) | Running service | Railway usage (one more small service) |
+| 6 | ~~A `worker` service in production~~: not needed, the `web` service runs the worker (§8b) | — | About 100–150 MB more memory in `web` |
 | 7 | Deploying newer commits to production (§8a) | Changes what KARINEX's staff see | None beyond the running service |
 
 What I changed in the repository (this branch, nothing deployed): the Dockerfile, `.dockerignore`, the staging guards, `/healthz`, `pnpm ops:smoke`, `scripts/db/hosted-roles.sql`, `scripts/ci/image-check.sh` and its CI step, the two Shopify app templates in `deploy/shopify/`, and this document.

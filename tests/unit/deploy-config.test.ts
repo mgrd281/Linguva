@@ -45,3 +45,13 @@ describe("container image", () => {
     for (const entry of [".env", ".env.*", ".git", ".shopify"]) expect(ignore).toContain(entry);
   });
 });
+
+describe("background jobs in the web container", () => {
+  it("the server bundle starts the embedded worker, which runs the worker bundle the build writes", () => {
+    expect(read("app/entry.server.tsx")).toMatch(/^startEmbeddedWorker\(\);$/m);
+    const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+    expect(pkg.scripts["build:worker"]).toMatch(/--outfile=build\/worker\/index\.js/);
+    expect(pkg.scripts.build).toMatch(/build:worker/);
+    expect(read("app/.server/jobs/embedded-worker.ts")).toContain('"build/worker/index.js"');
+  });
+});

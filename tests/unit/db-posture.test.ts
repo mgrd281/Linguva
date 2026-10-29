@@ -34,6 +34,26 @@ describe("verifyDatabasePostureOnce", () => {
     expect(log).toHaveBeenCalled();
   });
 
+  it("tries again after the database didn't answer, but keeps refusing a weak posture", async () => {
+    vi.resetModules();
+    const { verifyDatabasePostureOnce } = await import("../../app/.server/lib/db-posture");
+    let down = true;
+    const flaky = {
+      $queryRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        if (down) throw new Error("Can't reach database server");
+        return (privileged.$queryRaw as unknown as (s: TemplateStringsArray, ...v: unknown[]) => Promise<unknown>)(strings, ...values);
+      }),
+    } as unknown as PrismaClient;
+    const log = vi.fn();
+    await expect(verifyDatabasePostureOnce(flaky, { production: true, log })).rejects.toThrow(/reach database/);
+    down = false;
+    await expect(verifyDatabasePostureOnce(flaky, { production: true, log })).rejects.toThrow(/RUNTIME_SUPERUSER/);
+    const calls = (flaky.$queryRaw as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
+    // A real posture problem is decided once and stays refused.
+    await expect(verifyDatabasePostureOnce(flaky, { production: true, log })).rejects.toThrow(/RUNTIME_SUPERUSER/);
+    expect((flaky.$queryRaw as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(calls);
+  });
+
   it("only logs outside production", async () => {
     vi.resetModules();
     const { verifyDatabasePostureOnce } = await import("../../app/.server/lib/db-posture");

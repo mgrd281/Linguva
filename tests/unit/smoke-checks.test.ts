@@ -48,6 +48,18 @@ describe("deployment smoke checks", () => {
     ]);
   });
 
+  it("requires a running background worker when asked (production without a worker service)", async () => {
+    const running = deployment({ "/healthz/worker": () => Response.json({ status: "ok" }) });
+    const ok = await runSmokeChecks({ baseUrl: "https://linguva.example.app", expectWorker: true }, running.fetchImpl);
+    expect(ok.find((r) => r.name === "Background worker is running")).toMatchObject({ ok: true });
+    const stopped = deployment({ "/healthz/worker": () => Response.json({ status: "stopped" }, { status: 503 }) });
+    const failed = await runSmokeChecks({ baseUrl: "https://linguva.example.app", expectWorker: true }, stopped.fetchImpl);
+    expect(failed.filter((r) => !r.ok).map((r) => r.name)).toEqual(["Background worker is running"]);
+    // Not asked: not checked.
+    const plain = await runSmokeChecks({ baseUrl: "https://linguva.example.app" }, stopped.fetchImpl);
+    expect(plain.some((r) => r.name === "Background worker is running")).toBe(false);
+  });
+
   it("reports a network failure as a failed check, not a crash", async () => {
     const results = await runSmokeChecks({ baseUrl: "https://down.example.app" }, async () => {
       throw new Error("connect ECONNREFUSED");

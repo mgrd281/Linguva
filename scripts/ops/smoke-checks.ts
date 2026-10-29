@@ -10,6 +10,8 @@ export interface SmokeOptions {
   baseUrl: string;
   /** A store the deployment must refuse, e.g. karinex.myshopify.com on staging. */
   refusedShop?: string;
+  /** Also require a running background worker (GET /healthz/worker). */
+  expectWorker?: boolean;
   timeoutMs?: number;
 }
 
@@ -83,6 +85,14 @@ export async function runSmokeChecks(options: SmokeOptions, fetchImpl: Fetch = f
     // A redirect to the login or bounce page, or a refusal; never the app itself.
     return [response.status !== 200 || !(await response.text()).includes("s-app-nav"), `HTTP ${response.status}`];
   });
+
+  if (options.expectWorker) {
+    await check("Background worker is running", async () => {
+      const response = await request("/healthz/worker");
+      const body = (await response.json().catch(() => null)) as { status?: string } | null;
+      return [response.status === 200 && body?.status === "ok", `HTTP ${response.status}, ${JSON.stringify(body)}`];
+    });
+  }
 
   if (options.refusedShop) {
     const shop = options.refusedShop;

@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Background jobs without a worker service: in production the web process runs the worker as a supervised child process (restarted with backoff, stopped with SIGTERM, never taking the web down); `LINGUVA_EMBEDDED_WORKER` switches it. Worker heartbeat in Redis and `GET /healthz/worker`; `pnpm ops:smoke --expect-worker`. Coverage measurements whose page chain broke (a redeploy between saving a page and queueing the next, a lost first job) continue by themselves.
+- Configuration accepts values as pasted into a hosting dashboard: a DeepL key with spaces, line breaks or quotes, an empty key (AI off instead of a failed start), DeepL's address with `/v2`, and character limits with thousands separators (`450.000` is 450,000, never 450).
 - App scaffold from the official Shopify React Router template (Admin API 2026-10, expiring offline tokens), switched to pnpm and PostgreSQL.
 - Prisma schema and migrations for shops, sessions, settings, locales, installation history, webhook delivery log, audit log and privacy requests.
 - PostgreSQL row-level security on tenant tables with `withTenant()`, separate owner (migrations) and runtime database roles, append-only audit log.
@@ -91,6 +93,7 @@
 - Script policy (`script-src`): only the app's files, Shopify's CDN and React Router's inline scripts with a per-page nonce; injected inline scripts don't run.
 
 ### Fixed
+- A database that didn't answer during the first request's security posture check no longer fails every later request until a restart; the check runs again (a real posture problem still stops the process).
 - Approving an older draft, or a job publishing automatically a moment after someone translated the same field, could replace that person's newer translation. Drafts, automatic publishing and the editor (two people editing the same field) now check that the translation they replace is still in place (migration 20261029200000).
 - The app's `?locale=` parameter (language to translate into) collided with Shopify's `locale` (admin language); it is now `?lang=`.
 - A shop starting a job waited behind another shop's whole queued catalogue; items are now queued by their position in their own job.

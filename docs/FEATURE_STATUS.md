@@ -22,7 +22,7 @@ Three states, never mixed:
 | Bulk jobs, review approval, automatic translation, webhooks, worker on real events | **Untested** on Shopify |
 | Markets, countries without their language | **Untested** (`read_markets` granted on neither store yet) |
 | Interface inside the admin (Polaris, App Bridge, save bar, mobile app) | Owner-reported: opens embedded; the checklist (U, V) not yet done |
-| Production app "Linguva KARINEX" on the KARINEX store (no AI provider, no worker) | Owner-reported, 2026-10-28: installed, opens embedded; production smoke check passed (RAILWAY_STAGING.md §8). Nothing translated or published there yet |
+| Production app "Linguva KARINEX" on the KARINEX store (no AI provider; background jobs inside the web service since the commit after `a53c718`, RAILWAY_STAGING.md §8b) | Owner-reported, 2026-10-28: installed, opens embedded; production smoke check passed (RAILWAY_STAGING.md §8). Nothing translated or published there yet |
 | Billing | **Untested** |
 
 Everything else is an assumption encoded in the fakes, checked against the Admin API 2026-10 schema, until its check is logged in DEV_STORE_TEST_PLAN.md §3.
@@ -78,6 +78,7 @@ Everything else is an assumption encoded in the fakes, checked against the Admin
 | Interface | German, French, Spanish and English interface from the admin user's language (Shopify's `locale`), localised numbers, dates and language names. French and Spanish (phase G) still need a native speaker's review (I18N_REVIEW.md) | Yes | Unit + UI (10 pages per language) | No (Shopify's `locale` parameter not seen live) | A1 |
 | Jobs | Job report: results by reason, timing, remaining time, support reference, CSV download | Yes | Integration + UI | No | E1–E6 |
 | Jobs | Fair share between shops in the queue | Yes | Performance test (20 shops; large and small shops) | No | — |
+| Jobs | Background jobs without a worker service: the web process supervises the worker (production default, `LINGUVA_EMBEDDED_WORKER`), restart with backoff, clean stop; heartbeat and `GET /healthz/worker`; broken coverage measurements continue by themselves | Yes | Unit (supervisor with a simulated child and clock, heartbeat, setting) + integration (heartbeat expiry, `/healthz/worker`, re-queued measurements with real PostgreSQL, Redis, BullMQ) + container (image check: start, killed worker restarted, exit 0) | No (Railway production not yet observed with it) | — |
 | AI | Check for the chosen form of address (de, fr, es, it, nl) | Yes | Unit + pipeline | No (no DeepL key) | C7 |
 | Safety | A translation written in the meantime is never overwritten (draft approval, automatic publishing, two people in the editor) | Yes | Security suite (mutation-checked) | No | E2–E4 |
 | Safety | Structural guards for write paths and database changes | Yes | Unit + security suites | — | — |

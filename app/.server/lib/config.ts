@@ -18,6 +18,29 @@ export function shopList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/**
+ * A value as people paste it into a hosting dashboard: surrounding spaces,
+ * line breaks and quotes are dropped; empty means not set.
+ */
+function pasted(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  let v = value.trim();
+  if (v.length >= 2 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))) v = v.slice(1, -1).trim();
+  return v === "" ? undefined : v;
+}
+
+/** A character count with thousands separators as people type them: 450000, 450.000, 450,000 or 450 000. */
+function charCount(value: unknown): unknown {
+  const v = pasted(value);
+  return typeof v === "string" && /^\d{1,3}([.,' _]\d{3})+$/.test(v) ? v.replace(/[.,' _]/g, "") : v;
+}
+
+/** DeepL's base address; a pasted ".../v2" or trailing slash is dropped (the client adds /v2). */
+function deeplBaseUrl(value: unknown): unknown {
+  const v = pasted(value);
+  return typeof v === "string" ? v.replace(/\/+$/, "").replace(/\/v2$/i, "").replace(/\/+$/, "") : v;
+}
+
 const schema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -35,17 +58,17 @@ const schema = z.object({
       (v) => v.split(",").every((entry) => keyEntry.test(entry.trim())),
       "must be comma-separated kid:base64key entries with 32-byte keys",
     ),
-  // AI translation is disabled when no provider key is configured.
-  DEEPL_API_KEY: z.string().min(1).optional(),
-  DEEPL_API_URL: z.string().url().optional(),
+  // AI translation is disabled when no provider key is configured (an empty value counts as none).
+  DEEPL_API_KEY: z.preprocess(pasted, z.string().min(1).optional()),
+  DEEPL_API_URL: z.preprocess(deeplBaseUrl, z.string().url().optional()),
   // Monthly AI character allowance per shop until plans are wired to billing.
-  AI_MONTHLY_CHAR_LIMIT: z.coerce.number().int().positive().default(20_000),
+  AI_MONTHLY_CHAR_LIMIT: z.preprocess(charCount, z.coerce.number().int().positive().default(20_000)),
   // Daily cap per shop (UTC day); defaults to the monthly allowance.
-  AI_DAILY_CHAR_LIMIT: z.coerce.number().int().positive().optional(),
+  AI_DAILY_CHAR_LIMIT: z.preprocess(charCount, z.coerce.number().int().positive().optional()),
   // Cost safety: AI characters across all shops per UTC day.
-  AI_PLATFORM_DAILY_CHAR_LIMIT: z.coerce.number().int().positive().default(100_000),
+  AI_PLATFORM_DAILY_CHAR_LIMIT: z.preprocess(charCount, z.coerce.number().int().positive().default(100_000)),
   // Largest single interactive AI request (characters sent to the provider).
-  AI_MAX_CHARS_PER_REQUEST: z.coerce.number().int().positive().default(20_000),
+  AI_MAX_CHARS_PER_REQUEST: z.preprocess(charCount, z.coerce.number().int().positive().default(20_000)),
   // Interactive AI requests per minute, per staff member and per shop.
   AI_USER_REQUESTS_PER_MINUTE: z.coerce.number().int().positive().default(10),
   AI_SHOP_REQUESTS_PER_MINUTE: z.coerce.number().int().positive().default(30),
@@ -74,7 +97,7 @@ const schema = z.object({
   // sent to the provider). Set it to the provider contract's price.
   AI_COST_USD_PER_MILLION_CHARS: z.coerce.number().nonnegative().default(25),
   // "mock" returns marked pseudo-translations for development and tests.
-  TRANSLATION_PROVIDER: z.enum(["deepl", "mock"]).default("deepl"),
+  TRANSLATION_PROVIDER: z.preprocess(pasted, z.enum(["deepl", "mock"]).default("deepl")),
   // Background jobs are disabled when no Redis is configured.
   REDIS_URL: z.string().url().optional(),
   // Per-shop Shopify Admin API budget used by background jobs (points).

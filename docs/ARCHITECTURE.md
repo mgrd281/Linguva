@@ -54,7 +54,7 @@ Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, mo
 
 ### 2.2 Worker
 
-- A separate process (`worker/index.ts`) using BullMQ, deployed as its own Railway service.
+- A separate process (`worker/index.ts`) using BullMQ, deployed as its own Railway service (staging), or started by the web process as a supervised child process where no worker service exists (production, `app/.server/jobs/embedded-worker.ts`, docs/RAILWAY_STAGING.md §8b). The worker writes a heartbeat to Redis; `GET /healthz/worker` reports it.
 - Queues: `discovery`, `translate`, `publish`, `webhook-ingest`, `reconcile`, `usage`, plus a dead-letter queue (`dlq`).
 - Each job payload carries only `{ shopId, jobId, itemId, idempotencyKey }`. The worker reloads everything from the database inside a tenant-scoped transaction and re-checks that the installation is active.
 - Shopify calls go through a **per-shop token bucket** fed by `throttleStatus`, so one large merchant can't starve others.

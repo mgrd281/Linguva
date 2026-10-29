@@ -172,6 +172,8 @@ export const en = {
   "automatic.activity.reason.QUEUES_UNAVAILABLE": "background jobs aren't set up",
   "automatic.activity.reason.NO_LANGUAGE": "no language to translate into",
   "automatic.activity.reason.SMART_OFF": "turned off",
+  "automatic.activity.reason.SCAN_FAILED": "the measurement didn't finish; the next check reads everything again",
+  "automatic.activity.reason.STALLED": "the measurement stopped; the next check reads everything again",
   "automatic.activity.reason.other": "see the job",
 
   "automatic.error.heading": "Not saved",
@@ -367,6 +369,8 @@ export const de: Translation<typeof en> = {
   "automatic.activity.reason.QUEUES_UNAVAILABLE": "Hintergrundaufträge sind nicht eingerichtet",
   "automatic.activity.reason.NO_LANGUAGE": "keine Sprache zum Übersetzen",
   "automatic.activity.reason.SMART_OFF": "ausgeschaltet",
+  "automatic.activity.reason.SCAN_FAILED": "die Messung wurde nicht fertig; die nächste Prüfung liest alles neu",
+  "automatic.activity.reason.STALLED": "die Messung blieb stehen; die nächste Prüfung liest alles neu",
   "automatic.activity.reason.other": "siehe Auftrag",
 
   "automatic.error.heading": "Nicht gespeichert",
@@ -562,6 +566,8 @@ export const fr: Translation<typeof en> = {
   "automatic.activity.reason.QUEUES_UNAVAILABLE": "les tâches en arrière-plan ne sont pas configurées",
   "automatic.activity.reason.NO_LANGUAGE": "aucune langue de traduction",
   "automatic.activity.reason.SMART_OFF": "désactivée",
+  "automatic.activity.reason.SCAN_FAILED": "la mesure n'a pas abouti ; la prochaine vérification relit tout",
+  "automatic.activity.reason.STALLED": "la mesure s'est arrêtée ; la prochaine vérification relit tout",
   "automatic.activity.reason.other": "voir la tâche",
 
   "automatic.error.heading": "Non enregistré",
@@ -757,6 +763,8 @@ export const es: Translation<typeof en> = {
   "automatic.activity.reason.QUEUES_UNAVAILABLE": "los trabajos en segundo plano no están configurados",
   "automatic.activity.reason.NO_LANGUAGE": "ningún idioma al que traducir",
   "automatic.activity.reason.SMART_OFF": "desactivada",
+  "automatic.activity.reason.SCAN_FAILED": "la medición no terminó; la próxima revisión vuelve a leerlo todo",
+  "automatic.activity.reason.STALLED": "la medición se detuvo; la próxima revisión vuelve a leerlo todo",
   "automatic.activity.reason.other": "ver el trabajo",
 
   "automatic.error.heading": "No se guardó",

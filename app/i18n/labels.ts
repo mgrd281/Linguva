@@ -32,8 +32,9 @@ export function kindSingular(i18n: I18n, kind: TranslatableKind): string {
   return known(i18n, `common.kind.${kind}.singular`, kindMeta(kind).singular);
 }
 
-export function kindPlural(i18n: I18n, kind: TranslatableKind): string {
-  return known(i18n, `common.kind.${kind}.plural`, kindMeta(kind).plural);
+/** "products"; for images and custom fields of an owner type (a smart check's jobs) their own words. */
+export function kindPlural(i18n: I18n, kind: string): string {
+  return known(i18n, `common.kind.${kind}.plural`, isKind(kind) ? kindMeta(kind).plural : kindLabel(i18n, kind).toLowerCase());
 }
 
 export function groupLabel(i18n: I18n, group: string): string {

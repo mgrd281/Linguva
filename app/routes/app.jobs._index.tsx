@@ -3,7 +3,8 @@ import { Fragment, type ReactNode } from "react";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
-import { AUTO_REQUESTED_BY, isBulkResourceType, listJobsPage } from "../.server/jobs/bulk-jobs";
+import { AUTO_REQUESTED_BY, listJobsPage } from "../.server/jobs/bulk-jobs";
+import { SMART_REQUESTED_BY } from "../lib/smart-auto";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { jobProgress } from "../lib/job-display";
 import { RESOURCE_KINDS } from "../lib/resource-kinds";
@@ -26,12 +27,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     jobs: page.jobs.map((j) => ({
       id: j.id,
       targetLocale: j.targetLocale,
-      // Named in the interface language; other types show their code.
+      // Named in the interface language (also a smart check's images and custom fields).
       type: j.resourceType,
-      known: isBulkResourceType(j.resourceType),
       status: j.status,
       createdAt: j.createdAt.toISOString(),
       automatic: j.requestedBy === AUTO_REQUESTED_BY,
+      smart: j.requestedBy === SMART_REQUESTED_BY,
       progress: jobProgress(j),
     })),
   };
@@ -132,11 +133,17 @@ export default function Jobs() {
                       <s-link href={`/app/jobs/${job.id}`}>{i18n.dateTime(job.createdAt)}</s-link>
                     </s-table-cell>
                     <s-table-cell>
-                      {job.known ? kindLabel(i18n, job.type) : job.type}
+                      {kindLabel(i18n, job.type)}
                       {job.automatic ? (
                         <>
                           {" "}
                           <s-badge>{t("common.automatic")}</s-badge>
+                        </>
+                      ) : null}
+                      {job.smart ? (
+                        <>
+                          {" "}
+                          <s-badge tone="info">{t("automatic.name")}</s-badge>
                         </>
                       ) : null}
                     </s-table-cell>

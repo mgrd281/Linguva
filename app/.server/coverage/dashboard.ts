@@ -36,6 +36,8 @@ import { translatableByIds } from "../shopify/attached-resources";
 import { isSearchableType, searchIds } from "../shopify/search-ids";
 import { COVERAGE_TYPES, segmentOf, STALE_REPORT_MS } from "./coverage";
 import { listCoverageItems, loadCoverageSummary, type ItemStateFilter } from "./summary";
+import { excludedAmong } from "../smart/config";
+import { loadSmartCoverageNote, waitsForSmartCheck } from "../smart/panel";
 
 /** Types with a title of their own (images and custom fields are named by their text or owner). */
 function kindOfAny(type: string): TranslatableKind | null {
@@ -117,11 +119,16 @@ export async function loadCoverageDashboard(request: Request) {
   const stalled = Boolean(report && active && Date.now() - Date.parse(report.updatedAt) >= STALE_REPORT_MS);
   const current = report && active ? segmentOf(report, report.segmentIndex) : null;
 
-  const jobs = await withTenant(shop.id, (tx) =>
-    tx.translationJob.findMany({ where: { shopId: shop.id, status: { in: [...ACTIVE_JOBS] } }, orderBy: { createdAt: "desc" }, take: 10 }),
-  );
+  const [jobs, smart] = await Promise.all([
+    withTenant(shop.id, (tx) =>
+      tx.translationJob.findMany({ where: { shopId: shop.id, status: { in: [...ACTIVE_JOBS] } }, orderBy: { createdAt: "desc" }, take: 10 }),
+    ),
+    loadSmartCoverageNote(shop.id),
+  ]);
   const now = new Date();
   return {
+    /** The smart schedule beside the figures (null while off). */
+    smart: smart ? { mode: smart.mode, zone: smart.zone, paused: smart.paused, nextCheck: smart.nextCheck, translating: smart.translating, excluded: smart.excluded } : null,
     shopName: shop.name ?? shop.shopDomain,
     primary: locales.primary ? { locale: locales.primary.locale, name: locales.primary.name } : null,
     // Published languages first (what customers see), then by name.
@@ -253,7 +260,7 @@ export async function loadCoverageItemsPage(request: Request) {
     bulk: type ? bulkTargetOf(type) !== null : false,
     isFirstPage: !after,
   };
-  if (!locale) return { ...base, items: [], nextCursor: null, searchUnavailable: false };
+  if (!locale) return { ...base, items: [], nextCursor: null, searchUnavailable: false, smartNextCheck: null, smartZone: null };
 
   let resourceGids: string[] | null = null;
   const searchUnavailable = Boolean(search) && !isSearchableType(type);
@@ -275,6 +282,9 @@ export async function loadCoverageItemsPage(request: Request) {
     // Titles are a convenience: the list still works with ids.
   }
   const settings = await getShopSettings(shop.id);
+  // What the smart schedule does with the listed items: translating now, left alone, or waiting for its next check.
+  const smart = await loadSmartCoverageNote(shop.id);
+  const work = smart ? await smartWorkOn(shop.id, locale, page.items) : null;
   const titleOf = (gid: string, kind: string) => {
     const c = content.get(gid);
     const k = kindOfAny(kind);
@@ -299,7 +309,34 @@ export async function loadCoverageItemsPage(request: Request) {
         lastAttemptFailed: i.lastAttemptFailed,
         failureCode: i.failureCode,
         syncedAt: i.syncedAt,
+        smart: work
+          ? work.translating.has(i.resourceGid)
+            ? ("translating" as const)
+            : work.excluded.has(i.resourceGid) || Boolean(i.parentGid && work.excluded.has(i.parentGid))
+              ? ("excluded" as const)
+              : smart!.nextCheck && waitsForSmartCheck(smart!, { locale, resourceType: i.resourceType, fields: i.fields })
+                ? ("waiting" as const)
+                : null
+          : null,
       };
     }),
+    smartNextCheck: smart?.nextCheck ?? null,
+    smartZone: smart?.zone ?? null,
   };
+}
+
+/** The listed items the smart schedule translates now or leaves alone (one query each, for the page shown). */
+async function smartWorkOn(shopId: string, locale: string, items: ReadonlyArray<{ resourceGid: string; parentGid: string | null }>) {
+  const gids = items.map((i) => i.resourceGid);
+  const owners = items.flatMap((i) => (i.parentGid ? [i.parentGid] : []));
+  return withTenant(shopId, async (tx) => {
+    const [active, excluded] = await Promise.all([
+      tx.translationJobItem.findMany({
+        where: { shopId, resourceGid: { in: gids }, status: { in: ["PENDING", "RUNNING"] }, job: { targetLocale: locale, status: { in: [...ACTIVE_JOBS] } } },
+        select: { resourceGid: true },
+      }),
+      excludedAmong(tx, shopId, [...gids, ...owners]),
+    ]);
+    return { translating: new Set(active.map((a) => a.resourceGid)), excluded };
+  });
 }

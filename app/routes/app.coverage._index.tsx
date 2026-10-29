@@ -223,6 +223,29 @@ export default function Coverage() {
         </s-section>
       ) : null}
 
+      {data.smart ? (
+        <s-section heading={t("automatic.name")}>
+          <s-stack direction="inline" gap="small" alignItems="center">
+            <s-badge tone={data.smart.paused ? "warning" : "success"}>{data.smart.paused ? t("automatic.state.paused") : t("automatic.state.on")}</s-badge>
+            <s-text>
+              {[
+                data.smart.nextCheck
+                  ? t("coverage.smart.next", { time: t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.smart.nextCheck, data.smart.zone), zone: data.smart.zone }) })
+                  : data.smart.mode === "manual"
+                    ? t("coverage.smart.manual")
+                    : null,
+                data.smart.mode === "realtime" && !data.smart.paused ? t("coverage.smart.realtime") : null,
+                data.smart.translating ? t("coverage.smart.translating", { count: data.smart.translating }) : null,
+                data.smart.excluded ? t("coverage.smart.excluded", { count: data.smart.excluded }) : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </s-text>
+            <s-link href="/app/settings/automatic">{t("automatic.action.options")}</s-link>
+          </s-stack>
+        </s-section>
+      ) : null}
+
       {scanned ? (
         <s-query-container>
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">

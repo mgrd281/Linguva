@@ -54,6 +54,7 @@ export function ResourceTranslationEditor() {
   const aiFetcher = useFetcher<EditorAction>();
   const saveFetcher = useFetcher<EditorAction>();
   const consentFetcher = useFetcher<EditorAction>();
+  const smartFetcher = useFetcher<EditorAction>();
   const memoryFetcher = useFetcher<EditorAction>();
   const restoreFetcher = useFetcher<EditorAction>();
   const removeFetcher = useFetcher<EditorAction>();
@@ -169,6 +170,10 @@ export function ResourceTranslationEditor() {
     return `?${params.toString()}`;
   };
   const remaining = Math.max(0, Math.min(data.ai.limit - data.ai.used, data.ai.dailyLimit - data.ai.usedToday));
+  // Smart Auto-Translate (Business): left out of automatic translation, as just chosen or as stored.
+  const smartResult = smartFetcher.data?.kind === "smart" ? smartFetcher.data : null;
+  const smartExcluded = smartFetcher.formData ? smartFetcher.formData.get("intent") === "smart-exclude" : (smartResult?.excluded ?? data.smart?.excluded ?? false);
+  useResultToast(smartResult, smartResult ? (smartResult.excluded ? t("editor.smart.excluded") : t("editor.smart.included")) : null);
 
   return (
     <s-page heading={data.title}>
@@ -310,6 +315,15 @@ export function ResourceTranslationEditor() {
               : t("editor.toolbar.notConfigured")}
           </s-text>
         </s-stack>
+        {data.smart ? (
+          <s-checkbox
+            label={t("editor.smart.exclude")}
+            details={t("editor.smart.excludeDetails")}
+            {...(smartExcluded ? { checked: true } : {})}
+            {...(smartFetcher.state !== "idle" ? { disabled: true } : {})}
+            onChange={(e) => smartFetcher.submit({ intent: e.currentTarget.checked ? "smart-exclude" : "smart-include" }, { method: "post" })}
+          />
+        ) : null}
         {ai ? (
           <s-paragraph>
             {ai.provider === "memory"

@@ -102,6 +102,7 @@ export default function Plan() {
               bulk: yesNo(e.bulk),
               glossary: yesNo(e.glossary),
               autoPublish: yesNo(e.autoPublish),
+              smart: yesNo(e.smartAuto),
             })}
           </s-paragraph>
           {complimentary && data.costPerMillion !== null ? (
@@ -140,6 +141,7 @@ export default function Plan() {
             <s-table-header format="numeric">{t("common.languages")}</s-table-header>
             <s-table-header>{t("plan.plans.bulk")}</s-table-header>
             <s-table-header>{t("common.nav.glossary")}</s-table-header>
+            <s-table-header>{t("automatic.name")}</s-table-header>
           </s-table-header-row>
           <s-table-body>
             {Object.values(PLANS).map((p) => (
@@ -149,6 +151,7 @@ export default function Plan() {
                 <s-table-cell>{p.maxTargetLocales}</s-table-cell>
                 <s-table-cell>{p.bulk ? t("plan.plans.yes") : t("plan.plans.no")}</s-table-cell>
                 <s-table-cell>{p.glossary ? t("plan.plans.yes") : t("plan.plans.no")}</s-table-cell>
+                <s-table-cell>{p.smartAuto ? t("plan.plans.yes") : t("plan.plans.no")}</s-table-cell>
               </s-table-row>
             ))}
           </s-table-body>

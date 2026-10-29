@@ -145,3 +145,52 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
 }
 
 export type SmartPanel = Awaited<ReturnType<typeof loadSmartPanel>>;
+
+/**
+ * The smart schedule beside coverage: whether it is on or paused, its next
+ * check, what it translates now and what it leaves alone, and its scope
+ * (so items that wait for the next check can say so). Null while off.
+ */
+export async function loadSmartCoverageNote(shopId: string, client: PrismaClient = defaultClient, now = new Date()) {
+  return withTenant(
+    shopId,
+    async (tx) => {
+      const config = await tx.smartAutoConfig.findUnique({ where: { shopId } });
+      if (!config?.enabled) return null;
+      const [translating, excluded] = await Promise.all([
+        tx.translationJobItem.count({
+          where: { shopId, status: { in: ["PENDING", "RUNNING"] }, job: { requestedBy: SMART_REQUESTED_BY, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } } },
+        }),
+        tx.smartAutoExclusion.count({ where: { shopId } }),
+      ]);
+      const paused = Boolean(config.pausedAt) && (!config.pausedUntil || config.pausedUntil > now);
+      return {
+        mode: config.mode,
+        zone: config.timeZone,
+        paused,
+        nextCheck: !paused && config.nextRunAt ? config.nextRunAt.toISOString() : null,
+        translating,
+        excluded,
+        scope: {
+          locales: config.locales,
+          types: smartCoverageTypes(config),
+          // Handles (url) are never machine translated.
+          groups: config.fieldGroups.length ? config.fieldGroups : [...SMART_FIELD_GROUPS],
+          states: config.replaceOutdatedMachine ? ["missing", "failed", "outdated"] : ["missing", "failed"],
+        },
+      };
+    },
+    client,
+  );
+}
+
+export type SmartCoverageNote = NonNullable<Awaited<ReturnType<typeof loadSmartCoverageNote>>>;
+
+/** Whether an item's fields ("group:state") hold work for the smart schedule's next check. */
+export function waitsForSmartCheck(note: Pick<SmartCoverageNote, "scope">, item: { locale: string; resourceType: string; fields: readonly string[] }): boolean {
+  if (!note.scope.locales.includes(item.locale) || !note.scope.types.includes(item.resourceType)) return false;
+  return item.fields.some((entry) => {
+    const [group, state] = entry.split(":") as [string, string];
+    return note.scope.groups.includes(group) && note.scope.states.includes(state);
+  });
+}

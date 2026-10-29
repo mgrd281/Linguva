@@ -107,7 +107,7 @@ New tenant tables:
   - Smart jobs have `requestedBy = 'system:smart'`.
 - `CoverageReport.smartRunId`: a smart report plans translation while it reads.
 - `UsageLedger.origin` (nullable, `'smart'`). It is copied to the settle and release rows, so a day's or month's smart spend is a sum.
-- `CoverageItem.pendingChars Int @default(0)`: characters of machine-translatable fields that are missing or outdated (handles, JSON, file and URL fields excluded). It drives the estimate before anything is sent.
+- `CoverageItem.sourceChars Int[]`: the length of each counted original, in `sourceKeys` order, and `CoverageCount.chars BigInt`: their sum per language, type, field group and state, kept with every count change and rebuilt with the counts after a scan. Numbers only, no text. They drive the estimate before anything is sent.
 - `Shop.smartNextRunAt` (indexed): a due index for the tick, outside RLS.
   - The runtime role can write `Shop` for any shop, so the column is only a hint.
   - The tick re-reads the config under RLS.
@@ -117,7 +117,7 @@ New tenant tables:
 
 ### 5.1 Tick
 
-A BullMQ job scheduler `smart-tick` (`upsertJobScheduler`, every 60 s) on a new queue `translation-smart`. N workers still produce one job per slot. Each tick:
+Every 60 s the worker runs the tick, as its other periodic work: one worker per minute takes the Redis lock `smart-tick-lock`, and a second one (a deploy overlap) would still start each occurrence once (unique occurrence, per-shop advisory lock). Before deciding, the tick finishes runs whose measurement ended without finishing them (`repairSmartRuns`, also in the 5-minute sweep), and it retries a QUEUED run whose start didn't get through. Each tick:
 
 1. Lists up to 100 ACTIVE `Shop` rows with `smartNextRunAt <= now` (oldest first). It also starts WAITING runs whose blocking measurement has finished.
 2. **Outside any transaction**, per shop, it reads the facts:
@@ -232,7 +232,7 @@ Usage is reserved with `origin 'smart'` and the run's budgets (§5.4).
 
 ### 5.7 Estimates and preview
 
-- **Before enabling:** the preview sums `CoverageItem.pendingChars` over the selected scope, minus exclusions, from the newest measurement. It is labelled "up to … characters before translation memory". Without a measurement, the panel offers "Measure first".
+- **Before enabling:** the preview sums `CoverageCount.chars` over the selected scope (languages, types, field groups; missing and failed fields, and outdated ones when they are replaced; never handles) from the newest measurement and refreshes. Exclusions and people's outdated translations aren't subtracted, so it is an upper bound, labelled "up to … characters before translation memory". Without a measurement, the panel offers "Measure first".
 - **During a run:** `charsEstimated` is the sum of the planned source characters.
 - **After a run**, three figures, each shown as what it is:
   - billed characters (sent to the provider, from the ledger and the job totals);
@@ -320,7 +320,7 @@ Actions: Turn on/off, Pause/Resume, Check now, and Change schedule and options.
 | Budget or cap reached | Job stopped, config paused with the reason, resumes by itself (§5.4) |
 | Plan downgraded | The next tick or item sees no `smartAuto`: paused with PLAN; basic automatic translation stays available on the lower plan |
 | Primary language changed | Paused, banner, nothing deleted (§5.6) |
-| Uninstall | Runs cancelled, the due hint cleared, the config kept but paused, so a reinstall never resumes publishing silently; `shop/redact` deletes everything |
+| Uninstall | Runs and jobs cancelled, the due hint cleared, the config kept but turned off, so a reinstall never resumes checks or publishing without the merchant; `shop/redact` deletes everything |
 
 ## 10. Implementation order
 

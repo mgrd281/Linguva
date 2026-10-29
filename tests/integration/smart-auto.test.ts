@@ -19,7 +19,9 @@ import { processItem, type JobDependencies } from "../../app/.server/jobs/proces
 import { forgetCurrentLocales } from "../../app/.server/locales/current-locales";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { getShopSettings, setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
-import { addSmartExclusion, getSmartConfig, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
+import { addSmartExclusion, getSmartConfig, isSmartExcluded, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
+import { loadSmartCoverageNote } from "../../app/.server/smart/panel";
+import { loadEditorData, runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
 import { requestSmartRun, smartTick, type SmartDeps } from "../../app/.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsValue } from "../../app/.server/smart/validate";
 import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
@@ -358,6 +360,40 @@ describe("webhooks and the periodic check", () => {
     await pauseSmart({ shopId: shop.id, actorId: "7" }, app);
     store.touch("gid://shopify/Page/1", new Date(now.getTime() + 6 * 60_000));
     expect(await sweepChangedContent(sweepDeps, recordQueue().queue, new Date(now.getTime() + 10 * 60_000))).toMatchObject({ shops: 0, queued: 0 });
+  });
+});
+
+describe("the editor and coverage", () => {
+  const editor = (store: FakeShopifyStore, shopId: string, entitlements: Entitlements): EditorContext => ({
+    admin: store.asAdmin(),
+    shopId,
+    actorId: "7",
+    kind: "PRODUCT",
+    resourceId: P1,
+    target: { locale: "de", name: "German", rtl: false },
+    sourceName: "English",
+    billing: { configured: true, state: "ACTIVE", entitlements, subscription: null, stale: false, mustChoosePlan: false },
+    targetLocales: ["de"],
+  });
+  const form = (intent: string) => {
+    const f = new FormData();
+    f.set("intent", intent);
+    return f;
+  };
+
+  it("leave a product out of the smart schedule and back in from its editor; a lower plan can't", async () => {
+    const { shop, store } = await setup();
+    await enabled(shop.id);
+    expect((await loadEditorData(editor(store, shop.id, PLANS.business))).smart).toEqual({ excluded: false });
+    expect(await runEditorAction(editor(store, shop.id, PLANS.business), form("smart-exclude"))).toEqual({ kind: "smart", excluded: true });
+    expect((await loadEditorData(editor(store, shop.id, PLANS.business))).smart).toEqual({ excluded: true });
+    expect(await loadSmartCoverageNote(shop.id, app)).toMatchObject({ excluded: 1, paused: false });
+    // Pro: no option on the page, and a forged request changes nothing.
+    expect((await loadEditorData(editor(store, shop.id, PLANS.pro))).smart).toBeNull();
+    expect(await runEditorAction(editor(store, shop.id, PLANS.pro), form("smart-include"))).toEqual({ kind: "error", code: "PLAN_SMART" });
+    expect(await isSmartExcluded(shop.id, P1, app)).toBe(true);
+    expect(await runEditorAction(editor(store, shop.id, PLANS.business), form("smart-include"))).toEqual({ kind: "smart", excluded: false });
+    expect(await isSmartExcluded(shop.id, P1, app)).toBe(false);
   });
 });
 

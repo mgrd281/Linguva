@@ -19,7 +19,7 @@ export const en = {
   "plan.current.ends": "Your plan ends on {date}. Your translations stay in your store.",
   "plan.current.pending": "Changes to {plan} at the next billing cycle.",
   "plan.current.usage": "AI characters this month: {month} of {limit} · today: {today}",
-  "plan.current.features": "Languages: up to {languages} · Bulk translation: {bulk} · Glossary: {glossary} · Automatic publishing: {autoPublish}",
+  "plan.current.features": "Languages: up to {languages} · Bulk translation: {bulk} · Glossary: {glossary} · Automatic publishing: {autoPublish} · Smart schedule: {smart}",
   "plan.current.yes": "yes",
   "plan.current.no": "no",
   "plan.current.cost": "Estimated AI cost this month (internal): ${cost} at ${rate} per million characters.",
@@ -54,7 +54,7 @@ export const de: Translation<typeof en> = {
   "plan.current.pending": "Wechselt ab dem nächsten Abrechnungszeitraum zu {plan}.",
   "plan.current.usage": "KI-Zeichen diesen Monat: {month} von {limit} · heute: {today}",
   "plan.current.features":
-    "Sprachen: bis zu {languages} · Massenübersetzung: {bulk} · Glossar: {glossary} · Automatisches Veröffentlichen: {autoPublish}",
+    "Sprachen: bis zu {languages} · Massenübersetzung: {bulk} · Glossar: {glossary} · Automatisches Veröffentlichen: {autoPublish} · Intelligenter Zeitplan: {smart}",
   "plan.current.yes": "ja",
   "plan.current.no": "nein",
   "plan.current.cost": "Geschätzte KI-Kosten diesen Monat (intern): ${cost} bei ${rate} pro Million Zeichen.",
@@ -89,7 +89,7 @@ export const fr: Translation<typeof en> = {
   "plan.current.pending": "Passage au forfait {plan} au prochain cycle de facturation.",
   "plan.current.usage": "Caractères IA ce mois-ci : {month} sur {limit} · aujourd'hui : {today}",
   "plan.current.features":
-    "Langues : jusqu'à {languages} · Traduction groupée : {bulk} · Glossaire : {glossary} · Publication automatique : {autoPublish}",
+    "Langues : jusqu'à {languages} · Traduction groupée : {bulk} · Glossaire : {glossary} · Publication automatique : {autoPublish} · Planification intelligente : {smart}",
   "plan.current.yes": "oui",
   "plan.current.no": "non",
   "plan.current.cost": "Coût IA estimé ce mois-ci (interne) : {cost} $ à {rate} $ par million de caractères.",
@@ -124,7 +124,7 @@ export const es: Translation<typeof en> = {
   "plan.current.pending": "Cambia al plan {plan} en el próximo ciclo de facturación.",
   "plan.current.usage": "Caracteres de IA este mes: {month} de {limit} · hoy: {today}",
   "plan.current.features":
-    "Idiomas: hasta {languages} · Traducción masiva: {bulk} · Glosario: {glossary} · Publicación automática: {autoPublish}",
+    "Idiomas: hasta {languages} · Traducción masiva: {bulk} · Glosario: {glossary} · Publicación automática: {autoPublish} · Programación inteligente: {smart}",
   "plan.current.yes": "sí",
   "plan.current.no": "no",
   "plan.current.cost": "Costo estimado de IA este mes (interno): ${cost} a ${rate} por millón de caracteres.",

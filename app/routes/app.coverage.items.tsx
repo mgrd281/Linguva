@@ -166,6 +166,17 @@ export default function CoverageItems() {
                       <s-stack direction="block" gap="small-300">
                         {item.href ? <s-link href={item.href}>{name}</s-link> : <s-text>{name}</s-text>}
                         {item.lastAttemptFailed ? <s-text color="subdued">{t("coverage.items.lastAttempt")}</s-text> : null}
+                        {item.smart === "translating" ? (
+                          <s-badge tone="info">{t("coverage.items.smart.translating")}</s-badge>
+                        ) : item.smart === "excluded" ? (
+                          <s-badge>{t("coverage.items.smart.excluded")}</s-badge>
+                        ) : item.smart === "waiting" && data.smartNextCheck && data.smartZone ? (
+                          <s-text color="subdued">
+                            {t("coverage.items.smart.waiting", {
+                              time: t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.smartNextCheck, data.smartZone), zone: data.smartZone }),
+                            })}
+                          </s-text>
+                        ) : null}
                       </s-stack>
                     </s-table-cell>
                     {f.type ? null : <s-table-cell>{kindLabel(i18n, item.resourceType)}</s-table-cell>}

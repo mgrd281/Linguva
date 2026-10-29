@@ -290,6 +290,12 @@ export async function addSmartExclusion(input: { shopId: string; resourceGid: st
   return true;
 }
 
+/** Whether the merchant left this resource out of the smart schedule. */
+export async function isSmartExcluded(shopId: string, resourceGid: string, client: PrismaClient = defaultClient): Promise<boolean> {
+  const row = await withTenant(shopId, (tx) => tx.smartAutoExclusion.findUnique({ where: { shopId_resourceGid: { shopId, resourceGid } } }), client);
+  return row !== null;
+}
+
 export async function removeSmartExclusion(input: { shopId: string; resourceGid: string; actorId: string | null }, client: PrismaClient = defaultClient) {
   const removed = await withTenant(
     input.shopId,

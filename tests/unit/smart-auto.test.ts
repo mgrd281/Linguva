@@ -8,6 +8,7 @@ import { normaliseSmartSettings, type SmartSettingsContext, type SmartSettingsIn
 import { PLANS } from "../../app/lib/plans";
 import { budgetWindows, checkSpec, pauseLiftsAt, smartCoverageTypes } from "../../app/lib/smart-auto";
 import { nextOccurrence } from "../../app/lib/schedule";
+import { waitsForSmartCheck } from "../../app/.server/smart/panel";
 
 const at = (iso: string) => Date.parse(iso);
 const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
@@ -25,6 +26,22 @@ describe("what a check plans", () => {
     ]);
     // Never theme content or notifications, whatever the stored list says.
     expect(smartCoverageTypes({ resourceTypes: ["ONLINE_STORE_THEME", "EMAIL_TEMPLATE", "PRODUCT"], includeAttached: false })).toEqual(["PRODUCT"]);
+  });
+});
+
+describe("items waiting for the next check (coverage)", () => {
+  const note = { scope: { locales: ["de"], types: ["PRODUCT"], groups: ["title", "description"], states: ["missing", "failed", "outdated"] } };
+  it("wait when a field in the scope is missing, failed or outdated", () => {
+    expect(waitsForSmartCheck(note, { locale: "de", resourceType: "PRODUCT", fields: ["title:complete", "description:missing"] })).toBe(true);
+    expect(waitsForSmartCheck(note, { locale: "de", resourceType: "PRODUCT", fields: ["title:outdated"] })).toBe(true);
+    // A draft waits for review, not for the check; a field group outside the scope doesn't count.
+    expect(waitsForSmartCheck(note, { locale: "de", resourceType: "PRODUCT", fields: ["title:draft", "seo_title:missing"] })).toBe(false);
+    // Another language or type: not in the scope.
+    expect(waitsForSmartCheck(note, { locale: "fr", resourceType: "PRODUCT", fields: ["title:missing"] })).toBe(false);
+    expect(waitsForSmartCheck(note, { locale: "de", resourceType: "COLLECTION", fields: ["title:missing"] })).toBe(false);
+    // Outdated translations kept as they are.
+    const keep = { scope: { ...note.scope, states: ["missing", "failed"] } };
+    expect(waitsForSmartCheck(keep, { locale: "de", resourceType: "PRODUCT", fields: ["title:outdated"] })).toBe(false);
   });
 });
 

@@ -27,7 +27,7 @@ import { normaliseSmartSettings, type SmartSettingsProblem } from "../.server/sm
 import { withTenant } from "../.server/tenancy/with-tenant";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
 import { SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
-import { groupLabel, kindLabel } from "../i18n/labels";
+import { groupLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 import { formatTime, MAX_TIMES_PER_DAY, nextOccurrence, normaliseSchedule, parseTime, WEEKDAYS } from "../lib/schedule";
@@ -530,14 +530,8 @@ export default function SmartAutomatic() {
                   </s-badge>
                   <s-text color="subdued">{t(`automatic.activity.trigger.${run.trigger}` as "automatic.activity.trigger.MANUAL")}</s-text>
                 </s-stack>
-                {run.status === "SKIPPED" || (run.errorCode && run.status !== "COMPLETED") ? (
-                  <s-text color="subdued">
-                    {t(
-                      (["PAUSED", "COALESCED", "AI_NOT_CONFIGURED", "QUEUES_UNAVAILABLE", "NO_LANGUAGE", "SMART_OFF"].includes(run.errorCode ?? "")
-                        ? `automatic.activity.reason.${run.errorCode}`
-                        : "automatic.activity.reason.other") as "automatic.activity.reason.other",
-                    )}
-                  </s-text>
+                {run.status === "SKIPPED" ? (
+                  <s-text color="subdued">{runReason(i18n, run.errorCode)}</s-text>
                 ) : (
                   <s-text>
                     {[
@@ -550,6 +544,10 @@ export default function SmartAutomatic() {
                       .join(" · ")}
                   </s-text>
                 )}
+                {/* Why it didn't finish, or why its translation stopped (a budget, the plan's allowance). */}
+                {run.status !== "SKIPPED" && run.errorCode ? (
+                  <s-text tone={run.status === "FAILED" ? "critical" : "caution"}>{runReason(i18n, run.errorCode)}</s-text>
+                ) : null}
                 {run.failed || run.jobs.length ? (
                   <s-stack direction="inline" gap="small" alignItems="center">
                     {run.failed ? <s-text tone="critical">{t("automatic.activity.failed", { count: run.failed })}</s-text> : null}
@@ -572,6 +570,14 @@ export default function SmartAutomatic() {
       </s-section>
     </s-page>
   );
+}
+
+const RUN_REASONS = ["PAUSED", "COALESCED", "AI_NOT_CONFIGURED", "QUEUES_UNAVAILABLE", "NO_LANGUAGE", "SMART_OFF", "SCAN_FAILED", "STALLED"];
+
+/** Why a check was skipped, didn't finish or stopped translating. */
+function runReason(i18n: ReturnType<typeof useI18n>, code: string | null): string {
+  if (code && RUN_REASONS.includes(code)) return i18n.t(`automatic.activity.reason.${code}` as "automatic.activity.reason.other");
+  return (code ? jobErrorMessage(i18n, code) : null) ?? i18n.t("automatic.activity.reason.other");
 }
 
 /** The text for a refused action (the form's problems, the plan, consent, the installation). */

@@ -38,10 +38,11 @@ export function stateSummary(i18n: I18n, counts: StateCounts): string {
     .join(", ");
 }
 
-export function StateIcon({ state, size = "base" }: { state: ItemState; size?: "small" | "base" }) {
+/** A state's icon; `slot`: where it goes in a Polaris component (a chip's "graphic"). */
+export function StateIcon({ state, size = "base", slot }: { state: ItemState; size?: "small" | "base"; slot?: Lowercase<string> }) {
   const look = ITEM_STATE_LOOK[state];
   // Missing has no colour of its own: the subdued text colour.
-  return state === "missing" ? <s-icon type={look.icon} color="subdued" size={size} /> : <s-icon type={look.icon} tone={look.tone} size={size} />;
+  return state === "missing" ? <s-icon slot={slot} type={look.icon} color="subdued" size={size} /> : <s-icon slot={slot} type={look.icon} tone={look.tone} size={size} />;
 }
 
 /** "✓ 74 done  ◷ 18 waiting for approval …": the states with texts, each icon and words. */

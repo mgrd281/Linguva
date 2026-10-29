@@ -680,7 +680,7 @@ export interface CategoryRow {
   translated: string | null;
   /** Custom fields: the field's name. */
   label: string | null;
-  /** Products, collections, blog posts and product images: the picture, sized for a 64 px thumbnail. */
+  /** Products, collections, blog posts and product images (custom fields: their owner's): the picture, sized for a 64 px thumbnail. */
   image: { url: string; alt: string | null } | null;
 }
 
@@ -727,8 +727,9 @@ function textCounts(fieldStates: readonly string[]): StateCounts {
  * title search for the types Shopify can search. Names, translations and
  * pictures of the shown rows are read live from Shopify (best effort: the
  * list works without them). Also the category's figure, texts waiting for
- * approval, running job and what translating it would do. 404 for an
- * unknown category or language.
+ * approval, running job and what translating it would do, and where
+ * customers read the language (with `markets`). 404 for an unknown
+ * category or language.
  */
 export async function loadCategoryItems(
   admin: Admin,
@@ -737,7 +738,7 @@ export async function loadCategoryItems(
   category: string,
   query: CategoryListQuery = {},
   client: PrismaClient = defaultClient,
-  options: Pick<LanguagePageOptions, "jobsAvailable" | "aiAvailable" | "now"> = {},
+  options: Pick<LanguagePageOptions, "jobsAvailable" | "aiAvailable" | "markets" | "now"> = {},
 ) {
   if (!isCategoryId(category)) throw new Response("Not found", { status: 404 });
   const jobsAvailable = options.jobsAvailable ?? getQueues() !== null;
@@ -751,12 +752,13 @@ export async function loadCategoryItems(
   // A search keeps Shopify's matches only, in the counts too, so the filters still add up.
   const gids = search ? await searchCategory(admin, searchable, search) : null;
 
-  const [coverage, settings, billing, jobs, used] = await Promise.all([
+  const [coverage, settings, billing, jobs, used, markets] = await Promise.all([
     loadCoverageState(shop.id, client),
     getShopSettings(shop.id, client),
     shopBilling(admin, shop),
     activeJobs(shop.id, locale, client),
     getMonthlyUsage(shop.id, undefined, client),
+    options.markets ? options.markets() : Promise.resolve(null),
   ]);
 
   const scope = Prisma.sql`"shopId" = ${shop.id}::uuid AND "locale" = ${locale} AND "resourceType" = ANY(${types}::text[])${
@@ -820,7 +822,8 @@ export async function loadCategoryItems(
   const work = note ? await smartWorkOn(shop.id, locale, page, client) : null;
 
   const measured = measuredLocales(coverage.lastCompleted, coverage.segments, COVERAGE_TYPES).has(locale);
-  const scanning = scanningOf(coverage.report, measurementState(coverage.report, { jobsAvailable, now: options.now ?? Date.now() }), locale);
+  const measurement = measurementState(coverage.report, { jobsAvailable, now: options.now ?? Date.now() });
+  const scanning = scanningOf(coverage.report, measurement, locale);
   const figure = categoryTallies(coverage.counts, locale)[category];
   const counts = Object.fromEntries(ITEM_STATES.map((s, rank) => [s, totals.filter((t) => t.rank === rank).reduce((n, t) => n + t.total, 0)])) as Record<ItemState, number>;
   const shown = totals.filter((t) => stateRank === null || t.rank === stateRank);
@@ -830,8 +833,12 @@ export async function loadCategoryItems(
   return {
     language: languageOf(language),
     primary: primaryOf(locales),
+    ...marketsFor(markets, locales, locale),
     measured,
+    measurement,
     scanning,
+    /** Counting can start (background jobs run here and no measurement is under way). */
+    canCount: jobsAvailable && !UNDER_WAY.has(measurement.state),
     category: {
       id: category,
       tier: tierOf(category),
@@ -864,7 +871,8 @@ export async function loadCategoryItems(
         ...(metafield(row)
           ? { title: (row.parentGid ? nodes?.get(row.parentGid)?.text : null) ?? null, translated: null, label: node?.label ?? null }
           : { title: node?.text ?? text?.original ?? null, translated: node?.translated ?? text?.translated ?? null, label: null }),
-        image: sizedImage(node?.image, ROW_IMAGE_WIDTH),
+        // Custom fields show their owner's picture.
+        image: sizedImage((metafield(row) && row.parentGid ? nodes?.get(row.parentGid) : node)?.image, ROW_IMAGE_WIDTH),
       };
     }),
     page: {

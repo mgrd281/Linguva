@@ -64,7 +64,7 @@ function detailLine(i18n: I18n, category: LanguageCategory): string {
 }
 
 /** The category's picture in a soft square, for areas without pictures of their own and items without one. */
-function IconTile({ icon, size = 36 }: { icon: (typeof CATEGORIES)[CategoryId]["icon"]; size?: number }) {
+export function IconTile({ icon, size = 36 }: { icon: (typeof CATEGORIES)[CategoryId]["icon"]; size?: number }) {
   return (
     <s-stack background="subdued" borderRadius="base" inlineSize={`${size}px`} blockSize={`${size}px`} alignItems="center" justifyContent="center">
       <s-icon type={icon} color="subdued" />

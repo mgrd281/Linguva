@@ -7,7 +7,7 @@
  * the page reloads every few seconds only while a count or a translation
  * of this language runs.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -22,10 +22,10 @@ import { itemsHref, percentLabel } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
 import { Flag } from "../components/Flag";
 import { SHOWN_STATES, StateIcon, StateKey, TextStateBar, textCounts } from "../components/ItemStates";
+import { BIG_HEADING, Breadcrumbs, languageErrorText, NumberedSteps, PLAIN_LIST, StepNumber, type StepView } from "../components/LanguageLayout";
 import { ProgressBar } from "../components/ProgressBar";
 import { StepStrip } from "../components/StepStrip";
 import { TranslateConfirm } from "../components/TranslateConfirm";
-import { hasMessage } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { emptyCounts } from "../lib/coverage-rules";
@@ -54,9 +54,6 @@ const CONFIRM = "language-translate";
 /** How often the page reloads while a count or a translation of this language runs (never otherwise). */
 const POLL_MS = 3_000;
 const LANGUAGE_SETTINGS = "shopify://admin/settings/languages";
-const BIG_HEADING = { margin: 0, fontSize: 22, lineHeight: "28px", fontWeight: 700 } as const;
-/** A native list without bullets: Polaris' list roles fail the accessibility check. */
-const PLAIN_LIST = { listStyle: "none", margin: 0, padding: 0 } as const;
 
 /** Where the extras' texts are listed. */
 const EXTRA_HREF: Record<ExtraId, (locale: string) => string> = {
@@ -64,30 +61,6 @@ const EXTRA_HREF: Record<ExtraId, (locale: string) => string> = {
   notifications: () => "/app/content/email-templates",
   urls: (locale) => itemsHref({ lang: locale, group: "url" }),
 };
-
-/** An action's error in words: the language page's own codes, then the Coverage page's. */
-function errorText(i18n: I18n, code: string): string {
-  if (code === "SHOP_AUTH") return i18n.t("common.jobError.SHOP_AUTH");
-  for (const key of [`language.error.${code}`, `coverage.error.${code}`]) if (hasMessage(key)) return i18n.t(key);
-  return i18n.t("language.error.generic");
-}
-
-/** A step's number: the first filled, the others outlined. */
-function StepNumber({ n, first }: { n: number; first: boolean }) {
-  return (
-    <s-stack
-      background={first ? "strong" : "base"}
-      {...(first ? {} : { border: "base" })}
-      borderRadius="large-200"
-      inlineSize="24px"
-      blockSize="24px"
-      alignItems="center"
-      justifyContent="center"
-    >
-      <s-text type="strong">{n}</s-text>
-    </s-stack>
-  );
-}
 
 interface Names {
   /** The language as a heading ("Dänisch", "Danois") and inside sentences ("danois"). */
@@ -113,17 +86,7 @@ function Header({ data, i18n, title }: { data: Data; i18n: I18n; title: string }
     .join(" · ");
   return (
     <s-stack direction="block" gap="small-200">
-      <nav aria-label={t("language.breadcrumb")}>
-        <s-stack direction="inline" gap="small-200" alignItems="center">
-          <s-link href="/app">{t("common.nav.overview")}</s-link>
-          <span aria-hidden="true">
-            <s-text color="subdued">›</s-text>
-          </span>
-          <span aria-current="page">
-            <s-text color="subdued">{title}</s-text>
-          </span>
-        </s-stack>
-      </nav>
+      <Breadcrumbs i18n={i18n} trail={[{ href: "/app", label: t("common.nav.overview") }]} current={title} />
       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
         <Flag country={localeCountry(data.language.locale, data.marketCountries)} fallback={data.language.locale} size={40} />
         <s-stack direction="block" gap="small-500">
@@ -253,7 +216,7 @@ function categoryDetail(i18n: I18n, step: Extract<LanguageStep, { kind: "categor
   return `${upperFirst(parts.join(", "))}. ${t(`language.tier.${tier}.step`)}`;
 }
 
-function stepView(step: LanguageStep, first: boolean, ctx: StepContext): { title: ReactNode; detail?: string; action?: ReactNode } {
+function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<StepView, "key"> {
   const { data, i18n, names, counter } = ctx;
   const { t } = i18n;
   const variant = first ? "primary" : "secondary";
@@ -340,34 +303,13 @@ function NextSteps(ctx: StepContext) {
     <s-stack direction="block" gap="base">
       <s-heading>{t("language.next.heading")}</s-heading>
       {data.next.length ? (
-        <ol style={{ ...PLAIN_LIST, display: "grid", gap: 16 }}>
-          {data.next.map((step, i) => {
-            const view = stepView(step, i === 0, ctx);
-            return (
-              <li key={step.kind === "category" ? step.category : step.kind}>
-                <s-stack direction="block" gap="base">
-                  {i > 0 ? <s-divider /> : null}
-                  <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="start">
-                    <StepNumber n={i + 1} first={i === 0} />
-                    <s-stack direction="block" gap="small-200">
-                      <s-stack direction="block" gap="small-500">
-                        {typeof view.title === "string" ? <s-text type="strong">{view.title}</s-text> : view.title}
-                        {view.detail ? <s-text color="subdued">{view.detail}</s-text> : null}
-                      </s-stack>
-                      {view.action ? <s-stack direction="inline">{view.action}</s-stack> : null}
-                    </s-stack>
-                  </s-grid>
-                </s-stack>
-              </li>
-            );
-          })}
-        </ol>
+        <NumberedSteps steps={data.next.map((step, i) => ({ key: step.kind === "category" ? step.category : step.kind, ...stepView(step, i === 0, ctx) }))} />
       ) : (
         <s-text color="subdued">{empty}</s-text>
       )}
       {gate ? (
         <s-text color="subdued">
-          {errorText(i18n, gate)} {gate === "CONSENT_REQUIRED" ? <s-link href="/app/settings">{t("common.nav.settings")}</s-link> : null}
+          {languageErrorText(i18n, gate)} {gate === "CONSENT_REQUIRED" ? <s-link href="/app/settings">{t("common.nav.settings")}</s-link> : null}
         </s-text>
       ) : null}
     </s-stack>
@@ -552,7 +494,7 @@ export default function LanguagePage() {
         <Header data={data} i18n={i18n} title={languageNames.title} />
         {error ? (
           <s-banner tone="critical">
-            <s-paragraph>{errorText(i18n, error.error)}</s-paragraph>
+            <s-paragraph>{languageErrorText(i18n, error.error)}</s-paragraph>
           </s-banner>
         ) : null}
 

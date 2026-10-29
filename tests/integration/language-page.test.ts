@@ -415,11 +415,11 @@ describe("a category's list", () => {
     const failed = await loadCategoryItems(store.asAdmin(), shop, "de", "products", { state: "failed" }, app, available);
     expect(failed.rows).toEqual([expect.objectContaining({ reference: "6", failureCode: "PROVIDER_UNAVAILABLE", texts: [{ group: "title", state: "failed" }, { group: "description", state: "failed" }] })]);
 
-    // Custom fields by their owner's name and their own; images by their description.
+    // Custom fields by their owner's name, picture and their own name; images by their description.
     const fields = await loadCategoryItems(store.asAdmin(), shop, "de", "customFields", {}, app, available);
-    expect(fields.rows.map((r) => [r.title, r.label, r.href]).sort()).toEqual([
-      ["Product 1 jacket", "Care", "/app/products/1?lang=de"],
-      ["Product 2 jacket", "Features", "/app/products/2?lang=de"],
+    expect(fields.rows.map((r) => [r.title, r.label, r.href, r.image?.url ?? null]).sort()).toEqual([
+      ["Product 1 jacket", "Care", "/app/products/1?lang=de", "https://cdn.example/__fixtures/img/jacket.svg?width=128"],
+      ["Product 2 jacket", "Features", "/app/products/2?lang=de", null],
     ]);
     const images = await loadCategoryItems(store.asAdmin(), shop, "de", "images", {}, app, available);
     expect(images.rows.map((r) => [r.type, r.title, r.image?.url ?? null, r.href]).sort()).toEqual([
@@ -448,6 +448,17 @@ describe("a category's list", () => {
     expect(list.bulk).toMatchObject({ gate: null, publishMode: "DRAFT", estimate: { types: ["COLLECTION"], items: 3, texts: { missing: 7, outdated: 0, failed: 0 } } });
     expect(list.bulk.aiRemaining).toBeGreaterThan(0);
     expect(list.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(list).toMatchObject({ measured: true, scanning: false, canCount: true, measurement: { state: "done" }, countries: [], marketCountries: [] });
+
+    // Where customers read the language, as on the language page.
+    const markets = async (): Promise<MarketCountriesResult> => ({
+      access: true,
+      markets: [{ name: "DACH", status: "ACTIVE", countries: [{ code: "DE", name: "Germany" }, { code: "AT", name: "Austria" }], locales: null }],
+    });
+    expect(await loadCategoryItems(store.asAdmin(), shop, "de", "collections", {}, app, { ...available, markets })).toMatchObject({
+      countries: [{ code: "AT", name: "Austria" }, { code: "DE", name: "Germany" }],
+      marketCountries: ["DE", "AT"],
+    });
   });
 
   it("finds items by title where Shopify can search them", async () => {

@@ -15,7 +15,7 @@ const placeholders = (m: Message) =>
 const SAME_IN_BOTH = new Set(["{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—"]);
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
-  ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
+  ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
   ...["{language} (original)", "{title}, {field}, original", "{type} {reference}", "Business", "Budgets", "{time} ({zone})", "—"],
 ]);
 const SAME_IN_SPANISH = new Set([

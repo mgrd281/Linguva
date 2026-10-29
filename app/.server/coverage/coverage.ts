@@ -293,10 +293,15 @@ export interface CoverageRefreshPayload {
 }
 
 /**
- * Reads one resource again in every language whose type was scanned (after
- * a products/collections webhook: the original may have changed, which
- * makes translations outdated). A resource Shopify no longer returns is
- * removed from coverage.
+ * Reads one resource again in every language its type was read in (after a
+ * products/collections webhook, or a page, blog post or blog the periodic
+ * check found changed: the original may have changed, which makes
+ * translations outdated). Also while a scan reads the type, or after one
+ * stopped in it: the item's time (syncedAt) keeps an older scan read from
+ * replacing this one, and the refresh counts as seen, so the scan's end
+ * keeps the item. Not for a type without access or a language that is no
+ * longer a target. A resource Shopify no longer returns is removed from
+ * coverage.
  */
 export async function refreshCoverageResource(deps: CoverageDeps, payload: CoverageRefreshPayload) {
   const resourceType = kindOfGid(payload.resourceGid);
@@ -305,7 +310,15 @@ export async function refreshCoverageResource(deps: CoverageDeps, payload: Cover
   if (!shop || shop.status !== "ACTIVE") return { refreshed: 0 };
   const segments = await withTenant(
     payload.shopId,
-    (tx) => tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: "SCANNED" } }),
+    async (tx) => {
+      const [rows, locales] = await Promise.all([
+        tx.coverageSegment.findMany({ where: { shopId: payload.shopId, resourceType, status: { in: ["SCANNED", "SCANNING", "FAILED"] } } }),
+        tx.shopLocale.findMany({ where: { shopId: payload.shopId }, select: { locale: true, primary: true } }),
+      ]);
+      // The languages of the last sync (nothing to tell targets apart before the first one).
+      const targets = locales.length ? new Set(locales.filter((l) => !l.primary).map((l) => l.locale)) : null;
+      return rows.filter((s) => !targets || targets.has(s.locale));
+    },
     deps.prisma,
   );
   if (!segments.length) return { refreshed: 0 };

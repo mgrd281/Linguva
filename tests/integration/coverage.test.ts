@@ -14,20 +14,26 @@ import {
 } from "../../app/.server/coverage/coverage";
 import { loadCoverageSummary, listCoverageItems } from "../../app/.server/coverage/summary";
 import { rebuildCountsTx, syncCoverage } from "../../app/.server/coverage/items";
-import { Worker } from "bullmq";
+import { queueCoverageRefresh } from "../../app/.server/coverage/refresh";
+import { UnrecoverableError, Worker } from "bullmq";
 import {
   coveragePageJobId,
+  coverageRefreshJobId,
   createQueues,
   createWorkers,
   enqueueCoveragePage,
+  enqueueCoverageRefresh,
   QUEUE_NAMES,
   REPORT_STALL_MS,
   requeueStalledReports,
   type Queues,
   type WorkerSet,
 } from "../../app/.server/jobs/queues";
-import type { JobDependencies } from "../../app/.server/jobs/processors";
+import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
 import { finishItem } from "../../app/.server/jobs/bulk-jobs";
+import { MockTranslationProvider } from "../../app/.server/providers/mock";
+import { setAiConsent } from "../../app/.server/settings/shop-settings";
+import { syncShopLocales } from "../../app/.server/locales/shop-locales";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
 import { removeTranslation } from "../../app/.server/translation/history";
 import { approveDrafts, rejectDrafts, saveDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
@@ -83,6 +89,36 @@ async function ageReports(shopId: string, ms: number) {
 async function typeCounts(shopId: string, locale: string, type: string) {
   const summary = await loadCoverageSummary(shopId, app);
   return byType(summary.counts, locale).get(type)?.counts;
+}
+
+/** "group:state" of each counted field of one item (undefined: no item). */
+async function fieldsOf(shopId: string, locale: string, resourceGid: string) {
+  const item = await withTenant(shopId, (tx) => tx.coverageItem.findFirst({ where: { shopId, locale, resourceGid } }), app);
+  return item?.fieldStates;
+}
+
+/** A running job with one item for the resource (draft mode), processed with the mock provider. */
+async function runJobItem(shopId: string, store: FakeShopifyStore, input: { resourceType: string; resourceGid: string; locale: string; includeAttached?: boolean }) {
+  const job = await withTenant(
+    shopId,
+    (tx) =>
+      tx.translationJob.create({
+        data: { shopId, resourceType: input.resourceType, targetLocale: input.locale, idempotencyKey: `job-${++n}`, status: "RUNNING", totalItems: 1, discoveryDone: true, includeAttached: input.includeAttached ?? false },
+      }),
+    app,
+  );
+  const item = await withTenant(shopId, (tx) => tx.translationJobItem.create({ data: { shopId, jobId: job.id, resourceGid: input.resourceGid } }), app);
+  const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: new MockTranslationProvider(), monthlyLimit: 1_000_000, keyPrefix: "lv:test:cov" };
+  return processItem(deps, { shopId, itemId: item.id }, 1);
+}
+
+/** A machine translation Linguva published earlier (not approved, so a job may replace it once outdated). */
+async function publishedByAi(shopId: string, store: FakeShopifyStore, resourceGid: string, key: string, value: string, source: string) {
+  const outcomes = await saveResourceTranslations(
+    { admin: store.asAdmin(), shopId, actorId: null, resourceId: resourceGid, locale: "de", edits: [{ key, value, digest: digest(source), origin: "AI", provider: "mock", approved: false }] },
+    app,
+  );
+  expect(outcomes[0]).toMatchObject({ status: "saved" });
 }
 
 /** The counts kept with every change must equal the counts rebuilt from the items. */
@@ -395,6 +431,73 @@ describe("coverage stays current", () => {
     await expectCountsConsistent(shop.id);
   });
 
+  it("follows what a translation job reads: a page changed in Shopify shows the job's drafts, not a stale complete", async () => {
+    const { shop, store, deps } = await setup(0, 0);
+    store.addContent(1);
+    const page = "gid://shopify/Page/1";
+    await setAiConsent({ shopId: shop.id, granted: true, actorId: null }, app);
+    await publishedByAi(shop.id, store, page, "title", "Über uns 1", "About us 1");
+    await runAll(deps, shop.id, ["de"]);
+    expect(await fieldsOf(shop.id, "de", page)).toContain("title:complete");
+    // Pages send no webhook: only the job's own read tells coverage the title changed.
+    store.updateSource(page, "title", "About us, since 1991");
+    expect(await runJobItem(shop.id, store, { resourceType: "PAGE", resourceGid: page, locale: "de" })).toMatchObject({ status: "SUCCEEDED", errorCode: "DRAFTED" });
+    expect(await fieldsOf(shop.id, "de", page)).toEqual(expect.arrayContaining(["title:draft", "description:draft"]));
+    await expectCountsConsistent(shop.id);
+  });
+
+  it("follows the images and custom fields a job reads with their owner", async () => {
+    const { shop, store, deps } = await setup(1, 0);
+    const care = store.addMetafield(P1, { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Wash cold" });
+    await setAiConsent({ shopId: shop.id, granted: true, actorId: null }, app);
+    await publishedByAi(shop.id, store, care, "value", "Kalt waschen", "Wash cold");
+    await runAll(deps, shop.id, ["de"]);
+    expect(await fieldsOf(shop.id, "de", care)).toEqual(["value:complete"]);
+    store.updateSource(care, "value", "Wash cold, dry flat");
+    await runJobItem(shop.id, store, { resourceType: "PRODUCT", resourceGid: P1, locale: "de", includeAttached: true });
+    expect(await fieldsOf(shop.id, "de", care)).toEqual(["value:draft"]);
+    await expectCountsConsistent(shop.id);
+  });
+
+  it("reads a product again while a scan reads its type, and the scan's end keeps that newer read", async () => {
+    // Eight products, four per page: the products take two pages.
+    const { shop, store, deps } = await setup(8, 0);
+    store.translate(P2, "de", "title", "Jacke 2");
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "during" }, app);
+    let next = await runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null });
+    expect(next).toMatchObject({ segmentIndex: 0 });
+    expect(await fieldsOf(shop.id, "de", P2)).toContain("title:complete");
+    // Product 2's title changes after its page was read; its webhook's refresh runs during the scan.
+    store.updateSource(P2, "title", "Product 2 jacket, new name");
+    expect(await refreshCoverageResource(deps, { shopId: shop.id, resourceGid: P2 })).toEqual({ refreshed: 1 });
+    while (next) next = await runCoveragePage(deps, next);
+    expect(await fieldsOf(shop.id, "de", P2)).toContain("title:outdated");
+    await expectCountsConsistent(shop.id);
+  });
+
+  it("reads a product again after a scan stopped in its type, but not for a type without access or a language that isn't a target", async () => {
+    const { shop, store, deps } = await setup(2, 0);
+    // German is the store's only additional language; the scan also read French (removed since).
+    await syncShopLocales(shop.id, [
+      { locale: "en", name: "English", primary: true, published: true, rtl: false },
+      { locale: "de", name: "German", primary: false, published: true, rtl: false },
+    ], app);
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de", "fr"], requestedBy: null, idempotencyKey: "stopped" }, app);
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) {
+      // The products (both languages) are skipped after errors: "scan didn't finish".
+      next = segmentOf(report, next.segmentIndex)?.resourceType === "PRODUCT" ? await skipCoverageSegment(app, next, "SHOPIFY_QUERY_ERROR") : await runCoveragePage(deps, next);
+    }
+    expect(await refreshCoverageResource(deps, { shopId: shop.id, resourceGid: P1 })).toEqual({ refreshed: 1 });
+    expect(await fieldsOf(shop.id, "de", P1)).toEqual(["title:missing", "description:missing", "url:missing"]);
+    expect(await fieldsOf(shop.id, "fr", P1)).toBeUndefined();
+    // Without access to the type: nothing is read.
+    await withTenant(shop.id, (tx) => tx.coverageSegment.updateMany({ where: { resourceType: "PRODUCT" }, data: { status: "DENIED" } }), app);
+    const calls = store.calls.length;
+    expect(await refreshCoverageResource(deps, { shopId: shop.id, resourceGid: P2 })).toEqual({ refreshed: 0 });
+    expect(store.calls.length).toBe(calls);
+  });
+
   it("pages through the items behind a number and filters by field group", async () => {
     const { shop, store, deps } = await setup(7, 0);
     for (const i of [1, 2, 3]) store.translate(`gid://shopify/Product/${i}`, "de", "title", `Jacke ${i}`);
@@ -489,6 +592,41 @@ describe("coverage scan in the worker (BullMQ + Redis)", () => {
     workers = createWorkers(deps, queues, { connection: redis, prefix, concurrency: 2 });
     await waitFor(async () => (await reportRow(shop.id, report.id)).status === "COMPLETED", 30_000);
   }, 40_000);
+
+  it("queues the next refresh of a resource after one failed for good: a failed job isn't kept", async () => {
+    const { shop } = await setup(1, 0);
+    const webhook = () => queueCoverageRefresh({ shopDomain: shop.shopDomain, payload: { admin_graphql_api_id: P1 } }, { queue: queues.coverage, prisma: app });
+    expect(await webhook()).toBe("queued");
+    const id = coverageRefreshJobId({ shopId: shop.id, resourceGid: P1 });
+    const first = await queues.coverage.getJob(id);
+    expect(first?.opts.removeOnFail).toBe(true);
+    // Shopify keeps failing until the refresh gives up (a stand-in that gives up at once).
+    const failing = new Worker(QUEUE_NAMES.coverage, async () => {
+      throw new UnrecoverableError("SHOPIFY_UNAVAILABLE");
+    }, { connection: redis, prefix });
+    await first!.promote();
+    await waitFor(async () => !(await queues.coverage.getJob(id)), 10_000);
+    await failing.close();
+    // The next products/update is queued, not dropped as a repeat of the failed job.
+    expect(await webhook()).toBe("queued");
+    expect(await (await queues.coverage.getJob(id))?.getState()).toBe("delayed");
+  }, 20_000);
+
+  it("reads a page again from the queue when the periodic check found it changed", async () => {
+    const { shop, store, deps } = await setup(0, 0);
+    store.addContent(1);
+    const page = "gid://shopify/Page/1";
+    await runAll(deps, shop.id, ["de"]);
+    // Translated outside Linguva (pages send no webhook).
+    store.translate(page, "de", "title", "Über uns 1");
+    const jobDeps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: null, monthlyLimit: 0, keyPrefix: prefix };
+    workers = createWorkers(jobDeps, queues, { connection: redis, prefix, concurrency: 2 });
+    await enqueueCoverageRefresh(queues.coverage, { shopId: shop.id, resourceGid: page });
+    const job = await queues.coverage.getJob(coverageRefreshJobId({ shopId: shop.id, resourceGid: page }));
+    expect(job?.id).toBe(`covref_${shop.id}_1_pg`);
+    await job!.promote();
+    await waitFor(async () => (await fieldsOf(shop.id, "de", page))?.includes("title:complete") ?? false, 10_000);
+  }, 20_000);
 
   it("scans every page and completes, retrying a transient Shopify failure", async () => {
     const { shop, store } = await setup(9, 5);

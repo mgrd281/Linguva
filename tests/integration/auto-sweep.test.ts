@@ -14,6 +14,7 @@ vi.hoisted(() => {
 
 import { PrismaClient } from "@prisma/client";
 import { sweepChangedContent } from "../../app/.server/jobs/auto-sweep";
+import type { CoverageRefreshQueue } from "../../app/.server/coverage/refresh";
 import { createAutoItems, queueAutoTranslate, type AutoTranslatePayload } from "../../app/.server/jobs/auto-translate";
 import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
 import { createQueues, createWorkers, type Queues, type WorkerSet } from "../../app/.server/jobs/queues";
@@ -120,6 +121,22 @@ describe("periodic check for automatic translation", () => {
     const again = fakeQueue();
     await sweepChangedContent(depsFor({ "sweep-types.myshopify.com": store }), again.queue, new Date(now.getTime() + minutes(30)));
     expect(again.added).toEqual([]);
+  });
+
+  it("reads changed pages, blog posts and blogs again for the coverage report (they have no webhooks)", async () => {
+    const { shop, store } = await shopWithStore("sweep-coverage.myshopify.com");
+    const start = (await sweptAt(shop.id))!;
+    for (const gid of ["gid://shopify/Page/1", "gid://shopify/Article/1", "gid://shopify/Blog/1", "gid://shopify/Product/2", "gid://shopify/Collection/1"]) {
+      store.touch(gid, new Date(start.getTime() + minutes(5)));
+    }
+    const refreshes: Array<{ data: { shopId: string; resourceGid: string }; jobId: unknown }> = [];
+    const coverageQueue = { add: async (_: string, data: { shopId: string; resourceGid: string }, opts: { jobId?: string }) => void refreshes.push({ data, jobId: opts.jobId }) };
+    const { queue } = fakeQueue();
+    await sweepChangedContent({ ...depsFor({ "sweep-coverage.myshopify.com": store }), coverageQueue: coverageQueue as unknown as CoverageRefreshQueue }, queue, new Date(start.getTime() + minutes(30)));
+    // Products and collections are read again after their own webhooks.
+    expect(refreshes.map((r) => r.data)).toEqual(["Page", "Article", "Blog"].map((type) => ({ shopId: shop.id, resourceGid: `gid://shopify/${type}/1` })));
+    // One pending refresh per resource, apart from a product or collection with the same number.
+    expect(refreshes.map((r) => r.jobId)).toEqual(["pg", "ar", "bl"].map((type) => `covref_${shop.id}_1_${type}`));
   });
 
   it.each([false, true])("skips a type the store hasn't granted access to (library throws: %s), and keeps its position after a failure", async (throwsLikeLibrary) => {

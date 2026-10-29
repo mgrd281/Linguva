@@ -338,6 +338,33 @@ export async function refreshCoverageOverlays(
 }
 
 /**
+ * Records what a translation job read from Shopify (the resource and its
+ * images and custom fields, with the time the read started): a changed
+ * original then shows as outdated, and the job's drafts as drafts, instead
+ * of a stale "complete". Only existing items change, and an older read never
+ * replaces a newer state; never fails the caller.
+ */
+export async function noteCoverageRead(
+  shopId: string,
+  locale: string,
+  reads: ReadonlyArray<Pick<TranslatableResourceData, "resourceId" | "content" | "translations">>,
+  at: Date,
+  client: PrismaClient = defaultClient,
+) {
+  try {
+    await syncCoverage(
+      shopId,
+      locale,
+      reads.map((r) => ({ resourceGid: r.resourceId, observed: { data: { content: r.content, translations: r.translations }, at } })),
+      { create: false, seen: false },
+      client,
+    );
+  } catch (error) {
+    logger.warn({ shopId, err: (error as Error).name }, "coverage update after a job read failed");
+  }
+}
+
+/**
  * Records the state right after translations were written or removed: the
  * resource as read before the write, with the written values (or the
  * removal) applied. Only existing items change; never fails the caller.

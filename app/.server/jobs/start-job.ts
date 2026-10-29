@@ -30,16 +30,16 @@ export async function startBulkJob(input: {
   return { job, created };
 }
 
-/** Retries failed items (and resumes a stopped job). */
+/** Retries failed items (and resumes a stopped job); busy while another job of its type and language runs. */
 export async function retryBulkJob(shopId: string, jobId: string) {
   const queues = getQueues();
   if (!queues) throw new BackgroundJobsUnavailableError();
-  const { itemIds, rediscover } = await retryJobItems(shopId, jobId);
+  const { itemIds, rediscover, busy } = await retryJobItems(shopId, jobId);
   const round = `retry${Date.now()}`;
   await enqueueItems(queues, shopId, itemIds, round);
   // Discovery resumes from the stored cursor under a fresh queue job id.
   if (rediscover) await enqueueDiscovery(queues, { shopId, jobId }, null, round);
-  return itemIds.length;
+  return { retried: itemIds.length, busy: busy ?? false };
 }
 
 /** Starts (or reuses) a coverage report and enqueues its first page. */

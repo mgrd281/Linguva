@@ -1,8 +1,9 @@
 /**
  * The shop's languages as Shopify has them now, for background work (no
  * page load keeps the mirror fresh there): read with the shop's offline
- * session at most every few minutes per process, mirrored like a page load
- * does, and the stored mirror when Shopify can't be asked.
+ * session, mirrored like a page load does, and kept per process for a few
+ * minutes; a caller about to act on a change asks Shopify again
+ * (`maxAgeMs` 0). The stored mirror when Shopify can't be asked.
  */
 import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";

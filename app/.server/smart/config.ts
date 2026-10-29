@@ -244,30 +244,6 @@ export async function resumeSmart(input: { shopId: string; actorId: string | nul
   return config;
 }
 
-/**
- * Lifts a pause for the plan or consent where its cause goes away (consent
- * given), so real-time changes and Retry work again at once; otherwise the
- * tick lifts it within 15 minutes. Another pause, the merchant's own above
- * all, stays.
- */
-export async function liftCausePause(shopId: string, reason: "PLAN" | "CONSENT", now = new Date(), client: PrismaClient = defaultClient) {
-  const lifted = await withTenant(
-    shopId,
-    async (tx) => {
-      await lockSmart(tx, shopId);
-      const updated = await tx.smartAutoConfig.updateMany({
-        where: { shopId, pauseReason: reason, pausedAt: { not: null } },
-        data: { pausedAt: null, pauseReason: null, pausedUntil: null },
-      });
-      if (updated.count) await refreshDueHint(tx, shopId, now);
-      return updated.count > 0;
-    },
-    client,
-  );
-  if (lifted) await audit(client, shopId, null, "smart_auto.resumed", { reason });
-  return lifted;
-}
-
 /** Job stops that pause Smart Auto-Translate, and the reason recorded. */
 const PAUSE_FOR_STOP: Record<string, SmartPauseReason> = {
   SMART_BUDGET_DAILY: "BUDGET_DAILY",

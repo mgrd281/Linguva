@@ -8,6 +8,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getConfig } from "../.server/lib/config";
 import { ProgressBar } from "../components/ProgressBar";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
+import { prisma } from "../.server/lib/db";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 import { getTranslationProvider } from "../.server/providers";
 import {
@@ -30,7 +31,8 @@ import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usag
 import { useResultToast } from "../components/app-bridge";
 import { smartErrorText, SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
 import { loadSmartPanel, smartContext } from "../.server/smart/panel";
-import { getSmartConfig, liftCausePause, setSmartEnabled } from "../.server/smart/config";
+import { getSmartConfig, setSmartEnabled } from "../.server/smart/config";
+import { settleAfterConsent } from "../.server/smart/runs";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 
@@ -165,7 +167,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   await setAiConsent({ shopId: shop.id, granted: intent === "grant-consent", actorId });
   // The smart schedule waits for consent no longer than needed.
-  if (intent === "grant-consent") await liftCausePause(shop.id, "CONSENT");
+  if (intent === "grant-consent") await settleAfterConsent({ prisma, adminFor: async () => admin, billingFor: async () => shopBilling(admin, shop) }, shop);
   return { ok: true };
 };
 

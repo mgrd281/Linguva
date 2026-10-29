@@ -110,14 +110,22 @@ export async function createCoverageReport(
           segments: COVERAGE_TYPES.flatMap((type) => locales.map((l) => `${type}|${l}`)),
         },
       });
-      // Keep the latest few reports; older ones are only history.
+      // Keep the latest few reports; older ones are only history. The newest
+      // completed one always stays: the Overview's percentages come from it,
+      // even after several failed measurements in a row.
+      const keep = await tx.coverageReport.findFirst({
+        where: { shopId: input.shopId, status: "COMPLETED" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
       const old = await tx.coverageReport.findMany({
         where: { shopId: input.shopId, status: { notIn: ACTIVE } },
         orderBy: { createdAt: "desc" },
         skip: 4,
         select: { id: true },
       });
-      if (old.length) await tx.coverageReport.deleteMany({ where: { id: { in: old.map((r) => r.id) } } });
+      const doomed = old.filter((r) => r.id !== keep?.id).map((r) => r.id);
+      if (doomed.length) await tx.coverageReport.deleteMany({ where: { id: { in: doomed } } });
       return { report, created: true };
     },
     client,

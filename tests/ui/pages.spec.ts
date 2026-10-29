@@ -10,16 +10,16 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Overview",
     path: "/app",
     check: async (page) => {
-      // Setup checklist: languages, consent and a published translation are done in this store.
-      await expect(page.locator('s-section[heading="Get started"]')).toHaveCount(1);
-      await expect(page.getByText(/of 5 steps done/)).toBeVisible();
-      await expect(page.getByRole("progressbar", { name: "Setup progress" })).toBeVisible();
+      // One next step, the only primary button: drafts wait in this store.
+      await expect(page.locator('s-section[heading="Next step"]').getByText(/^Review \d+ translations?$/)).toBeVisible();
+      await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
       // Languages with their storefront state.
       const languages = page.locator('s-section[heading="Your languages"]');
       await expect(languages.getByText("Arabic", { exact: true })).toBeVisible();
       await expect(languages.getByText("Hidden", { exact: true })).toBeVisible();
-      await expect(page.getByText(/translations? to review/)).toBeVisible();
-      await expect(page.getByRole("progressbar", { name: "AI usage this month" })).toBeVisible();
+      const ai = page.locator('s-section[heading="AI translation"]');
+      await expect(ai.getByText("On", { exact: true })).toBeVisible();
+      await expect(ai.getByRole("progressbar", { name: "AI usage this month" })).toBeVisible();
     },
   },
   {

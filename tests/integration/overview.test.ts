@@ -13,6 +13,10 @@ import { approveDrafts, listPendingDrafts } from "../../app/.server/review/draft
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { usageLevel } from "../../app/lib/usage";
+import { createCoverageReport, runCoveragePage, type CoverageDeps, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
+import { loadCoverageSummary } from "../../app/.server/coverage/summary";
+import { storeWide } from "../../app/lib/coverage-view";
+import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
 
@@ -81,5 +85,97 @@ describe("AI usage level", () => {
     expect(usageLevel(800, 1000)).toBe("high");
     expect(usageLevel(1000, 1000)).toBe("exhausted");
     expect(usageLevel(5, 0)).toBe("exhausted");
+  });
+});
+
+describe("percentages from completed measurements only", () => {
+  async function measuredStore() {
+    const store = new FakeShopifyStore(6);
+    store.locales = [
+      { locale: "en", name: "English", primary: true, published: true },
+      { locale: "de", name: "German", primary: false, published: true },
+    ];
+    const { shop } = await upsertInstalledShop({ shopDomain: "measured.myshopify.com", name: "Measured store" }, app);
+    const deps: CoverageDeps = { prisma: app, adminFor: async () => store.asAdmin(), keyPrefix: "lv:test:overview", pageSize: 4 };
+    return { store, shop, deps };
+  }
+  const start = (shopId: string, key: string) => createCoverageReport({ shopId, locales: ["de"], requestedBy: null, idempotencyKey: key }, app);
+
+  it("shows no share during the first measurement, then the share and the time of the completed one", async () => {
+    const { store, shop, deps } = await measuredStore();
+    let overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.measurement.state).toBe("never");
+    expect(overview.next).toEqual({ id: "measure" });
+
+    const { report } = await start(shop.id, "first");
+    let next: CoveragePagePayload | null = await runCoveragePage(deps, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null });
+    overview = await loadOverview(store.asAdmin(), shop, app);
+    // One page read: products only. Not shown as the language's share.
+    expect(overview.progress[0]).toMatchObject({ locale: "de", measured: false, percent: null });
+    expect(overview.storeShare).toBeNull();
+    expect(overview.measurement).toMatchObject({ state: "running", total: report.segments.length });
+    expect(overview.next).toEqual({ id: "measure" });
+
+    while (next) next = await runCoveragePage(deps, next);
+    overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress[0]).toMatchObject({ locale: "de", measured: true });
+    expect(overview.progress[0]!.total).toBeGreaterThan(0);
+    expect(overview.measuredAt).not.toBeNull();
+    expect(overview.measurement.state).toBe("done");
+    // The headline equals the Coverage page's whole-store figure.
+    const summary = await loadCoverageSummary(shop.id, app);
+    const whole = storeWide(summary.counts, ["de"]);
+    expect(overview.storeShare).toEqual({ complete: whole.complete, total: whole.total, languages: 1 });
+    expect(overview.next?.id).not.toBe("measure");
+  });
+
+  it("keeps the last completed share while a new measurement runs, fails or stalls", async () => {
+    const { store, shop, deps } = await measuredStore();
+    const { report } = await start(shop.id, "one");
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    const measured = (await loadOverview(store.asAdmin(), shop, app)).progress[0]!;
+
+    const again = await start(shop.id, "two");
+    await runCoveragePage(deps, { shopId: shop.id, reportId: again.report.id, segmentIndex: 0, cursor: null });
+    let overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress[0]).toMatchObject({ measured: true, percent: measured.percent });
+    expect(overview.measurement.state).toBe("running");
+    expect(overview.next?.id).not.toBe("measure");
+
+    // Five failed measurements in a row: the completed one is kept (history pruning skips it).
+    for (let i = 0; i < 5; i++) {
+      await withTenant(shop.id, (tx) => tx.coverageReport.updateMany({ where: { status: { in: ["QUEUED", "RUNNING"] } }, data: { status: "FAILED" } }), app);
+      await start(shop.id, `fail-${i}`);
+    }
+    await withTenant(shop.id, (tx) => tx.coverageReport.updateMany({ where: { status: { in: ["QUEUED", "RUNNING"] } }, data: { status: "FAILED" } }), app);
+    overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress[0]).toMatchObject({ measured: true, percent: measured.percent });
+    expect(overview.measurement.state).toBe("failed");
+    expect(await withTenant(shop.id, (tx) => tx.coverageReport.count({ where: { status: "COMPLETED" } }), app)).toBe(1);
+  });
+
+  it("asks to measure again for a language published after the measurement, and says when a report stalled", async () => {
+    const { store, shop, deps } = await measuredStore();
+    const { report } = await start(shop.id, "m");
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    store.locales = [...store.locales, { locale: "fr", name: "French", primary: false, published: true }];
+    let overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress.find((l) => l.locale === "fr")).toMatchObject({ measured: false, percent: null });
+    expect(overview.next).toEqual({ id: "measure" });
+
+    await createCoverageReport({ shopId: shop.id, locales: ["de", "fr"], requestedBy: null, idempotencyKey: "stuck" }, app);
+    await ownerDb.$transaction([
+      ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shop.id}, true)`,
+      ownerDb.$executeRawUnsafe(`UPDATE "CoverageReport" SET "updatedAt" = now() - interval '31 minutes' WHERE status = 'QUEUED'`),
+    ]);
+    overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.measurement.state).toBe("stalled");
+    expect(overview.measurement.since).not.toBeNull();
+    // Without background jobs nothing can be measured here: no measure step.
+    overview = await loadOverview(store.asAdmin(), shop, app, { jobsAvailable: false });
+    expect(overview.measurement.state).toBe("unavailable");
+    expect(overview.next?.id).not.toBe("measure");
   });
 });

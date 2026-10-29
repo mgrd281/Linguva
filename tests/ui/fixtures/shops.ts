@@ -152,6 +152,37 @@ export const UI_SHOPS = {
     ],
     build: buildDemoStore,
   },
+  stalled: {
+    // Shaped like KARINEX: German primary, 12 published languages, one market
+    // with the EU and Switzerland (9 countries without their language), and a
+    // measurement queued an hour ago that never started. Nothing measured.
+    domain: "ui-stalled.myshopify.com",
+    gid: "gid://shopify/Shop/91012",
+    name: "Stalled Store",
+    locales: [
+      { locale: "de", name: "German", primary: true, published: true },
+      ...(
+        [
+          ["da", "Danish"],
+          ["en", "English"],
+          ["fi", "Finnish"],
+          ["fr", "French"],
+          ["el", "Greek"],
+          ["nl", "Dutch"],
+          ["it", "Italian"],
+          ["pl", "Polish"],
+          ["pt-PT", "Portuguese (Portugal)"],
+          ["ro", "Romanian"],
+          ["es", "Spanish"],
+          ["sv", "Swedish"],
+        ] as const
+      ).map(([locale, name]) => ({ locale, name, primary: false, published: true })),
+    ],
+    plan: "pro",
+    grantedOptionalScopes: ["read_markets"],
+    markets: [{ id: "gid://shopify/Market/11", name: "Europa", status: "ACTIVE", countries: ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "CH"] }],
+    build: () => new FakeShopifyStore(3),
+  },
   measure: {
     // Never scanned: the Overview offers to measure coverage.
     domain: "ui-measure.myshopify.com",

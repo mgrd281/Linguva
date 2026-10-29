@@ -30,7 +30,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ]);
     const targets = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
     const planLocales = billing.configured ? allowedTargetLocales(billing.entitlements, targets) : null;
-    const scanned = coverage.segments.some((seg) => seg.status === "SCANNED");
+    // Percentages only for the languages of the newest completed measurement (as on the Overview).
+    const measured = new Set(coverage.lastCompleted?.locales ?? []);
     const headline = headlineByLocale(coverage.counts);
     return {
       access: true as const,
@@ -46,9 +47,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                 published: locales.locales.filter((l) => !l.primary && l.published).map((l) => l.locale),
                 enabled: targets,
               },
-              new Map(targets.map((l) => [l, scanned ? (headline.get(l)?.percent ?? null) : null])),
+              new Map(targets.map((l) => [l, measured.has(l) ? (headline.get(l)?.percent ?? null) : null])),
             )
           : null,
+      measured: measured.size > 0,
     };
   } catch (error) {
     // The merchant revoked the scope since it was granted.
@@ -125,7 +127,7 @@ export default function Markets() {
             <s-paragraph>{t("markets.countries.none")}</s-paragraph>
           ) : (
             <>
-              <CountryStatusBar counts={countByStatus(data.countries)} i18n={i18n} />
+              <CountryStatusBar counts={countByStatus(data.countries)} i18n={i18n} measured={data.measured} />
               <s-table>
                 <s-table-header-row>
                   <s-table-header listSlot="primary">{t("markets.countries.country")}</s-table-header>

@@ -8,8 +8,8 @@ import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 test.describe("empty states", () => {
   test("a store with only its primary language is guided to add one", async ({ page }) => {
     await openApp(page, "empty", "/app");
-    // The checklist starts with adding a language, as the primary action.
-    await expect(page.getByText("0 of 5 steps done")).toBeVisible();
+    // The next step is adding a language, as the primary action.
+    await expect(page.locator('s-section[heading="Next step"]').getByText("Add a language")).toBeVisible();
     await expect(page.locator('s-button[variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
     await expect(page.getByText(/Your store only has its primary language/)).toBeVisible();
     await openApp(page, "empty", "/app/products");

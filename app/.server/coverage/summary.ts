@@ -26,9 +26,16 @@ export interface CoverageSummary {
     segmentIndex: number;
     resourcesScanned: number;
     createdAt: string;
+    /** Last progress (pages read) or state change. */
+    updatedAt: string;
     startedAt: string | null;
     finishedAt: string | null;
   } | null;
+  /**
+   * The newest completed measurement and its languages: percentages count
+   * only for these (a measurement under way has read only some types).
+   */
+  lastCompleted: { finishedAt: string; locales: string[] } | null;
   segments: SegmentInfo[];
   counts: CountRow[];
   /** Items per language and type (counted items with text to translate). */
@@ -48,8 +55,13 @@ export async function loadCoverageSummary(shopId: string, client: PrismaClient =
   return withTenant(
     shopId,
     async (tx) => {
-      const [report, segments, items, issues, dupes, missingTitle] = await Promise.all([
+      const [report, completed, segments, items, issues, dupes, missingTitle] = await Promise.all([
         tx.coverageReport.findFirst({ where: { shopId }, orderBy: { createdAt: "desc" } }),
+        tx.coverageReport.findFirst({
+          where: { shopId, status: "COMPLETED" },
+          orderBy: { createdAt: "desc" },
+          select: { finishedAt: true, updatedAt: true, segments: true },
+        }),
         tx.coverageSegment.findMany({ where: { shopId } }),
         tx.coverageItem.groupBy({ by: ["locale", "resourceType"], where: { shopId, NOT: { sourceKeys: { isEmpty: true } } }, _count: { _all: true } }),
         tx.coverageItem.groupBy({ by: ["locale", "resourceType"], where: { shopId, seoIssues: { gt: 0 } }, _sum: { seoIssues: true } }),
@@ -75,8 +87,16 @@ export async function loadCoverageSummary(shopId: string, client: PrismaClient =
               segmentIndex: report.segmentIndex,
               resourcesScanned: report.resourcesScanned,
               createdAt: report.createdAt.toISOString(),
+              updatedAt: report.updatedAt.toISOString(),
               startedAt: report.startedAt?.toISOString() ?? null,
               finishedAt: report.finishedAt?.toISOString() ?? null,
+            }
+          : null,
+        lastCompleted: completed
+          ? {
+              finishedAt: (completed.finishedAt ?? completed.updatedAt).toISOString(),
+              // Segments are "TYPE|locale".
+              locales: [...new Set(completed.segments.map((s) => s.slice(s.indexOf("|") + 1)))],
             }
           : null,
         segments: segments.map((s) => ({

@@ -82,6 +82,16 @@ export default async function globalSetup() {
       while (next) next = await runCoveragePage(coverageDeps, next);
     }
 
+    // A measurement queued an hour ago that never started (no worker): the Overview offers it again.
+    {
+      const locales = UI_SHOPS.stalled.locales.filter((l) => !l.primary).map((l) => l.locale);
+      await createCoverageReport({ shopId: ids.stalled!, locales, requestedBy: null, idempotencyKey: "ui-coverage-stalled" }, app);
+      await owner.$transaction([
+        owner.$executeRaw`SELECT set_config('app.shop_id', ${ids.stalled!}, true)`,
+        owner.$executeRaw`UPDATE "CoverageReport" SET "createdAt" = now() - interval '1 hour', "updatedAt" = now() - interval '1 hour' WHERE "shopId" = ${ids.stalled!}::uuid`,
+      ]);
+    }
+
     await grantComplimentaryAccess(owner, {
       shopifyShopGid: UI_SHOPS.owner.gid,
       reason: "UI test: operator's own store",

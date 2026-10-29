@@ -23,10 +23,15 @@ function CountryStatusDot({ status }: { status: CountryStatus }) {
   );
 }
 
-export function CountryStatusBar({ counts, i18n }: { counts: Record<CountryStatus, number>; i18n: I18n }) {
+/**
+ * `measured`: false until translations are measured; a country then counts as
+ * "offered its language", however little of it is translated.
+ */
+export function CountryStatusBar({ counts, i18n, measured = true }: { counts: Record<CountryStatus, number>; i18n: I18n; measured?: boolean }) {
   const shown = COUNTRY_STATUSES.filter((s) => counts[s] > 0);
   if (!shown.length) return null;
-  const text = (s: CountryStatus) => i18n.t(`overview.countries.status.${s}`, { count: counts[s] });
+  const text = (s: CountryStatus) =>
+    s === "ok" && !measured ? i18n.t("overview.countries.status.offered", { count: counts[s] }) : i18n.t(`overview.countries.status.${s}`, { count: counts[s] });
   return (
     <s-stack direction="block" gap="small">
       {/* A 2px gap of the card's surface between the parts, rounded only at the ends. */}

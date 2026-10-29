@@ -17,10 +17,9 @@ test("a new store installs through token exchange and lands on the Overview", as
   expect(await owner.shop.findUnique({ where: { shopDomain: shop.domain } })).toBeNull();
 
   await openApp(page, "fresh", "/app");
-  await expect(page.locator(`s-section[heading="${shop.name}"]`)).toHaveCount(1);
-  // A new merchant is guided: German exists and is published; the next step is allowing AI.
-  await expect(page.getByText("2 of 5 steps done")).toBeVisible();
-  await expect(page.locator('s-button[variant="primary"]', { hasText: "Open settings" })).toBeVisible();
+  // A new merchant is guided: German exists and is published; the next step is measuring it.
+  await expect(page.locator('s-section[heading="Next step"]').getByText("See how much of your store is translated")).toBeVisible();
+  await expect(page.locator('s-button[variant="primary"]', { hasText: "Measure now" })).toBeVisible();
 
   // afterAuth stored the tenant with the GID Shopify reported.
   const row = await owner.shop.findUniqueOrThrow({ where: { shopDomain: shop.domain } });
@@ -41,10 +40,15 @@ test("a forged session token gets no app content", async ({ page }) => {
   url.searchParams.set("shop", shop.domain);
   url.searchParams.set("host", Buffer.from("admin.shopify.com/store/ui-full").toString("base64"));
   url.searchParams.set("id_token", forged);
+  // The same request with a valid token shows the Overview…
+  const valid = new URL(url);
+  valid.searchParams.set("id_token", sessionToken(shop.domain));
+  expect(await (await page.request.get(valid.toString(), { maxRedirects: 0 })).text()).toContain('heading="Your languages"');
+  // …the forged one doesn't.
   const response = await page.request.get(url.toString(), { maxRedirects: 0 });
   const body = await response.text();
+  expect(body).not.toContain('heading="Your languages"');
   expect(body).not.toContain(shop.name);
-  expect(body).not.toContain("steps done");
 
   // A data request with a forged bearer token is refused.
   const data = await page.request.get(new URL("/app/products.data?lang=de", UI_ENV.appUrl).toString(), {

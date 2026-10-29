@@ -1,30 +1,39 @@
 /**
- * The Overview: translation per language, the countries the store sells to
- * that can't read it in their language, and measuring coverage from here.
+ * The Overview: one next step (the only primary button), the share per
+ * language from a completed measurement, the countries without their
+ * language, and measuring without fake progress.
  */
 import { expect, test } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
-test("headline figures, coverage per language and the countries missing their language @responsive", async ({ page }) => {
+test("one next step, the share per language and the countries missing their language @responsive", async ({ page }) => {
   await openApp(page, "demo", "/app");
-  await expect(page.getByText("Languages on your storefront")).toBeVisible();
-  await expect(page.getByText("Translated on average")).toBeVisible();
-  await expect(page.getByText("Countries in their language")).toBeVisible();
-  // Measured in this store: a bar and the share per language, on a phone too.
+  const next = page.locator('s-section[heading="Next step"]');
+  await expect(next.getByText(/^Review \d+ translations?$/)).toBeVisible();
+  await expect(next.locator('s-button[variant="primary"]')).toHaveAttribute("href", "/app/review");
+  await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+
   const languages = page.locator('s-section[heading="Your languages"]');
+  await expect(languages.getByText("translated across your 2 published languages")).toBeVisible();
+  // One line per language: its name leads to what's missing, the bar and share beside it.
+  const french = languages.getByRole("link", { name: /^French, \d+% translated: show what's missing$/ });
+  await expect(french).toBeVisible();
   await expect(languages.getByRole("img", { name: /^French translated/ })).toBeVisible();
   await expect(languages.getByText("44%", { exact: true })).toBeVisible();
+  await expect(languages.getByText("Hidden", { exact: true })).toHaveCount(1);
+  await expect(languages.getByRole("listitem")).toHaveCount(3);
+  // Name and share on one line, on a phone too.
+  const german = await languages.getByRole("link", { name: /^German, / }).boundingBox();
+  const share = await languages.getByText("44%", { exact: true }).boundingBox();
+  expect(Math.abs(german!.y + german!.height / 2 - (share!.y + share!.height / 2))).toBeLessThan(8);
 
   const countries = page.locator('s-section[heading="Countries you sell to"]');
-  await expect(countries.getByText("Languages your customers are missing")).toBeVisible();
-  // Italian would reach Italy and the Italian-speaking part of Switzerland.
-  await expect(countries.getByText(/Reaches 2 countries: .*Italy, .*Switzerland/)).toBeVisible();
-  await expect(countries.locator("s-button", { hasText: "Add language" }).first()).toHaveAttribute("href", "shopify://admin/settings/languages");
-  // Spanish is in the store but hidden: publish it rather than add it.
-  await expect(countries.getByText("Added to your store, but hidden from customers.")).toBeVisible();
-  await expect(countries.locator("s-button", { hasText: "Publish language" })).toHaveCount(1);
-  await expect(countries.getByRole("link", { name: "2 more languages: see all countries" })).toBeVisible();
-  // The draft market (Japan) doesn't count.
+  await expect(countries.getByText(/^Not added to your store: Italian \(Italy, Switzerland\), Dutch \(Netherlands, Belgium\)/)).toBeVisible();
+  await expect(countries.getByText("Added, but hidden from customers: Spanish (Spain)")).toBeVisible();
+  await expect(countries.locator('s-link[href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
+  await expect(countries.getByRole("link", { name: "See all countries" })).toBeVisible();
+  // Links only, no buttons; the draft market (Japan) doesn't count.
+  await expect(countries.locator("s-button")).toHaveCount(0);
   await expect(countries.getByText(/Japan/)).toHaveCount(0);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -38,17 +47,66 @@ test("the Markets page lists every country with its languages @responsive", asyn
   await expect(table.getByText("Spanish (hidden)")).toBeVisible();
   await expect(table.getByText("Switzerland")).toBeVisible();
   await expect(table.getByText("Japan")).toHaveCount(0);
+  // Measured: the legend says "in their language", not only "offered".
+  await expect(page.getByText(/^\d+ in (its|their) language$/)).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
 
-test("a store without a measurement starts it from the Overview and follows it", async ({ page }) => {
+test("a store without a measurement starts it from the Overview, without a progress bar stuck at 0", async ({ page }) => {
   await openApp(page, "measure", "/app");
-  await expect(page.getByText("Not measured yet").first()).toBeVisible();
+  const next = page.locator('s-section[heading="Next step"]');
+  await expect(next.getByText("See how much of your store is translated")).toBeVisible();
+  await expect(page.getByText("Percentages appear after the first measurement.")).toBeVisible();
+  await expect(page.getByText("Other languages on your storefront: German")).toBeVisible();
+  await expect(page.locator('s-section[heading="Your languages"]').getByRole("img")).toHaveCount(0);
   // Markets aren't connected: an offer, not an error.
   await expect(page.locator('s-section[heading="Countries you sell to"]').getByRole("button", { name: "Show countries" })).toBeVisible();
-  await page.getByRole("button", { name: "Measure now" }).click();
-  await expect(page.getByRole("progressbar", { name: "Coverage measurement" })).toBeVisible();
-  await expect(page.getByText(/Measuring… 0 of \d+ parts/)).toBeVisible();
+
+  await next.getByRole("button", { name: "Measure now" }).click();
+  // The page's live region (the button's own spinner is a status too while it loads).
+  const status = next.locator('div[role="status"]');
+  await expect(status).toHaveText("Starting…");
+  // The button is gone: the focus moved to the status that replaced it.
+  await expect(status).toBeFocused();
+  await expect(next.getByRole("button", { name: "Measure now" })).toHaveCount(0);
+  await expect(page.getByRole("progressbar", { name: "Coverage measurement" })).toHaveCount(0);
+  await expect(page.getByText(/Measuring… 0 of/)).toHaveCount(0);
   await expectAccessible(page);
+});
+
+test("a measurement that never started can be started again, in German, without polling @responsive", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes(".data")) requests.push(request.url());
+  });
+  await openApp(page, "stalled", "/app", { locale: "de" });
+  const next = page.locator('s-section[heading="Nächster Schritt"]');
+  await expect(next.getByText(/^Die Messung kommt seit .+ nicht voran$/)).toBeVisible();
+  await expect(next.locator('s-button[variant="primary"]', { hasText: "Erneut messen" })).toHaveCount(1);
+  await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+  // No measuring bar stuck at 0: the only bar on the page is the AI usage in the sidebar.
+  await expect(page.getByRole("progressbar")).toHaveCount(1);
+  await expect(page.getByRole("progressbar", { name: "KI-Nutzung in diesem Monat" })).toHaveCount(1);
+  await expect(page.getByText(/Wird gemessen/)).toHaveCount(0);
+
+  const languages = page.locator('s-section[heading="Deine Sprachen"]');
+  await expect(languages.getByText("Die Prozente erscheinen nach der ersten Messung.")).toBeVisible();
+  const live = languages.getByText(/^Weitere Sprachen im Onlineshop: /);
+  await expect(live).toBeVisible();
+  expect((await live.textContent())!.split(":")[1]!.split(",")).toHaveLength(12);
+  await expect(languages.getByRole("link", { name: "Sprachen verwalten" })).toHaveAttribute("href", "/app/languages");
+
+  const countries = page.locator('s-section[heading="Länder, in die du verkaufst"]');
+  await expect(countries.getByText("9 ohne ihre Sprache")).toBeVisible();
+  await expect(countries.getByText("19 in ihrer Sprache angeboten")).toBeVisible();
+  await expect(countries.getByText(/^Nicht in deinem Shop: /)).toBeVisible();
+  await expect(countries.getByText(/du kannst also noch 7 hinzufügen\.$/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Produkte" })).toBeVisible();
+
+  // Nothing under way: the page doesn't reload itself.
+  await page.waitForTimeout(4_000);
+  expect(requests).toEqual([]);
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
 });

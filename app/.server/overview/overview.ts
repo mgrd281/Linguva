@@ -1,7 +1,7 @@
 /**
- * The Overview page: a getting-started checklist for new merchants, how
- * complete each language is, AI usage against the allowance, and what
- * needs attention (drafts to review, running jobs).
+ * The Overview page: the one next step, how complete each language is
+ * (from the newest completed measurement only), the countries the store
+ * sells to and their languages, and AI usage against the allowance.
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import type { PrismaClient } from "@prisma/client";
@@ -12,6 +12,7 @@ import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings"
 import { countPendingDrafts } from "../review/drafts";
 import { loadCoverageSummary } from "../coverage/summary";
 import { headlineByLocale } from "../../lib/coverage-view";
+import { addCounts, emptyCounts, totalOf } from "../../lib/coverage-rules";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage } from "../usage/usage-ledger";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
@@ -20,6 +21,8 @@ import { usageLevel } from "../../lib/usage";
 import { analyzeCountries, countByStatus, missingLanguages } from "../../lib/country-coverage";
 import type { MarketCountriesResult } from "../markets/countries";
 import type { MessageRef } from "../../i18n/i18n";
+import { measurementState } from "./measurement";
+import { nextStep } from "./next-step";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -36,8 +39,12 @@ export interface ChecklistStep {
 export interface OverviewOptions {
   /** An AI provider is configured (no key: the AI steps are left out). */
   aiAvailable?: boolean;
+  /** Background jobs can run here (Redis configured): measuring can be offered. */
+  jobsAvailable?: boolean;
   /** The shop's markets and their countries (needs read_markets). */
   markets?: () => Promise<MarketCountriesResult>;
+  /** Tests only: the time the measurement state is judged at. */
+  now?: number;
 }
 
 export async function loadOverview(
@@ -47,6 +54,7 @@ export async function loadOverview(
   options: OverviewOptions = {},
 ) {
   const aiAvailable = options.aiAvailable ?? true;
+  const jobsAvailable = options.jobsAvailable ?? true;
   const [locales, settings, billing] = await Promise.all([
     fetchAndSyncShopLocales(admin, shop.id, client),
     getShopSettings(shop.id, client),
@@ -114,23 +122,29 @@ export async function loadOverview(
   // Without an AI provider there is no consent to give and no bulk drafts to review.
   const checklist = aiAvailable ? allSteps : allSteps.filter((s) => s.id !== "consent" && s.id !== "review");
 
-  // Share of complete fields per language (live coverage, published drafts only).
-  const scanned = coverage.segments.some((seg) => seg.status === "SCANNED");
+  // Percentages only from the newest completed measurement, for the languages it covered:
+  // a first measurement under way has read only some types, so its numbers would mislead.
+  const measuredLocales = new Set(coverage.lastCompleted?.locales ?? []);
   const headline = headlineByLocale(coverage.counts);
   const progress = targets.map((l) => {
-    const tally = scanned ? headline.get(l.locale) : undefined;
+    const measured = measuredLocales.has(l.locale);
+    const tally = measured ? headline.get(l.locale) : undefined;
     return {
       locale: l.locale,
       name: l.name,
       published: l.published,
+      measured,
       percent: tally?.percent ?? null,
       counts: tally?.counts ?? null,
       complete: tally?.complete ?? 0,
       total: tally?.total ?? 0,
     };
   });
-  const measured = progress.filter((l) => l.published && l.percent !== null);
-  const averagePercent = measured.length ? Math.round(measured.reduce((n, l) => n + l.percent!, 0) / measured.length) : null;
+  // The store's share: every counted field of the measured published languages (as on the Coverage page).
+  const shared = progress.filter((l) => l.published && l.measured && l.total > 0);
+  const sum = emptyCounts();
+  for (const l of shared) addCounts(sum, l.counts!);
+  const storeShare = shared.length ? { complete: sum.complete, total: totalOf(sum), languages: shared.length } : null;
 
   // Countries the shop sells to, and whether they can read it in their language.
   const countries = !markets
@@ -147,27 +161,36 @@ export async function loadOverview(
             );
             return { access: true as const, rows, missing: missingLanguages(rows), counts: countByStatus(rows) };
           })();
-  const report = coverage.report;
+
+  const measurement = measurementState(coverage.report, { jobsAvailable, now: options.now ?? Date.now() });
+  const firstTranslation = checklist.find((s) => s.id === "first-translation")!;
+  const next = nextStep({
+    targets: targets.map((l) => ({ locale: l.locale, name: l.name, published: l.published })),
+    consent,
+    firstTranslation: { done: firstTranslation.done, href: firstTranslation.href },
+    pendingDrafts,
+    aiAvailable,
+    jobsAvailable,
+    measuredLocales: [...measuredLocales],
+    progress,
+    countries: countries && "rows" in countries ? countries : null,
+    remainingLocales: locales.remainingEnabled,
+  });
 
   const limits = aiLimitsFor(getConfig(), billing);
   return {
-    shopName: shop.name ?? shop.shopDomain,
-    installedAt: shop.installedAt.toISOString(),
     primary: locales.primary?.name ?? null,
-    enabledCount: locales.enabledCount,
+    primaryLocale: locales.primary?.locale ?? null,
     maxLocales: MAX_ENABLED_LOCALES,
-    publishedCount: locales.publishedCount,
+    remainingLocales: locales.remainingEnabled,
     aiAvailable,
     checklist,
     progress,
-    averagePercent,
-    measuredLanguages: measured.length,
+    storeShare,
+    measuredAt: coverage.lastCompleted?.finishedAt ?? null,
+    measurement,
+    next,
     countries,
-    scan:
-      report && (report.status === "QUEUED" || report.status === "RUNNING")
-        ? { running: true as const, done: Math.min(report.segmentIndex, report.segments.length), total: report.segments.length }
-        : { running: false as const, failed: report?.status === "FAILED" },
-    coverageCheckedAt: report?.status === "COMPLETED" ? report.finishedAt : null,
     pendingDrafts,
     activeJobs,
     usage: { used, limit: limits.limit, usedToday, dailyLimit: limits.dailyLimit, level: usageLevel(used, limits.limit) },

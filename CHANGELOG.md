@@ -81,6 +81,7 @@
 - Launch preparation: competitive analysis (Langify, Transcy), App Store listing draft in English and German with 8 screenshots of the real app, a 30-day launch plan and the list of owner decisions (docs).
 
 ### Changed
+- Overview: one next step with the page's only primary button (add a language, measure, review drafts, allow AI, first translation, publish a language, the least translated language, countries without their language, all caught up); the share per language and the store-wide figure only from the newest completed measurement, so a measurement under way, failed or stuck never shows partial numbers; measuring said in words, with "Measure again" when it hasn't moved for 30 minutes and no reloading of the page otherwise; countries without their language grouped by reason, with Shopify's language limit when it limits the fix; an "AI translation" card in place of the store card. The history of measurements always keeps the newest completed one.
 - The app-wide daily AI limit no longer reads "paused because of high demand": the message names the app's daily limit and when it resets (midnight UTC).
 
 ### Security

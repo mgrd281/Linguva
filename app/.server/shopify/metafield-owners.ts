@@ -2,10 +2,11 @@
  * Custom fields for the coverage scan: owners are listed page by page with
  * their metafields, and the ones Shopify marks translatable
  * (Metafield.translatable, Admin API 2026-10) are read with their
- * translations via translatableResourcesByIds. Ten owners with up to 50
- * metafields each keep a page under Shopify's query cost limit; owners with
- * more than 50 metafields are counted with their first 50 (documented in
- * docs/COVERAGE_RULES.md).
+ * translations via translatableResourcesByIds. Ten owners with their first
+ * 50 metafields keep a page under Shopify's query cost limit. Metafields of
+ * any kind (an app's own data among them) count toward those 50, so an
+ * owner with more is read on, 100 at a time: no translatable custom field
+ * is left out of the figures (docs/COVERAGE_RULES.md).
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { AccessDeniedError, isAccessDenied, ShopifyApiError, type TranslatableResourceData } from "./translations-api";
@@ -16,8 +17,10 @@ type Admin = Pick<AdminApiContext, "graphql">;
 export const METAFIELD_OWNER_TYPES = ["PRODUCT", "COLLECTION", "PAGE", "ARTICLE"] as const;
 export type MetafieldOwnerType = (typeof METAFIELD_OWNER_TYPES)[number];
 export const OWNERS_PER_PAGE = 10;
-/** metafields(first: 50) in the queries below. */
+/** metafields(first: 50) in the owner queries below. */
 export const METAFIELDS_PER_OWNER = 50;
+/** metafields(first: 100) when an owner's metafields are read on. */
+export const METAFIELDS_PER_PAGE = 100;
 
 // Static documents (validated against the Admin schema by graphql-codegen).
 const PRODUCTS_QUERY = `#graphql
@@ -29,6 +32,10 @@ const PRODUCTS_QUERY = `#graphql
           nodes {
             id
             translatable
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
           }
         }
       }
@@ -50,6 +57,10 @@ const COLLECTIONS_QUERY = `#graphql
             id
             translatable
           }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
         }
       }
       pageInfo {
@@ -69,6 +80,10 @@ const PAGES_QUERY = `#graphql
           nodes {
             id
             translatable
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
           }
         }
       }
@@ -90,11 +105,34 @@ const ARTICLES_QUERY = `#graphql
             id
             translatable
           }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
         }
       }
       pageInfo {
         hasNextPage
         endCursor
+      }
+    }
+  }
+`;
+
+const MORE_METAFIELDS_QUERY = `#graphql
+  query LinguvaOwnerMetafieldsAfter($id: ID!, $after: String) {
+    node(id: $id) {
+      ... on HasMetafields {
+        metafields(first: 100, after: $after) {
+          nodes {
+            id
+            translatable
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
       }
     }
   }
@@ -111,6 +149,21 @@ export interface OwnedMetafield extends TranslatableResourceData {
   ownerGid: string;
 }
 
+type MetafieldPage = { nodes: Array<{ id: string; translatable: boolean }>; pageInfo?: { hasNextPage: boolean; endCursor?: string | null } | null };
+
+/** An owner's metafields after `after` (null: the owner is gone since it was listed). */
+async function moreMetafields(admin: Admin, owner: MetafieldOwnerType, ownerGid: string, after: string): Promise<MetafieldPage | null> {
+  const response = await admin.graphql(MORE_METAFIELDS_QUERY, { variables: { id: ownerGid, after } }).catch((error: unknown) => {
+    throw isAccessDenied(error) ? new AccessDeniedError(`${owner}_METAFIELD`) : error;
+  });
+  const body = (await response.json()) as { data?: { node?: { metafields?: MetafieldPage | null } | null } | null; errors?: unknown };
+  if (body.errors && isAccessDenied(body.errors)) throw new AccessDeniedError(`${owner}_METAFIELD`);
+  if (body.data && body.data.node === null) return null;
+  const connection = body.data?.node?.metafields;
+  if (!connection) throw new ShopifyApiError("metafields returned no data");
+  return connection;
+}
+
 export async function listOwnerMetafields(
   admin: Admin,
   options: { owner: MetafieldOwnerType; locale: string; after?: string | null; first?: number },
@@ -123,7 +176,7 @@ export async function listOwnerMetafields(
       throw isAccessDenied(error) ? new AccessDeniedError(`${options.owner}_METAFIELD`) : error;
     });
   const body = (await response.json()) as {
-    data?: Record<string, { nodes: Array<{ id: string; metafields?: { nodes: Array<{ id: string; translatable: boolean }> } | null }>; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null>;
+    data?: Record<string, { nodes: Array<{ id: string; metafields?: MetafieldPage | null }>; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null>;
     errors?: unknown;
   };
   if (body.errors && isAccessDenied(body.errors)) throw new AccessDeniedError(`${options.owner}_METAFIELD`);
@@ -131,7 +184,15 @@ export async function listOwnerMetafields(
   if (!connection) throw new ShopifyApiError(`${field} returned no data`);
   const owners = connection.nodes;
   const ownerOf = new Map<string, string>();
-  for (const o of owners) for (const m of o.metafields?.nodes ?? []) if (m.translatable) ownerOf.set(m.id, o.id);
+  for (const o of owners) {
+    let page: MetafieldPage | null = o.metafields ?? null;
+    while (page) {
+      for (const m of page.nodes) if (m.translatable) ownerOf.set(m.id, o.id);
+      // Metafields of any kind fill the first page: read on until the last one.
+      const next = page.pageInfo?.hasNextPage ? page.pageInfo.endCursor : null;
+      page = next ? await moreMetafields(admin, options.owner, o.id, next) : null;
+    }
+  }
   const data = await translatableByIds(admin, [...ownerOf.keys()], options.locale);
   const resources: OwnedMetafield[] = [];
   for (const [id, ownerGid] of ownerOf) {

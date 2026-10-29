@@ -181,6 +181,20 @@ describe("coverage scan", () => {
     expect(items).toEqual([expect.objectContaining({ resourceGid: care, parentGid: P1, fields: ["value:missing"] })]);
   });
 
+  it("counts custom fields that come after an owner's first 50 metafields (of any kind), reading on", async () => {
+    const { shop, store, deps } = await setup(2, 0);
+    // An app keeps 150 metafields of its own on product 1; the merchant's custom fields come after them.
+    for (let i = 1; i <= 150; i++) store.addMetafield(P1, { namespace: "app--reviews", key: `r${i}`, type: "json", value: "{}", translatable: false });
+    const later = Array.from({ length: 10 }, (_, i) => store.addMetafield(P1, { namespace: "custom", key: `f${i}`, type: "single_line_text_field", value: `Field ${i}` }));
+    store.addMetafield(P2, { namespace: "custom", key: "care", type: "single_line_text_field", value: "Wash cold" });
+    await runAll(deps, shop.id, ["de"]);
+    expect(await typeCounts(shop.id, "de", "PRODUCT_METAFIELD")).toMatchObject({ missing: 11 });
+    const items = (await listCoverageItems(shop.id, { locale: "de", resourceType: "PRODUCT_METAFIELD", limit: 100 }, app)).items;
+    expect(items.filter((i) => i.parentGid === P1).map((i) => i.resourceGid).sort()).toEqual([...later].sort());
+    // Read on with the owner's own query, 100 at a time: metafields 51–150 and 151–160.
+    expect(store.calls.filter((c) => c === "LinguvaOwnerMetafieldsAfter")).toHaveLength(2);
+  });
+
   it("marks a type without its optional scope as not available instead of failing the scan", async () => {
     const { shop, store, deps } = await setup(1, 0);
     store.deniedTypes.add("MENU");

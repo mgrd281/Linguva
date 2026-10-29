@@ -6,7 +6,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { Session } from "@shopify/shopify-api";
 import type { LoaderFunctionArgs } from "react-router";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   complimentaryUsageReport,
   grantComplimentaryAccess,
@@ -175,14 +175,14 @@ describe("the Plan page", () => {
     await shop("own-store.myshopify.com", OWN);
     await shop("customer.myshopify.com", OTHER);
     await grant(OWN);
-    process.env.COMPLIMENTARY_SHOP_GIDS = OWN;
+    vi.stubEnv("COMPLIMENTARY_SHOP_GIDS", OWN);
     resetConfigCache();
     try {
       expect(await planPage("own-store.myshopify.com")).toMatchObject({ state: "COMPLIMENTARY", costPerMillion: 25 });
       // Billing isn't configured here: every feature, but no internal figures.
       expect(await planPage("customer.myshopify.com")).toMatchObject({ configured: false, state: "ACTIVE", costPerMillion: null });
     } finally {
-      delete process.env.COMPLIMENTARY_SHOP_GIDS;
+      vi.unstubAllEnvs();
       resetConfigCache();
     }
   });

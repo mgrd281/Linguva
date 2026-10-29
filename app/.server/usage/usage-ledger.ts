@@ -124,6 +124,12 @@ export interface Reservation {
   period: string;
   /** UTC day of the reservation; settlement adjusts that day's platform counter. */
   day: string;
+  /**
+   * When it was reserved. Its settle and release rows carry this time, so every
+   * window summed by time (the shop's day, the smart budgets' local day and
+   * month) counts a reservation and its correction in the same window.
+   */
+  at: Date;
   chars: number;
   provider: string;
   /** Copied to the settle and release rows, so a budget sums the net usage. */
@@ -176,6 +182,7 @@ export async function reserveUsage(
           key: input.key,
           period: already.periodKey,
           day: dayKey(already.createdAt),
+          at: already.createdAt,
           chars: already.chars,
           provider: already.provider ?? input.provider,
           ...(already.origin ? { origin: already.origin as UsageOrigin } : {}),
@@ -214,6 +221,7 @@ export async function reserveUsage(
           provider: input.provider,
           idempotencyKey: input.key,
           origin: input.budget?.origin ?? null,
+          createdAt: now,
         },
       });
       return null;
@@ -226,6 +234,7 @@ export async function reserveUsage(
       key: input.key,
       period,
       day,
+      at: now,
       chars: input.chars,
       provider: input.provider,
       ...(input.budget ? { origin: input.budget.origin } : {}),
@@ -255,6 +264,7 @@ export async function settleUsage(
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:settle`,
         origin: reservation.origin ?? null,
+        createdAt: reservation.at,
       });
       if (inserted && delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
     },
@@ -283,6 +293,7 @@ export async function releaseUsage(
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:release`,
         origin: reservation.origin ?? null,
+        createdAt: reservation.at,
       });
       if (inserted) await addPlatformChars(tx, reservation.day, -reservation.chars, null);
     },

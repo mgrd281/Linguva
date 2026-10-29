@@ -26,6 +26,8 @@ type Admin = Pick<AdminApiContext, "graphql">;
 export const SMART_ACTIVE_RUN = ["QUEUED", "WAITING", "RUNNING"] as const;
 /** A run waiting for a measurement the merchant started is tried again this soon. */
 export const WAITING_RECHECK_MS = 60_000;
+/** A pause for the plan or consent is looked at again this often, so it lifts soon after its cause. */
+export const CAUSE_RECHECK_MS = 15 * 60_000;
 /** Check now at most this often (double clicks are one run by the form's key). */
 export const MANUAL_COOLDOWN_MS = 5 * 60_000;
 /** Runs are activity history: older ones are deleted, per shop. */
@@ -97,8 +99,36 @@ function pauseCause(config: SmartAutoConfig, facts: ShopFacts): SmartPauseReason
   return null;
 }
 
+/**
+ * Pauses as the facts are now: a cause pauses (never over the merchant's own
+ * pause, which would lift with it; it skips every check anyway), and a pause
+ * lifts when its time passed or its cause is gone. Returns the config as it is
+ * then, and the pause it set, if any.
+ */
+async function settlePausesTx(tx: TenantTx, config: SmartAutoConfig, facts: ShopFacts, now: Date) {
+  const cause = pauseCause(config, facts);
+  const merchants = Boolean(config.pausedAt) && config.pauseReason === "MANUAL";
+  const expired = config.pausedAt && config.pausedUntil && config.pausedUntil <= now;
+  const causeGone = config.pausedAt && (config.pauseReason === "PLAN" || config.pauseReason === "CONSENT") && config.pauseReason !== cause;
+  if (cause && !merchants && !(config.pausedAt && config.pauseReason === cause)) {
+    const paused = await tx.smartAutoConfig.update({ where: { shopId: config.shopId }, data: { pausedAt: now, pauseReason: cause, pausedUntil: null } });
+    return { config: paused, paused: cause };
+  }
+  if (expired || causeGone) {
+    return { config: await tx.smartAutoConfig.update({ where: { shopId: config.shopId }, data: { pausedAt: null, pauseReason: null, pausedUntil: null } }), paused: null };
+  }
+  return { config, paused: null };
+}
+
 async function setHint(tx: TenantTx, shopId: string, at: Date | null) {
   await tx.shop.update({ where: { id: shopId }, data: { smartNextRunAt: at } });
+}
+
+/** The tick looks at the shop again within a minute (an earlier hint stays). */
+async function recheckSoon(tx: TenantTx, shopId: string, now: Date) {
+  const soon = new Date(now.getTime() + WAITING_RECHECK_MS);
+  const shop = await tx.shop.findUnique({ where: { id: shopId }, select: { smartNextRunAt: true } });
+  if (!shop?.smartNextRunAt || shop.smartNextRunAt > soon) await setHint(tx, shopId, soon);
 }
 
 export interface TickSummary {
@@ -148,17 +178,9 @@ async function tickShop(deps: SmartDeps, shop: { id: string; shopDomain: string 
         await setHint(tx, shop.id, null);
         return { runId: null, waitingId: null, skipped: null, paused: null };
       }
-      // Pauses lift by themselves when their time passed, or when their cause is gone.
-      const cause = pauseCause(config, facts);
-      const expired = config.pausedAt && config.pausedUntil && config.pausedUntil <= now;
-      const causeGone = config.pausedAt && (config.pauseReason === "PLAN" || config.pauseReason === "CONSENT") && config.pauseReason !== cause;
-      let newPause: SmartPauseReason | null = null;
-      if (cause && !(config.pausedAt && config.pauseReason === cause)) {
-        newPause = cause;
-        config = await tx.smartAutoConfig.update({ where: { shopId: shop.id }, data: { pausedAt: now, pauseReason: cause, pausedUntil: null } });
-      } else if (expired || causeGone) {
-        config = await tx.smartAutoConfig.update({ where: { shopId: shop.id }, data: { pausedAt: null, pauseReason: null, pausedUntil: null } });
-      }
+      const settled = await settlePausesTx(tx, config, facts, now);
+      config = settled.config;
+      const newPause: SmartPauseReason | null = settled.paused;
 
       let runId: string | null = null;
       let skipped: string | null = null;
@@ -190,16 +212,26 @@ async function tickShop(deps: SmartDeps, shop: { id: string; shopDomain: string 
       }
       // A run waiting for the merchant's measurement, or one whose start didn't get through
       // (the process stopped right after creating it; a fresh Check now is left to its request).
-      const waiting = runId
+      let waiting = runId
         ? null
         : await tx.smartAutoRun.findFirst({
             where: { shopId: shop.id, OR: [{ status: "WAITING" }, { status: "QUEUED", createdAt: { lt: new Date(now.getTime() - WAITING_RECHECK_MS) } }] },
             orderBy: { createdAt: "asc" },
             select: { id: true },
           });
+      // Paused (or otherwise held) since it was created: recorded as skipped, not started.
+      const held = waiting ? blocker(config, facts, deps, now) : null;
+      if (waiting && held) {
+        await tx.smartAutoRun.update({ where: { id: waiting.id }, data: { status: "SKIPPED", errorCode: held, finishedAt: now } });
+        waiting = null;
+      }
       const queued = runId || waiting ? null : await tx.smartAutoRun.findFirst({ where: { shopId: shop.id, status: "QUEUED" }, select: { id: true } });
-      const recheck = waiting || queued ? new Date(now.getTime() + WAITING_RECHECK_MS) : null;
-      const next = config.nextRunAt && recheck ? (config.nextRunAt < recheck ? config.nextRunAt : recheck) : (config.nextRunAt ?? recheck);
+      // Also for the run created now: its start comes after this commit and may not get through.
+      const recheck = runId || waiting || queued ? new Date(now.getTime() + WAITING_RECHECK_MS) : null;
+      // A pause for the plan or consent lifts soon after its cause, also in manual mode.
+      const causeCheck = config.pausedAt && (config.pauseReason === "PLAN" || config.pauseReason === "CONSENT") ? new Date(now.getTime() + CAUSE_RECHECK_MS) : null;
+      const candidates = [config.nextRunAt, recheck, causeCheck].filter((d): d is Date => d !== null);
+      const next = candidates.length ? new Date(Math.min(...candidates.map((d) => d.getTime()))) : null;
       await setHint(tx, shop.id, next);
       return { runId, waitingId: waiting?.id ?? null, skipped, paused: newPause };
     },
@@ -273,6 +305,7 @@ export async function requestSmartRun(
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(input.idempotencyKey)) return { status: "blocked", reason: "INVALID_KEY" };
   const facts = await shopFacts(deps, input.shop);
   const shopId = input.shop.id;
+  let newPause: SmartPauseReason | null = null;
   const result = await withTenant(
     shopId,
     async (tx) => {
@@ -281,7 +314,10 @@ export async function requestSmartRun(
       if (!config?.enabled) return { status: "off" as const };
       const repeated = await tx.smartAutoRun.findUnique({ where: { shopId_idempotencyKey: { shopId, idempotencyKey: input.idempotencyKey } } });
       if (repeated) return { status: "active" as const, runId: repeated.id };
-      const cause = pauseCause(config, facts) ?? blocker(config, facts, deps, now);
+      // A pause whose cause is gone lifts now (the page already showed it as on); a new cause pauses.
+      const settled = await settlePausesTx(tx, config, facts, now);
+      newPause = settled.paused;
+      const cause = pauseCause(settled.config, facts) ?? blocker(settled.config, facts, deps, now);
       if (cause) return { status: "blocked" as const, reason: cause };
       const active = await tx.smartAutoRun.findFirst({ where: { shopId, status: { in: [...SMART_ACTIVE_RUN] } }, select: { id: true } });
       if (active) return { status: "active" as const, runId: active.id };
@@ -294,10 +330,15 @@ export async function requestSmartRun(
         data: { shopId, trigger: "MANUAL", idempotencyKey: input.idempotencyKey, requestedBy: input.actorId, status: "QUEUED", ...scopeSnapshot(config, facts) },
         select: { id: true },
       });
+      // Its start comes after this commit: should it not get through, the tick starts it (also in manual mode).
+      await recheckSoon(tx, shopId, now);
       return { status: "created" as const, runId: run.id };
     },
     deps.prisma,
   );
+  if (newPause) {
+    await deps.prisma.auditLog.createMany({ data: [{ shopId, actorType: "SYSTEM", actorId: null, action: "smart_auto.paused", metadata: { reason: newPause } }] });
+  }
   if (result.status !== "created") return result;
   await deps.prisma.auditLog.createMany({ data: [{ shopId, actorType: "MERCHANT_USER", actorId: input.actorId, action: "smart_auto.run_now", metadata: { runId: result.runId } }] });
   const started = await startSmartRun(deps, shopId, result.runId, facts, now);

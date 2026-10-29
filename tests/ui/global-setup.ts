@@ -18,6 +18,7 @@ import { saveSmartSettings, setSmartEnabled } from "../../app/.server/smart/conf
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { testEnv } from "../support/env";
+import { setWorkerRunning } from "./helpers";
 import { DEMO_GLOSSARY, demoDrafts } from "./fixtures/demo-store";
 import { UI_SHOPS } from "./fixtures/shops";
 
@@ -39,7 +40,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "autoLimits", "downgraded", "business", "businessEdit", "businessPause"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "smartDowngraded"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -109,7 +110,7 @@ export default async function globalSetup() {
           await tx.smartAutoRun.create({
             data: { shopId, trigger: "SCHEDULED", occurrenceAt: new Date(lastNight.getTime() - day), status: "SKIPPED", errorCode: "PAUSED", ...scope, createdAt: new Date(lastNight.getTime() - day), finishedAt: new Date(lastNight.getTime() - day) },
           });
-          await tx.smartAutoRun.create({
+          const completed = await tx.smartAutoRun.create({
             data: {
               shopId,
               trigger: "SCHEDULED",
@@ -123,6 +124,25 @@ export default async function globalSetup() {
               createdAt: lastNight,
               startedAt: lastNight,
               scanFinishedAt: new Date(lastNight.getTime() + 4 * 60_000),
+              finishedAt: new Date(lastNight.getTime() + 6 * 60_000),
+            },
+          });
+          // What it translated: its job, with the characters sent and those reused.
+          await tx.translationJob.create({
+            data: {
+              shopId,
+              resourceType: "PRODUCT",
+              targetLocale: "fr",
+              requestedBy: "system:smart",
+              idempotencyKey: `smart:${completed.id}:PRODUCT:fr`,
+              smartRunId: completed.id,
+              status: "COMPLETED",
+              discoveryDone: true,
+              totalItems: 3,
+              succeededItems: 3,
+              charsBilled: 1200,
+              charsSaved: 640,
+              startedAt: lastNight,
               finishedAt: new Date(lastNight.getTime() + 6 * 60_000),
             },
           });
@@ -157,6 +177,32 @@ export default async function globalSetup() {
       app,
     );
     await setSmartEnabled({ shopId: ids.businessPause!, actorId: null, enabled: true }, app);
+
+    // The same schedule, turned on before the store moved from Business to Pro.
+    await saveSmartSettings(
+      {
+        shopId: ids.smartDowngraded!,
+        actorId: null,
+        version: 0,
+        primaryLocale: "en",
+        value: {
+          mode: "realtime",
+          timeZone: "Europe/Berlin",
+          times: [3 * 60],
+          weekdays: [1, 2, 3, 4, 5, 6, 7],
+          locales: ["de"],
+          resourceTypes: ["PRODUCT"],
+          fieldGroups: [],
+          includeAttached: false,
+          publishMode: "DRAFT",
+          replaceOutdatedMachine: true,
+          dailyBudget: null,
+          monthlyBudget: null,
+        },
+      },
+      app,
+    );
+    await setSmartEnabled({ shopId: ids.smartDowngraded!, actorId: null, enabled: true }, app);
 
     // A German job with custom fields: a list of links waits on Review.
     const fieldsStore = UI_SHOPS.customFields.build();
@@ -198,6 +244,9 @@ export default async function globalSetup() {
         owner.$executeRaw`UPDATE "CoverageReport" SET "createdAt" = now() - interval '1 hour', "updatedAt" = now() - interval '1 hour' WHERE "shopId" = ${ids.stalled!}::uuid`,
       ]);
     }
+
+    // No worker runs in these tests: a heartbeat left from an earlier run would say otherwise.
+    await setWorkerRunning(false);
 
     await grantComplimentaryAccess(owner, {
       shopifyShopGid: UI_SHOPS.owner.gid,

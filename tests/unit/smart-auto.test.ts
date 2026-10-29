@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { normaliseSmartSettings, type SmartSettingsContext, type SmartSettingsInput } from "../../app/.server/smart/validate";
 import { PLANS } from "../../app/lib/plans";
-import { budgetWindows, checkSpec, pauseLiftsAt, smartCoverageTypes } from "../../app/lib/smart-auto";
+import { attachedOwner, budgetWindows, checkSpec, pauseLiftsAt, smartCoverageTypes, smartStatus } from "../../app/lib/smart-auto";
 import { nextOccurrence } from "../../app/lib/schedule";
 import { waitsForSmartCheck } from "../../app/.server/smart/panel";
 
@@ -72,6 +72,37 @@ describe("pauses", () => {
     const { daySince, monthSince } = budgetWindows(at("2026-10-25T12:00:00Z"), "Europe/Berlin");
     expect(iso(daySince)).toBe("2026-10-24T22:00:00.000Z");
     expect(iso(monthSince)).toBe("2026-09-30T22:00:00.000Z");
+  });
+});
+
+describe("the state every page shows", () => {
+  const base = { enabled: true, pausedAt: null, pauseReason: null, pausedUntil: null, entitled: true, consent: true, available: true, languages: 1, now: at("2026-10-29T12:00:00Z") };
+  it("says what keeps it from running, in the order the merchant can act on it", () => {
+    expect(smartStatus({ ...base, enabled: false, entitled: false })).toEqual({ state: "off" });
+    expect(smartStatus({ ...base, entitled: false, consent: false })).toEqual({ state: "waiting", reason: "PLAN" });
+    expect(smartStatus({ ...base, consent: false })).toEqual({ state: "waiting", reason: "CONSENT" });
+    expect(smartStatus({ ...base, available: false })).toEqual({ state: "waiting", reason: "UNAVAILABLE" });
+    expect(smartStatus({ ...base, worker: false })).toEqual({ state: "waiting", reason: "WORKER" });
+    expect(smartStatus({ ...base, languages: 0 })).toEqual({ state: "waiting", reason: "NO_LANGUAGE" });
+    expect(smartStatus({ ...base, worker: true })).toEqual({ state: "on" });
+  });
+
+  it("shows a pause until it lifts, and a pause for the plan or consent as over once they are back", () => {
+    const pausedAt = at("2026-10-29T08:00:00Z");
+    expect(smartStatus({ ...base, pausedAt, pauseReason: "MANUAL" })).toEqual({ state: "paused", reason: "MANUAL", until: null });
+    expect(smartStatus({ ...base, pausedAt, pauseReason: "BUDGET_DAILY", pausedUntil: at("2026-10-29T23:00:00Z") })).toMatchObject({ state: "paused", reason: "BUDGET_DAILY" });
+    expect(smartStatus({ ...base, pausedAt, pauseReason: "BUDGET_DAILY", pausedUntil: at("2026-10-29T11:00:00Z") })).toEqual({ state: "on" });
+    expect(smartStatus({ ...base, pausedAt, pauseReason: "PLAN" })).toEqual({ state: "on" });
+    expect(smartStatus({ ...base, pausedAt, pauseReason: "CONSENT" })).toEqual({ state: "on" });
+    // The merchant's own pause beats a stopped worker: resuming is theirs.
+    expect(smartStatus({ ...base, pausedAt, pauseReason: "MANUAL", worker: false })).toMatchObject({ state: "paused" });
+  });
+
+  it("knows whose images and custom fields a coverage type holds", () => {
+    expect(attachedOwner("PRODUCT_METAFIELD")).toBe("PRODUCT");
+    expect(attachedOwner("MEDIA_IMAGE")).toBe("PRODUCT");
+    expect(attachedOwner("COLLECTION_IMAGE")).toBe("COLLECTION");
+    expect(attachedOwner("PRODUCT")).toBeNull();
   });
 });
 

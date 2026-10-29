@@ -73,8 +73,14 @@ export async function sweepChangedContent(
         if (smart.mode !== "realtime" || smartPaused(smart, now) || !hasCurrentAiConsent(settings)) continue;
         const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
         if (billing?.configured && !billing.entitlements.smartAuto) continue;
-        // Never before its last full check started (that one read everything).
-        const fromCheck = smart.lastRunAt ? new Date(smart.lastRunAt.getTime() - OVERLAP_MS) : null;
+        // Never before its last complete check started (that one read everything); a skipped or
+        // failed check moves nothing.
+        const lastCheck = await withTenant(
+          shop.id,
+          (tx) => tx.smartAutoRun.findFirst({ where: { shopId: shop.id, status: "COMPLETED", startedAt: { not: null } }, orderBy: { startedAt: "desc" }, select: { startedAt: true } }),
+          deps.prisma,
+        );
+        const fromCheck = lastCheck?.startedAt ? new Date(lastCheck.startedAt.getTime() - OVERLAP_MS) : null;
         position = [settings.autoSweptAt, fromCheck].filter((d): d is Date => d !== null).sort((a, b) => b.getTime() - a.getTime())[0] ?? new Date(now.getTime() - OVERLAP_MS);
       } else {
         if (!settings.autoTranslateNew || !settings.autoTranslateLocales.length || !hasCurrentAiConsent(settings)) continue;

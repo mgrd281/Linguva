@@ -246,6 +246,8 @@ async function autoItem(client: PrismaClient, payload: AutoTranslatePayload, loc
       let job = await tx.translationJob.findFirst({ where: { ...scope, status: { in: [...ACTIVE_JOB_STATUSES] } } });
       // Never join a job that only translates search listings or may replace protected translations.
       if (job && (job.fieldScope !== "ALL" || job.overwriteProtected)) return "busy" as const;
+      // The smart schedule's budgets, fields and publishing hold for its jobs only: it waits for any other.
+      if (job && profile.requestedBy === SMART_REQUESTED_BY && job.requestedBy !== SMART_REQUESTED_BY) return "busy" as const;
       if (!job) {
         // One automatic job per day, type and language keeps the job list readable.
         const today = await tx.translationJob.findFirst({

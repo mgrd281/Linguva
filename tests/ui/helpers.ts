@@ -7,6 +7,10 @@
  */
 import { createHmac, randomUUID } from "node:crypto";
 import { AxeBuilder } from "@axe-core/playwright";
+import { Redis } from "ioredis";
+import { heartbeatKey } from "../../app/.server/queue/heartbeat";
+import { keyPrefix } from "../../app/.server/queue/redis";
+import { testEnv } from "../support/env";
 import { expect, type Page } from "@playwright/test";
 import { UI_ENV, UI_SHOPS, type UiShopKey } from "./fixtures/shops";
 
@@ -166,4 +170,24 @@ export async function saveBarShown(page: Page, id: string) {
 /** Clicks a button of a save bar (App Bridge would render it in the admin). */
 export async function clickSaveBarButton(page: Page, id: string, index: number) {
   await page.locator(`ui-save-bar#${id} button`).nth(index).evaluate((b) => (b as HTMLButtonElement).click());
+}
+
+/**
+ * Background jobs as the server sees them (its worker heartbeat, prefix of
+ * NODE_ENV=test). No worker runs in these tests, and most pages are tested
+ * that way; the smart schedule's pages are tested with one running.
+ */
+export async function setWorkerRunning(running: boolean) {
+  const redis = new Redis(testEnv.REDIS_URL!, { maxRetriesPerRequest: 2 });
+  try {
+    const key = heartbeatKey(keyPrefix("test"));
+    if (!running) {
+      await redis.del(key);
+      return;
+    }
+    const at = new Date().toISOString();
+    await redis.set(key, JSON.stringify({ v: 1, at, startedAt: at, mode: "standalone", pid: process.pid, commit: null, provider: "mock" }), "PX", 30 * 60_000);
+  } finally {
+    redis.disconnect();
+  }
 }

@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   getMonthlyUsage,
+  getOriginUsageSince,
   periodKey,
   QuotaExceededError,
   releaseUsage,
@@ -90,6 +91,26 @@ describe("usage ledger", () => {
     await reserveUsage({ shopId: b.id, key: "x", chars: 4000, limit: 5000, provider: "deepl" }, app);
     expect(await getMonthlyUsage(a.id, undefined, app)).toBe(4000);
     expect(await getMonthlyUsage(b.id, undefined, app)).toBe(4000);
+  });
+
+  it("counts a settle or release in the reservation's window, also when it comes after the window ended", async () => {
+    const s = await shop();
+    const budget = (since: Date) => ({ origin: "smart" as const, daily: { limit: 1_000, since } });
+    const before = new Date(Date.now() - 3_600_000);
+    // Reserved just before (local) midnight, corrected just after it.
+    const late = await reserveUsage({ shopId: s.id, key: "late-1", chars: 800, limit: 1_000_000, provider: "deepl", budget: budget(before) }, app);
+    const lower = await reserveUsage({ shopId: s.id, key: "late-2", chars: 150, limit: 1_000_000, provider: "deepl", budget: budget(before) }, app);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const midnight = new Date();
+    await releaseUsage(late, app);
+    await settleUsage(lower, 50, app);
+    expect(await getOriginUsageSince(s.id, "smart", midnight, app)).toBe(0);
+    expect(await getOriginUsageSince(s.id, "smart", before, app)).toBe(50);
+    // The new day starts at zero: its budget holds.
+    await reserveUsage({ shopId: s.id, key: "today-1", chars: 1_000, limit: 1_000_000, provider: "deepl", budget: budget(midnight) }, app);
+    await expect(reserveUsage({ shopId: s.id, key: "today-2", chars: 1, limit: 1_000_000, provider: "deepl", budget: budget(midnight) }, app)).rejects.toMatchObject({
+      scope: "smartDaily",
+    });
   });
 
   it("is append-only for the runtime role", async () => {

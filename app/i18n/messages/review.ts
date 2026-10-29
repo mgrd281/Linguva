@@ -176,7 +176,7 @@ export const es: Translation<typeof en> = {
   "review.saved.published": "Publicadas: {count}",
   "review.saved.stale": "No publicadas porque el original o la traducción cambiaron mientras tanto: {count}",
   "review.saved.failed": "Fallidas: {count}",
-  "review.saved.changed": "Cambiadas desde que abriste esta página (una traducción más reciente las reemplazó), sin cambios: {count}",
+  "review.saved.changed": "Cambiadas desde que abriste esta página (una traducción más reciente las reemplazó), se dejaron como estaban: {count}",
   "review.rejected.body": {
     one: "{count} borrador descartado. No se publicará.",
     other: "{count} borradores descartados. No se publicarán.",

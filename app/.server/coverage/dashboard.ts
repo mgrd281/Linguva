@@ -37,7 +37,7 @@ import { isSearchableType, searchIds } from "../shopify/search-ids";
 import { COVERAGE_TYPES, segmentOf, STALE_REPORT_MS } from "./coverage";
 import { listCoverageItems, loadCoverageSummary, type ItemStateFilter } from "./summary";
 import { excludedAmong } from "../smart/config";
-import { loadSmartCoverageNote, waitsForSmartCheck } from "../smart/panel";
+import { loadSmartCoverageNote, smartContext, waitsForSmartCheck } from "../smart/panel";
 
 /** Types with a title of their own (images and custom fields are named by their text or owner). */
 function kindOfAny(type: string): TranslatableKind | null {
@@ -119,16 +119,28 @@ export async function loadCoverageDashboard(request: Request) {
   const stalled = Boolean(report && active && Date.now() - Date.parse(report.updatedAt) >= STALE_REPORT_MS);
   const current = report && active ? segmentOf(report, report.segmentIndex) : null;
 
+  const smartState = await smartContext(await shopBilling(admin, shop), settings, allTargets.map((l) => l.locale));
   const [jobs, smart] = await Promise.all([
     withTenant(shop.id, (tx) =>
       tx.translationJob.findMany({ where: { shopId: shop.id, status: { in: [...ACTIVE_JOBS] } }, orderBy: { createdAt: "desc" }, take: 10 }),
     ),
-    loadSmartCoverageNote(shop.id),
+    loadSmartCoverageNote(shop.id, smartState),
   ]);
   const now = new Date();
   return {
-    /** The smart schedule beside the figures (null while off). */
-    smart: smart ? { mode: smart.mode, zone: smart.zone, paused: smart.paused, nextCheck: smart.nextCheck, translating: smart.translating, excluded: smart.excluded } : null,
+    /** The smart schedule beside the figures (null while off), with the same state as Settings. */
+    smart: smart
+      ? {
+          status: smart.status,
+          mode: smart.mode,
+          zone: smart.zone,
+          nextCheck: smart.nextCheck,
+          translating: smart.translating,
+          excluded: smart.excluded,
+          // Whether the language shown is one the schedule translates into.
+          inSchedule: selected ? smart.scope.locales.includes(selected.locale) : true,
+        }
+      : null,
     shopName: shop.name ?? shop.shopDomain,
     primary: locales.primary ? { locale: locales.primary.locale, name: locales.primary.name } : null,
     // Published languages first (what customers see), then by name.
@@ -282,8 +294,8 @@ export async function loadCoverageItemsPage(request: Request) {
     // Titles are a convenience: the list still works with ids.
   }
   const settings = await getShopSettings(shop.id);
-  // What the smart schedule does with the listed items: translating now, left alone, or waiting for its next check.
-  const smart = await loadSmartCoverageNote(shop.id);
+  // What the smart schedule does with the listed items: translating now, left alone, or waiting for its next check (only while on).
+  const smart = await loadSmartCoverageNote(shop.id, await smartContext(await shopBilling(admin, shop), settings, targets.map((l) => l.locale)));
   const work = smart ? await smartWorkOn(shop.id, locale, page.items) : null;
   const titleOf = (gid: string, kind: string) => {
     const c = content.get(gid);

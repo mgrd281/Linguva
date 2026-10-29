@@ -18,13 +18,15 @@ vi.hoisted(() => {
 import { PrismaClient } from "@prisma/client";
 import { createCoverageReport, failCoverageReport, runCoveragePage, type CoverageDeps, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
 import { noteCoverageWrite, rebuildCountsTx } from "../../app/.server/coverage/items";
-import { processItem, type JobDependencies } from "../../app/.server/jobs/processors";
+import { createAutoItems } from "../../app/.server/jobs/auto-translate";
+import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
+import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { createItemProcessor, requeueStalledDiscovery, type Queues } from "../../app/.server/jobs/queues";
 import { forgetCurrentLocales } from "../../app/.server/locales/current-locales";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { saveDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
-import { addSmartExclusion, getSmartConfig, pauseSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
+import { addSmartExclusion, getSmartConfig, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
 import { loadSmartPanel } from "../../app/.server/smart/panel";
 import { repairSmartRuns } from "../../app/.server/smart/plan";
 import { smartTick, type SmartDeps } from "../../app/.server/smart/runs";
@@ -274,6 +276,34 @@ describe("a scheduled run", () => {
     expect((await getSmartConfig(shop.id, app))!.lastSuccessAt).toBeNull();
   });
 
+  it("says so when part of it was read while paused, and isn't then the last complete check", async () => {
+    const { shop, deps, pages, coverage, jobs } = await setup(4);
+    await turnOn(shop.id);
+    await smartTick(deps, DUE);
+    // The first page of products in German, then a pause while the second is read.
+    const report = await withTenant(shop.id, (tx) => tx.coverageReport.findFirstOrThrow({ where: { shopId: shop.id }, orderBy: { createdAt: "desc" } }), app);
+    const index = report.segments.indexOf("PRODUCT|de");
+    const first = await measure(coverage, pages[0]!, (page) => page.segmentIndex === index && page.cursor !== null);
+    await pauseSmart({ shopId: shop.id, actorId: "7" }, app);
+    await measure(coverage, first.next!);
+    await resumeSmart({ shopId: shop.id, actorId: "7" }, app);
+    for (const itemId of first.queued) await processItem(jobs, { shopId: shop.id, itemId }, 1);
+    expect(first.queued).toHaveLength(2);
+    expect((await runRows(shop.id))[0]).toMatchObject({ status: "COMPLETED", errorCode: "PARTIAL" });
+    expect((await getSmartConfig(shop.id, app))!.lastSuccessAt).toBeNull();
+  });
+
+  it("is skipped, not started, when it waited for a measurement and the schedule was paused meanwhile", async () => {
+    const { shop, deps } = await setup(2);
+    await turnOn(shop.id);
+    await createCoverageReport({ shopId: shop.id, locales: ["de", "fr"], requestedBy: "1", idempotencyKey: `m-${++keys}` }, app);
+    await smartTick(deps, DUE);
+    expect((await runRows(shop.id)).map((r) => r.status)).toEqual(["WAITING"]);
+    await pauseSmart({ shopId: shop.id, actorId: "7" }, app);
+    await smartTick(deps, new Date(DUE.getTime() + 2 * 60_000));
+    expect((await runRows(shop.id)).map((r) => [r.status, r.errorCode])).toEqual([["SKIPPED", "PAUSED"]]);
+  });
+
   it("keeps the merchant's own pause when a job stops at a limit", async () => {
     const { shop } = await setup(1);
     await turnOn(shop.id);
@@ -301,6 +331,94 @@ describe("a scheduled run", () => {
     expect(await requeueStalledDiscovery(jobs, queues)).toBe(1);
     const [smart] = await smartJobs(shop.id);
     expect(added).not.toContain(smart!.id);
+  });
+});
+
+describe("beside other jobs: one active job per type and language", () => {
+  const activeJobs = (shopId: string, resourceType = "PRODUCT") =>
+    withTenant(
+      shopId,
+      (tx) => tx.translationJob.findMany({ where: { shopId, resourceType, targetLocale: "de", status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } }, include: { items: true } }),
+      app,
+    );
+
+  it("leaves a type and language to the merchant's bulk job, so nothing is translated twice", async () => {
+    const { shop, deps, pages, coverage, jobs } = await setup(3);
+    await turnOn(shop.id);
+    // "Translate all products into German", its discovery behind the check.
+    const { job: bulk } = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: `bulk-${++keys}` }, app);
+    await smartTick(deps, DUE);
+    const { queued } = await measure(coverage, pages[0]!);
+    await runDiscoveryPage(jobs, { shopId: shop.id, jobId: bulk.id });
+
+    expect(queued).toEqual([]);
+    const active = await activeJobs(shop.id);
+    expect(active.map((j) => [j.id, j.items.length])).toEqual([[bulk.id, 3]]);
+    // The check says what it translated itself: nothing here, and it is done.
+    expect((await runRows(shop.id))[0]).toMatchObject({ status: "COMPLETED", resourcesChecked: 3, resourcesChanged: 0, itemsQueued: 0 });
+  });
+
+  it("takes over the real-time job of the same type and language, its items kept", async () => {
+    const { shop, deps, pages, coverage } = await setup(3);
+    await turnOn(shop.id, value({ mode: "realtime" }));
+    const change = await createAutoItems(app, { shopId: shop.id, resourceGid: P(1), resourceType: "PRODUCT" }, deps.billingFor);
+    expect(change.itemIds).toHaveLength(1);
+    const [realtime] = await activeJobs(shop.id);
+    await smartTick(deps, DUE);
+    await measure(coverage, pages[0]!);
+
+    const [job, ...more] = await activeJobs(shop.id);
+    expect(more).toHaveLength(0);
+    const [run] = await runRows(shop.id);
+    expect(job).toMatchObject({ id: realtime!.id, smartRunId: run!.id, requestedBy: SMART_REQUESTED_BY, discoveryDone: true });
+    // Product 1 once (the real-time item, still waiting), the other two added by the check.
+    expect(job!.items.map((i) => i.resourceGid).sort()).toEqual([P(1), P(2), P(3)]);
+    expect(run).toMatchObject({ resourcesChanged: 2, itemsQueued: 2 });
+  });
+
+  it("leaves the images to a merchant's job that includes them", async () => {
+    const { shop, store, deps, pages, coverage } = await setup(2);
+    store.addImage(P(1), "Blue jacket");
+    await turnOn(shop.id, value({ includeAttached: true }));
+    await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: `bulk-${++keys}`, includeAttached: true }, app);
+    await smartTick(deps, DUE);
+    await measure(coverage, pages[0]!);
+    expect(await activeJobs(shop.id, "MEDIA_IMAGE")).toEqual([]);
+  });
+
+  it("plans a resource again that a stopped job left waiting", async () => {
+    const { shop, deps, pages, coverage } = await setup(2);
+    await turnOn(shop.id);
+    // A cancelled bulk job whose item for product 2 never ran (its queue job was lost).
+    const { job: bulk } = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: `bulk-${++keys}` }, app);
+    await withTenant(
+      shop.id,
+      async (tx) => {
+        await tx.translationJobItem.create({ data: { shopId: shop.id, jobId: bulk.id, resourceGid: P(2), status: "PENDING" } });
+        await tx.translationJob.update({ where: { id: bulk.id }, data: { status: "CANCELLED", finishedAt: new Date() } });
+      },
+      app,
+    );
+    await smartTick(deps, DUE);
+    await measure(coverage, pages[0]!);
+    const [job] = await activeJobs(shop.id);
+    expect(job!.items.map((i) => i.resourceGid).sort()).toEqual([P(1), P(2)]);
+  });
+
+  it("a real-time change waits for the merchant's bulk job instead of joining it, and a bulk request takes over a real-time job", async () => {
+    const { shop, deps } = await setup(2);
+    await turnOn(shop.id, value({ mode: "realtime", fieldGroups: ["title"], dailyBudget: 5 }));
+    const { job: bulk } = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: `bulk-${++keys}` }, app);
+    // Joining would translate it outside the smart budget, fields and publishing.
+    expect(await createAutoItems(app, { shopId: shop.id, resourceGid: P(1), resourceType: "PRODUCT" }, deps.billingFor)).toEqual({ itemIds: [], reused: [], busy: true });
+    expect((await activeJobs(shop.id)).map((j) => [j.id, j.items.length])).toEqual([[bulk.id, 0]]);
+
+    await withTenant(shop.id, (tx) => tx.translationJob.update({ where: { id: bulk.id }, data: { status: "COMPLETED" } }), app);
+    await createAutoItems(app, { shopId: shop.id, resourceGid: P(1), resourceType: "PRODUCT" }, deps.billingFor);
+    const [realtime] = await activeJobs(shop.id);
+    expect(realtime).toMatchObject({ requestedBy: SMART_REQUESTED_BY, fieldGroups: ["title"] });
+    const taken = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: `bulk-${++keys}` }, app);
+    expect(taken).toMatchObject({ created: true, job: { id: realtime!.id, requestedBy: "1", fieldGroups: [], publishMode: "DRAFT", discoveryDone: false } });
   });
 });
 
@@ -350,5 +468,23 @@ describe("the estimate before turning it on", () => {
     expect(live.find((c) => c.fieldGroup === "title" && c.state === "missing")).toMatchObject({ count: 2, chars: BigInt(chars(store, 1, "title") + chars(store, 2, "title")) });
     await withTenant(shop.id, (tx) => rebuildCountsTx(tx, shop.id, "de", "PRODUCT"), app);
     expect(await counts()).toEqual(live);
+  });
+
+  it("asks for a new measurement when the newest one is older than its character counts", async () => {
+    const { shop, report, coverage } = await measured(3);
+    await measure(coverage, { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null });
+    const fresh = await panel(shop.id);
+    expect(fresh).toMatchObject({ remeasure: false });
+    expect(fresh.estimate).toBeGreaterThan(0);
+    // What rows measured before the counts existed hold (the migration's defaults): "up to 0" would be wrong.
+    await ownerDb.$transaction([
+      ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shop.id}, true)`,
+      ownerDb.$executeRaw`UPDATE "CoverageItem" SET "sourceChars" = '{}' WHERE "shopId" = ${shop.id}::uuid`,
+      ownerDb.$executeRaw`UPDATE "CoverageCount" SET "chars" = 0 WHERE "shopId" = ${shop.id}::uuid`,
+    ]);
+    expect(await panel(shop.id)).toMatchObject({ estimate: null, remeasure: true });
+    const { report: again } = await createCoverageReport({ shopId: shop.id, locales: ["de", "fr"], requestedBy: "1", idempotencyKey: `m-${++keys}` }, app);
+    await measure(coverage, { shopId: shop.id, reportId: again.id, segmentIndex: 0, cursor: null });
+    expect(await panel(shop.id)).toMatchObject({ estimate: fresh.estimate, remeasure: false });
   });
 });

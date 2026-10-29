@@ -34,9 +34,10 @@ The feature is Business-only, checked on the server. Lower plans keep the existi
    - Skipped: fields with a pending, rejected or refused draft for the same source, and fields with a person's draft waiting for review.
    - Translation memory and in-request de-duplication run before the provider.
    - Every provider call is metered once, under its own key.
-3. **A scheduled mode never translates in between.** In daily, weekly, custom and manual modes, webhooks and the 30-minute check only refresh coverage (free). They queue nothing paid.
-4. **Exactly one run per scheduled occurrence**, however many workers tick: a unique `(shopId, occurrenceAt)` row decides, and a partial unique index allows one active run per shop.
-5. **Safe defaults**:
+3. **A scheduled mode never translates in between.** In daily, weekly, custom and manual modes, product and collection webhooks only refresh coverage (free) and queue nothing paid. The 30-minute check doesn't run in these modes, so changed pages, blog posts and blogs show at the next check.
+4. **Exactly one run per scheduled occurrence**, however many workers tick: a unique `(shopId, occurrenceAt)` row decides. Both places that create runs (the tick and Check now) hold the per-shop advisory lock and look for an active run first, so one run is active per shop (there is no partial unique index for it).
+5. **One active job per type and language**, as for every job (§5.2): a check never translates beside a merchant's bulk job, and a real-time check never joins one.
+6. **Safe defaults**:
    - off;
    - drafts;
    - own fields only (images and custom fields are opt-in);
@@ -117,15 +118,18 @@ New tenant tables:
 
 ### 5.1 Tick
 
-Every 60 s the worker runs the tick, as its other periodic work: one worker per minute takes the Redis lock `smart-tick-lock`, and a second one (a deploy overlap) would still start each occurrence once (unique occurrence, per-shop advisory lock). Before deciding, the tick finishes runs whose measurement ended without finishing them (`repairSmartRuns`, also in the 5-minute sweep), and it retries a QUEUED run whose start didn't get through. Each tick:
+Every 60 s the worker runs the tick, as its other periodic work: one worker per minute takes the Redis lock `smart-tick-lock`, and a second one (a deploy overlap) would still start each occurrence once (unique occurrence, per-shop advisory lock). Before deciding, the tick finishes runs whose measurement ended without finishing them (`repairSmartRuns`, also in the 5-minute sweep).
+
+A run's start comes after the commit that created it, so the tick and Check now set the shop's hint to at most a minute later: should the start not get through (a database timeout, a restart), the next tick starts the QUEUED run, also in manual mode, where no schedule would bring the tick back. A run that waited and was paused meanwhile is recorded as SKIPPED (`PAUSED`) instead of started. Each tick:
 
 1. Lists up to 100 ACTIVE `Shop` rows with `smartNextRunAt <= now` (oldest first). It also starts WAITING runs whose blocking measurement has finished.
 2. **Outside any transaction**, per shop, it reads the facts:
-   - the plan (`getBillingStatus`, forced when the cached state is older than an hour);
+   - the plan (`getBillingStatus`: the cached subscription, read from Shopify again after 6 hours, `SUBSCRIPTION_TTL_MS`, and after a plan change);
    - AI consent;
    - the provider;
    - the shop's languages (`currentShopLocales`).
 3. In a tenant transaction with `pg_advisory_xact_lock(hashtextextended('smart:'||shopId, 0))`, it re-reads the config. If the config is no longer due, it fixes the hint and stops. Otherwise it decides:
+   - the merchant's own pause stays as it is: a cause below never replaces it (it would lift with the cause), and it skips the checks anyway;
    - not entitled → pause `PLAN`;
    - no consent → pause `CONSENT`;
    - no provider → SKIPPED run `AI_NOT_CONFIGURED`;
@@ -147,15 +151,22 @@ Every 60 s the worker runs the tick, as its other periodic work: one worker per 
 - the coverage type must be in scope (own types, plus image and custom-field types when `includeAttached` is on);
 - excluded resources are skipped;
 - `planResourceWork` runs with `latestRevisions`, `pendingDraftDigests`, the run's `fieldGroups` and `keepOutdatedMachine`;
-- a resource that already has a PENDING or RUNNING item in another job for the same language is skipped (it is handled there).
+- a resource that already has a PENDING or RUNNING item in another **active** job for the same language is skipped (it is handled there); an image or custom field also when its owner has one in a job that includes them. Leftovers of a stopped job don't count.
 
 **Items per exact resource.**
 - Each resource that needs work gets an item for its own GID, also an image or a metafield.
 - The item goes into the run's job for (coverage type, language), with idempotency key `smart:<runId>:<type>:<locale>`.
 - Attached content needs no owner lookup. Its "failed" overlay works per resource, too.
 
+**One active job per type and language.** The run's job is found or created under the lock every job creation takes (`job:<shop>:<type>:<locale>`, as `createBulkJob` and real-time checks), so the rule holds for smart checks too:
+- an automatic job (basic, or the smart schedule's real-time one) for the type and language becomes the run's job; its items stay, as when a bulk job takes one over;
+- any other active job (a merchant's bulk job, another run's) keeps the type and language, as does a merchant's job that includes the images and custom fields of their owner: the run plans nothing for them, and its counts say what it translated itself. The next check picks up whatever is left;
+- once the run's own job was stopped (Jobs page, a limit), nothing more is added to it.
+
+A merchant's bulk request takes over a real-time job like a basic automatic one (with the bulk job's own rules from then on), and answers with a check's job while one is active.
+
 **Writes, atomic with the checkpoint.** Inside the page's transaction:
-- `createMany` the job (skip duplicates) and the items (unique per job and resource);
+- the job as above, and the items (unique per job and resource);
 - increment the job's total and the run's counters.
 
 A repeated page job can't double-count, because the checkpoint advance is conditional.
@@ -166,7 +177,9 @@ A repeated page job can't double-count, because the checkpoint advance is condit
 - Smart jobs are created with `discoveryDone = false` while their run's scan goes on. The report's last page sets `discoveryDone = true` on all of the run's jobs and completes the empty ones.
 - `requeueStalledDiscovery` ignores smart jobs: they have no discovery chain.
 
-**Finish.** The run is COMPLETED when its report has finished and all of its jobs have; `lastSuccessAt` is set then. The check runs at the report's last page and whenever a smart job completes. A failed report makes the run FAILED, while items already queued finish.
+**Finish.** The run is COMPLETED when its report has finished and all of its jobs have; `lastSuccessAt` ("last complete check") is set then, unless part of its scope wasn't planned: a type in scope that couldn't be read (no access, skipped after its retries) or pages read while paused. Such a run finishes with `PARTIAL`, and the next check takes the rest. The check runs at the report's last page and whenever a smart job completes. A failed report makes the run FAILED, while items already queued finish.
+
+**Retry** on the Jobs page resumes a check's job without a discovery of its own: its run's measurement fills it.
 
 **Run now** creates a MANUAL run the same way, idempotent through the form's key, with a cooldown of one per 5 minutes.
 
@@ -174,16 +187,18 @@ A repeated page job can't double-count, because the checkpoint advance is condit
 
 ### 5.3 Items of smart jobs (`processItem`)
 
-Before claiming, `processItem` checks:
+Every item checks the settings as they are now, not as they were when it was planned:
 - the `smartAuto` entitlement — missing: the job stops with `PLAN_SMART` and the config pauses with `PLAN`;
 - the config is enabled and not paused — otherwise the item is CANCELLED `PAUSED` or `SMART_OFF`;
-- the language is still a target and within the plan's languages — otherwise `AUTO_OFF`;
-- the resource isn't excluded — otherwise SKIPPED `EXCLUDED`.
+- the language is still chosen, the type is still in scope, the field groups still share one, and a real-time item's schedule is still real time — otherwise `OUT_OF_SCOPE` (the next check follows the settings);
+- the language is still in the store and within the plan's languages (`currentShopLocales`) — otherwise `LANGUAGE_GONE`, before anything is sent;
+- the resource isn't excluded, nor (an image or custom field) its owner — otherwise SKIPPED `EXCLUDED`;
+- after the read: the resource's source language is the primary language the settings were saved with — otherwise the job stops with `PRIMARY_LANGUAGE` and the config pauses until the languages are saved again.
 
 Planning:
-- `onlyGroups` (job `fieldGroups`, via `fieldGroupOf`);
-- `keepOutdatedMachine` (`!replaceOutdatedMachine`) leaves every outdated translation in place, Linguva's own unreviewed machine output included;
-- image and custom-field items translate only their editable fields (`isEditableAttachedField`).
+- `onlyGroups`: the job's field groups narrowed to the current ones;
+- `keepOutdatedMachine` (`!replaceOutdatedMachine`, of the job or the current settings) leaves every outdated translation in place, Linguva's own unreviewed machine output included;
+- image and custom-field items translate only their editable fields (`isEditableAttachedField`); a real-time item includes them only while the settings still do.
 
 Publishing needs all of the following:
 - the job's AUTO_PUBLISH snapshot;
@@ -196,7 +211,7 @@ Usage is reserved with `origin 'smart'` and the run's budgets (§5.4).
 
 ### 5.4 Budgets and pauses
 
-`reserveUsage` takes an optional `budget: { origin, daily?: { limit, since }, monthly?: { limit, since } }`. Under the existing per-shop advisory lock, it sums the `origin = 'smart'` rows since the local day or month start. If the reservation would exceed a budget, it throws `QuotaExceededError` with scope `smartDaily` or `smartMonthly`.
+`reserveUsage` takes an optional `budget: { origin, daily?: { limit, since }, monthly?: { limit, since } }`. Under the existing per-shop advisory lock, it sums the `origin = 'smart'` rows since the local day or month start. If the reservation would exceed a budget, it throws `QuotaExceededError` with scope `smartDaily` or `smartMonthly`. A reservation's settle and release rows carry the reservation's time, so a correction just after midnight (or the 1st) counts in the window it belongs to and never gives the new one room it doesn't have; the shop's daily cap counts the same way.
 
 | Stop | Pause reason | Lifts |
 |---|---|---|
@@ -221,18 +236,19 @@ Usage is reserved with `origin 'smart'` and the run's budgets (§5.4).
   - pause and budgets;
   - `requestedBy 'system:smart'`, and a daily real-time job per (type, language) in the schedule's time zone.
 - In every other smart mode they queue nothing paid.
-- Turning the smart config on turns basic automatic translation off. The routing refuses to run both.
+- A real-time check joins only the smart schedule's own jobs; while another job is active for the type and language (a merchant's bulk job), it waits for it, so the smart budgets, fields and publishing always hold.
+- Turning the smart config on turns basic automatic translation off. The routing refuses to run both. On a plan without the smart schedule (a downgrade), turning basic automatic translation on turns the smart schedule off.
 
 ### 5.6 Languages and the primary language
 
-- At every tick, run start and real-time check, the worker reads the shop's languages (`currentShopLocales`, at most every 5 minutes per process). Targets that are gone or became primary are not translated (the stored choice stays, so a restored language comes back).
+- At every tick, run start, real-time check and smart item, the worker reads the shop's languages (`currentShopLocales`, at most every 5 minutes per process). Targets that are gone or became primary are not translated (the stored choice stays, so a restored language comes back).
 - A primary language different from the config's snapshot pauses with `PRIMARY_LANGUAGE`, and a banner asks the merchant to review the languages. Nothing is deleted or replaced.
 - Shopify's primary language is never changed: the app sends no locale mutation, and `structure.test.ts` pins this.
 - `processItem` refuses a target equal to the resource's source language (`SAME_LANGUAGE`).
 
 ### 5.7 Estimates and preview
 
-- **Before enabling:** the preview sums `CoverageCount.chars` over the selected scope (languages, types, field groups; missing and failed fields, and outdated ones when they are replaced; never handles) from the newest measurement and refreshes. Exclusions and people's outdated translations aren't subtracted, so it is an upper bound, labelled "up to … characters before translation memory". Without a measurement, the panel offers "Measure first".
+- **Before enabling:** the preview sums `CoverageCount.chars` over the selected scope (languages, types, field groups; missing and failed fields, and outdated ones when they are replaced; never handles) from the newest measurement and refreshes. Exclusions and people's outdated translations aren't subtracted, so it is an upper bound, labelled "up to … characters before translation memory". Without a measurement, the panel offers "Measure first"; when the newest one is older than the character counts (made before this version), it says "Measure again" rather than showing a figure that would be too low.
 - **During a run:** `charsEstimated` is the sum of the planned source characters.
 - **After a run**, three figures, each shown as what it is:
   - billed characters (sent to the provider, from the ledger and the job totals);
@@ -274,7 +290,7 @@ Actions: Turn on/off, Pause/Resume, Check now, and Change schedule and options.
 - **Publishing.** Drafts (recommended), or publish automatically. The latter needs a confirmation modal and the `autoPublish` entitlement, and records who and when.
 - **Outdated machine translations:** replace or keep.
 - **Budgets** per day and per month, next to the plan's allowance and today's and this month's smart spend.
-- **Exclusions:** a list with remove buttons. A resource is excluded from its editor ("Don't translate automatically").
+- **Exclusions:** a list with remove buttons. A resource is excluded from its editor ("Leave out of the smart schedule").
 - **Cost preview.**
 - **Recent activity:** the last 20 runs with their counters and errors, "Retry failed", and links to the jobs.
 - **Form handling:** the form carries `version`; a stale one is refused ("changed meanwhile, reload"). The save bar appears for unsaved changes.
@@ -315,10 +331,12 @@ Actions: Turn on/off, Pause/Resume, Check now, and Change schedule and options.
 |---|---|
 | Worker restart during a run | Coverage stall repair re-queues the page (10 min); PENDING items without a queue job are re-queued; the run continues |
 | Two workers tick at the same time | One job per slot (job scheduler); a unique occurrence row under the per-shop advisory lock; one active run per shop |
+| A run's start doesn't get through | The hint brings the tick back within a minute; it starts the QUEUED run (also in manual mode) |
+| A merchant's bulk job for the same type and language | The check leaves it to that job; a real-time check waits for it (§5.2, §5.5) |
 | Shopify 5xx or throttling | Retried with backoff; throttling waits without spending an attempt; a type that keeps failing is skipped and shown as "not fully read" |
 | Provider down | Item retries, then DEAD; the run shows failed items with "Retry failed" |
 | Budget or cap reached | Job stopped, config paused with the reason, resumes by itself (§5.4) |
-| Plan downgraded | The next tick or item sees no `smartAuto`: paused with PLAN; basic automatic translation stays available on the lower plan |
+| Plan downgraded | The next tick or item sees no `smartAuto`: paused with PLAN (a merchant's own pause stays); basic automatic translation stays available on the lower plan, and turning it on turns the smart schedule off |
 | Primary language changed | Paused, banner, nothing deleted (§5.6) |
 | Uninstall | Runs and jobs cancelled, the due hint cleared, the config kept but turned off, so a reinstall never resumes checks or publishing without the merchant; `shop/redact` deletes everything |
 

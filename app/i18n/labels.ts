@@ -4,6 +4,7 @@
  * app/lib (which also humanise unknown keys).
  */
 import { fieldLabel } from "../lib/field-labels";
+import { upperFirst } from "../lib/name-lists";
 import { issueLabel } from "../lib/issue-labels";
 import { ITEM_ERROR_MESSAGES, JOB_ERROR_MESSAGES, JOB_STATUS_LABELS } from "../lib/job-display";
 import { coverageTypeLabel, isContentType, kindMeta, RESOURCE_KINDS, type TranslatableKind } from "../lib/resource-kinds";
@@ -30,6 +31,11 @@ export function kindLabel(i18n: I18n, kind: string): string {
 /** "product" / "Produkt" (German nouns keep their capital letter). */
 export function kindSingular(i18n: I18n, kind: TranslatableKind): string {
   return known(i18n, `common.kind.${kind}.singular`, kindMeta(kind).singular);
+}
+
+/** "Product" for one item of a known kind ("Product 12"); other types: their label. */
+export function itemKindLabel(i18n: I18n, kind: string): string {
+  return isKind(kind) ? upperFirst(kindSingular(i18n, kind)) : kindLabel(i18n, kind);
 }
 
 /** "products"; for images and custom fields of an owner type (a smart check's jobs) their own words. */

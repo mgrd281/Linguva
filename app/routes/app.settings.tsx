@@ -28,9 +28,9 @@ import { getQueues } from "../.server/queue/client";
 import { requireShop } from "../.server/shopify/require-shop";
 import { getDailyUsage, getMonthlyUsage, periodKey } from "../.server/usage/usage-ledger";
 import { useResultToast } from "../components/app-bridge";
-import { SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
-import { loadSmartPanel } from "../.server/smart/panel";
-import { getSmartConfig } from "../.server/smart/config";
+import { smartErrorText, SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
+import { loadSmartPanel, smartContext } from "../.server/smart/panel";
+import { getSmartConfig, setSmartEnabled } from "../.server/smart/config";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 
@@ -45,15 +45,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const limits = aiLimitsFor(getConfig(), billing);
   const targets = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
   // The smart schedule (Business): its state and preview; other plans see what it would add.
-  const smart = billing.entitlements.smartAuto
-    ? await loadSmartPanel(shop.id, {
-        entitled: true,
-        consent: hasCurrentAiConsent(settings),
-        available: getTranslationProvider() !== null && getQueues() !== null,
-        allowed: allowedTargetLocales(billing.entitlements, targets),
-        shopTimeZone: null,
-      })
-    : null;
+  const smartState = billing.entitlements.smartAuto ? await smartContext(billing, settings, targets) : null;
+  const smart = smartState ? await loadSmartPanel(shop.id, { ...smartState, shopTimeZone: null }) : null;
   return {
     // One Check now per page view (a double click is one check).
     smartCheckKey: crypto.randomUUID(),
@@ -67,6 +60,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           lastRun: smart.lastRun,
           translating: smart.translating,
           estimate: smart.estimate,
+          remeasure: smart.remeasure,
+          publishing: smart.publishing,
+          // Turning on needs both: the card says so instead of a button that is refused.
+          cantTurnOn: !smartState!.consent ? ("CONSENT" as const) : !smartState!.available ? ("UNAVAILABLE" as const) : null,
         }
       : null,
     style: {
@@ -137,11 +134,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "auto") {
     const enabled = form.get("enabled") === "true";
     const billing = await shopBilling(admin, shop);
+    const smart = enabled ? await getSmartConfig(shop.id) : null;
     if (enabled) {
       if (!hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "CONSENT_REQUIRED" };
       if (!billing.entitlements.bulk) return { ok: false, error: "PLAN_BULK" };
       // The smart schedule replaces it while on: both would follow the same changes.
-      if ((await getSmartConfig(shop.id))?.enabled) return { ok: false, error: "SMART_ON" };
+      if (smart?.enabled && billing.entitlements.smartAuto) return { ok: false, error: "SMART_ON" };
     }
     const locales = await fetchAndSyncShopLocales(admin, shop.id);
     const targets = locales.locales.filter((l) => !l.primary).map((l) => l.locale);
@@ -153,6 +151,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (chosen.some((l) => targets.includes(l) && !allowed.includes(l))) return { ok: false, error: "PLAN_LANGUAGE" };
       if (!chosen.some((l) => allowed.includes(l))) return { ok: false, error: "NO_LANGUAGE" };
     }
+    // Left on from a plan that had it, the smart schedule can't run any more: this replaces it.
+    if (smart?.enabled) await setSmartEnabled({ shopId: shop.id, actorId, enabled: false });
     const result = await setAutoTranslate({ shopId: shop.id, enabled, locales: chosen, allowedLocales: allowed, actorId });
     return { ok: true, saved: "auto" as const, autoEnabled: result.enabled };
   }
@@ -345,7 +345,12 @@ export default function Settings() {
                 </s-button>
               ) : data.smart.status.state === "off" ? (
                 <>
-                  <s-button variant="primary" onClick={() => smartAct("turn-on")} {...(smartBusy ? { loading: true } : {})}>
+                  <s-button
+                    variant="primary"
+                    disabled={data.smart.cantTurnOn !== null}
+                    onClick={() => smartAct("turn-on")}
+                    {...(smartBusy ? { loading: true } : {})}
+                  >
                     {t("automatic.action.turnOn")}
                   </s-button>
                   <s-button href="/app/settings/automatic">{t("automatic.action.options")}</s-button>
@@ -369,6 +374,14 @@ export default function Settings() {
                 </>
               )}
             </s-stack>
+            {data.smart.config && data.smart.status.state === "off" && data.smart.cantTurnOn ? (
+              <s-text color="subdued">{smartErrorText(i18n, data.smart.cantTurnOn)}</s-text>
+            ) : null}
+            {smartFetcher.data && !smartFetcher.data.ok && smartFetcher.data.error ? (
+              <s-banner tone="critical" heading={t("automatic.error.actionHeading")}>
+                <s-paragraph>{smartErrorText(i18n, smartFetcher.data.error)}</s-paragraph>
+              </s-banner>
+            ) : null}
           </s-stack>
         </s-section>
       ) : null}

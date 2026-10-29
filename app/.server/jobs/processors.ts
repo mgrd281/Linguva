@@ -23,7 +23,9 @@ import { pendingDraftDigests, recordRejectedAttempts, saveDrafts } from "../revi
 import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage, type UsageBudget } from "../usage/usage-ledger";
 import { smartPaused } from "../smart/config";
-import { budgetWindows, SMART_REQUESTED_BY } from "../../lib/smart-auto";
+import { budgetWindows, SMART_REQUESTED_BY, smartCoverageTypes } from "../../lib/smart-auto";
+import { allowedTargetLocales } from "../billing/subscription";
+import { currentShopLocales } from "../locales/current-locales";
 import { AUTO_REQUESTED_BY, finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
@@ -77,6 +79,14 @@ async function throttle(deps: JobDependencies, shopId: string, cost: number) {
 /** Started by the app itself (automatic translation), not by the merchant. */
 function isAutomaticJob(job: { requestedBy: string | null }): boolean {
   return Boolean(job.requestedBy?.startsWith("system:"));
+}
+
+/** The field groups both the plan and the settings now allow ([]: all), or null when they share none. */
+export function narrowGroups(planned: readonly string[], current: readonly string[]): string[] | null {
+  if (planned.length === 0) return [...current];
+  if (current.length === 0) return [...planned];
+  const both = planned.filter((g) => current.includes(g));
+  return both.length ? both : null;
 }
 
 async function loadActiveShop(deps: JobDependencies, shopId: string) {
@@ -261,8 +271,10 @@ export async function processItem(
 
   const settings = await getShopSettings(payload.shopId, deps.prisma);
   if (!hasCurrentAiConsent(settings)) throw new JobStopError("CONSENT_REQUIRED");
-  // Plans can change while a job runs: check before every item.
+  // Plans can change while a job runs: check before every item (the smart schedule's own entitlement
+  // first, so its jobs stop with the reason that pauses it).
   const billing = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
+  if (billing && job.requestedBy === SMART_REQUESTED_BY && !billing.entitlements.smartAuto) throw new JobStopError("PLAN_SMART");
   if (billing && !billing.entitlements.bulk) throw new JobStopError("PLAN_REQUIRED");
   // An item queued by automatic translation runs only while it is on for this language.
   if (job.requestedBy === AUTO_REQUESTED_BY && (!settings.autoTranslateNew || !settings.autoTranslateLocales.includes(job.targetLocale))) {
@@ -270,19 +282,29 @@ export async function processItem(
     return { status: "CANCELLED", errorCode: "AUTO_OFF" };
   }
   // Smart Auto-Translate: its plan, settings, languages and exclusions are checked again for every item.
-  let smart: { budget: UsageBudget; publish: boolean } | null = null;
+  let smart: { budget: UsageBudget; publish: boolean; fieldGroups: string[]; keepOutdated: boolean; includeAttached: boolean; primaryLocale: string | null } | null = null;
   if (job.requestedBy === SMART_REQUESTED_BY) {
     if (billing && !billing.entitlements.smartAuto) throw new JobStopError("PLAN_SMART");
     const state = await withTenant(
       payload.shopId,
-      async (tx) => ({
-        config: await tx.smartAutoConfig.findUnique({ where: { shopId: payload.shopId } }),
-        excluded: await tx.smartAutoExclusion.findUnique({ where: { shopId_resourceGid: { shopId: payload.shopId, resourceGid: item.resourceGid } } }),
-      }),
+      async (tx) => {
+        // An image or a custom field of its own: excluding its owner leaves it alone too.
+        const owner = isBulkResourceType(job.resourceType)
+          ? null
+          : ((await tx.coverageItem.findFirst({ where: { shopId: payload.shopId, resourceGid: item.resourceGid, parentGid: { not: null } }, select: { parentGid: true } }))?.parentGid ?? null);
+        return {
+          config: await tx.smartAutoConfig.findUnique({ where: { shopId: payload.shopId } }),
+          excluded: await tx.smartAutoExclusion.findFirst({ where: { shopId: payload.shopId, resourceGid: { in: owner ? [item.resourceGid, owner] : [item.resourceGid] } }, select: { resourceGid: true } }),
+        };
+      },
       deps.prisma,
     );
     const config = state.config;
-    const stop = !config?.enabled ? "SMART_OFF" : smartPaused(config) ? "PAUSED" : !config.locales.includes(job.targetLocale) ? "AUTO_OFF" : null;
+    // The settings as they are now: a type, the field groups or real time taken out since it was planned.
+    const groups = config ? narrowGroups(job.fieldGroups, config.fieldGroups) : null;
+    const outOfScope = config && (!smartCoverageTypes(config).includes(job.resourceType) || groups === null || (!job.smartRunId && config.mode !== "realtime"));
+    // A language taken out of its settings is out of scope too (AUTO_OFF names basic automatic translation).
+    const stop = !config?.enabled ? "SMART_OFF" : smartPaused(config) ? "PAUSED" : !config.locales.includes(job.targetLocale) || outOfScope ? "OUT_OF_SCOPE" : null;
     if (stop) {
       await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: stop }, deps.prisma);
       return { status: "CANCELLED", errorCode: stop };
@@ -301,12 +323,26 @@ export async function processItem(
       },
       // Publishing only while the smart settings still say so, as confirmed by the merchant.
       publish: config!.publishMode === "AUTO_PUBLISH" && Boolean(config!.publishConfirmedAt),
+      fieldGroups: groups!,
+      keepOutdated: !job.replaceOutdatedMachine || !config!.replaceOutdatedMachine,
+      includeAttached: config!.includeAttached,
+      primaryLocale: config!.primaryLocale,
     };
   }
   const monthlyLimit = billing?.configured ? billing.entitlements.monthlyChars : deps.monthlyLimit;
   const dailyLimit = deps.dailyLimit === undefined ? undefined : Math.min(deps.dailyLimit, monthlyLimit);
 
   const admin = await deps.adminFor(shop.shopDomain);
+  if (smart) {
+    // Only into a language the store and the plan still have (as Shopify says now: with only the
+    // stored copy, Shopify is having trouble and the read below decides whether the item waits).
+    const locales = await currentShopLocales(payload.shopId, async () => admin, deps.prisma);
+    const allowed = billing ? allowedTargetLocales(billing.entitlements, locales.targets) : locales.targets;
+    if (locales.fresh && !allowed.includes(job.targetLocale)) {
+      await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: "LANGUAGE_GONE" }, deps.prisma);
+      return { status: "CANCELLED", errorCode: "LANGUAGE_GONE" };
+    }
+  }
   // Coverage takes the read as the state when it started: a save made meanwhile stays newer.
   const readAt = new Date();
   const resource = await getTranslatableResource(admin, item.resourceGid, job.targetLocale);
@@ -321,6 +357,11 @@ export async function processItem(
     await finishItem(payload.shopId, item.id, { status: "SKIPPED", errorCode: "SAME_LANGUAGE" }, deps.prisma);
     return { status: "SKIPPED", errorCode: "SAME_LANGUAGE" };
   }
+  // The store's primary language changed since the smart settings were saved: nothing is
+  // translated from the new one until the merchant reviewed the languages (the schedule pauses).
+  // Only from the language Shopify gives the content (a resource without any has none to compare).
+  const contentLocale = resource.content[0]?.locale;
+  if (smart?.primaryLocale && contentLocale && contentLocale !== smart.primaryLocale) throw new JobStopError("PRIMARY_LANGUAGE");
   // Coverage follows what the job read: an original changed in Shopify (no webhook for pages and
   // blogs, or a refresh that didn't run) shows as outdated, and the job's drafts as drafts.
   await noteCoverageRead(payload.shopId, job.targetLocale, [resource], readAt, deps.prisma);
@@ -343,8 +384,8 @@ export async function processItem(
     targetLocale: job.targetLocale,
     overwriteProtected: job.overwriteProtected,
     automatic: isAutomaticJob(job),
-    fieldGroups: job.fieldGroups,
-    keepOutdated: !job.replaceOutdatedMachine,
+    fieldGroups: smart ? smart.fieldGroups : job.fieldGroups,
+    keepOutdated: smart ? smart.keepOutdated : !job.replaceOutdatedMachine,
     ...(smart ? { budget: smart.budget } : {}),
     settings,
     monthlyLimit,
@@ -369,7 +410,7 @@ export async function processItem(
 
   // Image alt text and custom fields of the item, when the merchant included
   // them (all fields only), with the same rules: drafts, protection, checks.
-  if (job.includeAttached) {
+  if (job.includeAttached && (smart ? smart.includeAttached : true)) {
     const attachedAt = new Date();
     const attached = await listAttachedResources(admin, item.resourceGid, job.targetLocale);
     await noteCoverageRead(payload.shopId, job.targetLocale, attached, attachedAt, deps.prisma);

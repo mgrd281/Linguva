@@ -7,7 +7,11 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { UI_ENV, UI_SHOPS } from "./fixtures/shops";
-import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp, sessionToken } from "./helpers";
+import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp, sessionToken, setWorkerRunning } from "./helpers";
+
+// The smart schedule runs in the worker: these pages are tested with background jobs running.
+test.beforeAll(() => setWorkerRunning(true));
+test.afterAll(() => setWorkerRunning(false));
 
 const card = (page: Page) => page.locator('s-section[heading="Smart schedule"]');
 
@@ -20,7 +24,7 @@ test("Settings shows the smart schedule with real values and its actions @respon
   await expect(section.getByText("Every day at 23:00")).toBeVisible();
   // The next check in the schedule's own time zone, named.
   await expect(section.getByText(/23:00 \(Europe\/Berlin\)/).first()).toBeVisible();
-  await expect(section.getByText("3 changes, 12 fields to translate")).toBeVisible();
+  await expect(section.getByText("3 changes, fields to translate: 12")).toBeVisible();
   await expect(section.getByText("0 items")).toBeVisible();
   await expect(section.getByRole("button", { name: "Check now" })).toBeVisible();
   await expect(section.getByRole("button", { name: "Pause" })).toBeVisible();
@@ -51,8 +55,11 @@ test("the smart page shows the schedule, recent checks and budgets @responsive",
   await expect(page.locator("s-ordered-list s-list-item")).toHaveCount(3);
   // Recent checks with what they found, and a skipped one with its reason.
   const activity = page.locator('s-section[heading="Recent checks"]');
-  await expect(activity.getByText("64 items checked · 3 needed translation (12 fields, about 1,840 characters)")).toBeVisible();
+  await expect(activity.getByText("64 items checked · 3 needed translation (fields: 12, about 1,840 characters)")).toBeVisible();
   await expect(activity.getByText("paused")).toBeVisible();
+  // Billed and reused kept apart, from the check's own job.
+  await expect(activity.getByText("1,200 characters sent to AI, 640 not sent")).toBeVisible();
+  await expect(activity.getByRole("link", { name: "Products · French" })).toBeVisible();
   await expect(page.getByText("Used by the smart schedule: 0 today, 0 this month")).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -143,6 +150,32 @@ test("forged requests: a lower plan can't save, and forged values are refused wi
     form: { intent: "auto", enabled: "true", locale: "de" },
   });
   expect(await basic.text()).toContain("SMART_ON");
+});
+
+test("after a move to a plan without the smart schedule, basic automatic translation can be turned on (it replaces the schedule)", async ({ page }) => {
+  await openApp(page, "smartDowngraded", "/app/settings");
+  const section = page.locator('s-section[heading="Automatic translation"]');
+  await section.getByRole("checkbox", { name: "German", exact: true }).check();
+  await section.getByRole("button", { name: "Turn on automatic translation" }).click();
+  await expectToast(page, /translated about a minute later/);
+  await page.reload();
+  await expect(section.getByRole("button", { name: "Turn off" })).toBeVisible();
+  await expect(section.getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
+});
+
+test("an item is left out of the smart schedule from its editor, and taken back in on the smart page", async ({ page }) => {
+  await openApp(page, "businessPause", "/app/products/1?lang=de");
+  const box = page.getByRole("checkbox", { name: "Leave out of the smart schedule" });
+  await box.check();
+  await expectToast(page, "Left out of the smart schedule.");
+  await page.reload();
+  await expect(box).toBeChecked();
+  await openApp(page, "businessPause", "/app/settings/automatic");
+  const section = page.locator('s-section[heading="Left alone"]');
+  await expect(section.getByRole("link", { name: "Product 1" })).toBeVisible();
+  await section.getByRole("button", { name: "Remove" }).click();
+  await expectToast(page, "Removed from the exclusions.");
+  await expect(section.getByText("Nothing is left alone.")).toBeVisible();
 });
 
 test("the smart page is German for a German admin user", async ({ page }) => {

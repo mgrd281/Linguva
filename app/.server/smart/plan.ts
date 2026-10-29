@@ -6,17 +6,17 @@
  * twice and nothing read is left unplanned. Kept apart from runs.ts (the
  * scheduler), so the scan can call it without importing the scheduler.
  */
-import type { CoverageReport, PrismaClient } from "@prisma/client";
+import type { CoverageReport, PrismaClient, SmartAutoRun, TranslationJob } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import type { CoverageChange } from "../coverage/items";
-import { completeIfDone } from "../jobs/bulk-jobs";
+import { ACTIVE_JOB_STATUSES, AUTO_REQUESTED_BY, completeIfDone } from "../jobs/bulk-jobs";
 import { planResourceWork } from "../jobs/needs-work";
 import { pendingDraftDigests } from "../review/drafts";
 import { isEditableAttachedField } from "../translation/attached-editor";
 import { latestRevisions } from "../translation/revisions";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
-import { SMART_REQUESTED_BY, smartCoverageTypes } from "../../lib/smart-auto";
+import { attachedOwner, SMART_REQUESTED_BY, smartCoverageTypes } from "../../lib/smart-auto";
 import { excludedAmong, smartPaused } from "./config";
 import { finishSmartRunIfDone } from "./finish";
 
@@ -52,21 +52,33 @@ export async function planSmartPage(
         tx.smartAutoRun.findFirst({ where: { id: runId, shopId: input.shopId } }),
         tx.smartAutoConfig.findUnique({ where: { shopId: input.shopId } }),
       ]);
-      if (!run || run.status !== "RUNNING" || !config?.enabled || smartPaused(config, now)) return null;
+      if (!run || run.status !== "RUNNING") return null;
       // The measurement reads every language and type; the run plans its own scope only.
-      if (!run.locales.includes(input.locale) || !smartCoverageTypes(run).includes(input.resourceType)) return null;
-      const gids = input.changes.flatMap((c) => [c.resourceGid, ...(c.parentGid ? [c.parentGid] : [])]);
-      const excluded = await excludedAmong(tx, input.shopId, gids);
+      if (!inRunScope(run, input)) return null;
+      // Paused or turned off meanwhile: what this page found waits for the next check, and the run says so.
+      if (!config?.enabled || smartPaused(config, now)) {
+        await noteSmartGapTx(tx, input.shopId, runId);
+        return null;
+      }
+      const parents = input.changes.flatMap((c) => (c.parentGid ? [c.parentGid] : []));
+      const excluded = await excludedAmong(tx, input.shopId, [...input.changes.map((c) => c.resourceGid), ...parents]);
+      // Items another active job will still translate: the resource itself, or (an image or a
+      // custom field) its owner in a job that includes them. Leftovers of a stopped job don't count.
       const busy = await tx.translationJobItem.findMany({
         where: {
           shopId: input.shopId,
-          resourceGid: { in: input.changes.map((c) => c.resourceGid) },
           status: { in: ["PENDING", "RUNNING"] },
-          job: { targetLocale: input.locale, OR: [{ smartRunId: null }, { smartRunId: { not: runId } }] },
+          job: { targetLocale: input.locale, status: { in: [...ACTIVE_JOB_STATUSES] }, OR: [{ smartRunId: null }, { smartRunId: { not: runId } }] },
+          OR: [{ resourceGid: { in: input.changes.map((c) => c.resourceGid) } }, ...(parents.length ? [{ resourceGid: { in: parents }, job: { includeAttached: true } }] : [])],
         },
-        select: { resourceGid: true },
+        select: { resourceGid: true, job: { select: { includeAttached: true } } },
       });
-      return { run, excluded, busy: new Set(busy.map((b) => b.resourceGid)) };
+      return {
+        run,
+        excluded,
+        busy: new Set(busy.map((b) => b.resourceGid)),
+        busyOwners: new Set(busy.filter((b) => b.job.includeAttached).map((b) => b.resourceGid)),
+      };
     },
     client,
   );
@@ -77,8 +89,9 @@ export async function planSmartPage(
   const candidates = input.changes.filter((c) => {
     const skip = state.excluded.has(c.resourceGid) || Boolean(c.parentGid && state.excluded.has(c.parentGid));
     if (skip) plan.excluded++;
-    // Being translated by another job (a bulk job, or the previous run): left to it.
-    return !skip && !state.busy.has(c.resourceGid) && c.observed;
+    // Being translated by another job (a bulk job, a real-time check): left to it.
+    const busy = state.busy.has(c.resourceGid) || Boolean(c.parentGid && state.busyOwners.has(c.parentGid));
+    return !skip && !busy && c.observed;
   });
   const gids = candidates.map((c) => c.resourceGid);
   const [latest, pendingDrafts] = await Promise.all([
@@ -109,6 +122,23 @@ export async function planSmartPage(
   return plan;
 }
 
+function inRunScope(run: Pick<SmartAutoRun, "locales" | "resourceTypes" | "includeAttached">, segment: { locale: string; resourceType: string }) {
+  return run.locales.includes(segment.locale) && smartCoverageTypes(run).includes(segment.resourceType);
+}
+
+/**
+ * The run leaves part of its scope unplanned (a type it couldn't read, a page
+ * read while paused): it finishes saying so, and isn't the last complete
+ * check. With a segment: only when that segment is in the run's scope.
+ */
+export async function noteSmartGapTx(tx: TenantTx, shopId: string, runId: string, segment?: { locale: string; resourceType: string }) {
+  if (segment) {
+    const run = await tx.smartAutoRun.findFirst({ where: { id: runId, shopId }, select: { locales: true, resourceTypes: true, includeAttached: true } });
+    if (!run || !inRunScope(run, segment)) return;
+  }
+  await tx.smartAutoRun.updateMany({ where: { id: runId, shopId, status: "RUNNING", errorCode: null }, data: { errorCode: "PARTIAL" } });
+}
+
 /**
  * Writes a page's plan inside the page's transaction: the run's job for
  * this type and language (created once), an item per resource (unique per
@@ -123,29 +153,10 @@ export async function writeSmartPlanTx(tx: TenantTx, shopId: string, plan: Smart
   let itemIds: string[] = [];
   let position = 0;
   let created = 0;
-  if (plan.items.length) {
-    const idempotencyKey = `smart:${run.id}:${plan.resourceType}:${plan.locale}`;
-    await tx.translationJob.createMany({
-      data: [
-        {
-          shopId,
-          resourceType: plan.resourceType,
-          targetLocale: plan.locale,
-          status: "RUNNING",
-          requestedBy: SMART_REQUESTED_BY,
-          idempotencyKey,
-          smartRunId: run.id,
-          publishMode: run.publishMode,
-          fieldGroups: run.fieldGroups,
-          replaceOutdatedMachine: run.replaceOutdatedMachine,
-          // Done when the run's measurement has read everything (finishSmartScanTx).
-          discoveryDone: false,
-          startedAt: now,
-        },
-      ],
-      skipDuplicates: true,
-    });
-    const job = await tx.translationJob.findUniqueOrThrow({ where: { shopId_idempotencyKey: { shopId, idempotencyKey } } });
+  const job = plan.items.length ? await runJobTx(tx, shopId, run, plan, now) : null;
+  // Another job translates this type and language now: what it holds is left to it.
+  const planned = job ? plan.items : [];
+  if (job) {
     position = job.totalItems;
     const gids = plan.items.map((i) => i.resourceGid);
     const inserted = await tx.translationJobItem.createMany({
@@ -164,14 +175,57 @@ export async function writeSmartPlanTx(tx: TenantTx, shopId: string, plan: Smart
     where: { id: run.id },
     data: {
       resourcesChecked: { increment: plan.checked },
-      resourcesChanged: { increment: plan.items.length },
-      fieldsDetected: { increment: plan.items.reduce((n, i) => n + i.fields, 0) },
-      charsEstimated: { increment: plan.items.reduce((n, i) => n + i.chars, 0) },
+      resourcesChanged: { increment: planned.length },
+      fieldsDetected: { increment: planned.reduce((n, i) => n + i.fields, 0) },
+      charsEstimated: { increment: planned.reduce((n, i) => n + i.chars, 0) },
       itemsQueued: { increment: created },
       excludedSkipped: { increment: plan.excluded },
     },
   });
   return { itemIds, position };
+}
+
+/**
+ * The run's job for a type and language, under the lock every job creation
+ * takes, so smart checks keep the rule too: one active job per shop, type and
+ * language (createBulkJob). An automatic job holding a few changed resources
+ * becomes the run's job (its items stay, as when a bulk job takes one over).
+ * Any other active job keeps them, as does a merchant's job that includes
+ * the images and custom fields of their owner: null, and the next check
+ * picks up whatever it left. Null as well once the run's job was stopped.
+ */
+async function runJobTx(tx: TenantTx, shopId: string, run: SmartAutoRun, plan: SmartPagePlan, now: Date): Promise<TranslationJob | null> {
+  const owner = attachedOwner(plan.resourceType);
+  for (const type of owner ? [owner, plan.resourceType] : [plan.resourceType]) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`job:${shopId}:${type}:${plan.locale}`}, 0))`;
+  }
+  const idempotencyKey = `smart:${run.id}:${plan.resourceType}:${plan.locale}`;
+  const own = await tx.translationJob.findUnique({ where: { shopId_idempotencyKey: { shopId, idempotencyKey } } });
+  if (own) return (ACTIVE_JOB_STATUSES as readonly string[]).includes(own.status) ? own : null;
+  const jobs = await tx.translationJob.findMany({
+    where: { shopId, targetLocale: plan.locale, status: { in: [...ACTIVE_JOB_STATUSES] }, resourceType: { in: owner ? [plan.resourceType, owner] : [plan.resourceType] } },
+    orderBy: { createdAt: "asc" },
+  });
+  const automatic = (job: TranslationJob) => job.requestedBy === AUTO_REQUESTED_BY || (job.requestedBy === SMART_REQUESTED_BY && !job.smartRunId);
+  const keeps = (job: TranslationJob) =>
+    job.resourceType === plan.resourceType ? !(automatic(job) && job.fieldScope === "ALL" && !job.overwriteProtected) : job.includeAttached && !automatic(job);
+  if (jobs.some(keeps)) return null;
+  const active = jobs.find((j) => j.resourceType === plan.resourceType);
+  const data = {
+    requestedBy: SMART_REQUESTED_BY,
+    idempotencyKey,
+    smartRunId: run.id,
+    status: "RUNNING" as const,
+    publishMode: run.publishMode,
+    fieldGroups: run.fieldGroups,
+    replaceOutdatedMachine: run.replaceOutdatedMachine,
+    // Its images and custom fields have their own jobs in a run.
+    includeAttached: false,
+    // Done when the run's measurement has read everything (finishSmartScanTx).
+    discoveryDone: false,
+  };
+  if (active) return tx.translationJob.update({ where: { id: active.id }, data: { ...data, finishedAt: null } });
+  return tx.translationJob.create({ data: { shopId, resourceType: plan.resourceType, targetLocale: plan.locale, ...data, startedAt: now } });
 }
 
 /**

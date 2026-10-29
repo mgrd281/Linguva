@@ -6,23 +6,49 @@
  * use, and the resources left alone.
  */
 import type { PrismaClient } from "@prisma/client";
+import { allowedTargetLocales } from "../billing/subscription";
 import { prisma as defaultClient } from "../lib/db";
+import { getTranslationProvider } from "../providers";
+import { backgroundJobsRunning, getQueues } from "../queue/client";
+import { hasCurrentAiConsent, type getShopSettings } from "../settings/shop-settings";
 import { withTenant } from "../tenancy/with-tenant";
 import { getOriginUsageSince } from "../usage/usage-ledger";
+import type { Entitlements } from "../../lib/plans";
 import { upcomingOccurrences } from "../../lib/schedule";
 import { budgetWindows, checkSpec, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_REQUESTED_BY, smartCoverageTypes, smartStatus, type SmartStatus } from "../../lib/smart-auto";
 import { editorPathFor, kindOfGid } from "../../lib/resource-kinds";
 import { listSmartExclusions } from "./config";
 
-export interface SmartPanelContext {
+/** What the smart schedule's state depends on beyond its own settings: the same for every page that shows it. */
+export interface SmartContext {
   entitled: boolean;
   consent: boolean;
   /** AI translation and background jobs are set up. */
   available: boolean;
+  /** False when background jobs are known not to run now (no worker heartbeat). */
+  worker?: boolean;
   /** The shop's additional languages within the plan. */
   allowed: readonly string[];
+}
+
+export interface SmartPanelContext extends SmartContext {
   shopTimeZone: string | null;
   now?: Date;
+}
+
+export async function smartContext(
+  billing: { entitlements: Entitlements },
+  settings: Awaited<ReturnType<typeof getShopSettings>>,
+  targets: readonly string[],
+): Promise<SmartContext> {
+  const available = getTranslationProvider() !== null && getQueues() !== null;
+  return {
+    entitled: billing.entitlements.smartAuto,
+    consent: hasCurrentAiConsent(settings),
+    available,
+    worker: available ? await backgroundJobsRunning() : true,
+    allowed: allowedTargetLocales(billing.entitlements, targets),
+  };
 }
 
 export const RECENT_RUNS = 20;
@@ -46,19 +72,37 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
       // Up to this many characters wait in the scope (missing, failed and, when replaced, outdated
       // fields of the chosen languages, types and field groups), from the newest measurement and refreshes.
       const scope = config ?? { locales: [...context.allowed], resourceTypes: [...SMART_DEFAULT_TYPES], includeAttached: false, fieldGroups: [], replaceOutdatedMachine: true };
-      const measured = await tx.coverageSegment.count({ where: { shopId, status: "SCANNED" } });
+      const locales = scope.locales.filter((l) => context.allowed.includes(l));
+      const types = smartCoverageTypes(scope);
+      // Read in full for every chosen language and type (a type without access counts: it can't be
+      // translated either), or there is no figure: a language added since would otherwise add nothing.
+      const segments = await tx.coverageSegment.findMany({
+        where: { shopId, locale: { in: locales }, resourceType: { in: types }, status: { in: ["SCANNED", "DENIED"] } },
+        select: { locale: true, resourceType: true },
+      });
+      const read = new Set(segments.map((s) => `${s.locale}|${s.resourceType}`));
+      const scopeRead = locales.length > 0 && locales.every((l) => types.every((t) => read.has(`${l}|${t}`)));
+      const measured = (await tx.coverageSegment.count({ where: { shopId, status: "SCANNED" } })) > 0;
       const pending = await tx.coverageCount.aggregate({
         where: {
           shopId,
-          locale: { in: scope.locales.filter((l) => context.allowed.includes(l)) },
-          resourceType: { in: smartCoverageTypes(scope) },
+          locale: { in: locales },
+          resourceType: { in: types },
           // Handles (url) are never machine translated.
           fieldGroup: { in: scope.fieldGroups.length ? scope.fieldGroups : [...SMART_FIELD_GROUPS] },
           state: { in: scope.replaceOutdatedMachine ? ["missing", "failed", "outdated"] : ["missing", "failed"] },
         },
         _sum: { chars: true },
       });
-      return { config, runs, jobs, translating, measured: measured > 0, pendingChars: Number(pending._sum.chars ?? 0) };
+      // Items read before their characters were recorded (a measurement older than this): their
+      // fields count as nothing, so there is no estimate until the next measurement.
+      const [older] = await tx.$queryRaw<Array<{ older: boolean }>>`
+        SELECT EXISTS (
+          SELECT 1 FROM "CoverageItem"
+          WHERE "shopId" = ${shopId}::uuid AND "locale" = ANY(${locales}::text[]) AND "resourceType" = ANY(${types}::text[])
+            AND cardinality("sourceChars") < cardinality("sourceKeys")
+        ) AS "older"`;
+      return { config, runs, jobs, translating, measured, scopeRead, older: Boolean(older?.older), pendingChars: Number(pending._sum.chars ?? 0) };
     },
     client,
   );
@@ -79,6 +123,7 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
     entitled: context.entitled,
     consent: context.consent,
     available: context.available,
+    ...(context.worker === undefined ? {} : { worker: context.worker }),
     languages: (config?.locales ?? []).filter((l) => context.allowed.includes(l)).length,
     now: now.getTime(),
   });
@@ -106,7 +151,10 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
       : null,
     status,
     zone,
-    nextChecks: config?.enabled && spec && status.state !== "off" ? upcomingOccurrences(spec, now.getTime(), 3) : [],
+    // Only checks that will run: none while paused or waiting.
+    nextChecks: spec && status.state === "on" ? upcomingOccurrences(spec, now.getTime(), 3) : [],
+    /** How its results go out, as they would now (automatic only as confirmed). */
+    publishing: config ? (config.publishMode === "AUTO_PUBLISH" && config.publishConfirmedAt ? ("AUTO_PUBLISH" as const) : ("DRAFT" as const)) : null,
     lastSuccessAt: config?.lastSuccessAt?.toISOString() ?? null,
     lastRun: lastFinished
       ? { resourcesChanged: lastFinished.resourcesChanged, fieldsDetected: lastFinished.fieldsDetected, finishedAt: lastFinished.finishedAt?.toISOString() ?? null }
@@ -132,7 +180,9 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
       };
     }),
     translating: data.translating,
-    estimate: data.measured ? data.pendingChars : null,
+    estimate: data.scopeRead && !data.older ? data.pendingChars : null,
+    /** No estimate although something was measured: a chosen language or type wasn't read in full, or only before character counts: measure again. */
+    remeasure: data.measured && (!data.scopeRead || data.older),
     usage: { today: usedToday, month: usedMonth },
     exclusions: exclusions.map((e) => ({
       resourceGid: e.resourceGid,
@@ -147,11 +197,12 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
 export type SmartPanel = Awaited<ReturnType<typeof loadSmartPanel>>;
 
 /**
- * The smart schedule beside coverage: whether it is on or paused, its next
- * check, what it translates now and what it leaves alone, and its scope
- * (so items that wait for the next check can say so). Null while off.
+ * The smart schedule beside coverage, from the same state as Settings and its
+ * page (smartStatus): on, paused (why) or waiting, its next check (only while
+ * on, never one in the past), what it translates now and what it leaves alone,
+ * and its scope (so items that wait for the next check can say so). Null while off.
  */
-export async function loadSmartCoverageNote(shopId: string, client: PrismaClient = defaultClient, now = new Date()) {
+export async function loadSmartCoverageNote(shopId: string, context: SmartContext, client: PrismaClient = defaultClient, now = new Date()) {
   return withTenant(
     shopId,
     async (tx) => {
@@ -163,16 +214,30 @@ export async function loadSmartCoverageNote(shopId: string, client: PrismaClient
         }),
         tx.smartAutoExclusion.count({ where: { shopId } }),
       ]);
-      const paused = Boolean(config.pausedAt) && (!config.pausedUntil || config.pausedUntil > now);
+      const locales = config.locales.filter((l) => context.allowed.includes(l));
+      const status = smartStatus({
+        enabled: true,
+        pausedAt: config.pausedAt?.getTime() ?? null,
+        pauseReason: config.pauseReason,
+        pausedUntil: config.pausedUntil?.getTime() ?? null,
+        entitled: context.entitled,
+        consent: context.consent,
+        available: context.available,
+        ...(context.worker === undefined ? {} : { worker: context.worker }),
+        languages: locales.length,
+        now: now.getTime(),
+      });
+      const spec = checkSpec(config);
+      const next = status.state === "on" && spec ? upcomingOccurrences(spec, now.getTime(), 1)[0] : undefined;
       return {
+        status,
         mode: config.mode,
         zone: config.timeZone,
-        paused,
-        nextCheck: !paused && config.nextRunAt ? config.nextRunAt.toISOString() : null,
+        nextCheck: next === undefined ? null : new Date(next).toISOString(),
         translating,
         excluded,
         scope: {
-          locales: config.locales,
+          locales,
           types: smartCoverageTypes(config),
           // Handles (url) are never machine translated.
           groups: config.fieldGroups.length ? config.fieldGroups : [...SMART_FIELD_GROUPS],

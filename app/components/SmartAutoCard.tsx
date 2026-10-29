@@ -18,8 +18,11 @@ export interface SmartCardData {
   lastSuccessAt: string | null;
   lastRun: { resourcesChanged: number; fieldsDetected: number } | null;
   translating: number;
-  /** Characters waiting in the scope; null without a measurement. */
+  /** Characters waiting in the scope; null without a measurement (or one too old to count them: remeasure). */
   estimate: number | null;
+  remeasure?: boolean;
+  /** How its results go out (its own setting, not bulk translation's). */
+  publishing?: "DRAFT" | "AUTO_PUBLISH" | null;
 }
 
 /** "Every day at 23:00", "Every Monday and Thursday at 09:00", … */
@@ -62,6 +65,7 @@ const WAITING_TEXT = {
   PLAN: "automatic.blocked.PLAN",
   CONSENT: "automatic.blocked.CONSENT",
   UNAVAILABLE: "automatic.blocked.UNAVAILABLE",
+  WORKER: "automatic.blocked.WORKER",
   NO_LANGUAGE: "automatic.blocked.NO_LANGUAGE",
 } as const;
 
@@ -135,14 +139,32 @@ export function SmartPreview({ data, languageNames }: { data: SmartCardData; lan
               ? t("automatic.preview.found", { count: data.lastRun.resourcesChanged, fields: number(data.lastRun.fieldsDetected) })
               : t("automatic.preview.none")}
           </Fact>
+          {data.publishing ? (
+            <Fact label={t("automatic.preview.publishing")}>
+              {data.publishing === "AUTO_PUBLISH" ? <s-text tone="caution">{t("automatic.preview.publishAuto")}</s-text> : t("automatic.preview.publishDraft")}
+            </Fact>
+          ) : null}
           <Fact label={t("automatic.preview.translating")}>{t("automatic.preview.items", { count: data.translating })}</Fact>
           <Fact label={t("automatic.preview.waiting")}>
-            {data.estimate === null ? t("automatic.preview.measureFirst") : t("automatic.preview.chars", { chars: number(data.estimate) })}
+            {data.estimate !== null
+              ? t("automatic.preview.chars", { chars: number(data.estimate) })
+              : t(data.remeasure ? "automatic.preview.measureAgain" : "automatic.preview.measureFirst")}
           </Fact>
         </s-grid>
       </s-query-container>
     </s-box>
   );
+}
+
+/** The text for a refused smart action or form (the same on Settings and the smart page). */
+export function smartErrorText(i18n: I18n, error: string): string {
+  const { t } = i18n;
+  if (error === "PLAN") return t("automatic.blocked.PLAN");
+  if (error === "CONSENT") return t("automatic.blocked.CONSENT");
+  if (error === "UNAVAILABLE") return t("automatic.blocked.UNAVAILABLE");
+  if (error === "PRIMARY_LANGUAGE") return t("automatic.paused.PRIMARY_LANGUAGE");
+  if (error === "INVALID") return t("automatic.error.CHANGED");
+  return t(`automatic.error.${error}` as "automatic.error.CHANGED");
 }
 
 /** The confirmation toast for a smart action's result (problems stay on the page). */

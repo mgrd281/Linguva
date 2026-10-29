@@ -7,6 +7,7 @@ import { prisma as defaultClient } from "../lib/db";
 import { refreshCoverageOverlays } from "../coverage/items";
 import { finishSmartRunIfDone } from "../smart/finish";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 
 export const ACTIVE_JOB_STATUSES = ["PENDING", "DISCOVERING", "RUNNING"] as const;
 /** requestedBy of jobs created by automatic translation (webhooks). */
@@ -93,11 +94,14 @@ export async function createBulkJob(
       });
       const fieldScope = input.fieldScope ?? "ALL";
       const includeAttached = Boolean(input.includeAttached) && fieldScope === "ALL" && ATTACHED_BULK_TYPES.has(input.resourceType);
-      if (active?.requestedBy === AUTO_REQUESTED_BY && fieldScope === "ALL") {
-        // An automatic job holds a few changed resources: it becomes the
-        // requested bulk job (its items stay, discovery adds the rest). Not
-        // for a narrower job (search listings only): its pending items would
-        // lose their other fields; the automatic job finishes first.
+      const automatic = active && (active.requestedBy === AUTO_REQUESTED_BY || (active.requestedBy === SMART_REQUESTED_BY && !active.smartRunId));
+      if (automatic && fieldScope === "ALL") {
+        // An automatic job (also the smart schedule's real-time one) holds a few changed
+        // resources: it becomes the requested bulk job (its items stay, discovery adds the
+        // rest). Not for a narrower job (search listings only): its pending items would
+        // lose their other fields; the automatic job finishes first. A smart check's job
+        // is kept, like any other active job.
+        const settings = await tx.shopSettings.findUnique({ where: { shopId: input.shopId } });
         const job = await tx.translationJob.update({
           where: { id: active.id },
           data: {
@@ -106,6 +110,10 @@ export async function createBulkJob(
             overwriteProtected: input.overwriteProtected ?? false,
             fieldScope,
             includeAttached,
+            // A bulk job's own rules from now on (the smart schedule's may differ).
+            publishMode: settings?.bulkPublishMode ?? "DRAFT",
+            fieldGroups: [],
+            replaceOutdatedMachine: true,
             discoveryDone: false,
             discoveryCursor: null,
           },
@@ -449,7 +457,8 @@ export async function retryJobItems(
         where: { jobId, shopId, status: { in: statuses } },
         select: { id: true, status: true },
       });
-      const rediscover = job.status === "FAILED" && !job.discoveryDone;
+      // A smart check's job is filled by its run's measurement, never by a discovery of its own.
+      const rediscover = job.status === "FAILED" && !job.discoveryDone && !job.smartRunId;
       if (items.length === 0 && !rediscover) return { itemIds: [], rediscover: false };
       const failed = items.filter((i) => i.status !== "CANCELLED").length;
       const cancelled = items.length - failed;
@@ -462,7 +471,7 @@ export async function retryJobItems(
       await tx.translationJob.update({
         where: { id: jobId },
         data: {
-          status: job.discoveryDone ? "RUNNING" : "DISCOVERING",
+          status: job.discoveryDone || job.smartRunId ? "RUNNING" : "DISCOVERING",
           errorCode: null,
           finishedAt: null,
           failedItems: { decrement: failed },

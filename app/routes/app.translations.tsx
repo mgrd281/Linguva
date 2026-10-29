@@ -107,7 +107,7 @@ export default function Translations() {
                   </s-option>
                 ))}
               </s-select>
-              <s-select label={t("coverage.types.type")} value={type} onChange={(e) => setType(e.currentTarget.value)}>
+              <s-select label={t("coverage.types.type")} value={type} onInput={(e) => setType(e.currentTarget.value)} onChange={(e) => setType(e.currentTarget.value)}>
                 {data.types.map((k) => (
                   <s-option key={k} value={k}>
                     {kindLabel(i18n, k)}
@@ -116,7 +116,13 @@ export default function Translations() {
               </s-select>
             </s-grid>
           </s-query-container>
-          <s-checkbox label={t("transfer.export.onlyGaps")} {...(gaps ? { checked: true } : {})} onChange={(e) => setGaps(e.currentTarget.checked)} />
+          <s-checkbox
+            label={t("transfer.export.onlyGaps")}
+            {...(gaps ? { checked: true } : {})}
+            // React 18 sends no onChange for a web component; its input event comes through.
+            onInput={(e) => setGaps(e.currentTarget.checked)}
+            onChange={(e) => setGaps(e.currentTarget.checked)}
+          />
           <s-text color="subdued">{t("transfer.export.columns")}</s-text>
           <s-stack direction="inline" gap="base" alignItems="center">
             <s-button variant="primary" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>

@@ -266,6 +266,15 @@ export const UI_SHOPS = {
     plan: "business",
     build: () => new FakeShopifyStore(2),
   },
+  smartDowngraded: {
+    // The smart schedule was turned on under Business; the store is now on Pro (no smart schedule).
+    domain: "ui-smart-downgraded.myshopify.com",
+    gid: "gid://shopify/Shop/91019",
+    name: "Smart Downgraded Store",
+    locales: [en, de],
+    plan: "pro",
+    build: () => new FakeShopifyStore(2),
+  },
   autoLimits: {
     // Starter (three additional languages) with four: Spanish is outside the plan.
     // Automatic translation was turned on for German and Spanish, and today's AI allowance ran out.

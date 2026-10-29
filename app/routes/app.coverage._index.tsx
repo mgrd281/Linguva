@@ -8,6 +8,7 @@ import type { I18n } from "../i18n/i18n";
 import { hasMessage, kindLabel, kindPlural } from "../i18n/labels";
 import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar, StateLegend, StateSummary } from "../components/Coverage";
 import { ProgressBar } from "../components/ProgressBar";
+import { SmartStateBadge, SmartStateBanner } from "../components/SmartAutoCard";
 import { byFieldGroup, byType, coverageNextStep, headlineByLocale, storeWide, unreadableTypes, type CoverageNextStep, type Tally } from "../lib/coverage-view";
 import { inParentheses, languageList } from "../lib/name-lists";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES } from "../lib/coverage-rules";
@@ -225,23 +226,30 @@ export default function Coverage() {
 
       {data.smart ? (
         <s-section heading={t("automatic.name")}>
-          <s-stack direction="inline" gap="small" alignItems="center">
-            <s-badge tone={data.smart.paused ? "warning" : "success"}>{data.smart.paused ? t("automatic.state.paused") : t("automatic.state.on")}</s-badge>
-            <s-text>
-              {[
-                data.smart.nextCheck
-                  ? t("coverage.smart.next", { time: t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.smart.nextCheck, data.smart.zone), zone: data.smart.zone }) })
-                  : data.smart.mode === "manual"
-                    ? t("coverage.smart.manual")
-                    : null,
-                data.smart.mode === "realtime" && !data.smart.paused ? t("coverage.smart.realtime") : null,
-                data.smart.translating ? t("coverage.smart.translating", { count: data.smart.translating }) : null,
-                data.smart.excluded ? t("coverage.smart.excluded", { count: data.smart.excluded }) : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </s-text>
-            <s-link href="/app/settings/automatic">{t("automatic.action.options")}</s-link>
+          <s-stack direction="block" gap="small">
+            <s-stack direction="inline" gap="small" alignItems="center">
+              <SmartStateBadge status={data.smart.status} />
+              <s-text>
+                {[
+                  !data.smart.inSchedule
+                    ? t("coverage.smart.notThisLanguage")
+                    : data.smart.status.state !== "on"
+                      ? null
+                      : data.smart.nextCheck
+                        ? t("coverage.smart.next", { time: t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.smart.nextCheck, data.smart.zone), zone: data.smart.zone }) })
+                        : data.smart.mode === "manual"
+                          ? t("coverage.smart.manual")
+                          : null,
+                  data.smart.inSchedule && data.smart.mode === "realtime" && data.smart.status.state === "on" ? t("coverage.smart.realtime") : null,
+                  data.smart.translating ? t("coverage.smart.translating", { count: data.smart.translating }) : null,
+                  data.smart.excluded ? t("coverage.smart.excluded", { count: data.smart.excluded }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </s-text>
+              <s-link href="/app/settings/automatic">{t("automatic.action.options")}</s-link>
+            </s-stack>
+            <SmartStateBanner status={data.smart.status} zone={data.smart.zone} />
           </s-stack>
         </s-section>
       ) : null}

@@ -8,8 +8,12 @@
  * Fictional stores only; no merchant data.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { openApp } from "./helpers";
+import { openApp, setWorkerRunning } from "./helpers";
 import type { UiShopKey } from "./fixtures/shops";
+
+// The smart schedule runs in the worker: these pages are tested with background jobs running.
+test.beforeAll(() => setWorkerRunning(true));
+test.afterAll(() => setWorkerRunning(false));
 
 const OUT = process.env.UI_REVIEW_SCREENSHOTS;
 test.skip(!OUT, "Design review screenshots on demand (UI_REVIEW_SCREENSHOTS=<folder>).");

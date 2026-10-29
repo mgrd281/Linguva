@@ -4,9 +4,9 @@
  * value is validated again on the server (smart/validate.ts); the plan is
  * checked in every action, also for a form posted without this page.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
@@ -20,14 +20,14 @@ import { getQueues } from "../.server/queue/client";
 import { getShopSettings, hasCurrentAiConsent } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchShopTimeZone } from "../.server/shopify/shop-time-zone";
-import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled } from "../.server/smart/config";
-import { loadSmartPanel } from "../.server/smart/panel";
+import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled, smartPaused } from "../.server/smart/config";
+import { loadSmartPanel, smartContext } from "../.server/smart/panel";
 import { requestSmartRun } from "../.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsProblem } from "../.server/smart/validate";
 import { withTenant } from "../.server/tenancy/with-tenant";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
-import { SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
-import { groupLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
+import { smartErrorText, SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
+import { groupLabel, itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 import { formatTime, MAX_TIMES_PER_DAY, nextOccurrence, normaliseSchedule, parseTime, WEEKDAYS } from "../lib/schedule";
@@ -47,19 +47,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     fetchShopTimeZone(admin),
   ]);
   const targets = locales.locales.filter((l) => !l.primary);
-  const allowed = allowedTargetLocales(billing.entitlements, targets.map((l) => l.locale));
-  const available = getTranslationProvider() !== null && getQueues() !== null;
-  const panel = await loadSmartPanel(shop.id, {
-    entitled: billing.entitlements.smartAuto,
-    consent: hasCurrentAiConsent(settings),
-    available,
-    allowed,
-    shopTimeZone,
-  });
+  const context = await smartContext(billing, settings, targets.map((l) => l.locale));
+  const allowed = context.allowed;
+  const panel = await loadSmartPanel(shop.id, { ...context, shopTimeZone });
   // The shop's zone first (Shopify may spell it differently from Intl), then Intl's list.
   const zones = [...new Set([...(panel.config ? [panel.config.timeZone] : []), ...(shopTimeZone ? [shopTimeZone] : []), "UTC", ...Intl.supportedValuesOf("timeZone")])];
   return {
     entitled: billing.entitlements.smartAuto,
+    // Turning on needs both: the page says so instead of a button that is refused.
+    consent: context.consent,
+    available: context.available,
     autoPublishInPlan: billing.entitlements.autoPublish,
     allowance: aiLimitsFor(getConfig(), billing).limit,
     languages: targets.map((l) => ({ locale: l.locale, name: l.name, inPlan: allowed.includes(l.locale) })),
@@ -73,7 +70,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
-type ActionResult = { ok: true; done: string; count?: number } | { ok: false; error: SmartSettingsProblem | "PLAN" | "CHANGED" | "NOT_CONFIGURED" | "COOLDOWN" | "CONSENT" | "UNAVAILABLE" | "INVALID" };
+type ActionResult =
+  | { ok: true; done: string; count?: number }
+  | {
+      ok: false;
+      error: SmartSettingsProblem | "PLAN" | "CHANGED" | "NOT_CONFIGURED" | "COOLDOWN" | "CONSENT" | "UNAVAILABLE" | "INVALID" | "NOT_ON" | "PAUSED" | "PRIMARY_LANGUAGE";
+    };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionResult> => {
   const { admin, shop, actorId } = await requireShop(request);
@@ -151,7 +153,15 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionRes
     if (result.status === "started" || result.status === "waiting" || result.status === "active") return { ok: true, done: result.status };
     if (result.status === "cooldown") return { ok: false, error: "COOLDOWN" };
     if (result.status === "off") return { ok: false, error: "NOT_CONFIGURED" };
-    return { ok: false, error: result.reason === "CONSENT" ? "CONSENT" : result.reason === "PLAN" ? "PLAN" : "UNAVAILABLE" };
+    // What keeps it from running, as the merchant can act on it.
+    const reasons: Record<string, Extract<ActionResult, { ok: false }>["error"]> = {
+      CONSENT: "CONSENT",
+      PLAN: "PLAN",
+      PAUSED: "PAUSED",
+      PRIMARY_LANGUAGE: "PRIMARY_LANGUAGE",
+      NO_LANGUAGE: "NO_LANGUAGE",
+    };
+    return { ok: false, error: reasons[result.reason ?? ""] ?? "UNAVAILABLE" };
   }
   if (intent === "remove-exclusion") {
     const gid = String(form.get("resourceGid") ?? "");
@@ -164,6 +174,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionRes
     if (!/^[0-9a-f-]{36}$/i.test(runId)) return { ok: false, error: "INVALID" };
     const queues = getQueues();
     if (!queues) return { ok: false, error: "UNAVAILABLE" };
+    // Retried items would only be cancelled while it is off, paused or without consent.
+    const config = await getSmartConfig(shop.id);
+    if (!config?.enabled || smartPaused(config) || !hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "NOT_ON" };
     // Only this shop's jobs of that run (read under its tenant).
     const jobs = await withTenant(shop.id, (tx) => tx.translationJob.findMany({ where: { shopId: shop.id, smartRunId: runId, failedItems: { gt: 0 } }, select: { id: true } }));
     let count = 0;
@@ -187,10 +200,12 @@ export default function SmartAutomatic() {
 
   const settingsFetcher = useFetcher<typeof action>();
   const actionFetcher = useFetcher<typeof action>();
-  const result = settingsFetcher.data ?? actionFetcher.data;
   useResultToast(settingsFetcher.data, smartToast(t, settingsFetcher.data));
   useResultToast(actionFetcher.data, smartToast(t, actionFetcher.data));
-  const busy = actionFetcher.state !== "idle";
+  // The button that was pressed shows it is working (one action at a time).
+  const pending = actionFetcher.state !== "idle" ? actionFetcher.formData : null;
+  const loading = (intent: string, field?: [string, string]) =>
+    pending?.get("intent") === intent && (!field || pending.get(field[0]) === field[1]) ? { loading: true } : {};
   const act = (intent: string, extra: Record<string, string> = {}) => actionFetcher.submit({ intent, ...extra }, { method: "post" });
 
   // The form: what the merchant changes before saving (the next checks follow it live).
@@ -233,8 +248,25 @@ export default function SmartAutomatic() {
     setPreview({ times: [...initial.times], weekdays: [...initial.weekdays], zone: initial.zone });
     setDirty(false);
   };
-  if (settingsFetcher.state === "idle" && settingsFetcher.data?.ok && dirty) setDirty(false);
+  // Saved: the form is clean again, once per save (later edits show the save bar again).
+  const savedResult = useRef<unknown>(null);
+  useEffect(() => {
+    if (settingsFetcher.state !== "idle" || !settingsFetcher.data?.ok || savedResult.current === settingsFetcher.data) return;
+    savedResult.current = settingsFetcher.data;
+    setDirty(false);
+  }, [settingsFetcher.state, settingsFetcher.data]);
   useSaveBar(SAVE_BAR, dirty && data.entitled);
+
+  // While a check runs, its figures follow (not while the form is being edited, nor in a hidden tab).
+  const revalidator = useRevalidator();
+  const running = panel.runs.some((r) => r.status === "RUNNING" || r.status === "QUEUED" || r.status === "WAITING");
+  useEffect(() => {
+    if (!running || dirty) return;
+    const timer = setInterval(() => {
+      if (revalidator.state === "idle" && document.visibilityState === "visible") revalidator.revalidate();
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [running, dirty, revalidator]);
 
   // The next three checks of the schedule as it is in the form now.
   const upcoming = useMemo(() => {
@@ -258,8 +290,11 @@ export default function SmartAutomatic() {
     return out;
   }, [mode, preview, data.shopTimeZone, data.now]);
 
-  const error = result && !result.ok ? result.error : null;
+  // Each fetcher's own refusal: the form's next to the form, an action's next to its buttons.
+  const error = settingsFetcher.data && !settingsFetcher.data.ok ? settingsFetcher.data.error : null;
+  const actionError = actionFetcher.data && !actionFetcher.data.ok ? actionFetcher.data.error : null;
   const notConfigured = !config;
+  const cantTurnOn = !data.consent ? "CONSENT" : !data.available ? "UNAVAILABLE" : null;
 
   return (
     <s-page heading={t("automatic.page.heading")}>
@@ -284,24 +319,40 @@ export default function SmartAutomatic() {
           <SmartPreview data={panel} languageNames={languageNames} />
           <s-stack direction="inline" gap="small">
             {panel.status.state === "off" ? (
-              <s-button variant="primary" disabled={!data.entitled || notConfigured} onClick={() => act("turn-on")} {...(busy ? { loading: true } : {})}>
+              <s-button variant="primary" disabled={!data.entitled || notConfigured || cantTurnOn !== null} onClick={() => act("turn-on")} {...loading("turn-on")}>
                 {t("automatic.action.turnOn")}
               </s-button>
             ) : (
               <>
-                <s-button variant="primary" disabled={panel.status.state !== "on"} onClick={() => act("check-now", { key: data.checkKey })} {...(busy ? { loading: true } : {})}>
+                <s-button variant="primary" disabled={panel.status.state !== "on"} onClick={() => act("check-now", { key: data.checkKey })} {...loading("check-now")}>
                   {t("automatic.action.checkNow")}
                 </s-button>
                 {panel.status.state === "paused" ? (
-                  <s-button onClick={() => act("resume")}>{t("automatic.action.resume")}</s-button>
+                  <s-button onClick={() => act("resume")} {...loading("resume")}>
+                    {t("automatic.action.resume")}
+                  </s-button>
                 ) : (
-                  <s-button onClick={() => act("pause")}>{t("automatic.action.pause")}</s-button>
+                  <s-button onClick={() => act("pause")} {...loading("pause")}>
+                    {t("automatic.action.pause")}
+                  </s-button>
                 )}
-                <s-button onClick={() => act("turn-off")}>{t("automatic.action.turnOff")}</s-button>
+                <s-button onClick={() => act("turn-off")} {...loading("turn-off")}>
+                  {t("automatic.action.turnOff")}
+                </s-button>
               </>
             )}
           </s-stack>
           {notConfigured ? <s-text color="subdued">{t("automatic.error.NOT_CONFIGURED")}</s-text> : null}
+          {data.entitled && !notConfigured && panel.status.state === "off" && cantTurnOn ? (
+            <s-text color="subdued">
+              {errorText(i18n, cantTurnOn)} {cantTurnOn === "CONSENT" ? <s-link href="/app/settings">{t("automatic.page.back")}</s-link> : null}
+            </s-text>
+          ) : null}
+          {actionError ? (
+            <s-banner tone="critical" heading={t("automatic.error.actionHeading")}>
+              <s-paragraph>{errorText(i18n, actionError)}</s-paragraph>
+            </s-banner>
+          ) : null}
         </s-stack>
       </s-section>
 
@@ -505,8 +556,13 @@ export default function SmartAutomatic() {
           {panel.exclusions.length ? (
             panel.exclusions.map((e) => (
               <s-stack key={e.resourceGid} direction="inline" gap="small" alignItems="center">
-                {e.href ? <s-link href={e.href}>{`${kindLabel(i18n, e.resourceType)} ${e.resourceGid.split("/").pop()}`}</s-link> : <s-text>{e.resourceGid}</s-text>}
-                <s-button variant="tertiary" onClick={() => act("remove-exclusion", { resourceGid: e.resourceGid })}>
+                {e.href ? <s-link href={e.href}>{`${itemKindLabel(i18n, e.resourceType)} ${e.resourceGid.split("/").pop()}`}</s-link> : <s-text>{e.resourceGid}</s-text>}
+                <s-button
+                  variant="tertiary"
+                  accessibilityLabel={`${t("automatic.action.remove")}: ${itemKindLabel(i18n, e.resourceType)} ${e.resourceGid.split("/").pop()}`}
+                  onClick={() => act("remove-exclusion", { resourceGid: e.resourceGid })}
+                  {...loading("remove-exclusion", ["resourceGid", e.resourceGid])}
+                >
                   {t("automatic.action.remove")}
                 </s-button>
               </s-stack>
@@ -551,8 +607,14 @@ export default function SmartAutomatic() {
                 {run.failed || run.jobs.length ? (
                   <s-stack direction="inline" gap="small" alignItems="center">
                     {run.failed ? <s-text tone="critical">{t("automatic.activity.failed", { count: run.failed })}</s-text> : null}
-                    {run.failed ? (
-                      <s-button variant="tertiary" onClick={() => act("retry", { runId: run.id })}>
+                    {/* Only while it runs: retried items would be cancelled again while paused or off. */}
+                    {run.failed && panel.status.state === "on" ? (
+                      <s-button
+                        variant="tertiary"
+                        accessibilityLabel={`${t("automatic.action.retryFailed")}: ${t("automatic.schedule.zone", { time: i18n.dateTimeIn(run.createdAt, panel.zone), zone: panel.zone })}`}
+                        onClick={() => act("retry", { runId: run.id })}
+                        {...loading("retry", ["runId", run.id])}
+                      >
                         {t("automatic.action.retryFailed")}
                       </s-button>
                     ) : null}
@@ -572,7 +634,7 @@ export default function SmartAutomatic() {
   );
 }
 
-const RUN_REASONS = ["PAUSED", "COALESCED", "AI_NOT_CONFIGURED", "QUEUES_UNAVAILABLE", "NO_LANGUAGE", "SMART_OFF", "SCAN_FAILED", "STALLED"];
+const RUN_REASONS = ["PAUSED", "COALESCED", "AI_NOT_CONFIGURED", "QUEUES_UNAVAILABLE", "NO_LANGUAGE", "SMART_OFF", "SCAN_FAILED", "STALLED", "PARTIAL"];
 
 /** Why a check was skipped, didn't finish or stopped translating. */
 function runReason(i18n: ReturnType<typeof useI18n>, code: string | null): string {
@@ -582,12 +644,7 @@ function runReason(i18n: ReturnType<typeof useI18n>, code: string | null): strin
 
 /** The text for a refused action (the form's problems, the plan, consent, the installation). */
 function errorText(i18n: ReturnType<typeof useI18n>, error: Extract<ActionResult, { ok: false }>["error"]): string {
-  const { t } = i18n;
-  if (error === "PLAN") return t("automatic.blocked.PLAN");
-  if (error === "CONSENT") return t("automatic.blocked.CONSENT");
-  if (error === "UNAVAILABLE") return t("automatic.blocked.UNAVAILABLE");
-  if (error === "INVALID") return t("automatic.error.CHANGED");
-  return t(`automatic.error.${error}`);
+  return smartErrorText(i18n, error);
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

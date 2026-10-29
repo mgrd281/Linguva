@@ -17,7 +17,7 @@ import { RateLimitedError } from "../jobs/errors";
 import type { Admin, Limiter } from "../jobs/processors";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, kindOfGid, RESOURCE_KINDS, type TranslatableKind } from "../../lib/resource-kinds";
 import { dropCoverageTypeTx, dropDeletedResource, finishSegmentTx, syncCoverageTx, type CoverageChange } from "./items";
-import { afterSmartScan, finishSmartScanTx, planSmartPage, writeSmartPlanTx } from "../smart/plan";
+import { afterSmartScan, finishSmartScanTx, noteSmartGapTx, planSmartPage, writeSmartPlanTx } from "../smart/plan";
 
 /** Custom fields of each owner type ("PRODUCT_METAFIELD", …). */
 export const METAFIELD_COVERAGE_TYPES = METAFIELD_OWNER_TYPES.map((owner) => `${owner}_METAFIELD` as const);
@@ -239,6 +239,7 @@ export async function runCoveragePage(deps: CoverageDeps, payload: CoveragePageP
           create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "DENIED", reportId: report.id, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
           update: { status: "DENIED", reportId: report.id, startedAt: null, scannedAt: readAt, errorCode: "ACCESS_DENIED" },
         });
+        if (report.smartRunId) await noteSmartGapTx(tx, payload.shopId, report.smartRunId, segment);
       } else {
         if (payload.cursor === null) {
           await tx.coverageSegment.upsert({
@@ -414,6 +415,7 @@ export async function skipCoverageSegment(
           create: { shopId: payload.shopId, locale: segment.locale, resourceType: segment.resourceType, status: "FAILED", reportId: report.id, errorCode },
           update: { status: "FAILED", reportId: report.id, errorCode },
         });
+        if (report.smartRunId) await noteSmartGapTx(tx, payload.shopId, report.smartRunId, segment);
       }
       if (finished && report.smartRunId) await finishSmartScanTx(tx, payload.shopId, report.smartRunId);
       return { next: finished ? null : { shopId: payload.shopId, reportId: report.id, segmentIndex: nextIndex, cursor: null }, smartRunId: finished ? report.smartRunId : null };

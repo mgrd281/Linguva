@@ -90,7 +90,7 @@ export const en = {
 export const de: Translation<typeof en> = {
   "settings.ai.heading": "KI-Übersetzung",
   "settings.ai.body":
-    "Wenn Linguva mit KI übersetzt (wenn du es anstößt, oder automatisch, sobald du die automatische Übersetzung oder den intelligenten Zeitplan einschaltest), werden die übersetzten Texte deines Shops zur Verarbeitung an DeepL SE (Deutschland) gesendet. Linguva sendet keine Kundendaten. KI-Ergebnisse bleiben Entwürfe, bis du sie veröffentlichst, außer du schaltest das automatische Veröffentlichen ein.",
+    "Wenn Linguva mit KI übersetzt (wenn du es anstößt, oder automatisch, sobald du die automatische Übersetzung oder den intelligenten Zeitplan einschaltest), werden die zu übersetzenden Texte deines Shops zur Verarbeitung an DeepL SE (Deutschland) gesendet. Linguva sendet keine Kundendaten. KI-Ergebnisse bleiben Entwürfe, bis du sie veröffentlichst, außer du schaltest das automatische Veröffentlichen ein.",
   "settings.ai.since": "seit {date}",
   "settings.ai.notAllowed": "Nicht erlaubt",
   "settings.ai.withdraw": "Einwilligung widerrufen",
@@ -177,7 +177,7 @@ export const de: Translation<typeof en> = {
 export const fr: Translation<typeof en> = {
   "settings.ai.heading": "Traduction par IA",
   "settings.ai.body":
-    "Lorsque Linguva traduit avec l'IA (à votre demande, ou automatiquement une fois la traduction automatique ou la planification intelligente activée), les textes de la boutique traduits sont envoyés à DeepL SE (Allemagne) pour traitement. Linguva n'envoie aucune donnée client. Les résultats de l'IA restent des brouillons tant que vous ne les publiez pas, sauf si vous activez la publication automatique.",
+    "Lorsque Linguva traduit avec l'IA (à votre demande, ou automatiquement une fois la traduction automatique ou la planification intelligente activée), les textes de la boutique qu'il traduit sont envoyés à DeepL SE (Allemagne) pour traitement. Linguva n'envoie aucune donnée client. Les résultats de l'IA restent des brouillons tant que vous ne les publiez pas, sauf si vous activez la publication automatique.",
   "settings.ai.since": "depuis le {date}",
   "settings.ai.notAllowed": "Non autorisé",
   "settings.ai.withdraw": "Retirer l'autorisation",

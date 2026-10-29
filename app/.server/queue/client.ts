@@ -30,6 +30,11 @@ export async function getWorkerStatus(): Promise<WorkerStatus> {
   return readWorkerStatus(connection, keyPrefix(getConfig().NODE_ENV));
 }
 
+/** False only when background jobs are known not to run now (no heartbeat); a slow or missing answer counts as running. */
+export async function backgroundJobsRunning(): Promise<boolean> {
+  return (await getWorkerStatus()).state !== "stopped";
+}
+
 /** Tests only: close and forget the connection. */
 export async function resetQueueClient() {
   await queues?.close();

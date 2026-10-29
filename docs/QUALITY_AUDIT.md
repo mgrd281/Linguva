@@ -367,6 +367,8 @@ Scheduled, budgeted automatic translation (SMART_AUTO_TRANSLATE.md), after an au
 
 Evidence added: unit and integration tests for schedules (daylight saving, catch-up, one run per occurrence with five ticks at once), planning while measuring (only missing and outdated machine fields of the chosen scope; people's translations, drafts waiting for review, removals and exclusions kept), budgets and pauses, the plan checked on the server for every action, tick and item, forged requests (form and database); a performance test of a run over 5,000 products in two languages (31 s, median 14 ms per page, nothing planned twice); browser tests of the settings card and page on desktop and phone with accessibility checks; screenshots on desktop, tablet and iPhone (`docs/ui-review/smart-auto/`).
 
+An independent review of the smart backend found 6 problems and several smaller ones, each reproduced against PostgreSQL (a merchant's pause lifted by a plan or consent change, double translation beside a merchant's bulk job, the budget window at midnight, a run left QUEUED, a resource hidden by a stopped job's leftover, an estimate of 0 for stores measured earlier). All are fixed with a test that fails without the fix (SMART_AUTO_TRANSLATE_AUDIT.md §12).
+
 Scores unchanged: every criterion this touches is either met already (performance 3, billing 2) or waits for a store (content coverage 9: webhooks and the periodic check on real events; Shopify integration: writes and webhooks). Smart Auto-Translate is not verified on Shopify yet; DEV_STORE_TEST_PLAN.md §Q lists the checks.
 
 ## 5. Next steps, in order of effect

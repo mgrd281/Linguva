@@ -33,12 +33,13 @@ export async function finishSmartRunIfDone(shopId: string, runId: string, client
         where: { id: runId, shopId, status: "RUNNING" },
         data: {
           status: failed ? "FAILED" : "COMPLETED",
-          errorCode: failed ? (report?.errorCode ?? "SCAN_FAILED") : (stopped?.errorCode ?? null),
+          // A job's stop first, then a gap noted while it ran (PARTIAL).
+          errorCode: failed ? (report?.errorCode ?? "SCAN_FAILED") : (stopped?.errorCode ?? run.errorCode),
           finishedAt: now,
         },
       });
       // "Last complete check": everything checked and everything it found handled.
-      if (finished.count && !failed && !stopped) await tx.smartAutoConfig.updateMany({ where: { shopId }, data: { lastSuccessAt: now } });
+      if (finished.count && !failed && !stopped && !run.errorCode) await tx.smartAutoConfig.updateMany({ where: { shopId }, data: { lastSuccessAt: now } });
       return failed ? "FAILED" : "COMPLETED";
     },
     client,

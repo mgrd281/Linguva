@@ -52,6 +52,11 @@ const ATTACHED_BY_OWNER: Record<string, readonly string[]> = Object.entries(IMAG
   { PRODUCT: ["PRODUCT_METAFIELD"], COLLECTION: ["COLLECTION_METAFIELD"], PAGE: ["PAGE_METAFIELD"], ARTICLE: ["ARTICLE_METAFIELD"] },
 );
 
+/** The content type whose images or custom fields a coverage type holds (PRODUCT for PRODUCT_METAFIELD), or null. */
+export function attachedOwner(type: string): string | null {
+  return Object.entries(ATTACHED_BY_OWNER).find(([, types]) => types.includes(type))?.[0] ?? null;
+}
+
 /** The coverage types a check plans: the chosen content types, plus their images and custom fields when included. */
 export function smartCoverageTypes(scope: { resourceTypes: readonly string[]; includeAttached: boolean }): string[] {
   const types = scope.resourceTypes.filter(isSmartType);
@@ -134,7 +139,7 @@ export type SmartStatus =
   | { state: "on" }
   | { state: "paused"; reason: SmartPauseReason; until: number | null }
   /** On, but it can't run: the reason is shown with what to do. */
-  | { state: "waiting"; reason: "PLAN" | "CONSENT" | "UNAVAILABLE" | "NO_LANGUAGE" };
+  | { state: "waiting"; reason: "PLAN" | "CONSENT" | "UNAVAILABLE" | "WORKER" | "NO_LANGUAGE" };
 
 /**
  * What the merchant sees as the state: the stored switch, an active pause,
@@ -150,6 +155,8 @@ export function smartStatus(input: {
   entitled: boolean;
   consent: boolean;
   available: boolean;
+  /** False only when background jobs are known not to run now (no worker heartbeat). */
+  worker?: boolean;
   /** Chosen languages the shop and the plan still have. */
   languages: number;
   now: number;
@@ -158,10 +165,13 @@ export function smartStatus(input: {
   if (!input.entitled) return { state: "waiting", reason: "PLAN" };
   if (!input.consent) return { state: "waiting", reason: "CONSENT" };
   if (!input.available) return { state: "waiting", reason: "UNAVAILABLE" };
-  if (input.pausedAt !== null && (input.pausedUntil === null || input.pausedUntil > input.now)) {
+  // Here the plan includes it and consent is given: a pause for either is over (the tick lifts it within minutes).
+  const causeGone = input.pauseReason === "PLAN" || input.pauseReason === "CONSENT";
+  if (input.pausedAt !== null && !causeGone && (input.pausedUntil === null || input.pausedUntil > input.now)) {
     const reason = (SMART_PAUSE_REASONS as readonly string[]).includes(input.pauseReason ?? "") ? (input.pauseReason as SmartPauseReason) : "MANUAL";
     return { state: "paused", reason, until: input.pausedUntil };
   }
+  if (input.worker === false) return { state: "waiting", reason: "WORKER" };
   if (input.languages === 0) return { state: "waiting", reason: "NO_LANGUAGE" };
   return { state: "on" };
 }

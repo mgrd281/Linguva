@@ -118,10 +118,8 @@ export default function Coverage() {
             <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
               <s-stack direction="block" gap="small-300">
                 <s-text>{t("coverage.intro")}</s-text>
-                {data.report && !scanning && data.report.finishedAt ? (
-                  <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.report.finishedAt) })}</s-text>
-                ) : null}
-                {data.report?.stalled ? <s-text color="subdued">{t("overview.next.stalled.label", { date: i18n.dateTime(data.report.updatedAt) })}</s-text> : null}
+                {!scanning && data.lastFullScan ? <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.lastFullScan) })}</s-text> : null}
+                {data.report?.stalled ? <s-text color="subdued">{t("coverage.scan.stalled", { date: i18n.dateTime(data.report.updatedAt) })}</s-text> : null}
               </s-stack>
               <s-button
                 type="submit"
@@ -298,7 +296,7 @@ export default function Coverage() {
                   ? t("coverage.types.notScanned")
                   : seg.status === "DENIED"
                     ? t("coverage.types.denied")
-                    : seg.status === "FAILED"
+                    : seg.status === "FAILED" || (seg.status === "SCANNING" && !scanning)
                       ? t("coverage.types.failed")
                       : seg.status === "SCANNING"
                         ? t("coverage.types.scanning")

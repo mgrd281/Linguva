@@ -12,7 +12,7 @@ import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings"
 import { countPendingDrafts } from "../review/drafts";
 import { loadCoverageSummary } from "../coverage/summary";
 import { headlineByLocale } from "../../lib/coverage-view";
-import { addCounts, emptyCounts, totalOf } from "../../lib/coverage-rules";
+import { addCounts, emptyCounts, HEADLINE_EXCLUDED_TYPES, totalOf } from "../../lib/coverage-rules";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage } from "../usage/usage-ledger";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
@@ -129,8 +129,16 @@ export async function loadOverview(
   // Without an AI provider there is no consent to give and no bulk drafts to review.
   const checklist = aiAvailable ? allSteps : allSteps.filter((s) => s.id !== "consent" && s.id !== "review");
 
-  // Content the measurement had to skip after errors: its figures leave it out.
-  const unread = new Set(coverage.segments.filter((s) => s.status === "FAILED").map((s) => s.locale));
+  // Content whose latest read didn't finish (skipped after errors, or left by a measurement that
+  // stopped or got stuck): its figures may be older or incomplete. Only types the figures count.
+  const measurement = measurementState(coverage.report, { jobsAvailable, now: options.now ?? Date.now() });
+  const reading = measurement.state === "queued" || measurement.state === "waiting" || measurement.state === "running";
+  const unread = new Set(
+    coverage.segments
+      .filter((s) => !Object.hasOwn(HEADLINE_EXCLUDED_TYPES, s.resourceType))
+      .filter((s) => s.status === "FAILED" || (s.status === "SCANNING" && !reading))
+      .map((s) => s.locale),
+  );
   const progress = targets.map((l) => {
     const measured = measuredLocales.has(l.locale);
     const tally = measured ? headline.get(l.locale) : undefined;
@@ -169,7 +177,6 @@ export async function loadOverview(
             return { access: true as const, rows, missing: missingLanguages(rows), counts: countByStatus(rows) };
           })();
 
-  const measurement = measurementState(coverage.report, { jobsAvailable, now: options.now ?? Date.now() });
   const firstTranslation = checklist.find((s) => s.id === "first-translation")!;
   const next = nextStep({
     targets: targets.map((l) => ({ locale: l.locale, name: l.name, published: l.published })),

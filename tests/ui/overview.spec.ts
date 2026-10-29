@@ -117,7 +117,8 @@ test("a stuck newer measurement keeps the figures and can be started again from 
   await openApp(page, "remeasure", "/app");
   const languages = page.locator('s-section[heading="Your languages"]');
   await expect(languages.getByRole("listitem")).toHaveCount(1);
-  await expect(languages.getByText("A newer measurement didn't complete; these figures are from the last complete one.")).toBeVisible();
+  // No worker runs in these tests: the note says so (with a worker: "A newer measurement didn't complete…").
+  await expect(languages.getByText(/^Background jobs aren't running right now/)).toBeVisible();
   // A secondary action: the next step keeps the page's only primary button.
   await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
   await languages.getByRole("button", { name: "Measure again" }).click();
@@ -134,7 +135,7 @@ test("the Coverage page lets a stuck measurement be started again, without follo
     if (request.url().includes(".data")) requests.push(request.url());
   });
   await openApp(page, "stalled", "/app/coverage", { locale: "de" });
-  await expect(page.getByText(/^Die Messung kommt seit .+ nicht voran$/)).toBeVisible();
+  await expect(page.getByText(/^Die Prüfung kommt seit .+ nicht voran$/)).toBeVisible();
   await expect(page.getByRole("button", { name: /^Shop (erneut )?prüfen$/ })).toBeEnabled();
   await expect(page.getByRole("progressbar", { name: /Prüfung|Messung|Scan/ })).toHaveCount(0);
   await page.waitForTimeout(4_000);

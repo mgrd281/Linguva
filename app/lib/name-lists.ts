@@ -27,11 +27,15 @@ export function languageList(i18n: I18n, names: readonly string[], shown = 3): s
 
 /**
  * "Bulgarian (Bulgaria)", "Italian (Italy, Switzerland)": the language and the
- * countries it would reach. A regional name already says where ("Portuguese
- * (Brazil)"): no second parentheses.
+ * countries it would reach. A regional language reaching just its own region
+ * needs no countries ("Portuguese (Brazil)"); a name that has parentheses of
+ * its own gets the countries after a colon ("Portuguese (Brazil): Portugal").
  */
-export function gapEntry(i18n: I18n, name: string, countries: readonly Pick<CountryCoverage, "code" | "name">[]): string {
-  return name.includes("(") ? name : `${name} (${countryList(i18n, countries.map((c) => i18n.country(c.code, c.name)))})`;
+export function gapEntry(i18n: I18n, locale: string, name: string, countries: readonly Pick<CountryCoverage, "code" | "name">[]): string {
+  const region = locale.split("-")[1]?.toUpperCase();
+  if (region && countries.length === 1 && countries[0]!.code.toUpperCase() === region) return name;
+  const list = countryList(i18n, countries.map((c) => i18n.country(c.code, c.name)));
+  return name.includes("(") ? `${name}: ${list}` : `${name} (${list})`;
 }
 
 /** The entries of one gap line: at most GAP_SHOWN, then "and N more". */

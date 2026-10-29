@@ -173,6 +173,27 @@ describe("percentages from completed measurements only", () => {
     overview = await loadOverview(store.asAdmin(), shop, app);
     expect(overview.progress.find((l) => l.locale === "de")).toMatchObject({ measured: true, partial: true });
     expect(overview.progress.find((l) => l.locale === "fr")).toMatchObject({ measured: false, partial: false });
+
+    // Read again; only content the figures don't count (theme texts) fails: not partial.
+    const setStatus = (type: string, status: string) =>
+      ownerDb.$transaction([
+        ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shop.id}, true)`,
+        ownerDb.$executeRawUnsafe(
+          `INSERT INTO "CoverageSegment" ("shopId", "locale", "resourceType", "status", "updatedAt") VALUES ($1::uuid, 'de', $2, $3::"CoverageSegmentStatus", now())
+           ON CONFLICT ("shopId", "locale", "resourceType") DO UPDATE SET "status" = EXCLUDED."status"`,
+          shop.id,
+          type,
+          status,
+        ),
+      ]);
+    await setStatus("PRODUCT", "SCANNED");
+    await setStatus("ONLINE_STORE_THEME", "FAILED");
+    overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress.find((l) => l.locale === "de")).toMatchObject({ partial: false });
+    // A read left unfinished by a measurement that stopped (no measurement under way): partial.
+    await setStatus("PRODUCT", "SCANNING");
+    overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.progress.find((l) => l.locale === "de")).toMatchObject({ partial: true });
   });
 
   it("counts translations already live in the store (made anywhere) as past the first translation", async () => {

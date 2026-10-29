@@ -105,7 +105,7 @@ describe("next step", () => {
 
   it("never says all caught up while the measurement skipped some of a published language's content", () => {
     const partial = { ...row(fr, 10, 10), partial: true };
-    expect(nextStep(input({ progress: [partial] }))).toEqual({ id: "unread" });
+    expect(nextStep(input({ progress: [partial] }))).toEqual({ id: "unread", locale: "fr" });
     // Other steps still come first; a hidden language's skipped content doesn't count.
     expect(nextStep(input({ progress: [{ ...row(fr, 4, 10), partial: true }] }))).toMatchObject({ id: "translate", locale: "fr" });
     expect(nextStep(input({ targets: [fr, es], progress: [row(fr, 10, 10), { ...row(es, 10, 10), partial: true }] }))).toEqual({ id: "done" });

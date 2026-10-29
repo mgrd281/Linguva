@@ -32,8 +32,11 @@ describe("languages inside a sentence", () => {
 
 describe("gap lines", () => {
   it("says which countries a language would reach, without nested parentheses", () => {
-    expect(gapEntry(en, "Italian", [{ code: "IT", name: "Italy" }, { code: "CH", name: "Switzerland" }])).toBe("Italian (Italy, Switzerland)");
-    expect(gapEntry(de, de.language("pt-BR"), [{ code: "BR", name: "Brazil" }])).toBe("Portugiesisch (Brasilien)");
+    expect(gapEntry(en, "it", "Italian", [{ code: "IT", name: "Italy" }, { code: "CH", name: "Switzerland" }])).toBe("Italian (Italy, Switzerland)");
+    // A regional language reaching its own region; reaching another country it still names it.
+    expect(gapEntry(de, "pt-BR", de.language("pt-BR"), [{ code: "BR", name: "Brazil" }])).toBe("Portugiesisch (Brasilien)");
+    expect(gapEntry(de, "pt-BR", de.language("pt-BR"), [{ code: "PT", name: "Portugal" }])).toBe("Portugiesisch (Brasilien): Portugal");
+    expect(gapEntry(en, "nb", "Norwegian (Bokmål)", [{ code: "NO", name: "Norway" }])).toBe("Norwegian (Bokmål): Norway");
   });
 
   it("names at most GAP_SHOWN languages", () => {

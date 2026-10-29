@@ -26,8 +26,8 @@ export type NextStep =
       notAdded: number;
       free: number;
     }
-  /** Everything else is done, but the last measurement couldn't read some content. */
-  | { id: "unread" }
+  /** Everything else is done, but the last measurement couldn't read some content (of this language first). */
+  | { id: "unread"; locale: string }
   | { id: "done" };
 
 export interface NextStepInput {
@@ -99,7 +99,8 @@ export function nextStep(input: NextStepInput): NextStep | null {
   const rest = lowest(input, 100);
   if (rest) return rest;
   // Skipped content may be untranslated: never "all caught up" over it.
-  if (input.progress.some((p) => p.published && p.partial)) return { id: "unread" };
+  const unread = input.progress.find((p) => p.published && p.partial);
+  if (unread) return { id: "unread", locale: unread.locale };
   // Nor over a published language that was never measured (no background jobs to measure it).
   if (unmeasured) return null;
   return measured.size > 0 ? { id: "done" } : null;

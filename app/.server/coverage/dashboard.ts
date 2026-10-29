@@ -134,6 +134,8 @@ export async function loadCoverageDashboard(request: Request) {
     jobsAvailable: getQueues() !== null,
     canTranslate: getTranslationProvider() !== null && hasCurrentAiConsent(settings),
     coverageTypes: COVERAGE_TYPES,
+    /** The newest completed measurement (a failed or stuck newer one has no full scan to show). */
+    lastFullScan: summary.lastCompleted?.finishedAt ?? null,
     report: report
       ? {
           status: report.status,

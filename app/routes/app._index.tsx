@@ -143,7 +143,7 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
       return {
         title: t("overview.next.unread.label"),
         detail: t("overview.next.unread.detail"),
-        action: { href: "/app/coverage", label: t("overview.languages.updateCoverage") },
+        action: { href: `/app/coverage?lang=${encodeURIComponent(step.locale)}`, label: t("overview.languages.updateCoverage") },
       };
     case "done":
       return {
@@ -242,6 +242,16 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
   const { t, language } = i18n;
   const remeasurer = useFetcher<{ ok?: true; error?: string }>();
   const footerStatus = useRef<HTMLDivElement>(null);
+  const m = data.measurement;
+  // A newer measurement on a measured store (the next step follows a first one).
+  const remeasure = data.next?.id !== "measure" && data.measuredAt !== null;
+  const following = remeasure && MEASURING.has(m.state);
+  const [wasFollowing, setWasFollowing] = useState(following);
+  const [ended, setEnded] = useState<MeasurementState | null>(null);
+  if (following !== wasFollowing) {
+    setWasFollowing(following);
+    setEnded(following ? null : m.state);
+  }
   // The button that started the measurement is gone: keep the focus nearby.
   useEffect(() => {
     if (remeasurer.state === "idle" && remeasurer.data?.ok) footerStatus.current?.focus();
@@ -258,22 +268,23 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
       (a.percent ?? 101) - (b.percent ?? 101) ||
       nameOf(a).localeCompare(nameOf(b), i18n.locale),
   );
-  const m = data.measurement;
-  const remeasure = data.next?.id !== "measure" && data.measuredAt !== null;
   const restart = remeasure && (m.state === "failed" || m.state === "stalled");
-  const footerNote = !remeasure
+  // Read out on change: text that changes with the state only (the part count stays outside).
+  const footerLive = !remeasure
     ? null
-    : m.state === "running"
-      ? t("overview.scan.running", { done: m.done, total: m.total })
+    : data.workerStopped && (m.state === "waiting" || m.state === "stalled")
+      ? t("overview.scan.stopped")
       : m.state === "queued"
         ? t("overview.scan.queued")
         : m.state === "waiting"
-          ? data.workerStopped
-            ? t("overview.scan.stopped")
-            : t("overview.scan.waiting")
+          ? t("overview.scan.waiting")
           : restart
             ? t("overview.scan.updateFailed")
-            : null;
+            : ended === "done"
+              ? t("overview.scan.updated")
+              : null;
+  const footerCount = remeasure && m.state === "running" ? t("overview.scan.running", { done: m.done, total: m.total }) : null;
+  const partial = data.progress.filter((l) => l.published && l.partial);
   const manage = <s-link href="/app/languages">{t("overview.languages.manage")}</s-link>;
 
   if (!data.progress.length) {
@@ -348,15 +359,22 @@ function LanguagesSection({ data, i18n }: { data: Data; i18n: I18n }) {
         )}
         <s-stack direction="block" gap="small-200">
           {data.measuredAt ? (
-            // Also the live region for a newer measurement (only measured stores have one to restart).
-            <div role="status" tabIndex={-1} ref={footerStatus} style={{ outline: "none" }}>
+            // One block, so an empty live region adds no gap (only measured stores measure again here).
+            <div>
               <s-stack direction="block" gap="small-200">
                 <s-text color="subdued">{t("overview.languages.measured", { date: i18n.dateTime(data.measuredAt) })}</s-text>
-                {footerNote ? <s-text color="subdued">{footerNote}</s-text> : null}
+                {footerCount ? <s-text color="subdued">{footerCount}</s-text> : null}
               </s-stack>
+              <div role="status" tabIndex={-1} ref={footerStatus} style={{ outline: "none" }}>
+                {footerLive ? (
+                  <div style={{ paddingTop: 8 }}>
+                    <s-text color="subdued">{footerLive}</s-text>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
-          {data.progress.some((l) => l.published && l.partial) ? <s-text color="subdued">{t("overview.languages.partial")}</s-text> : null}
+          {partial.length ? <s-text color="subdued">{t("overview.languages.partial", { languages: languageList(i18n, partial.map(rawName)) })}</s-text> : null}
           {remeasurer.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
           {restart ? (
             <remeasurer.Form method="post" action="/app/coverage">
@@ -413,7 +431,7 @@ function CountriesSection({ data, i18n }: { data: Data; i18n: I18n }) {
   }
 
   // "In their language" only when every language a country is offered has been measured.
-  const measured = countries.rows.every((c) => c.status !== "ok" || c.percent !== null);
+  const measured = countries.rows.every((c) => !c.languages.some((l) => l.available) || c.percent !== null);
   const names = new Map(data.progress.map((l) => [l.locale, l.name]));
   const nameOf = (locale: string) => language(locale, names.get(locale));
   const reasons = (["not-added", "unpublished", "not-in-market"] as const).filter((r) => countries.missing.some((m) => m.reason === r));
@@ -433,7 +451,7 @@ function CountriesSection({ data, i18n }: { data: Data; i18n: I18n }) {
             <s-heading>{t("overview.countries.missing.heading")}</s-heading>
             {reasons.map((reason) => (
               <s-paragraph key={reason}>
-                {t(GAP_LINE[reason], { languages: gapLine(i18n, countries.missing.filter((m) => m.reason === reason).map((m) => gapEntry(i18n, nameOf(m.locale), m.countries))) })}
+                {t(GAP_LINE[reason], { languages: gapLine(i18n, countries.missing.filter((m) => m.reason === reason).map((m) => gapEntry(i18n, m.locale, nameOf(m.locale), m.countries))) })}
               </s-paragraph>
             ))}
             {capacity ? <s-text color="subdued">{capacity}</s-text> : null}

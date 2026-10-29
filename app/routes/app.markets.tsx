@@ -52,7 +52,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       findings: analyzeMarkets(markets, locales.locales, planLocales),
       countries: rows,
       // "In their language" only when every language a country is offered has been measured.
-      measured: rows ? rows.every((c) => c.status !== "ok" || c.percent !== null) : false,
+      measured: rows ? rows.every((c) => !c.languages.some((l) => l.available) || c.percent !== null) : false,
     };
   } catch (error) {
     // The merchant revoked the scope since it was granted.

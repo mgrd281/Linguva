@@ -8,9 +8,14 @@ import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 import { addSecurityHeaders } from "./.server/lib/security-headers";
 import { logger } from "./.server/lib/logger";
+import { dropMigrationDatabaseUrl } from "./.server/lib/config";
 import { startEmbeddedWorker } from "./.server/jobs/embedded-worker";
 
 export const streamTimeout = 5000;
+
+// The owner role's database URL: the migrations ran before this server
+// started, in their own process (docs/SECURITY_MODEL.md §5n).
+dropMigrationDatabaseUrl();
 
 // Background jobs inside this process's container when no worker service
 // exists (on by default in production only; docs/RAILWAY_STAGING.md §8b).

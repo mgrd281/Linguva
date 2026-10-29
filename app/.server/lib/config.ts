@@ -211,6 +211,17 @@ export function getConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return result.data;
 }
 
+/**
+ * The owner role's database URL is for the migration step and the operator
+ * tools, which run as processes of their own before or beside the server
+ * (docs/RAILWAY_STAGING.md §5.4). The web process drops it at start, so no
+ * request, log line or child process of the server holds a connection
+ * string for the owner of every table.
+ */
+export function dropMigrationDatabaseUrl(env: NodeJS.ProcessEnv = process.env): void {
+  delete env.MIGRATION_DATABASE_URL;
+}
+
 /** The Shopify shop GIDs eligible for owner complimentary access. */
 export function complimentaryShopGids(config: AppConfig): string[] {
   return (config.COMPLIMENTARY_SHOP_GIDS ?? "")

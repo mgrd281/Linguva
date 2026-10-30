@@ -25,10 +25,11 @@ import type { AreaKey } from "../lib/review-areas";
 import { hintText, highlightNumbers, markNumbersInHtml, numberMarks, type ReviewIssue } from "../lib/review-hints";
 import { cardDone, type ClientOutcome, type ReviewActionResult } from "../lib/review-view";
 import { SEO_KEYS } from "../lib/seo";
+import { textBoxBlockSize } from "../lib/text-box-height";
 import { MARK_COLOUR, STATE_COLOURS, TRACK_COLOUR } from "./Coverage";
 import type { IconName } from "./DialogPoint";
 import { Flag } from "./Flag";
-import { HtmlPreview, previewHeight } from "./HtmlPreview";
+import { HtmlPreview } from "./HtmlPreview";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { SeoCounter } from "./SeoPanel";
 import { StructuredView } from "./StructuredValue";
@@ -513,7 +514,8 @@ function Texts({ card, draft, title, ctx }: RowProps) {
     const source = markNumbersInHtml(draft.sourcePreview ?? "", marks.source);
     // While the merchant edits HTML the frame shows what they type (sandboxed, as in the editor).
     const shown = markNumbersInHtml(ctx.isEdited(draft) || editing ? value : (draft.valuePreview ?? ""), marks.target);
-    const height = Math.max(previewHeight(source), previewHeight(shown));
+    // One height for both boxes, for each width the card can have (no box changes height once shown).
+    const blockSize = textBoxBlockSize(source, shown);
     return (
       <s-stack direction="block" gap="small-200">
         {/* While the translation is edited, the original keeps its own height. */}
@@ -523,8 +525,8 @@ function Texts({ card, draft, title, ctx }: RowProps) {
             title={t("review.draft.originalTitle", { title, field: label })}
             lang={ctx.primaryLocale ?? ""}
             tone="subdued"
-            height={height}
-            boxPadding
+            blockSize={blockSize}
+            textBox
             label={<FrameLanguage name={primaryName} />}
           />
           <s-stack direction="block" gap="small-200">
@@ -533,8 +535,8 @@ function Texts({ card, draft, title, ctx }: RowProps) {
               title={t("review.draft.previewTitle", { title, field: label })}
               lang={card.locale}
               dir={dir}
-              height={height}
-              boxPadding
+              blockSize={blockSize}
+              textBox
               label={<FrameLanguage name={language} />}
             />
             {editing && draft.kind === "html" ? (

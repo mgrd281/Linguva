@@ -181,6 +181,10 @@ test.describe("Review", () => {
     await open(page, "/app/review?lang=de");
     const preview = page.frameLocator('iframe[title="Product 2 jacket, Description, translation preview"]');
     await expect(preview.locator("body")).toHaveText("[de] Warm jacket number 2.");
+    // Its box fits the text as a plain text box does: one line, nothing cut off.
+    const frame = await page.locator('iframe[title="Product 2 jacket, Description, translation preview"]').boundingBox();
+    expect(frame!.height).toBeLessThanOrEqual(46);
+    expect(await preview.locator("body").evaluate((body) => body.getBoundingClientRect().height)).toBeLessThanOrEqual(frame!.height);
     await expect(page.locator('iframe[title="Product 2 jacket, Description, original"]')).toHaveAttribute("sandbox", "");
     await button(page, "Edit HTML: Description – Product 2 jacket").click();
     const raw = page.getByRole("textbox", { name: "Description in German" });

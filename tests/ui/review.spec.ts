@@ -378,4 +378,54 @@ test.describe("Review", () => {
     await expect(changed).toHaveCount(0);
     await expect(name).toHaveCount(0);
   });
+
+  test("more than one page: Next page without deciding this one, and Back to the start @responsive", async ({ page }) => {
+    // 60 more French texts: two pages of French.
+    await inStore((shopId) =>
+      owner.translationDraft.createMany({
+        data: Array.from({ length: 60 }, (_, i) => ({
+          shopId,
+          resourceGid: `gid://shopify/Product/${1000 + i}`,
+          resourceTitle: `Product ${1000 + i} scarf`,
+          locale: "fr",
+          key: "title",
+          sourceDigest: `scarf-${i}`,
+          sourceValue: `Product ${1000 + i} scarf`,
+          value: `Écharpe produit ${1000 + i}`,
+          provider: "deepl",
+        })),
+      }),
+    );
+    await open(page, "/app/review?lang=fr");
+    // The chosen tab's count: every French text waiting.
+    const total = await numberIn(languages(page).locator('[aria-current="true"]'));
+    expect(total).toBeGreaterThan(50);
+    await expect(summary(page)).toHaveText(`50 translations on this page · 1–50 of ${total}`);
+    await expect(page.getByText(`1–50 of ${total}`, { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Back to the start" })).toHaveCount(0);
+    // A card's picture square (its first rounded box): a picture, the area's icon without one, empty while pictures load.
+    const square = () => page.locator("s-section[accessibilitylabel]").first().locator('div[style*="border-radius"]').first();
+    await expect(square().locator("img, s-icon")).toHaveCount(1);
+
+    // The next page's pictures load after it: its cards wait for theirs, not for this page's answer.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/app/review/previews**", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.getByRole("link", { name: "Next page" }).click();
+    await expect(page).toHaveURL(/after=/);
+    await expect(square().locator("img, s-icon")).toHaveCount(0);
+    release();
+    // These have no picture in the store: the area's icon once the answer is there.
+    await expect(square().locator("s-icon")).toHaveCount(1);
+    await expect(summary(page)).toHaveText(new RegExp(`^${total - 50} translations? on this page · 51–${total} of ${total}$`));
+    await expect(page.getByRole("link", { name: "Next page" })).toHaveCount(0);
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+    await page.getByRole("link", { name: "Back to the start" }).click();
+    await expect(page).not.toHaveURL(/after=/);
+    await expect(summary(page)).toHaveText(`50 translations on this page · 1–50 of ${total}`);
+  });
 });

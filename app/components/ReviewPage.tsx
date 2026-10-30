@@ -64,7 +64,8 @@ export function ReviewPage({ data }: { data: ReviewPageData }) {
             </s-stack>
           </s-grid>
         </s-stack>
-        <ReviewBody key={keyOf(data)} data={data} previews={previews.data ?? null} />
+        {/* While a new page's pictures load, its cards wait for them (empty squares), not for the last page's answer. */}
+        <ReviewBody key={keyOf(data)} data={data} previews={previews.state === "idle" ? (previews.data ?? null) : null} />
       </s-stack>
     </s-page>
   );
@@ -369,6 +370,19 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
       </div>
 
       {allDecided ? <PageDone data={data} outcomes={outcomes} elsewhere={elsewhere} continueHref={continueHref} i18n={i18n} /> : null}
+
+      {/* More than one page: the way to the next one without deciding this one, and back to the first. */}
+      {data.page.nextCursor || !data.page.isFirstPage ? (
+        <s-box padding="base">
+          <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
+            {data.page.size ? <s-text color="subdued">{t("review.page.position", { from: data.page.from, to: data.page.to, total: data.page.matching })}</s-text> : <span />}
+            <s-stack direction="inline" gap="small-200">
+              {!data.page.isFirstPage ? <s-button href={reviewHref(query)}>{t("language.list.page.first")}</s-button> : null}
+              {data.page.nextCursor ? <s-button href={reviewHref(query, { after: data.page.nextCursor })}>{t("language.list.page.next")}</s-button> : null}
+            </s-stack>
+          </s-grid>
+        </s-box>
+      ) : null}
 
       {/* The page's two questions (opened from the strip). */}
       <ReviewApproveConfirm id="review-approve" summary={summary} i18n={i18n} onConfirm={() => submitPage("approve", approvable.map((x) => x.draft))} />

@@ -143,7 +143,7 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 
 ### N. Uninstall and compliance
 - **N1** Uninstall → sessions deleted, running jobs cancelled, `Shop` marked uninstalled.
-- **N2** Reinstall → works without old sessions; data handling per DATABASE_SCHEMA.md.
+- **N2** Reinstall → works without old sessions; data handling per DATABASE_SCHEMA.md. Shopify cancelled the subscription at the uninstall, and Linguva forgot the cached plan then: the plan is checked again on the first open. With `BILLING_REQUIRED=true`, Shopify's plan page appears again after a reinstall, also within the 6 h cache (App Store requirement 1.2.2); with `false`, the store starts on Free until a plan is chosen again.
 - **N3** `shopify app webhook trigger` for `customers/data_request`, `customers/redact`, `shop/redact` → 200, recorded; `shop/redact` deletes the shop's data.
 
 ### P. Automatic translation (webhooks)

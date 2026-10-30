@@ -10,6 +10,23 @@ export interface InstallInput {
 }
 
 /**
+ * Shopify cancels the app's subscription when the app is uninstalled, so
+ * the cached plan no longer holds: "no plan", checked never. The next
+ * billing check asks the Partner API again, and with plans required a
+ * reinstalled store chooses a plan again (App Store requirement 1.2.2).
+ */
+const CANCELLED_SUBSCRIPTION = {
+  state: "NONE",
+  planHandle: null,
+  pendingPlanHandle: null,
+  billingPeriod: null,
+  trialEndsAt: null,
+  cancelAtEndOfCycle: false,
+  currentPeriodEnd: null,
+  checkedAt: new Date(0),
+} as const;
+
+/**
  * Creates or reactivates the tenant for a freshly authenticated shop and
  * records the installation event. Idempotent and safe under concurrency:
  * on first open the app's loaders authenticate in parallel, so several
@@ -63,6 +80,10 @@ export async function upsertInstalledShop(
           data: { shopId: shop.id, event, scopes: input.scopes ?? null },
         });
       }
+      // The uninstall reset the plan already; this also covers one recorded before that reset existed.
+      if (event === "REINSTALLED") {
+        await tx.shopSubscription.updateMany({ where: { shopId: shop.id }, data: CANCELLED_SUBSCRIPTION });
+      }
     },
     client,
   );
@@ -97,6 +118,8 @@ export async function markShopUninstalled(
       await tx.shopInstallation.create({
         data: { shopId: shop.id, event: "UNINSTALLED" },
       });
+      // Shopify cancelled the subscription: a reinstall asks again (CANCELLED_SUBSCRIPTION).
+      await tx.shopSubscription.updateMany({ where: { shopId: shop.id }, data: CANCELLED_SUBSCRIPTION });
       // Background work stops with the installation.
       await tx.translationJob.updateMany({
         where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } },

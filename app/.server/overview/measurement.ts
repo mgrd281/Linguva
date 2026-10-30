@@ -57,3 +57,14 @@ export function measurementState(report: ReportInfo | null, options: { jobsAvail
   if (report.status === "FAILED") return { state: "failed", ...none };
   return { state: "done", ...none };
 }
+
+/** Measurements reading the store now (a stalled one can be started again). */
+export const UNDER_WAY: ReadonlySet<MeasurementState> = new Set(["queued", "waiting", "running"]);
+
+/** Segments are "TYPE|locale": whether a measurement reads the language. */
+const readsLocale = (segments: readonly string[], locale: string) => segments.some((s) => s.slice(s.indexOf("|") + 1) === locale);
+
+/** A measurement under way reads the language now. */
+export function scanningOf(report: { segments: readonly string[] } | null, measurement: Measurement, locale: string) {
+  return UNDER_WAY.has(measurement.state) && Boolean(report && readsLocale(report.segments, locale));
+}

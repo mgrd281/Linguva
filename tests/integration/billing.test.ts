@@ -183,6 +183,52 @@ describe("plans in bulk jobs and the editor", () => {
   });
 });
 
+describe("refresh throttle (minAgeMs)", () => {
+  it("reuses a successful check younger than minAgeMs, asks Shopify for an older one, and always with force alone", async () => {
+    const s = await shop();
+    const api = fakePartnerApi({ handle: "pro" });
+    let now = new Date("2026-10-30T09:00:00Z");
+    const d = deps(api, { now: () => now });
+    await getBillingStatus(d, s);
+    expect(api.calls).toHaveLength(1);
+
+    now = new Date(now.getTime() + 10_000);
+    expect(await getBillingStatus(d, s, { force: true, minAgeMs: 30_000 })).toMatchObject({ state: "ACTIVE", stale: false, entitlements: PLANS.pro });
+    expect(api.calls).toHaveLength(1);
+
+    now = new Date(now.getTime() + 21_000);
+    api.set({ handle: "business" });
+    expect((await getBillingStatus(d, s, { force: true, minAgeMs: 30_000 })).entitlements.plan).toBe("business");
+    expect(api.calls).toHaveLength(2);
+
+    // Without minAgeMs, force always asks (the welcome link).
+    await getBillingStatus(d, s, { force: true });
+    expect(api.calls).toHaveLength(3);
+  });
+
+  it("never turns a failed check into 'no plan': the last known state or UNKNOWN, and the next click asks again", async () => {
+    const s = await shop();
+    const api = fakePartnerApi({ handle: "starter" });
+    let now = new Date("2026-10-30T09:00:00Z");
+    const d = deps(api, { now: () => now });
+    await getBillingStatus(d, s);
+    api.set({ status: 503 });
+    now = new Date(now.getTime() + 31_000);
+    expect(await getBillingStatus(d, s, { force: true, minAgeMs: 30_000 })).toMatchObject({ state: "ACTIVE", stale: true, entitlements: PLANS.starter });
+    // A failure doesn't update checkedAt: the next refresh asks Shopify again.
+    now = new Date(now.getTime() + 1_000);
+    await getBillingStatus(d, s, { force: true, minAgeMs: 30_000 });
+    expect(api.calls).toHaveLength(3);
+
+    const never = await shop("never-answered.myshopify.com");
+    expect(await getBillingStatus(deps(fakePartnerApi({ status: 503 })), never, { force: true, minAgeMs: 30_000 })).toMatchObject({
+      state: "UNKNOWN",
+      entitlements: PLANS.free,
+      mustChoosePlan: false,
+    });
+  });
+});
+
 describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
   const HOUR = 3_600_000;
 

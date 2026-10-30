@@ -141,12 +141,15 @@ export async function refreshSubscription(
 
 /**
  * The shop's billing status and entitlements. Uses the cache while it is
- * fresh; `force` re-checks (for example after the welcome link).
+ * fresh; `force` re-checks (for example after the welcome link). With
+ * `minAgeMs`, a forced check reuses a successful check younger than that
+ * (the Plan page's refresh); a failed check never updates `checkedAt`, so
+ * it is asked again.
  */
 export async function getBillingStatus(
   deps: BillingDeps,
   shop: { id: string; shopifyShopGid: string | null },
-  options: { force?: boolean } = {},
+  options: { force?: boolean; minAgeMs?: number } = {},
 ): Promise<BillingStatus> {
   // Complimentary access needs no subscription and wins over any plan.
   const complimentary = await activeComplimentaryAccess(
@@ -171,8 +174,10 @@ export async function getBillingStatus(
   const client = deps.prisma ?? defaultClient;
   const now = (deps.now ?? (() => new Date()))().getTime();
   const cached = await withTenant(shop.id, (tx) => tx.shopSubscription.findUnique({ where: { shopId: shop.id } }), client);
-  const fresh = cached && now - cached.checkedAt.getTime() < SUBSCRIPTION_TTL_MS;
-  if (cached && fresh && !options.force) return statusFrom(cached, deps, false);
+  const age = cached ? now - cached.checkedAt.getTime() : Infinity;
+  const fresh = age < SUBSCRIPTION_TTL_MS;
+  const recent = options.minAgeMs !== undefined && age < options.minAgeMs;
+  if (cached && fresh && (!options.force || recent)) return statusFrom(cached, deps, false);
   try {
     const row = await refreshSubscription(deps, shop);
     return statusFrom(row ?? cached, deps, !row && Boolean(cached));

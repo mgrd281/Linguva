@@ -268,9 +268,13 @@ test.describe("Review", () => {
 
   test("a page whose original changed meanwhile: what went live, what didn't and why @responsive", async ({ page }) => {
     await open(page, "/app/review?lang=es");
+    const payoff = page.getByText(/^Once you approve everything, Spanish is \d+\s?% translated\.$/);
+    await expect(payoff).toBeVisible();
     await primary(page).click();
     await page.locator("s-modal#review-approve").getByRole("button", { name: "Approve 2", exact: true }).click();
     await expect(page.locator('s-banner[heading="1 approved · 1 not published"]')).toBeVisible();
+    // Nothing of Spanish waits any more: no promise about approving it all.
+    await expect(payoff).toHaveCount(0);
     await expect(page.getByText("The marked texts say why.")).toBeVisible();
     await expect(page.getByText("Outdated: the original changed in the meantime. Not published.")).toBeVisible();
     await expect(page.getByText("Approved – customers see it now.")).toBeVisible();
@@ -368,6 +372,15 @@ test.describe("Review", () => {
     // The last area chosen: its chip is in view on every width.
     await open(page, "/app/review?area=urls");
     await expect(areas(page).locator('[aria-current="true"]')).toBeInViewport({ ratio: 0.95 });
+  });
+
+  test("a selection with nothing in it says so once, without the page's strip @responsive", async ({ page }) => {
+    await open(page, "/app/review?q=Zzzz");
+    await expect(page.getByText("Nothing found for “Zzzz”.")).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Clear search" })).toHaveCount(1);
+    await expect(page.getByText("Everything on this page is decided.")).toHaveCount(0);
+    await expect(summary(page)).toHaveCount(0);
+    await expect(primary(page)).toHaveCount(0);
   });
 
   test("is accessible and never scrolls sideways, also at 390 px @responsive", async ({ page }) => {

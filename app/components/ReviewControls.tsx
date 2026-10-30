@@ -296,17 +296,15 @@ export function ReviewControls({
                 {query.group ? <ScopeChip text={t(`review.scope.group.${query.group as "seo" | "handle" | "content"}`)} href={reviewHref(query, { group: null })} i18n={i18n} /> : null}
               </s-stack>
             ) : null}
-            {query.search ? (
+            {/* Without matches the page says so once, below the card, with its "Clear search" button. */}
+            {query.search && data.page.matching ? (
               <s-stack direction="inline" gap="small-200 base" alignItems="center">
-                <s-text>
-                  {data.page.matching
-                    ? t("language.list.search.results", { count: data.page.matching, query: quoted })
-                    : t("language.list.search.none", { query: quoted })}
-                </s-text>
+                <s-text>{t("language.list.search.results", { count: data.page.matching, query: quoted })}</s-text>
                 <s-link href={reviewHref(query, { search: null })}>{t("language.list.search.clear")}</s-link>
               </s-stack>
             ) : null}
-            {data.payoff ? (
+            {/* While texts of its language still wait (the counts drop as the merchant decides). */}
+            {data.payoff && (facets.languages.find((l) => l.locale === data.payoff!.locale)?.count ?? 0) > 0 ? (
               <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
                 <s-icon type="chart-line" tone="info" />
                 <s-stack direction="@container (inline-size > 640px) inline, block" gap="small-200" alignItems="baseline">
@@ -318,35 +316,38 @@ export function ReviewControls({
             {previewsFailed ? <s-text color="subdued">{t("review.previews.error")}</s-text> : null}
           </s-stack>
         </s-box>
-        <s-divider />
-        <s-box padding="base" background="subdued">
-          <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="small-200 base" alignItems="center">
-            <s-text>{summary}</s-text>
-            {actions.undecided > 0 ? (
-              <s-stack direction="inline" gap="small-200 base" alignItems="center" justifyContent="end">
-                {actions.approving ? <s-text color="subdued">{t("review.page.busy")}</s-text> : null}
-                {!actions.busy && actions.blocked ? (
-                  <s-text color="subdued">{t(actions.blocked === "empty" ? "review.page.blocked.empty" : "review.page.blocked.question")}</s-text>
-                ) : null}
-                <s-button variant="tertiary" tone="critical" commandFor="review-reject" command="--show" {...(rejectDisabled ? { disabled: true } : {})}>
-                  {t("review.page.rejectAll")}
-                </s-button>
-                {actions.approvable > 0 ? (
-                  <s-button
-                    variant="primary"
-                    icon="check"
-                    commandFor="review-approve"
-                    command="--show"
-                    {...(disabled ? { disabled: true } : {})}
-                    {...(actions.approving ? { loading: true } : {})}
-                  >
-                    {t(actions.allOnPage ? "review.page.approveAll" : "review.page.approveAllOnPage", { count: actions.approvable })}
+        {/* A selection with nothing in it has nothing to decide: the page says so below the card. */}
+        {data.page.size > 0 ? <s-divider /> : null}
+        {data.page.size > 0 ? (
+          <s-box padding="base" background="subdued">
+            <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="small-200 base" alignItems="center">
+              <s-text>{summary}</s-text>
+              {actions.undecided > 0 ? (
+                <s-stack direction="inline" gap="small-200 base" alignItems="center" justifyContent="end">
+                  {actions.approving ? <s-text color="subdued">{t("review.page.busy")}</s-text> : null}
+                  {!actions.busy && actions.blocked ? (
+                    <s-text color="subdued">{t(actions.blocked === "empty" ? "review.page.blocked.empty" : "review.page.blocked.question")}</s-text>
+                  ) : null}
+                  <s-button variant="tertiary" tone="critical" commandFor="review-reject" command="--show" {...(rejectDisabled ? { disabled: true } : {})}>
+                    {t("review.page.rejectAll")}
                   </s-button>
-                ) : null}
-              </s-stack>
-            ) : null}
-          </s-grid>
-        </s-box>
+                  {actions.approvable > 0 ? (
+                    <s-button
+                      variant="primary"
+                      icon="check"
+                      commandFor="review-approve"
+                      command="--show"
+                      {...(disabled ? { disabled: true } : {})}
+                      {...(actions.approving ? { loading: true } : {})}
+                    >
+                      {t(actions.allOnPage ? "review.page.approveAll" : "review.page.approveAllOnPage", { count: actions.approvable })}
+                    </s-button>
+                  ) : null}
+                </s-stack>
+              ) : null}
+            </s-grid>
+          </s-box>
+        ) : null}
       </s-query-container>
     </s-section>
   );

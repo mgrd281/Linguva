@@ -14,6 +14,7 @@ vi.hoisted(() => {
  */
 import { PrismaClient } from "@prisma/client";
 import { loadPlanPage } from "../../app/.server/billing/plan-page";
+import { AUTO_REQUESTED_BY } from "../../app/.server/jobs/bulk-jobs";
 import { getBillingStatus, type BillingDeps } from "../../app/.server/billing/subscription";
 import { resetConfigCache } from "../../app/.server/lib/config";
 import { MAX_ENABLED_LOCALES } from "../../app/.server/locales/shop-locales";
@@ -22,6 +23,7 @@ import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { periodKey } from "../../app/.server/usage/usage-ledger";
 import { recommendPlan } from "../../app/lib/plan-view";
 import { PLANS, TRIAL_AI_CHARS } from "../../app/lib/plans";
+import { SMART_REQUESTED_BY } from "../../app/lib/smart-auto";
 import { ownerDb, resetDatabase } from "../support/db";
 import { fakePartnerApi, PARTNER_SETTINGS, type FakeSubscription } from "../support/fake-partner-api";
 import { FakeShopifyStore } from "../support/fake-store";
@@ -208,6 +210,31 @@ describe("what the store uses", () => {
       app,
     );
     expect((await page(s, new FakeShopifyStore(1), { handle: "starter" }, { now })).use).toMatchObject({ bulk: false });
+  });
+
+  it("doesn't count the app's own automatic jobs as the store translating whole areas at once", async () => {
+    const now = new Date();
+    const s = await shop();
+    // Automatic translation of new content and the smart schedule's real-time mode run jobs of their
+    // own (without a run); both were switched off since. Nothing else is used: Free is enough.
+    await withTenant(
+      s.id,
+      async (tx) => {
+        await tx.translationJob.create({ data: { shopId: s.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: AUTO_REQUESTED_BY, idempotencyKey: "auto", createdAt: now } });
+        await tx.translationJob.create({ data: { shopId: s.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: SMART_REQUESTED_BY, idempotencyKey: "realtime", createdAt: now } });
+      },
+      app,
+    );
+    const quiet = await page(s, new FakeShopifyStore(1), { handle: "starter" }, { now });
+    expect(quiet.use).toMatchObject({ bulk: false, auto: false, smart: false });
+    expect(recommendPlan(quiet.use!)).toEqual({ plan: "free", reasons: [] });
+
+    // A job the merchant started counts, also one without a signed-in user (an offline session).
+    for (const requestedBy of ["7", null]) {
+      const own = await shop();
+      await withTenant(own.id, (tx) => tx.translationJob.create({ data: { shopId: own.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy, idempotencyKey: "own", createdAt: now } }), app);
+      expect((await page(own, new FakeShopifyStore(1), { handle: "starter" }, { now })).use, String(requestedBy)).toMatchObject({ bulk: true });
+    }
   });
 
   it("is left out without AI translation: nothing to recommend", async () => {

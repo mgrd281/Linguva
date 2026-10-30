@@ -7,6 +7,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import { AUTO_REQUESTED_BY } from "../jobs/bulk-jobs";
 import { getConfig } from "../lib/config";
 import { prisma as defaultClient } from "../lib/db";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
@@ -15,6 +16,7 @@ import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage, nextPeriodStart, periodKey } from "../usage/usage-ledger";
 import { planSelectionUrl } from "../../lib/plans";
 import type { ShopUse } from "../../lib/plan-view";
+import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { aiLimitsFor } from "./billing";
 import { allowedTargetLocales, type BillingStatus } from "./subscription";
 
@@ -32,7 +34,14 @@ export async function shopUseFlags(shopId: string, now: Date, client: PrismaClie
       const settings = await tx.shopSettings.findUnique({ where: { shopId }, select: { autoTranslateNew: true, bulkPublishMode: true } });
       const smart = await tx.smartAutoConfig.findUnique({ where: { shopId }, select: { enabled: true } });
       const job = await tx.translationJob.findFirst({
-        where: { shopId, smartRunId: null, createdAt: { gte: new Date(now.getTime() - BULK_USE_WINDOW_MS) } },
+        where: {
+          shopId,
+          smartRunId: null,
+          // Started by the merchant (signed in or not), not by automatic translation of new content or
+          // the smart schedule's real-time mode: those run jobs of their own too (isAutomaticJob).
+          OR: [{ requestedBy: null }, { requestedBy: { notIn: [AUTO_REQUESTED_BY, SMART_REQUESTED_BY] } }],
+          createdAt: { gte: new Date(now.getTime() - BULK_USE_WINDOW_MS) },
+        },
         select: { id: true },
       });
       return {

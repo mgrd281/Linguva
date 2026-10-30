@@ -3,8 +3,6 @@ import type { Message, Translation } from "./define";
 
 export const en = {
   "common.nav.overview": "Overview",
-  "common.nav.products": "Products",
-  "common.nav.collections": "Collections",
   "common.nav.content": "Content",
   "common.nav.review": "Review",
   "common.nav.jobs": "Jobs",
@@ -209,8 +207,6 @@ export const en = {
 
 export const de: Translation<typeof en> = {
   "common.nav.overview": "Übersicht",
-  "common.nav.products": "Produkte",
-  "common.nav.collections": "Kollektionen",
   "common.nav.content": "Inhalte",
   "common.nav.review": "Prüfen",
   "common.nav.jobs": "Aufträge",
@@ -415,8 +411,6 @@ export const de: Translation<typeof en> = {
 
 export const fr: Translation<typeof en> = {
   "common.nav.overview": "Vue d'ensemble",
-  "common.nav.products": "Produits",
-  "common.nav.collections": "Collections",
   "common.nav.content": "Contenus",
   "common.nav.review": "Révision",
   "common.nav.jobs": "Tâches",
@@ -621,8 +615,6 @@ export const fr: Translation<typeof en> = {
 
 export const es: Translation<typeof en> = {
   "common.nav.overview": "Resumen",
-  "common.nav.products": "Productos",
-  "common.nav.collections": "Colecciones",
   "common.nav.content": "Contenido",
   "common.nav.review": "Revisión",
   "common.nav.jobs": "Tareas",

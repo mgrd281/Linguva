@@ -31,7 +31,7 @@ describe("languages inside a sentence", () => {
 
   it("puts several languages with unread content after a colon in French", () => {
     const partial = (names: string[]) => fr.t("overview.languages.partial", { languages: languageList(fr, names), count: names.length });
-    expect(partial(["tchèque"])).toMatch(/^Lors de la dernière mesure, certains contenus en tchèque n'ont pas pu être lus ;/);
+    expect(partial(["tchèque"])).toMatch(/^Lors du dernier comptage, certains contenus en tchèque n'ont pas pu être lus ;/);
     expect(partial(["tchèque", "polonais"])).toMatch(/n'ont pas pu être lus dans ces langues : tchèque et polonais ;/);
   });
 

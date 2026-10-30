@@ -9,9 +9,9 @@ test.describe("empty states", () => {
   test("a store with only its primary language is guided to add one", async ({ page }) => {
     await openApp(page, "empty", "/app");
     // The next step is adding a language, as the primary action.
-    await expect(page.locator('s-section[heading="Next step"]').getByText("Add a language")).toBeVisible();
+    await expect(page.locator('s-section[heading="Next"]').getByText("Add a language")).toBeVisible();
     await expect(page.locator('s-button[variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
-    await expect(page.getByText(/Your store only has its primary language/)).toBeVisible();
+    await expect(page.getByText("Your store only has its original language (English).")).toBeVisible();
     await openApp(page, "empty", "/app/products");
     await expect(page.getByText("No languages to translate into")).toBeVisible();
     await expect(page.locator("s-button", { hasText: "Open language settings" })).toBeVisible();
@@ -90,11 +90,11 @@ test.describe("loading states", () => {
     await openApp(page, "full", "/app");
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route("**/app/coverage.data**", async (route) => {
+    await page.route("**/app/jobs.data**", async (route) => {
       await held;
       await route.continue();
     });
-    await page.getByRole("link", { name: "See coverage details" }).click();
+    await page.getByRole("link", { name: "All jobs" }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(true);
     release();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(false);

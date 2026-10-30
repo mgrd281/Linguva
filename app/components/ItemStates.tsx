@@ -10,6 +10,7 @@ import type { I18n } from "../i18n/i18n";
 import type { StateCounts } from "../lib/coverage-rules";
 import type { ItemState } from "../lib/language-categories";
 import { STATE_COLOURS, SURFACE_COLOUR, TRACK_COLOUR } from "./Coverage";
+import { PLAIN_LIST } from "./LanguageLayout";
 
 /** The states in reading order: what is live first, what is missing last. */
 export const SHOWN_STATES = ["complete", "waiting", "outdated", "failed", "missing"] as const satisfies readonly ItemState[];
@@ -59,6 +60,25 @@ export function StateCountList({ counts, i18n }: { counts: StateCounts; i18n: I1
         </s-stack>
       ))}
     </s-stack>
+  );
+}
+
+/** "✓ 15 done – customers see them": one line per state with texts, the figure first (a hero's list). */
+export function StateLines({ counts, i18n }: { counts: StateCounts; i18n: I18n }) {
+  const texts = textCounts(counts);
+  return (
+    <ul style={{ ...PLAIN_LIST, display: "grid", gap: 6 }}>
+      {SHOWN_STATES.filter((s) => texts[s] > 0).map((s) => (
+        <li key={s}>
+          <s-grid gridTemplateColumns="auto 1fr" gap="small-200" alignItems="center">
+            <StateIcon state={s} size="small" />
+            <s-text>
+              <s-text type="strong">{i18n.number(texts[s])}</s-text> {i18n.t(`language.hero.state.${s}`, { count: texts[s] })}
+            </s-text>
+          </s-grid>
+        </li>
+      ))}
+    </ul>
   );
 }
 

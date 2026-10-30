@@ -21,7 +21,7 @@ import { CategoryCard, categoryName, type LanguageCategory } from "../components
 import { itemsHref, percentLabel } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
 import { Flag } from "../components/Flag";
-import { SHOWN_STATES, StateIcon, StateKey, TextStateBar, textCounts } from "../components/ItemStates";
+import { SHOWN_STATES, StateIcon, StateKey, StateLines, TextStateBar } from "../components/ItemStates";
 import { BIG_HEADING, Breadcrumbs, languageErrorText, NumberedSteps, PLAIN_LIST, StepNumber, type StepView } from "../components/LanguageLayout";
 import { ProgressBar } from "../components/ProgressBar";
 import { StepStrip } from "../components/StepStrip";
@@ -151,7 +151,6 @@ function Figure({ data, i18n, names }: { data: Data; i18n: I18n; names: Names })
   }
   const figure = data.headline;
   const percent = percentLabel(i18n, figure.complete, figure.total);
-  const texts = textCounts(figure.counts);
   return (
     <s-stack direction="block" gap="base">
       <s-grid gridTemplateColumns="auto 1fr" gap="large" alignItems="center">
@@ -167,18 +166,7 @@ function Figure({ data, i18n, names }: { data: Data; i18n: I18n; names: Names })
           <s-text color="subdued">{t("language.hero.fallback", { primary: names.primary })}</s-text>
         </s-stack>
       </s-grid>
-      <ul style={{ ...PLAIN_LIST, display: "grid", gap: 6 }}>
-        {SHOWN_STATES.filter((s) => texts[s] > 0).map((s) => (
-          <li key={s}>
-            <s-grid gridTemplateColumns="auto 1fr" gap="small-200" alignItems="center">
-              <StateIcon state={s} size="small" />
-              <s-text>
-                <s-text type="strong">{i18n.number(texts[s])}</s-text> {t(`language.hero.state.${s}`, { count: texts[s] })}
-              </s-text>
-            </s-grid>
-          </li>
-        ))}
-      </ul>
+      <StateLines counts={figure.counts} i18n={i18n} />
       {data.payoff !== null && data.steps ? (
         <s-stack direction="inline">
           <s-badge tone="info" icon="arrow-up-right">

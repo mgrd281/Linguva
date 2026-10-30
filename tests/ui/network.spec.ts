@@ -27,9 +27,9 @@ test("on a slow connection, navigation shows the admin loading bar and arrives",
     await route.continue();
   });
   await page.evaluate(() => ((window as unknown as { __loading: boolean[] }).__loading = []));
-  await page.locator("s-section", { hasText: "What do you want to translate?" }).getByRole("link", { name: "Products" }).click();
+  await page.getByRole("link", { name: /^French \d+%/ }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading[0])).toBe(true);
-  await expect(page.getByText("Translate all products")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("heading", { level: 1, name: "French" })).toBeVisible({ timeout: 10_000 });
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(false);
 });
 

@@ -18,8 +18,8 @@ test("a new store installs through token exchange and lands on the Overview", as
 
   await openApp(page, "fresh", "/app");
   // A new merchant is guided: German exists and is published; the next step is measuring it.
-  await expect(page.locator('s-section[heading="Next step"]').getByText("See how much of your store is translated")).toBeVisible();
-  await expect(page.locator('s-button[variant="primary"]', { hasText: "Measure now" })).toBeVisible();
+  await expect(page.locator('s-section[heading="Next"]').getByText("See how much of your store is translated")).toBeVisible();
+  await expect(page.locator('s-button[variant="primary"]', { hasText: "Count now" })).toBeVisible();
 
   // afterAuth stored the tenant with the GID Shopify reported.
   const row = await owner.shop.findUniqueOrThrow({ where: { shopDomain: shop.domain } });
@@ -43,11 +43,11 @@ test("a forged session token gets no app content", async ({ page }) => {
   // The same request with a valid token shows the Overview…
   const valid = new URL(url);
   valid.searchParams.set("id_token", sessionToken(shop.domain));
-  expect(await (await page.request.get(valid.toString(), { maxRedirects: 0 })).text()).toContain('heading="Your languages"');
+  expect(await (await page.request.get(valid.toString(), { maxRedirects: 0 })).text()).toContain('heading="Next"');
   // …the forged one doesn't.
   const response = await page.request.get(url.toString(), { maxRedirects: 0 });
   const body = await response.text();
-  expect(body).not.toContain('heading="Your languages"');
+  expect(body).not.toContain('heading="Next"');
   expect(body).not.toContain(shop.name);
 
   // A data request with a forged bearer token is refused.

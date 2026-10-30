@@ -3,7 +3,8 @@
  * order, and never a step that can't be done here.
  */
 import { describe, expect, it } from "vitest";
-import { nextStep, type NextStepInput } from "../../app/.server/overview/next-step";
+import { attention, nextStep, type NextStepInput } from "../../app/.server/overview/next-step";
+import { emptyCounts, type StateCounts } from "../../app/lib/coverage-rules";
 import { analyzeCountries, missingLanguages, type MarketCountries } from "../../app/lib/country-coverage";
 
 const fr = { locale: "fr", name: "French", published: true };
@@ -128,5 +129,38 @@ describe("next step", () => {
   it("skips countries it can't know about", () => {
     expect(nextStep(input({ countries: null }))).toEqual({ id: "done" });
     expect(nextStep(input({ countries: { rows: [], missing: [] } }))).toEqual({ id: "done" });
+  });
+});
+
+describe("what else needs the merchant", () => {
+  const de = { locale: "de", name: "German", published: true };
+  const counted = (l: { locale: string; name: string; published: boolean }, counts: Partial<StateCounts>) => {
+    const all = { ...emptyCounts(), ...counts };
+    return { ...row(l, all.complete, Object.values(all).reduce((n, c) => n + c, 0)), counts: all };
+  };
+
+  it("sums outdated and failed texts across the languages customers can choose, the language with the most first", () => {
+    const progress = [counted(fr, { complete: 10, outdated: 2, failed: 1 }), counted(de, { complete: 10, outdated: 5 }), { ...counted(es, { outdated: 9 }) }];
+    expect(attention(input({ targets: [fr, de, es], progress }), null)).toEqual([
+      { id: "outdated", count: 7, locales: [{ locale: "de", name: "German", count: 5 }, { locale: "fr", name: "French", count: 2 }] },
+      { id: "failed", count: 1, locales: [{ locale: "fr", name: "French", count: 1 }] },
+    ]);
+  });
+
+  it("leaves out languages not counted yet and says nothing when all is well", () => {
+    expect(attention(input({ progress: [{ ...counted(fr, { outdated: 3 }), measured: false }] }), null)).toEqual([]);
+    expect(attention(input(), { id: "done" })).toEqual([]);
+  });
+
+  it("adds the countries without their language, unless the next step already asks for them", () => {
+    const shop = { primary: "en", published: ["fr"] };
+    const missing = countries([market(["FR", "IT"])], shop);
+    const next = nextStep(input({ countries: missing }));
+    expect(next).toMatchObject({ id: "countries", reason: "not-added" });
+    expect(attention(input({ countries: missing }), next)).toEqual([]);
+    expect(attention(input({ countries: missing, progress: [counted(fr, { complete: 1, outdated: 1 })] }), { id: "review", count: 1 })).toMatchObject([
+      { id: "outdated", count: 1 },
+      { id: "countries", reason: "not-added", countries: 1, locales: [{ locale: "it" }] },
+    ]);
   });
 });

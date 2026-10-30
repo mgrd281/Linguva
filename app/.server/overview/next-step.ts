@@ -5,7 +5,7 @@
  * limit is reached). The order is a product decision and lives only here.
  */
 import { LOW_COVERAGE_PERCENT, type CountryCoverage, type MissingReason } from "../../lib/country-coverage";
-import { coveragePercent } from "../../lib/coverage-rules";
+import { coveragePercent, type StateCounts } from "../../lib/coverage-rules";
 
 export type NextStep =
   | { id: "add-language" }
@@ -42,7 +42,17 @@ export interface NextStepInput {
   /** Languages of the newest completed measurement (empty: never measured). */
   measuredLocales: readonly string[];
   /** Per target language; measured rows carry their counts; partial: the measurement skipped some of its content. */
-  progress: ReadonlyArray<{ locale: string; name: string | null; published: boolean; measured: boolean; partial?: boolean; complete: number; total: number }>;
+  progress: ReadonlyArray<{
+    locale: string;
+    name: string | null;
+    published: boolean;
+    measured: boolean;
+    partial?: boolean;
+    complete: number;
+    total: number;
+    /** Texts per state (measured languages; read by `attention`). */
+    counts?: StateCounts | null;
+  }>;
   /** Content types of the published languages Linguva can't read (no access scope), and where to allow it. */
   unreadable?: { types: number; href: string | null } | null;
   /** Countries of the active markets, or null when unknown (no access, error). */
@@ -110,4 +120,33 @@ export function nextStep(input: NextStepInput): NextStep | null {
   // Nor over a published language that was never measured (no background jobs to measure it).
   if (unmeasured) return null;
   return measured.size > 0 ? { id: "done" } : null;
+}
+
+/** What else needs the merchant besides the next step: texts in one state across the languages customers can choose, or countries without their language. */
+export type Attention =
+  | {
+      id: "outdated" | "failed";
+      count: number;
+      /** The languages with such texts, most first. */
+      locales: Array<{ locale: string; name: string | null; count: number }>;
+    }
+  | Extract<NextStep, { id: "countries" }>;
+
+/**
+ * Under the next step, in this order: outdated texts (customers still see
+ * the old translation), failed ones, and countries without their language;
+ * each once, and never what the next step already asks for.
+ */
+export function attention(input: NextStepInput, next: NextStep | null): Attention[] {
+  const items: Attention[] = [];
+  for (const state of ["outdated", "failed"] as const) {
+    const locales = input.progress
+      .filter((p) => p.published && p.measured && p.counts && p.counts[state] > 0)
+      .map((p) => ({ locale: p.locale, name: p.name, count: p.counts![state] }))
+      .sort((a, b) => b.count - a.count || a.locale.localeCompare(b.locale));
+    if (locales.length) items.push({ id: state, count: locales.reduce((n, l) => n + l.count, 0), locales });
+  }
+  const countries = next?.id === "countries" ? null : countriesStep(input);
+  if (countries?.id === "countries") items.push(countries);
+  return items;
 }

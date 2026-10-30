@@ -17,7 +17,7 @@ test("the content page shows the store area by area for one language @responsive
 
   // The languages: visible ones by name, the hidden one last; the shown one is no link.
   const languages = page.getByRole("navigation", { name: "Choose a language" });
-  await expect(languages.locator('li s-text[type="strong"]')).toHaveText(["French", "German", "Arabic"]);
+  await expect(languages.locator("li")).toHaveText([/^French/, /^German/, /^Arabic/]);
   await expect(languages.locator('[aria-current="page"]')).toHaveText(/German/);
   await expect(languages.getByRole("link", { name: /^French: / })).toHaveAttribute("href", "/app/content?lang=fr");
   await expect(languages.locator("li", { hasText: "Arabic" })).toContainText("hidden");

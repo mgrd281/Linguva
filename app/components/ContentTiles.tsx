@@ -42,6 +42,13 @@ const INLINE_ICON = { display: "inline-flex", verticalAlign: "middle", marginInl
 const SUMMARY = { display: "block", cursor: "pointer", listStyle: "none" } as const;
 /** A card: on a phone too (Polaris draws sections flat there). */
 const CARD = { background: "base", border: "base", borderRadius: "large-100" } as const;
+/** Semibold at the body size: s-text type="strong" keeps the body weight (450) in Polaris, so names wouldn't stand out. */
+const STRONG = { fontWeight: 600, lineHeight: "20px" } as const;
+
+/** A name that leads its card, row or fold ("Produkte", "Texte deines Designs"), as the language page's card titles. */
+function Strong({ children }: { children: ReactNode }) {
+  return <strong style={STRONG}>{children}</strong>;
+}
 
 /** "Products", "Legal texts": a content type in the merchant's words. */
 export function partName(i18n: I18n, type: HubType): string {
@@ -70,14 +77,15 @@ export function chipLabel(i18n: I18n, language: Language): string {
     : i18n.t("content.language.chipNotCounted", { language: shown });
 }
 
-function ChipBody({ language, i18n }: { language: Language; i18n: I18n }) {
+/** A chip's flag, name (semibold on the current one), the hidden marker and the percentage. */
+function ChipBody({ language, current, i18n }: { language: Language; current: boolean; i18n: I18n }) {
+  const name = chipName(i18n, language);
+  const figure = language.measured ? percentLabel(i18n, language.complete, language.total) : "—";
   return (
     <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
       <Flag country={language.country} fallback={language.locale} size={20} />
       <s-stack direction="block">
-        <span style={ONE_LINE}>
-          <s-text type="strong">{chipName(i18n, language)}</s-text>
-        </span>
+        <span style={ONE_LINE}>{current ? <Strong>{name}</Strong> : <s-text>{name}</s-text>}</span>
         {language.published ? null : (
           <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-400" alignItems="center">
             <s-icon type="hide" size="small" color="subdued" />
@@ -87,9 +95,13 @@ function ChipBody({ language, i18n }: { language: Language; i18n: I18n }) {
           </s-grid>
         )}
       </s-stack>
-      <s-text color="subdued" fontVariantNumeric="tabular-nums">
-        {language.measured ? percentLabel(i18n, language.complete, language.total) : "—"}
-      </s-text>
+      {current ? (
+        <span style={{ ...STRONG, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{figure}</span>
+      ) : (
+        <s-text color="subdued" fontVariantNumeric="tabular-nums">
+          {figure}
+        </s-text>
+      )}
     </s-grid>
   );
 }
@@ -99,6 +111,14 @@ function ChipBody({ language, i18n }: { language: Language; i18n: I18n }) {
  * can't change with the width in Polaris' public props, the padding can.
  */
 const CHIP_PADDING = "@container (inline-size > 640px) small-200, small";
+
+/**
+ * A chip is as wide as its words, at least 168 px (two short ones share a
+ * phone's row): a long name or "100 %" never cuts the name ("Französis…" in
+ * equal 168 px columns). The chips of a row are equally tall (a hidden
+ * language's chip has two lines).
+ */
+const CHIP_ITEM = { display: "grid", flex: "0 0 auto", minWidth: "min(168px, 100%)", maxWidth: "100%" } as const;
 
 /**
  * The store's languages with how far each is: visible ones first, each
@@ -129,12 +149,12 @@ export function LanguageChips({ languages, current, i18n }: { languages: Languag
   return (
     <nav aria-label={t("content.language.nav")}>
       <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr, 1fr" gap="small-200 base" alignItems="center">
-        <s-text type="strong">{t("content.language.label")}</s-text>
-        <ul style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(168px, 100%), 1fr))", gap: 8 }}>
+        <Strong>{t("content.language.label")}</Strong>
+        <ul style={{ ...PLAIN_LIST, display: "flex", flexWrap: "wrap", gap: 8 }}>
           {ordered.map((l) => (
-            <li key={l.locale}>
+            <li key={l.locale} style={CHIP_ITEM}>
               {l.locale === current ? (
-                <span aria-current="page" style={{ display: "block" }}>
+                <span aria-current="page" style={{ display: "grid" }}>
                   <s-stack
                     direction="block"
                     justifyContent="center"
@@ -144,15 +164,24 @@ export function LanguageChips({ languages, current, i18n }: { languages: Languag
                     paddingInline="base"
                     paddingBlock={CHIP_PADDING}
                     minBlockSize="40px"
+                    blockSize="100%"
                   >
-                    <ChipBody language={l} i18n={i18n} />
+                    <ChipBody language={l} current i18n={i18n} />
                   </s-stack>
                 </span>
               ) : (
-                <s-clickable href={`/app/content?lang=${encodeURIComponent(l.locale)}`} background="base" border="base" borderRadius="large-200" inlineSize="100%">
+                <s-clickable href={`/app/content?lang=${encodeURIComponent(l.locale)}`} background="base" border="base" borderRadius="large-200" inlineSize="100%" blockSize="100%">
                   <s-text accessibilityVisibility="exclusive">{chipLabel(i18n, l)}</s-text>
-                  <s-stack direction="block" justifyContent="center" paddingInline="base" paddingBlock={CHIP_PADDING} minBlockSize="40px" accessibilityVisibility="hidden">
-                    <ChipBody language={l} i18n={i18n} />
+                  <s-stack
+                    direction="block"
+                    justifyContent="center"
+                    paddingInline="base"
+                    paddingBlock={CHIP_PADDING}
+                    minBlockSize="40px"
+                    blockSize="100%"
+                    accessibilityVisibility="hidden"
+                  >
+                    <ChipBody language={l} current={false} i18n={i18n} />
                   </s-stack>
                 </s-clickable>
               )}
@@ -541,7 +570,7 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
           <s-grid gridTemplateColumns={linked ? "auto minmax(0, 1fr) auto auto" : "auto minmax(0, 1fr)"} gap="base" alignItems="start">
             <IconTile icon={CATEGORIES[area.id].icon} />
             <s-stack direction="block" gap="small-500">
-              <s-text type="strong">{name}</s-text>
+              <Strong>{name}</Strong>
               {wideDetail ? (
                 <s-box display="@container (inline-size > 420px) auto, none">
                   <s-text color="subdued">{wideDetail}</s-text>
@@ -691,7 +720,7 @@ function PartRow({ part, i18n }: { part: ContentGroup["parts"][number]; i18n: I1
     <s-grid gridTemplateColumns={PART_GRID} gap="base" alignItems="center">
       <s-icon type={PART_ICON[part.type]} color="subdued" size="small" />
       <s-stack direction="block" gap="small-500">
-        <s-text type="strong">{name}</s-text>
+        <Strong>{name}</Strong>
         <s-text color="subdued">{t(`content.part.${part.type}.hint`)}</s-text>
       </s-stack>
       <RowFigure tally={part.tally} name={name} i18n={i18n} />
@@ -729,7 +758,7 @@ function GroupRow({ id, group, requested, i18n }: { id: GroupId; group: ContentG
           <s-grid gridTemplateColumns={ROW_GRID} gap="base" alignItems="center">
             <IconTile icon={id === "theme" ? "theme" : "email"} />
             <s-stack direction="block" gap="small-500">
-              <s-text type="strong">{name}</s-text>
+              <Strong>{name}</Strong>
               <s-text color="subdued">
                 {detail} · <span style={{ whiteSpace: "nowrap" }}>{parts}</span>
               </s-text>
@@ -771,7 +800,7 @@ function RefusedRow({ id, group, i18n }: { id: GroupId; group: ContentGroup; i18
           <IconTile icon={id === "theme" ? "theme" : "email"} />
           <s-stack direction="block" gap="small-200">
             <s-stack direction="block" gap="small-500">
-              <s-text type="strong">{t(`language.extra.${id}.name`)}</s-text>
+              <Strong>{t(`language.extra.${id}.name`)}</Strong>
               <s-text color="subdued">{t(`language.extra.${id}.detail`)}</s-text>
             </s-stack>
             <Lines lines={refusedLines(i18n, group)} boxed />
@@ -826,7 +855,7 @@ export function MoreTexts({ extras, open, i18n }: { extras: ContentPage["extras"
                 <s-grid gridTemplateColumns={ROW_GRID} gap="base" alignItems="center">
                   <IconTile icon="link" />
                   <s-stack direction="block" gap="small-500">
-                    <s-text type="strong">{urlsName}</s-text>
+                    <Strong>{urlsName}</Strong>
                     <s-text color="subdued">{t("language.extra.urls.detail")}</s-text>
                   </s-stack>
                   <RowFigure tally={extras.urls.tally} name={urlsName} i18n={i18n} />
@@ -851,7 +880,7 @@ function Fold({ heading, note, types, i18n }: { heading: string; note: string; t
       <summary style={SUMMARY}>
         <s-stack direction="inline" gap="small-200" alignItems="center" padding="small-200 base" minBlockSize="52px">
           <s-icon type={open ? "chevron-down" : "chevron-right"} size="small" />
-          <s-text type="strong">{heading}</s-text>
+          <Strong>{heading}</Strong>
           <s-badge>{i18n.number(types.length)}</s-badge>
           {open ? null : <s-text color="subdued">{languageList(i18n, names, 4)}</s-text>}
         </s-stack>
@@ -867,7 +896,7 @@ function Fold({ heading, note, types, i18n }: { heading: string; note: string; t
                   <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
                     <IconTile icon={PART_ICON[type]} size={28} />
                     <span>
-                      <s-text type="strong">{names[i]}</s-text>
+                      <Strong>{names[i]}</Strong>
                       {/* The area, unless it has the type's own name ("Größentabellen & Co."). */}
                       {area === names[i] ? null : <s-text color="subdued"> · {area}</s-text>}
                     </span>

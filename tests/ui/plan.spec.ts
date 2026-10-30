@@ -13,7 +13,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { translator } from "../../app/i18n/i18n";
 import { FEATURE_ICON } from "../../app/lib/plan-features";
-import { formatUsd, priceLabel } from "../../app/lib/plan-prices";
+import { formatUsd, monthsFree, priceLabel, yearlyHandles } from "../../app/lib/plan-prices";
 import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type PlanHandle } from "../../app/lib/plans";
 import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
 
@@ -44,7 +44,7 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
     else await expect(c, handle).not.toContainText(de.t("plan.price.perMonth"));
     if (price.yearlyUsd !== null) {
       await expect(c, handle).toContainText(de.t("plan.price.yearly", { amount: formatUsd("de", price.yearlyUsd) }));
-      await expect(c.locator("s-badge", { hasText: de.t("plan.price.monthsFree", { count: 2 }) }), handle).toHaveCount(1);
+      await expect(c.locator("s-badge", { hasText: de.t("plan.price.monthsFree", { count: monthsFree(handle)! }) }), handle).toHaveCount(1);
     } else {
       await expect(c, handle).not.toContainText(" / Jahr");
       if (price.monthlyUsd > 0) await expect(c, handle).toContainText(de.t("plan.price.monthlyOnly"));
@@ -52,7 +52,7 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
     }
   }
   // Two yearly lines (Starter, Pro), no switch between monthly and yearly, no "0 $".
-  await expect(page.getByText(/^oder [\d.]+\s\$ \/ Jahr$/)).toHaveCount(2);
+  await expect(page.getByText(/^oder [\d.]+\s\$ \/ Jahr$/)).toHaveCount(yearlyHandles().length);
   await expect(page.locator('[role="switch"], s-switch')).toHaveCount(0);
   await expect(page.locator("s-page")).not.toContainText(/(^|\s)0\s\$/);
   await expect(page.getByText(de.t("plan.price.footnote"))).toBeVisible();
@@ -89,7 +89,10 @@ test("English: prices like $29, Free as a word, and the price row in the full co
   await table.locator("summary").click();
   const priceRow = table.locator("tbody").first().locator("tr");
   await expect(priceRow.locator("th")).toContainText(en.t("plan.price.rowMonth"));
-  await expect(priceRow.locator("th")).toContainText("Starter and Pro also yearly: 2 months free");
+  const yearly = yearlyHandles();
+  await expect(priceRow.locator("th")).toContainText(
+    en.t("plan.price.rowYearly", { plans: new Intl.ListFormat("en-US", { type: "conjunction" }).format(yearly.map((h) => NAMES[h])), count: monthsFree(yearly[0]!)! }),
+  );
   await expect(priceRow.locator("td")).toHaveText(HANDLES.map((h) => priceLabel(en, h)));
 });
 
@@ -100,9 +103,10 @@ test("a store without a plan: Free applies now, the trial on the three paid card
   await expect(page.locator("s-button", { hasText: "Choose a plan" })).toHaveAttribute("href", /\/charges\/linguva-ui-test\/pricing_plans$/);
 
   await expect(card(page, "free").locator("s-badge", { hasText: en.t("plan.compare.appliesNow") })).toHaveCount(1);
-  await expect(page.getByText(trialLine(en))).toHaveCount(3);
+  // The paid plans' trial, only while they have one (TRIAL_DAYS 0: no trial text anywhere).
+  await expect(page.getByText(trialLine(en))).toHaveCount(TRIAL_DAYS > 0 ? 3 : 0);
   await expect(card(page, "free")).not.toContainText(trialLine(en));
-  for (const handle of ["starter", "pro", "business"] as const) await expect(card(page, handle)).toContainText(trialLine(en));
+  if (TRIAL_DAYS > 0) for (const handle of ["starter", "pro", "business"] as const) await expect(card(page, handle)).toContainText(trialLine(en));
 
   // Nothing used yet: Free is enough, and the page says so.
   await expect(page.getByText("Fits your store: Free.")).toBeVisible();

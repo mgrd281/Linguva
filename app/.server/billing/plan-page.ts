@@ -19,6 +19,7 @@ import type { ShopUse } from "../../lib/plan-view";
 import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { aiLimitsFor } from "./billing";
 import { allowedTargetLocales, type BillingStatus } from "./subscription";
+import { settleAll } from "../lib/settle";
 
 /** The refresh button asks Shopify again, but reuses a check that succeeded this recently (a double click asks once). */
 export const REFRESH_MIN_INTERVAL_MS = 30_000;
@@ -67,7 +68,9 @@ export interface PlanPageInput {
 
 export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = defaultClient) {
   const now = input.now ?? new Date();
-  const [billing, fetched, month, today, flags] = await Promise.all([
+  // Every read settles before the page answers or fails: none keeps running
+  // against the database after the request is gone.
+  const [billing, fetched, month, today, flags] = await settleAll([
     input.billing,
     // The page renders without them: "couldn't load your languages", no recommendation.
     fetchAndSyncShopLocales(input.admin, input.shop.id, client).then(

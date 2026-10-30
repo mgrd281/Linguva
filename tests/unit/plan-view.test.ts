@@ -19,7 +19,7 @@ import {
   type PlanViewInput,
   type ShopUse,
 } from "../../app/lib/plan-view";
-import { PLANS } from "../../app/lib/plans";
+import { PLANS, TRIAL_AI_CHARS } from "../../app/lib/plans";
 
 const NOW = "2026-10-30T09:12:00.000Z";
 const URL = "https://admin.shopify.com/store/shop/charges/linguva/pricing_plans";
@@ -57,7 +57,7 @@ describe("the hero for each billing state", () => {
   it("shows a running trial with its end and the trial allowance; a trial in the past is ignored", () => {
     const trial = view({ subscription: sub({ planHandle: "business", trialEndsAt: "2026-11-05T00:00:00.000Z" }) });
     expect(trial.badge).toEqual({ tone: "info", icon: "clock", words: { key: "plan.status.trial", dates: { date: "2026-11-05T00:00:00.000Z" } } });
-    expect(trial.lines).toEqual([{ icon: null, words: { key: "plan.current.trialAllowance", vars: { trial: 100_000, limit: 4_000_000 } } }]);
+    expect(trial.lines).toEqual([{ icon: null, words: { key: "plan.current.trialAllowance", vars: { trial: TRIAL_AI_CHARS, limit: PLANS.business.monthlyChars } } }]);
     expect(trial.trialEndsAt).toBe("2026-11-05T00:00:00.000Z");
     const over = view({ subscription: sub({ trialEndsAt: "2026-10-29T00:00:00.000Z" }) });
     expect(over.badge?.words.key).toBe("plan.status.active");

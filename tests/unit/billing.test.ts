@@ -95,10 +95,10 @@ describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
     const ends = new Date("2026-11-05T00:00:00Z");
     const status = statusFrom(row("business", ends), deps, false);
     expect(status.entitlements).toEqual({ ...PLANS.business, monthlyChars: TRIAL_AI_CHARS });
-    expect(status.entitlements.monthlyChars).toBe(100_000);
+    expect(status.entitlements.monthlyChars).toBe(TRIAL_AI_CHARS);
     expect(status.trialEndsAt).toEqual(ends);
     // Every limit follows: the monthly allowance and the daily cap (min(1,000,000, 100,000)).
-    expect(aiLimitsFor(config, status)).toMatchObject({ limit: 100_000, dailyLimit: 100_000 });
+    expect(aiLimitsFor(config, status)).toMatchObject({ limit: TRIAL_AI_CHARS, dailyLimit: TRIAL_AI_CHARS });
     // Only the allowance changes; the plan's features stay.
     expect(status).toMatchObject({ state: "ACTIVE", configured: true, mustChoosePlan: false, entitlements: { plan: "business", smartAuto: true, maxTargetLocales: 20 } });
   });
@@ -114,7 +114,7 @@ describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
   it("follows the clock, not the cached check: the full allowance starts when the trial ends", () => {
     const ends = new Date("2026-10-30T12:00:00Z");
     const cached = row("starter", ends);
-    expect(statusFrom(cached, { ...deps, now: () => new Date("2026-10-30T11:59:59Z") }, false).entitlements.monthlyChars).toBe(100_000);
+    expect(statusFrom(cached, { ...deps, now: () => new Date("2026-10-30T11:59:59Z") }, false).entitlements.monthlyChars).toBe(TRIAL_AI_CHARS);
     expect(statusFrom(cached, { ...deps, now: () => new Date("2026-10-30T12:00:01Z") }, false).entitlements.monthlyChars).toBe(300_000);
   });
 
@@ -125,7 +125,7 @@ describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
   });
 
   it("applies to the last known state too, and leaves no subscription and NONE as they are", () => {
-    expect(statusFrom(row("pro", new Date("2026-11-05T00:00:00Z")), deps, true)).toMatchObject({ stale: true, entitlements: { monthlyChars: 100_000 } });
+    expect(statusFrom(row("pro", new Date("2026-11-05T00:00:00Z")), deps, true)).toMatchObject({ stale: true, entitlements: { monthlyChars: TRIAL_AI_CHARS } });
     expect(statusFrom(null, deps, false)).toEqual({ configured: true, state: "UNKNOWN", entitlements: PLANS.free, subscription: null, stale: false, mustChoosePlan: false });
     const none = { ...row("pro", new Date("2026-11-05T00:00:00Z")), state: "NONE" as const, planHandle: null };
     expect(statusFrom(none, deps, false)).toMatchObject({ state: "NONE", entitlements: PLANS.free });
@@ -150,8 +150,8 @@ describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
     });
     const context = (entitlements: typeof PLANS.business) => ({ targets: ["de"], allowed: ["de"], shopTimeZone: "Europe/Berlin", entitlements, currentPublishMode: "DRAFT" as const });
     const trial = statusFrom(row("business", new Date("2026-11-05T00:00:00Z")), deps, false).entitlements as typeof PLANS.business;
-    expect(normaliseSmartSettings(form("150000"), context(trial))).toEqual({ ok: false, problem: "BUDGET" });
-    expect(normaliseSmartSettings(form("100000"), context(trial))).toMatchObject({ ok: true, value: { monthlyBudget: 100_000 } });
+    expect(normaliseSmartSettings(form(String(TRIAL_AI_CHARS + 50_000)), context(trial))).toEqual({ ok: false, problem: "BUDGET" });
+    expect(normaliseSmartSettings(form(String(TRIAL_AI_CHARS)), context(trial))).toMatchObject({ ok: true, value: { monthlyBudget: TRIAL_AI_CHARS } });
     expect(normaliseSmartSettings(form("150000"), context(PLANS.business))).toMatchObject({ ok: true, value: { monthlyBudget: 150_000 } });
   });
 });

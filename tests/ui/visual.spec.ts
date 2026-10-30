@@ -19,6 +19,7 @@ const PAGES: Array<[string, string]> = [
   ["plan", "/app/plan"],
   ["language", "/app/languages/de"],
   ["category", "/app/languages/de/products"],
+  ["content", "/app/content"],
 ];
 
 // With the time and zone where a page shows them ("Oct 30, 2026, 9:15 AM UTC").

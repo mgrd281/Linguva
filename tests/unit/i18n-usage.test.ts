@@ -26,6 +26,8 @@ const DYNAMIC = [
   "automatic.activity.reason.",
   "automatic.error.",
   "common.kind.",
+  "content.part.",
+  "content.access.scope.",
   "common.group.",
   "common.field.",
   "common.issue.",

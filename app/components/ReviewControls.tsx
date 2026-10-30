@@ -1,0 +1,321 @@
+/**
+ * Review's control card: the languages as tabs with flags and counts, a
+ * search that runs while typing, the areas and "With notes" as chips in
+ * one row (it swipes sideways on a phone), the job's or the old field
+ * filter's scope, the payoff for a page of one language, and the strip with
+ * the page's two actions. Filters are links (instant, no "Apply"); every
+ * change starts on the first page.
+ */
+import { useEffect, useRef } from "react";
+import { Form, useSubmit } from "react-router";
+import type { ReviewPageData } from "../.server/review/page";
+import type { I18n } from "../i18n/i18n";
+import { localeCountry } from "../lib/flags";
+import { languagePath } from "../lib/language-categories";
+import { reviewHref, type Facets, type ReviewQuery } from "../lib/review-view";
+import { areaIcon, areaName, focusSoon, languageLabel } from "./ReviewCard";
+import { Flag } from "./Flag";
+import { PLAIN_LIST } from "./LanguageLayout";
+
+/** Typing pauses this long before the search runs. */
+const SEARCH_DELAY_MS = 350;
+const COUNT = { fontVariantNumeric: "tabular-nums" } as const;
+
+export interface PageActions {
+  /** Undecided texts on the page (web addresses included) and those "Approve all" approves (without them). */
+  undecided: number;
+  approvable: number;
+  /** The page holds every matching text. */
+  allOnPage: boolean;
+  busy: boolean;
+  /** Why the page's buttons wait: an emptied or invalid text being edited, or an open question. */
+  blocked: "empty" | "question" | null;
+}
+
+function LanguageTabs({ data, facets, query, i18n }: { data: ReviewPageData; facets: Facets; query: ReviewQuery; i18n: I18n }) {
+  const { t } = i18n;
+  const languages = facets.languages
+    .map((l) => ({ ...l, name: languageLabel(i18n, l.locale, data.names) }))
+    .sort((a, b) => a.name.localeCompare(b.name, i18n.locale));
+  const tabs = [
+    { locale: null as string | null, name: t("language.list.filter.all"), count: facets.total },
+    ...languages,
+  ];
+  return (
+    <nav aria-label={t("review.lang.label")}>
+      <ul style={{ ...PLAIN_LIST, display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {tabs.map((tab) => {
+          const hidden = tab.locale !== null && data.published[tab.locale] === false;
+          const content = (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              {tab.locale ? <Flag country={localeCountry(tab.locale, data.marketCountries)} fallback={tab.locale} size={20} /> : null}
+              <s-text type={query.locale === tab.locale ? "strong" : "generic"}>{tab.name}</s-text>
+              {hidden ? (
+                <>
+                  <s-icon type="hide" color="subdued" size="small" />
+                  <s-text accessibilityVisibility="exclusive">{t("review.lang.hidden")}</s-text>
+                </>
+              ) : null}
+              <s-text color="subdued">
+                <span style={COUNT}>{i18n.number(tab.count)}</span>
+              </s-text>
+            </s-stack>
+          );
+          return (
+            <li key={tab.locale ?? "all"}>
+              {query.locale === tab.locale ? (
+                <span aria-current="true">
+                  <s-box padding="small-200 base" borderRadius="base" background="strong">
+                    {content}
+                  </s-box>
+                </span>
+              ) : (
+                <s-clickable href={reviewHref(query, { locale: tab.locale })} padding="small-200 base" borderRadius="base">
+                  {content}
+                </s-clickable>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+/**
+ * The search was being typed in when it last ran: the page is drawn afresh
+ * for the new results, and the field takes the focus back (caret at the
+ * end), so typing goes on where it was.
+ */
+let searchHadFocus = false;
+
+/** The search: runs while typing (after a pause, from two characters on) and at once on Enter. */
+function Search({ query, i18n }: { query: ReviewQuery; i18n: I18n }) {
+  const { t } = i18n;
+  const submit = useSubmit();
+  const form = useRef<HTMLFormElement>(null);
+  const field = useRef<HTMLElementTagNameMap["s-search-field"]>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  useEffect(() => {
+    if (!searchHadFocus) return;
+    searchHadFocus = false;
+    focusSoon(() => field.current);
+    requestAnimationFrame(() => {
+      const input = field.current?.shadowRoot?.querySelector("input");
+      if (input) input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }, []);
+  const run = () => {
+    searchHadFocus = Boolean(form.current?.contains(document.activeElement));
+  };
+  const onInput = (event: Event) => {
+    const text = (event.currentTarget as HTMLInputElement).value.trim();
+    if (timer.current) clearTimeout(timer.current);
+    if (text.length === 1) return;
+    timer.current = setTimeout(() => {
+      if (!form.current) return;
+      run();
+      void submit(form.current, { replace: true });
+    }, SEARCH_DELAY_MS);
+  };
+  return (
+    <Form method="get" ref={form} role="search" onSubmit={run}>
+      {query.locale ? <input type="hidden" name="lang" value={query.locale} /> : null}
+      {query.area ? <input type="hidden" name="area" value={query.area} /> : null}
+      {query.flagged ? <input type="hidden" name="flagged" value="1" /> : null}
+      {query.jobId ? <input type="hidden" name="job" value={query.jobId} /> : null}
+      {query.group ? <input type="hidden" name="group" value={query.group} /> : null}
+      <s-search-field
+        ref={field}
+        name="q"
+        label={t("common.action.search")}
+        labelAccessibilityVisibility="exclusive"
+        placeholder={t("review.filter.searchPlaceholder")}
+        value={query.search ?? ""}
+        onInput={onInput}
+      />
+    </Form>
+  );
+}
+
+/** The areas (each text in its own area: they add up to "All areas") and "With notes", one row. */
+function Chips({ data, facets, query, i18n }: { data: ReviewPageData; facets: Facets; query: ReviewQuery; i18n: I18n }) {
+  const { t } = i18n;
+  const showAreas = data.facets.areas.length > 1;
+  const showHints = facets.flagged > 0 || query.flagged;
+  if (!showAreas && !showHints) return null;
+  const all = facets.areas.reduce((n, a) => n + a.count, 0);
+  const hints = `${t("review.filter.hints")} ${i18n.number(facets.flagged)}`;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, overflowX: "auto", paddingBlock: 2 }}>
+      {showAreas ? (
+        <nav aria-label={t("review.filter.areaLabel")}>
+          <ul style={{ ...PLAIN_LIST, display: "flex", gap: 8 }}>
+            {[{ area: null, count: all }, ...facets.areas].map((option) => {
+              const text = `${option.area ? areaName(i18n, option.area) : t("review.filter.allAreas")} ${i18n.number(option.count)}`;
+              const icon = option.area ? <s-icon slot="graphic" type={areaIcon(option.area)} /> : null;
+              return (
+                <li key={option.area ?? "all"} style={{ flex: "none" }}>
+                  {query.area === option.area ? (
+                    <span aria-current="true">
+                      <s-chip color="strong">
+                        {icon}
+                        {text}
+                      </s-chip>
+                    </span>
+                  ) : (
+                    <s-clickable-chip href={reviewHref(query, { area: option.area })}>
+                      {icon}
+                      {text}
+                    </s-clickable-chip>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      ) : null}
+      {showAreas && showHints ? (
+        <div aria-hidden="true" style={{ alignSelf: "stretch", display: "flex", flex: "none" }}>
+          <s-divider direction="block" />
+        </div>
+      ) : null}
+      {showHints ? (
+        <div style={{ flex: "none" }}>
+          {query.flagged ? (
+            <span aria-current="true">
+              <s-clickable-chip color="strong" href={reviewHref(query, { flagged: false })} accessibilityLabel={t("review.filter.remove", { name: hints })}>
+                <s-icon slot="graphic" type="alert-triangle" />
+                {hints}
+              </s-clickable-chip>
+            </span>
+          ) : (
+            <s-clickable-chip href={reviewHref(query, { flagged: true })}>
+              <s-icon slot="graphic" type="alert-triangle" />
+              {hints}
+            </s-clickable-chip>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** A filter the page came with (a job's texts, the old field filter), with the way back to all. */
+function ScopeChip({ text, href, i18n }: { text: string; href: string; i18n: I18n }) {
+  const { t } = i18n;
+  return (
+    <s-stack direction="inline" gap="small-200" alignItems="center">
+      <s-chip>
+        <s-icon slot="graphic" type="filter" />
+        {text}
+      </s-chip>
+      <s-link href={href} accessibilityLabel={t("review.filter.remove", { name: text })}>
+        {t("review.filter.showAll")}
+      </s-link>
+    </s-stack>
+  );
+}
+
+export function ReviewControls({
+  data,
+  facets,
+  query,
+  actions,
+  previewsFailed,
+  i18n,
+}: {
+  data: ReviewPageData;
+  facets: Facets;
+  query: ReviewQuery;
+  actions: PageActions;
+  previewsFailed: boolean;
+  i18n: I18n;
+}) {
+  const { t } = i18n;
+  const quoted = query.search ? t("language.preview.quoted", { text: query.search }) : "";
+  const payoffLanguage = data.payoff ? i18n.language(data.payoff.locale, data.names[data.payoff.locale]) : "";
+  const disabled = actions.busy || actions.blocked !== null;
+  const summary =
+    actions.undecided > 0
+      ? `${t("review.page.summary", { count: actions.undecided })}${data.page.nextCursor || !data.page.isFirstPage ? ` · ${t("review.page.position", { from: data.page.from, to: data.page.to, total: data.page.matching })}` : ""}`
+      : t("review.page.allDecided");
+  return (
+    <s-section padding="none">
+      <s-query-container>
+        <s-box padding="base">
+          <s-stack direction="block" gap="base">
+            {data.facets.languages.length > 1 ? (
+              <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 280px, 1fr" gap="base" alignItems="center">
+                <LanguageTabs data={data} facets={facets} query={query} i18n={i18n} />
+                <Search query={query} i18n={i18n} />
+              </s-grid>
+            ) : (
+              // One language: no tabs, the search has the row.
+              <Search query={query} i18n={i18n} />
+            )}
+            <Chips data={data} facets={facets} query={query} i18n={i18n} />
+            {data.job || query.group ? (
+              <s-stack direction="inline" gap="small-200 base" alignItems="center">
+                {data.job ? (
+                  <ScopeChip text={t("review.filter.job", { date: i18n.date(data.job.createdAt, "medium") })} href={reviewHref(query, { jobId: null })} i18n={i18n} />
+                ) : null}
+                {query.group ? <ScopeChip text={t(`review.scope.group.${query.group as "seo" | "handle" | "content"}`)} href={reviewHref(query, { group: null })} i18n={i18n} /> : null}
+              </s-stack>
+            ) : null}
+            {query.search ? (
+              <s-stack direction="inline" gap="small-200 base" alignItems="center">
+                <s-text>
+                  {data.page.matching
+                    ? t("language.list.search.results", { count: data.page.matching, query: quoted })
+                    : t("language.list.search.none", { query: quoted })}
+                </s-text>
+                <s-link href={reviewHref(query, { search: null })}>{t("language.list.search.clear")}</s-link>
+              </s-stack>
+            ) : null}
+            {data.payoff ? (
+              <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
+                <s-icon type="chart-line" tone="info" />
+                <s-stack direction="@container (inline-size > 640px) inline, block" gap="small-200" alignItems="baseline">
+                  <s-text tone="info">{t("review.payoff", { language: payoffLanguage, percent: i18n.percent(data.payoff.percent) })}</s-text>
+                  <s-link href={languagePath(data.payoff.locale)}>{`${t("review.payoff.link", { language: languageLabel(i18n, data.payoff.locale, data.names) })} ›`}</s-link>
+                </s-stack>
+              </s-grid>
+            ) : null}
+            {previewsFailed ? <s-text color="subdued">{t("review.previews.error")}</s-text> : null}
+          </s-stack>
+        </s-box>
+        <s-divider />
+        <s-box padding="base" background="subdued">
+          <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="small-200 base" alignItems="center">
+            <s-text>{summary}</s-text>
+            {actions.undecided > 0 ? (
+              <s-stack direction="inline" gap="small-200 base" alignItems="center" justifyContent="end">
+                {actions.busy ? <s-text color="subdued">{t("review.page.busy")}</s-text> : null}
+                {!actions.busy && actions.blocked ? (
+                  <s-text color="subdued">{t(actions.blocked === "empty" ? "review.page.blocked.empty" : "review.page.blocked.question")}</s-text>
+                ) : null}
+                <s-button variant="tertiary" tone="critical" commandFor="review-reject" command="--show" {...(disabled ? { disabled: true } : {})}>
+                  {t("review.page.rejectAll")}
+                </s-button>
+                {actions.approvable > 0 ? (
+                  <s-button
+                    variant="primary"
+                    icon="check"
+                    commandFor="review-approve"
+                    command="--show"
+                    {...(disabled ? { disabled: true } : {})}
+                    {...(actions.busy ? { loading: true } : {})}
+                  >
+                    {t(actions.allOnPage ? "review.page.approveAll" : "review.page.approveAllOnPage", { count: actions.approvable })}
+                  </s-button>
+                ) : null}
+              </s-stack>
+            ) : null}
+          </s-grid>
+        </s-box>
+      </s-query-container>
+    </s-section>
+  );
+}

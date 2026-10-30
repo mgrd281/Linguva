@@ -22,6 +22,9 @@ export const TRACK_COLOUR = "#ebebeb";
 /** A card's own surface (Polaris' base background), for marks drawn over pictures. */
 export const SURFACE_COLOUR = "#ffffff";
 
+/** Behind numbers marked in a text (Review's number hints): a light yellow that keeps text contrast. */
+export const MARK_COLOUR = "#ffef9d";
+
 /**
  * Drafts and translations waiting for review aren't live yet: striped, so a
  * bar full of drafts never looks like a complete one.

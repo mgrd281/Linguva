@@ -28,7 +28,8 @@ export interface SeoPanelProps {
   pathSegment: string;
 }
 
-export function SeoCounter({ fieldKey, value, source }: { fieldKey: string; value: string; source: string }) {
+/** `showIssues={false}`: the length only, where the page names the findings itself (Review's live hints). */
+export function SeoCounter({ fieldKey, value, source, showIssues = true }: { fieldKey: string; value: string; source: string; showIssues?: boolean }) {
   const i18n = useI18n();
   const limits = SEO_LIMITS[fieldKey as keyof typeof SEO_LIMITS];
   if (!limits) return null;
@@ -44,7 +45,7 @@ export function SeoCounter({ fieldKey, value, source }: { fieldKey: string; valu
       <s-text tone={over ? "critical" : "neutral"}>
         {width} / {limits.max}
       </s-text>
-      {issues.map((i) => (
+      {(showIssues ? issues : []).map((i) => (
         <s-badge key={i.code} tone="warning">
           {issueName(i18n, i.code)}
         </s-badge>

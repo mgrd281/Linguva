@@ -12,15 +12,15 @@ const placeholders = (m: Message) =>
   [...new Set((typeof m === "string" ? [m] : [m.one, m.other]).flatMap((s) => [...s.matchAll(/\{(\w+)\}/g)].map((x) => x[1])))].sort();
 
 // Words that are the same in English and German, French or Spanish.
-const SAME_IN_BOTH = new Set(["Original", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—"]);
+const SAME_IN_BOTH = new Set(["Original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—"]);
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
-  ...["{language} (original)", "{title}, {field}, original", "{type} {reference}", "Business", "Budgets", "{time} ({zone})", "—"],
+  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "{time} ({zone})", "—"],
 ]);
 const SAME_IN_SPANISH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Plan", "Manual", "Original", "Formal", "Informal", "No", "no", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
-  ...["{language} (original)", "{title}, {field}, original", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Business", "{time} ({zone})", "—"],
+  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Business", "{time} ({zone})", "—"],
 ]);
 
 describe("interface language", () => {

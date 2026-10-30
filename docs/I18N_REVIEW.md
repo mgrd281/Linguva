@@ -37,6 +37,15 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - `{singular}` sentences use "cet élément ({singular})" / "este elemento ({singular})" because the noun's gender varies.
 - `landing.feature.control.text`, `landing.feature.seo.title`: marketing wording, free renderings.
 
+**Content page (`content.*`, Redesign 2)**
+- `content.part.*.name`: the merchant's names for Shopify's 26 content types, e.g. "Fiche de la boutique sur Google" / "Ficha de la tienda en Google" (the store's search listing), "Guides des tailles et plus" / "Tablas de tallas y más" (metaobjects), "Intégrations d'applications" / "Integraciones de apps" (app embeds), "Bordereau de livraison" / "Albarán" (as `common.kind.PACKING_SLIP_TEMPLATE`, Spain; Latin America: "lista de empaque").
+- `content.part.SELLING_PLAN_GROUP.name` / `SELLING_PLAN.name`: "Abonnements", "Options d'abonnement" / "Suscripciones", "Opciones de suscripción" (German uses the short "Abos").
+- `content.part.ONLINE_STORE_THEME_*.hint`: one line per theme part ("Par exemple le bouton « Ajouter au panier »" / "Por ejemplo, el botón «Agregar al carrito»"); compare with what Dawn's French and Spanish themes say.
+- `content.tile.attached.*`: "Les {parts} se traduisent avec vos produits." / "Traduces {parts} junto con tus productos.", with `content.tile.attachedPart.*` "descriptions d'images", "informations complémentaires" / "descripciones de imágenes", "información adicional".
+- `content.language.hidden` and `resources.hiddenLanguage`: "masquée" (feminine, for "langue") / "oculto" (masculine, for "idioma").
+- `content.tile.new`, `content.tile.recount`: "comptage" / "recuento" for a count of the store, as on the language page.
+- `content.unavailable.note`: names Shopify's translation app without its English name.
+
 **Jobs, glossary, memory, markets, plan**
 - `jobs.detail.timing.remaining`, `started`, `finished`: built so either value of `{duration}` fits.
 - `jobs.outcome.TRANSLATION_CHANGED`, `PROTECTED`: read as "the existing translation was kept".

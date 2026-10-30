@@ -152,6 +152,7 @@ export const en = {
   "automatic.budget.monthly": "Characters per month",
   "automatic.budget.help": "Leave empty for no limit beyond your plan's AI allowance ({allowance} characters a month). The smart schedule pauses when a budget is used up and continues by itself.",
   "automatic.budget.used": "Used by the smart schedule: {today} today, {month} this month",
+  "automatic.budget.trial": "Trial until {date}: until then your plan has {trial} AI characters a month, so a budget can't be higher. Afterwards: {limit} a month.",
 
   "automatic.exclusions.body": "These are never translated by the smart schedule. Add one from its editor.",
   "automatic.exclusions.empty": "Nothing is left alone.",
@@ -361,6 +362,7 @@ export const de: Translation<typeof en> = {
   "automatic.budget.monthly": "Zeichen pro Monat",
   "automatic.budget.help": "Leer lassen, wenn nur das KI-Kontingent deines Tarifs gelten soll ({allowance} Zeichen im Monat). Der intelligente Zeitplan pausiert, wenn ein Budget aufgebraucht ist, und läuft von selbst weiter.",
   "automatic.budget.used": "Vom intelligenten Zeitplan verbraucht: {today} heute, {month} in diesem Monat",
+  "automatic.budget.trial": "Testphase bis {date}: Bis dahin hast du {trial} KI-Zeichen im Monat, ein Budget kann also nicht höher sein. Danach: {limit} pro Monat.",
 
   "automatic.exclusions.body": "Diese übersetzt der intelligente Zeitplan nie. Füge sie in ihrem Editor hinzu.",
   "automatic.exclusions.empty": "Nichts ist ausgenommen.",
@@ -570,6 +572,7 @@ export const fr: Translation<typeof en> = {
   "automatic.budget.monthly": "Caractères par mois",
   "automatic.budget.help": "Laissez vide pour n'avoir aucune limite autre que le quota d'IA de votre forfait ({allowance} caractères par mois). La planification intelligente se met en pause quand un budget est épuisé et reprend d'elle-même.",
   "automatic.budget.used": "Utilisés par la planification intelligente : {today} aujourd'hui, {month} ce mois-ci",
+  "automatic.budget.trial": "Essai jusqu'au {date} : jusque-là, votre forfait dispose de {trial} caractères IA par mois, un budget ne peut donc pas être plus élevé. Ensuite : {limit} par mois.",
 
   "automatic.exclusions.body": "La planification intelligente ne traduit jamais ceux-ci. Ajoutez-en depuis leur éditeur.",
   "automatic.exclusions.empty": "Rien n'est exclu.",
@@ -779,6 +782,7 @@ export const es: Translation<typeof en> = {
   "automatic.budget.monthly": "Caracteres por mes",
   "automatic.budget.help": "Déjalo vacío para no tener más límite que la cuota de IA de tu plan ({allowance} caracteres al mes). La programación inteligente se pausa cuando se agota un presupuesto y continúa por sí sola.",
   "automatic.budget.used": "Usados por la programación inteligente: {today} hoy, {month} este mes",
+  "automatic.budget.trial": "Prueba hasta el {date}: hasta entonces tu plan tiene {trial} caracteres de IA al mes, así que un presupuesto no puede ser mayor. Después: {limit} al mes.",
 
   "automatic.exclusions.body": "La programación inteligente nunca traduce estos. Añádelos desde su editor.",
   "automatic.exclusions.empty": "No hay nada excluido.",

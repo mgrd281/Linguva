@@ -1,5 +1,11 @@
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.hoisted(() => {
+  // The editor's AI translation needs a provider: the mock one (no network).
+  process.env.TRANSLATION_PROVIDER = "mock";
+});
+
 import { PrismaClient } from "@prisma/client";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { ensureShopGid, getBillingStatus, SUBSCRIPTION_TTL_MS, type BillingDeps } from "../../app/.server/billing/subscription";
 import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
 import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
@@ -9,7 +15,8 @@ import { setAiConsent, setBulkPublishMode } from "../../app/.server/settings/sho
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
-import { PLANS, type Entitlements } from "../../app/lib/plans";
+import { periodKey, QuotaExceededError } from "../../app/.server/usage/usage-ledger";
+import { PLANS, TRIAL_AI_CHARS, type Entitlements } from "../../app/lib/plans";
 import { ownerDb, resetDatabase } from "../support/db";
 import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
 import { FakeShopifyStore } from "../support/fake-store";
@@ -173,5 +180,87 @@ describe("plans in bulk jobs and the editor", () => {
     form.set("intent", "ai-translate");
     form.append("key", "title");
     expect(await runEditorAction(ctx("fr"), form)).toEqual({ kind: "error", code: "PLAN_LANGUAGE" });
+  });
+});
+
+describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
+  const HOUR = 3_600_000;
+
+  /** AI characters this shop already used this month (not on the platform's daily counter). */
+  async function usedThisMonth(shopId: string, chars: number) {
+    await withTenant(
+      shopId,
+      (tx) => tx.usageLedger.create({ data: { shopId, periodKey: periodKey(), kind: "RESERVE", chars, provider: "mock", idempotencyKey: "seed-month" } }),
+      app,
+    );
+  }
+
+  async function trialShop() {
+    const s = await shop();
+    await setAiConsent({ shopId: s.id, granted: true, actorId: null }, app);
+    // The trial ends in two hours; the next check would be in six.
+    let now = new Date();
+    const api = fakePartnerApi({ handle: "pro", trialEndsAt: new Date(now.getTime() + 2 * HOUR).toISOString() });
+    const d = deps(api, { now: () => now });
+    return { s, api, d, later: () => (now = new Date(now.getTime() + 3 * HOUR)) };
+  }
+
+  const editor = (shopId: string, store: FakeShopifyStore, billing: EditorContext["billing"]): EditorContext => ({
+    admin: store.asAdmin(),
+    shopId,
+    actorId: "1",
+    kind: "PRODUCT",
+    resourceId: "gid://shopify/Product/1",
+    target: { locale: "de", name: "German", rtl: false },
+    sourceName: "English",
+    billing,
+    targetLocales: ["de"],
+  });
+  const aiTranslate = () => {
+    const form = new FormData();
+    form.set("intent", "ai-translate");
+    form.append("key", "title");
+    return form;
+  };
+
+  it("refuses editor AI above the trial allowance, and gives the plan's allowance once the trial is over, without a new check", async () => {
+    const { s, api, d, later } = await trialShop();
+    await usedThisMonth(s.id, TRIAL_AI_CHARS - 5);
+    const store = new FakeShopifyStore(1);
+
+    const trial = await getBillingStatus(d, s);
+    expect(trial.entitlements).toEqual({ ...PLANS.pro, monthlyChars: TRIAL_AI_CHARS });
+    expect(await runEditorAction(editor(s.id, store, trial), aiTranslate())).toEqual({ kind: "error", code: "QUOTA_EXCEEDED" });
+
+    later();
+    const after = await getBillingStatus(d, s);
+    expect(api.calls).toHaveLength(1);
+    expect(after.entitlements).toEqual(PLANS.pro);
+    expect(after.trialEndsAt).toBeUndefined();
+    expect(await runEditorAction(editor(s.id, store, after), aiTranslate())).toMatchObject({ kind: "ai", drafts: { title: "[de] Product 1 jacket" } });
+  });
+
+  it("stops a bulk job at the trial allowance; after the trial it continues", async () => {
+    const { s, d, later } = await trialShop();
+    await usedThisMonth(s.id, TRIAL_AI_CHARS - 5);
+    const store = new FakeShopifyStore(2);
+    const jobs: JobDependencies = {
+      prisma: app,
+      adminFor: async () => store.asAdmin(),
+      provider: new MockTranslationProvider(),
+      monthlyLimit: 10_000_000,
+      keyPrefix: "lv:test:trial",
+      billingFor: (shopId) => getBillingStatus(d, { id: shopId, shopifyShopGid: s.shopifyShopGid }),
+    };
+    const { job } = await createBulkJob({ shopId: s.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: null, idempotencyKey: `trial-${++n}` }, app);
+    const page = await runDiscoveryPage(jobs, { shopId: s.id, jobId: job.id });
+    const stop = await processItem(jobs, { shopId: s.id, itemId: page.itemIds[0]! }, 1).catch((e) => e);
+    expect(stop).toBeInstanceOf(QuotaExceededError);
+    expect(stop).toMatchObject({ scope: "monthly", limit: TRIAL_AI_CHARS });
+
+    // The same item, resumed after the trial: the plan's allowance applies (results wait as drafts).
+    later();
+    expect(await processItem(jobs, { shopId: s.id, itemId: page.itemIds[0]! }, 1)).toMatchObject({ status: "SUCCEEDED" });
+    expect((await listPendingDrafts(s.id, {}, app)).length).toBeGreaterThan(0);
   });
 });

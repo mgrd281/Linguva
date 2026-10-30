@@ -35,6 +35,7 @@ export const en = {
   "plan.plans.no": "No",
   "plan.plans.includes": "Also includes",
   "plan.plans.nothing": "—",
+  "plan.price.free": "Free",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -72,6 +73,8 @@ export const de: Translation<typeof en> = {
   "plan.plans.no": "Nein",
   "plan.plans.includes": "Außerdem enthalten",
   "plan.plans.nothing": "—",
+  // A soft hyphen: "Kostenlos" breaks only in the narrow phone table cell.
+  "plan.price.free": "Kosten\u00ADlos",
 };
 
 export const fr: Translation<typeof en> = {
@@ -109,6 +112,7 @@ export const fr: Translation<typeof en> = {
   "plan.plans.no": "Non",
   "plan.plans.includes": "Inclut aussi",
   "plan.plans.nothing": "—",
+  "plan.price.free": "Gratuit",
 };
 
 export const es: Translation<typeof en> = {
@@ -146,4 +150,5 @@ export const es: Translation<typeof en> = {
   "plan.plans.no": "No",
   "plan.plans.includes": "Incluye además",
   "plan.plans.nothing": "—",
+  "plan.price.free": "Gratis",
 };

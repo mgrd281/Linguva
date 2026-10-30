@@ -28,6 +28,7 @@ import { smartErrorText, SmartPreview, SmartStateBadge, SmartStateBanner, smartT
 import { groupLabel, itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
+import { entitlementsFor } from "../lib/plans";
 import { CONTENT_TYPES, isContentType, stillWithoutAccess } from "../lib/resource-kinds";
 import { formatTime, MAX_TIMES_PER_DAY, nextOccurrence, normaliseSchedule, parseTime, WEEKDAYS } from "../lib/schedule";
 import { checkSpec, REALTIME_CHECK_MINUTE, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_PERSONAL_DATA_TYPES, SMART_TYPES } from "../lib/smart-auto";
@@ -61,6 +62,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     available: context.available,
     autoPublishInPlan: billing.entitlements.autoPublish,
     allowance: aiLimitsFor(getConfig(), billing).limit,
+    // While a Shopify trial runs, the allowance (and so every budget) is the trial's; afterwards the plan's.
+    trial: billing.trialEndsAt ? { endsAt: billing.trialEndsAt.toISOString(), limit: entitlementsFor(billing.subscription?.planHandle).monthlyChars } : null,
     languages: targets.map((l) => ({ locale: l.locale, name: l.name, inPlan: allowed.includes(l.locale) })),
     shopTimeZone,
     zones,
@@ -542,6 +545,12 @@ export default function SmartAutomatic() {
               </s-grid>
             </s-query-container>
             <s-text color="subdued">{t("automatic.budget.help", { allowance: number(data.allowance) })}</s-text>
+            {data.trial ? (
+              <s-stack direction="inline" gap="small-200" alignItems="start">
+                <s-icon type="clock" color="subdued" />
+                <s-text>{t("automatic.budget.trial", { date: i18n.date(data.trial.endsAt), trial: number(data.allowance), limit: number(data.trial.limit) })}</s-text>
+              </s-stack>
+            ) : null}
             <s-text>{t("automatic.budget.used", { today: number(panel.usage.today), month: number(panel.usage.month) })}</s-text>
           </s-stack>
         </s-section>

@@ -4,6 +4,8 @@ import type { Message, Translation } from "./define";
 export const en = {
   "overview.banner.exhausted.heading": "This month's AI allowance is used up",
   "overview.banner.exhausted.body": "AI translation pauses until next month. Manual translation and translation memory keep working.",
+  "overview.banner.exhausted.headingTrial": "Your trial's AI allowance is used up",
+  "overview.banner.exhausted.bodyTrial": "AI translation pauses until your trial ends on {date}. Then your plan's full allowance applies. Manual translation and translation memory keep working.",
   "overview.banner.high.heading": "{percent} % of this month's AI allowance used",
   "overview.banner.high.body": "Large bulk jobs may stop when the allowance runs out.",
 
@@ -152,6 +154,8 @@ export const en = {
 export const de: Translation<typeof en> = {
   "overview.banner.exhausted.heading": "Das KI-Kontingent dieses Monats ist aufgebraucht",
   "overview.banner.exhausted.body": "Die KI-Übersetzung pausiert bis zum nächsten Monat. Manuelle Übersetzung und Übersetzungsspeicher funktionieren weiterhin.",
+  "overview.banner.exhausted.headingTrial": "Das KI-Kontingent deiner Testphase ist aufgebraucht",
+  "overview.banner.exhausted.bodyTrial": "Die KI-Übersetzung pausiert, bis deine Testphase am {date} endet. Danach gilt das volle Kontingent deines Tarifs. Manuelle Übersetzung und Übersetzungsspeicher funktionieren weiterhin.",
   "overview.banner.high.heading": "{percent} % des KI-Kontingents dieses Monats verbraucht",
   "overview.banner.high.body": "Große Massenaufträge können anhalten, wenn das Kontingent aufgebraucht ist.",
 
@@ -300,6 +304,8 @@ export const de: Translation<typeof en> = {
 export const fr: Translation<typeof en> = {
   "overview.banner.exhausted.heading": "Le quota d'IA de ce mois-ci est épuisé",
   "overview.banner.exhausted.body": "La traduction par IA est suspendue jusqu'au mois prochain. La traduction manuelle et la mémoire de traduction continuent de fonctionner.",
+  "overview.banner.exhausted.headingTrial": "Le quota d'IA de votre essai est épuisé",
+  "overview.banner.exhausted.bodyTrial": "La traduction par IA est suspendue jusqu'à la fin de votre essai, le {date}. Le quota complet de votre forfait s'applique ensuite. La traduction manuelle et la mémoire de traduction continuent de fonctionner.",
   "overview.banner.high.heading": "Vous avez utilisé {percent} % du quota d'IA de ce mois-ci",
   "overview.banner.high.body": "Les tâches de traduction groupée volumineuses peuvent s'interrompre une fois le quota épuisé.",
 
@@ -449,6 +455,8 @@ export const fr: Translation<typeof en> = {
 export const es: Translation<typeof en> = {
   "overview.banner.exhausted.heading": "La cuota de IA de este mes está agotada",
   "overview.banner.exhausted.body": "La traducción con IA queda en pausa hasta el próximo mes. La traducción manual y la memoria de traducción siguen funcionando.",
+  "overview.banner.exhausted.headingTrial": "La cuota de IA de tu prueba está agotada",
+  "overview.banner.exhausted.bodyTrial": "La traducción con IA queda en pausa hasta que termine tu prueba, el {date}. Después se aplica la cuota completa de tu plan. La traducción manual y la memoria de traducción siguen funcionando.",
   "overview.banner.high.heading": "Has usado el {percent} % de la cuota de IA de este mes",
   "overview.banner.high.body": "Las tareas de traducción masiva grandes pueden detenerse cuando se agote la cuota.",
 

@@ -18,8 +18,9 @@ import { addCounts, coveragePercent, emptyCounts, HEADLINE_EXCLUDED_TYPES, total
 import { reviewPayoff } from "../../lib/language-categories";
 import { CONTENT_TYPES, isContentType } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
-import { getDailyUsage, getMonthlyUsage } from "../usage/usage-ledger";
+import { getDailyUsage, getMonthlyUsage, nextPeriodStart } from "../usage/usage-ledger";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
+import type { BillingStatus } from "../billing/subscription";
 import { MAX_ENABLED_LOCALES } from "../../lib/locale-limits";
 import { usageLevel } from "../../lib/usage";
 import { analyzeCountries, countByStatus, missingLanguages } from "../../lib/country-coverage";
@@ -55,6 +56,8 @@ export interface OverviewOptions {
   markets?: () => Promise<MarketCountriesResult>;
   /** Tests only: the time the measurement state is judged at. */
   now?: number;
+  /** Tests only: the store's billing state instead of asking Shopify. */
+  billing?: BillingStatus;
 }
 
 export async function loadOverview(
@@ -68,7 +71,7 @@ export async function loadOverview(
   const [locales, settings, billing] = await Promise.all([
     fetchAndSyncShopLocales(admin, shop.id, client),
     getShopSettings(shop.id, client),
-    shopBilling(admin, shop),
+    options.billing ?? shopBilling(admin, shop),
   ]);
   const active = { shopId: shop.id, status: { in: [...ACTIVE_JOB_STATUSES] } };
   const [pendingDrafts, published, [activeJobs, running], coverage, used, usedToday, markets] = await Promise.all([
@@ -264,6 +267,9 @@ export async function loadOverview(
   });
 
   const limits = aiLimitsFor(getConfig(), billing);
+  // A trial's allowance ends with the trial: when that comes before the
+  // month's renewal, AI translation resumes then, not on the 1st.
+  const trialEndsAt = billing.trialEndsAt && billing.trialEndsAt < nextPeriodStart(now) ? billing.trialEndsAt.toISOString() : null;
   return {
     shopName: shop.name,
     primary: locales.primary?.name ?? null,
@@ -283,6 +289,6 @@ export async function loadOverview(
     pendingDrafts,
     activeJobs,
     jobs,
-    usage: { used, limit: limits.limit, usedToday, dailyLimit: limits.dailyLimit, level: usageLevel(used, limits.limit) },
+    usage: { used, limit: limits.limit, usedToday, dailyLimit: limits.dailyLimit, level: usageLevel(used, limits.limit), trialEndsAt },
   };
 }

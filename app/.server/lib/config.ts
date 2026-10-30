@@ -231,6 +231,31 @@ export function dropMigrationDatabaseUrl(env: NodeJS.ProcessEnv = process.env): 
   delete env.MIGRATION_DATABASE_URL;
 }
 
+/**
+ * Settings that let the app start but need attention before merchants pay
+ * (docs/PRICING_DECISION.md §8): with plans required, a platform cap below
+ * 1,000,000 characters a day lets one store's first pass stop AI
+ * translation for every store. Advice only: never a reason not to start.
+ */
+export function configWarnings(config: AppConfig): string[] {
+  const warnings: string[] = [];
+  if (config.BILLING_REQUIRED === "true" && config.AI_PLATFORM_DAILY_CHAR_LIMIT < 1_000_000) {
+    warnings.push(
+      "AI_PLATFORM_DAILY_CHAR_LIMIT is below 1,000,000 while BILLING_REQUIRED=true: one store's first pass can stop AI translation for every store (docs/PRICING_DECISION.md §8: 3,000,000 at launch)",
+    );
+  }
+  return warnings;
+}
+
+/** Logs configWarnings once, at start. Never throws: an invalid configuration is reported where it is used. */
+export function logConfigWarnings(log: (message: string) => void, env: NodeJS.ProcessEnv = process.env): void {
+  try {
+    for (const warning of configWarnings(getConfig(env))) log(warning);
+  } catch {
+    // Not this function's concern (getConfig reports it on first use).
+  }
+}
+
 /** The Shopify shop GIDs eligible for owner complimentary access. */
 export function complimentaryShopGids(config: AppConfig): string[] {
   return (config.COMPLIMENTARY_SHOP_GIDS ?? "")

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiUsageLimits, getConfig } from "../../app/.server/lib/config";
+import { aiUsageLimits, configWarnings, getConfig, logConfigWarnings } from "../../app/.server/lib/config";
 
 const valid = {
   DATABASE_URL: "postgresql://u:p@localhost:5432/db",
@@ -107,5 +107,26 @@ describe("getConfig: values pasted into a hosting dashboard", () => {
     expect(getConfig({ ...valid, AI_MONTHLY_CHAR_LIMIT: "" } as NodeJS.ProcessEnv).AI_MONTHLY_CHAR_LIMIT).toBe(20_000);
     // Ambiguous: refused with the variable's name, not guessed.
     expect(() => getConfig({ ...valid, AI_MONTHLY_CHAR_LIMIT: "1.5" } as NodeJS.ProcessEnv)).toThrow(/AI_MONTHLY_CHAR_LIMIT/);
+  });
+});
+
+describe("configuration warnings at start", () => {
+  const billing = { SHOPIFY_PARTNER_ORG_ID: "1", SHOPIFY_PARTNER_API_TOKEN: "prtapi_test_token", SHOPIFY_APP_GID: "gid://shopify/App/1", SHOPIFY_APP_HANDLE: "linguva" };
+
+  it("warns when plans are required while the platform cap is below 1,000,000 a day", () => {
+    const warnings = configWarnings(getConfig({ ...valid, ...billing, BILLING_REQUIRED: "true" } as NodeJS.ProcessEnv));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/AI_PLATFORM_DAILY_CHAR_LIMIT/);
+    expect(configWarnings(getConfig({ ...valid, ...billing, BILLING_REQUIRED: "true", AI_PLATFORM_DAILY_CHAR_LIMIT: "3000000" } as NodeJS.ProcessEnv))).toEqual([]);
+    // Without required plans (development, billing off), the safe default stays quiet.
+    expect(configWarnings(getConfig({ ...valid } as NodeJS.ProcessEnv))).toEqual([]);
+  });
+
+  it("only logs, and never stops the start, even with an invalid configuration", () => {
+    const logged: string[] = [];
+    logConfigWarnings((message) => logged.push(message), { ...valid, ...billing, BILLING_REQUIRED: "true" } as NodeJS.ProcessEnv);
+    expect(logged).toHaveLength(1);
+    expect(() => logConfigWarnings((message) => logged.push(message), {} as NodeJS.ProcessEnv)).not.toThrow();
+    expect(logged).toHaveLength(1);
   });
 });

@@ -41,9 +41,11 @@ test("exports what's missing, imports translations as drafts and lists skipped r
 
   // The draft waits on Review; nothing was published.
   await page.getByRole("link", { name: "Open Review" }).click();
-  await expect(page.getByText("Product 1 jacket · Title · German")).toBeVisible();
-  // Same content checks as AI drafts: the number in the original is missing.
-  await expect(page.getByText("Check: Numbers changed").first()).toBeVisible();
+  const card = page.locator('s-section[accessibilitylabel="Product 1 jacket, German"]');
+  await expect(card.getByRole("heading", { name: "Product 1 jacket", exact: true })).toBeVisible();
+  // Same content checks as AI drafts: the number in the original is missing; the text says where it came from.
+  await expect(card.locator("s-badge", { hasText: /^Note: Number/ }).first()).toBeVisible();
+  await expect(card.locator("s-badge", { hasText: "From your import" })).toBeVisible();
 });
 
 test("the import and export page is German for a German admin user", async ({ page }) => {

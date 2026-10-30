@@ -55,10 +55,13 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Review",
     path: "/app/review",
     check: async (page) => {
-      await expect(page.getByText(/translations waiting for review/)).toBeVisible();
-      await expect(page.getByText("Product 1 jacket · Title · French")).toBeVisible();
-      // The actions are reachable without scrolling through every draft.
-      await expect(page.getByRole("button", { name: "Approve and publish selected" }).first()).toBeInViewport();
+      await expect(page.getByRole("heading", { level: 1, name: "Review translations" })).toBeVisible();
+      // One card per item and language: its name, then its area and language.
+      const card = page.locator('s-section[accessibilitylabel="Product 1 jacket, French"]');
+      await expect(card.getByRole("heading", { level: 2, name: "Product 1 jacket", exact: true })).toBeVisible();
+      await expect(card.getByText("French", { exact: true }).first()).toBeVisible();
+      // The page's one primary action is in the first screen, without scrolling through the texts.
+      await expect(page.getByRole("button", { name: /^Approve all \d+( on this page)?$/ })).toBeInViewport();
     },
   },
   {

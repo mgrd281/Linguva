@@ -2,7 +2,7 @@
  * A realistic demo catalog (a fictional outdoor store) for the App Store
  * screenshots (tests/ui/app-store-screenshots.spec.ts): real German
  * translations (one outdated, one partial), French drafts waiting in
- * Review (one flagged by the number check), glossary terms, and a picture
+ * Review (an imported one flagged by the number check), glossary terms, and a picture
  * for every product and collection. The UI tests that need realistic
  * content (Overview, language page, editor states) read it; none changes it.
  */
@@ -166,15 +166,23 @@ export function buildDemoStore(): FakeShopifyStore {
   return store;
 }
 
-/** French drafts waiting in Review: real translations, one with a changed number. */
+/** French drafts waiting in Review: real translations, one imported with a changed number. */
 export function demoDrafts() {
-  const french: Array<{ n: number; key: "title" | "body_html" | "meta_description"; value: string; issues?: Array<{ code: string }> }> = [
+  const french: Array<{
+    n: number;
+    key: "title" | "body_html" | "meta_description";
+    value: string;
+    issues?: Array<{ code: string; severity: string; detail: string }>;
+    provider?: string;
+  }> = [
     { n: 4, key: "title", value: "Gourde isotherme" },
     {
       n: 4,
       key: "body_html",
       value: "<p>L'acier à double paroi garde les boissons froides pendant 24 heures ou chaudes pendant 6 heures.</p>",
-      issues: [{ code: "NUMBERS_CHANGED" }],
+      // From an import: only imported texts reach Review with a changed number (AI output with one is refused before).
+      issues: [{ code: "NUMBERS_CHANGED", severity: "error", detail: "source [12, 24] target [24, 6]" }],
+      provider: "csv",
     },
     { n: 6, key: "title", value: "Pantalon de pluie" },
     { n: 6, key: "body_html", value: "<p>Un pantalon imperméable avec zips latéraux, à enfiler par-dessus vos chaussures.</p>" },
@@ -195,7 +203,7 @@ export function demoDrafts() {
       value: d.value,
       segmentPairs: [],
       issues: d.issues ?? [],
-      provider: "deepl",
+      provider: d.provider ?? "deepl",
       currentDigest: "none",
       valueType: d.key === "body_html" ? "HTML" : "SINGLE_LINE_TEXT_FIELD",
     };

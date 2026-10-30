@@ -28,6 +28,7 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `ui-owner` | Owner complimentary access (granted by the operator tool in the setup) |
 | `ui-visual` | Fixed content for screenshot comparisons (counted once, three product pictures); no test changes it |
 | `ui-catalog` | 55 products (more than one page of an area's list) in every state, counted, with pictures; German is only read, the French tests start a translation |
+| `ui-coverage-items` | The coverage drill-down's own store (`coverage.spec.ts`): 30 products with German like `ui-full`'s (titles on 1–10, Product 2's description outdated), counted once; no test changes it, so its figures hold in any order of the specs |
 | `ui-demo` | A realistic outdoor store (App Store screenshots, Overview by country, language page): a picture for every product and collection, German partly translated, French drafts, markets |
 | `ui-slow` | Shopify answers translation queries only after 20 s (longer than the app's time limit, 3 s in these tests) |
 | `ui-fresh` | Not seeded: installs during the test |

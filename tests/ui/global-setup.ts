@@ -43,7 +43,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "smartDowngraded", "review", "reviewPhone"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "smartDowngraded", "review", "reviewPhone", "coverageItems"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -236,7 +236,7 @@ export default async function globalSetup() {
     for (const itemId of fieldsPage.itemIds) await processItem(fieldsDeps, { shopId: ids.customFields!, itemId }, 1);
 
     // A finished coverage scan (after the drafts above, so they show as drafts).
-    for (const key of ["full", "demo", "remeasure", "catalog", "visual", "review", "reviewPhone"] as const) {
+    for (const key of ["full", "demo", "remeasure", "catalog", "visual", "review", "reviewPhone", "coverageItems"] as const) {
       const shopStore = UI_SHOPS[key].build();
       const coverageDeps: CoverageDeps = { prisma: app, adminFor: async () => shopStore.asAdmin(), keyPrefix: "lv:ui-test" };
       const locales = UI_SHOPS[key].locales.filter((l) => !l.primary).map((l) => l.locale);

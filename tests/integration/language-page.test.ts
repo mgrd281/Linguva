@@ -178,6 +178,30 @@ describe("the language page", () => {
     expect(page.extras.map((e) => e.state)).toEqual([{ kind: "ok" }, { kind: "ok" }, null]);
   });
 
+  it("links image descriptions and custom fields waiting for approval to their own area on Review", async () => {
+    const { shop, store } = await outdoorShop();
+    const image = store.media.get(P(1))![0]!.id;
+    const care = store.metafields.get(P(1))!.find((m) => m.key === "care")!.id;
+    const text = (resourceGid: string, key: string, source: string, value: string) => ({
+      jobId: null,
+      resourceGid,
+      parentGid: P(1),
+      resourceTitle: null,
+      locale: "de",
+      key,
+      sourceDigest: digest(source),
+      sourceValue: source,
+      value,
+      segmentPairs: [],
+      issues: [],
+      provider: "test",
+    });
+    await saveDrafts(shop.id, [text(image, "alt", "Red wool jacket, front view", "Rote Wolljacke, von vorn"), text(care, "value", "Hand wash cold.", "Kalt von Hand waschen.")], app);
+    const page = await loadLanguagePage(store.asAdmin(), shop, "de", app, available);
+    expect(category(page, "images").review).toEqual({ count: 1, href: "/app/review?lang=de&area=images" });
+    expect(category(page, "customFields").review).toEqual({ count: 1, href: "/app/review?lang=de&area=customFields" });
+  });
+
   it("puts approving first, then the categories that can be translated in bulk", async () => {
     const { shop, store } = await outdoorShop();
     await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
@@ -186,7 +210,7 @@ describe("the language page", () => {
     expect(page.next[0]).toEqual({ kind: "review", count: 2, payoff: 21, href: "/app/review?lang=de" });
     expect(page.next[1]).toMatchObject({ kind: "category", category: "products", missing: 12, outdated: 1, failed: 2, action: "translate", href: "/app/languages/de/products" });
     expect(page.next).toHaveLength(3);
-    expect(category(page, "collections").review).toEqual({ count: 2, href: "/app/review?lang=de&type=COLLECTION" });
+    expect(category(page, "collections").review).toEqual({ count: 2, href: "/app/review?lang=de&area=collections" });
     expect(category(page, "products").review).toBeNull();
 
     // What "Translate" would do: open products, their texts, and the characters of their originals.
@@ -446,7 +470,7 @@ describe("a category's list", () => {
       state: { kind: "ok" },
       tally: { total: 9, complete: 0, counts: { draft: 2, missing: 7 } },
       payoff: 22,
-      review: { count: 2, href: "/app/review?lang=de&type=COLLECTION" },
+      review: { count: 2, href: "/app/review?lang=de&area=collections" },
       job: null,
       searchable: true,
     });

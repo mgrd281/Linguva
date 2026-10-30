@@ -74,6 +74,18 @@ export function formatDate(locale: AppLocale, value: string | Date, style: "medi
   return new Intl.DateTimeFormat(INTL_LOCALE[locale], { dateStyle: style, timeZone: "UTC" }).format(date);
 }
 
+/**
+ * Day and month ("1. November", "November 1"), with the year only when it
+ * isn't `now`'s year ("1. Januar 2027"). In UTC, so server and browser agree.
+ */
+export function formatDayMonth(locale: AppLocale, value: string | Date, now: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const reference = typeof now === "string" ? new Date(now) : now;
+  if (Number.isNaN(date.getTime())) return "";
+  const otherYear = Number.isNaN(reference.getTime()) || date.getUTCFullYear() !== reference.getUTCFullYear();
+  return new Intl.DateTimeFormat(INTL_LOCALE[locale], { day: "numeric", month: "long", ...(otherYear ? { year: "numeric" as const } : {}), timeZone: "UTC" }).format(date);
+}
+
 /** Date and time with "UTC", so server and browser render the same text. */
 export function formatDateTime(locale: AppLocale, value: string | Date): string {
   const date = typeof value === "string" ? new Date(value) : value;
@@ -172,6 +184,7 @@ export function translator(locale: AppLocale) {
     number: (value: number) => formatNumber(locale, value),
     date: (value: string | Date, style?: "medium" | "long") => formatDate(locale, value, style),
     dateTime: (value: string | Date) => formatDateTime(locale, value),
+    dayMonth: (value: string | Date, now: string | Date) => formatDayMonth(locale, value, now),
     dateTimeIn: (value: string | Date | number, timeZone: string) => formatDateTimeIn(locale, value, timeZone),
     weekday: (isoWeekday: number, style?: "long" | "short") => formatWeekday(locale, isoWeekday, style),
     month: (period: string) => formatMonth(locale, period),

@@ -5,8 +5,9 @@ import type { SegmentPair } from "../memory/alignment";
 import { refreshCoverageOverlays } from "../coverage/items";
 import { storedTargetLocales } from "../locales/shop-locales";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
-import { ResourceNotFoundError, saveResourceTranslations } from "../translation/product-translation-service";
+import { ResourceNotFoundError, saveResourceTranslations, type SaveErrorCode, type SaveOutcome } from "../translation/product-translation-service";
 import { ANY_SOURCE } from "../jobs/needs-work";
+import { validateHandle } from "../../lib/handles";
 import { RESOURCE_KINDS } from "../../lib/resource-kinds";
 
 type Admin = Pick<AdminApiContext, "graphql">;
@@ -359,18 +360,19 @@ export async function countPendingDrafts(shopId: string, client: PrismaClient = 
 /**
  * Rejects pending drafts. With `tokens` (the versions a page showed), a
  * draft that changed since, for example replaced by a newer translation,
- * is left as it is.
+ * is left as it is. Returns the ids it rejected; the merchant's decision is
+ * kept in the audit log (counts and language codes, no text).
  */
-export async function rejectDrafts(
+export async function rejectDraftsDetailed(
   shopId: string,
   draftIds: readonly string[],
   actorId: string | null,
   client: PrismaClient = defaultClient,
   tokens?: ReadonlyMap<string, string>,
-) {
+): Promise<{ rejected: string[] }> {
   const ids = draftIds.filter((id) => UUID.test(id)).slice(0, MAX_DRAFTS_PER_ACTION);
-  if (ids.length === 0) return 0;
-  const rejected = await withTenant(
+  if (ids.length === 0) return { rejected: [] };
+  const result = await withTenant(
     shopId,
     async (tx) => {
       const found = await tx.translationDraft.findMany({
@@ -378,18 +380,44 @@ export async function rejectDrafts(
         select: { id: true, resourceGid: true, locale: true, updatedAt: true },
       });
       const pending = tokens ? found.filter((d) => tokens.get(d.id) === draftToken(d)) : found;
-      if (pending.length === 0) return { count: 0, pending };
+      if (pending.length === 0) return { rejected: [] as Array<{ id: string; locale: string }>, pending };
       // Only the versions read here: a draft replaced meanwhile stays pending.
-      const result = await tx.translationDraft.updateMany({
+      const rejected = await tx.translationDraft.updateManyAndReturn({
         where: { shopId, status: "PENDING", OR: pending.map((d) => ({ id: d.id, updatedAt: d.updatedAt })) },
         data: { status: "REJECTED", reviewedAt: new Date(), reviewedBy: actorId },
+        select: { id: true, locale: true },
       });
-      return { count: result.count, pending };
+      return { rejected, pending };
     },
     client,
   );
-  await refreshCoverageOverlays(shopId, rejected.pending, client);
-  return rejected.count;
+  await refreshCoverageOverlays(shopId, result.pending, client);
+  if (result.rejected.length) {
+    // createMany: no RETURNING, so the runtime role needs no SELECT on AuditLog.
+    await client.auditLog.createMany({
+      data: [
+        {
+          shopId,
+          actorType: actorId ? "MERCHANT_USER" : "SYSTEM",
+          actorId,
+          action: "drafts.rejected",
+          metadata: { count: result.rejected.length, locales: [...new Set(result.rejected.map((r) => r.locale))].sort() },
+        },
+      ],
+    });
+  }
+  return { rejected: result.rejected.map((r) => r.id) };
+}
+
+/** rejectDraftsDetailed, counted. */
+export async function rejectDrafts(
+  shopId: string,
+  draftIds: readonly string[],
+  actorId: string | null,
+  client: PrismaClient = defaultClient,
+  tokens?: ReadonlyMap<string, string>,
+) {
+  return (await rejectDraftsDetailed(shopId, draftIds, actorId, client, tokens)).rejected.length;
 }
 
 export interface ApprovalResult {
@@ -400,24 +428,55 @@ export interface ApprovalResult {
   changed: number;
 }
 
+/** What happened to one draft the merchant approved. */
+export type DraftOutcome =
+  | { id: string; status: "published" }
+  /** Not published, retired: the original changed, someone saved another translation, or the item is gone. */
+  | { id: string; status: "stale"; reason: "SOURCE_CHANGED" | "TRANSLATION_CHANGED" | "RESOURCE_GONE" }
+  /** Not published, still waiting: it can be approved again (detail: Shopify's message, or the handle problem). */
+  | {
+      id: string;
+      status: "failed";
+      reason: SaveErrorCode | "SHOPIFY_UNAVAILABLE" | "HANDLE_INVALID" | "HANDLE_NOT_CONFIRMED" | "UNKNOWN";
+      detail?: string;
+    }
+  /** Not the version shown (a newer one replaced it), not waiting any more, or not found: left alone. */
+  | { id: string; status: "changed" };
+
+export interface DetailedApprovalResult extends ApprovalResult {
+  outcomes: DraftOutcome[];
+}
+
+export interface ApproveDraftsInput {
+  admin: Admin;
+  shopId: string;
+  actorId: string | null;
+  draftIds: readonly string[];
+  edits?: ReadonlyMap<string, string>;
+  /** The version of each draft the page showed (draftToken): one that changed since isn't approved. */
+  tokens?: ReadonlyMap<string, string>;
+  /**
+   * Web addresses (URL handles), the editor's rule: published only when the
+   * merchant confirmed that old links stop working (the ids in `confirmed`),
+   * and only a valid handle. Without it, handles are approved like any text.
+   */
+  handles?: { confirmed: ReadonlySet<string> };
+}
+
+/** Why Shopify refused a text, as the editor shows it: Shopify's own (English) words, cut short. */
+const SHOPIFY_DETAIL_MAX = 200;
+
 /**
- * Publishes approved drafts. The merchant may edit a draft before approving
- * it; edited drafts are saved as manual translations. Drafts whose source
- * changed since translation are marked STALE and not published.
+ * Publishes approved drafts, with what happened to each one. The merchant
+ * may edit a draft before approving it; edited drafts are saved as manual
+ * translations, and an emptied one is refused (EMPTY_TRANSLATION), never
+ * replaced by the draft. Drafts whose source changed since translation are
+ * marked STALE and not published. When Shopify doesn't answer in time
+ * (a 504 from withShopifyTimeout), the drafts not sent yet stay pending as
+ * failed and the rest of the request ends cleanly.
  */
-export async function approveDrafts(
-  input: {
-    admin: Admin;
-    shopId: string;
-    actorId: string | null;
-    draftIds: readonly string[];
-    edits?: ReadonlyMap<string, string>;
-    /** The version of each draft the page showed (draftToken): one that changed since isn't approved. */
-    tokens?: ReadonlyMap<string, string>;
-  },
-  client: PrismaClient = defaultClient,
-): Promise<ApprovalResult> {
-  const ids = input.draftIds.filter((id) => UUID.test(id)).slice(0, MAX_DRAFTS_PER_ACTION);
+export async function approveDraftsDetailed(input: ApproveDraftsInput, client: PrismaClient = defaultClient): Promise<DetailedApprovalResult> {
+  const ids = [...new Set(input.draftIds.filter((id) => UUID.test(id)).slice(0, MAX_DRAFTS_PER_ACTION))];
   const found = ids.length
     ? await withTenant(
         input.shopId,
@@ -426,17 +485,41 @@ export async function approveDrafts(
       )
     : [];
   const drafts = input.tokens ? found.filter((d) => input.tokens!.get(d.id) === draftToken(d)) : found;
-  const result: ApprovalResult = { published: 0, stale: 0, failed: 0, changed: found.length - drafts.length };
+  const result: DetailedApprovalResult = { published: 0, stale: 0, failed: 0, changed: found.length - drafts.length, outcomes: [] };
+  const shown = new Set(drafts.map((d) => d.id));
+  for (const id of ids) if (!shown.has(id)) result.outcomes.push({ id, status: "changed" });
+
+  const valueOf = (d: (typeof drafts)[number]) => {
+    const edited = input.edits?.get(d.id);
+    return edited !== undefined && edited !== d.value ? edited : d.value;
+  };
+  // A new web address only with the merchant's confirmation, and only a valid one: refused before anything is sent.
+  const refused = new Set<string>();
+  if (input.handles) {
+    for (const d of drafts) {
+      if (d.key !== "handle") continue;
+      const problem = input.handles.confirmed.has(d.id) ? validateHandle(valueOf(d)) : null;
+      if (input.handles.confirmed.has(d.id) && !problem) continue;
+      refused.add(d.id);
+      result.failed++;
+      result.outcomes.push(problem ? { id: d.id, status: "failed", reason: "HANDLE_INVALID", detail: problem } : { id: d.id, status: "failed", reason: "HANDLE_NOT_CONFIRMED" });
+    }
+  }
 
   const byResource = new Map<string, typeof drafts>();
   for (const d of drafts) {
+    if (refused.has(d.id)) continue;
     const key = `${d.resourceGid}|${d.locale}`;
     byResource.set(key, [...(byResource.get(key) ?? []), d]);
   }
 
-  for (const group of byResource.values()) {
+  const groups = [...byResource.values()];
+  const unsent = new Set<string>();
+  for (let g = 0; g < groups.length; g++) {
+    const group = groups[g]!;
     const { resourceGid, locale } = group[0]!;
-    let outcomes: Awaited<ReturnType<typeof saveResourceTranslations>>;
+    let outcomes: SaveOutcome[] = [];
+    let gone = false;
     try {
       outcomes = await saveResourceTranslations(
         {
@@ -461,21 +544,47 @@ export async function approveDrafts(
               ...(d.currentDigest ? { expectedCurrent: d.currentDigest } : {}),
             };
           }),
+          // Recorded below as published (not retired as outdated), only in the version read here.
+          publishing: group.map((d) => d.id),
         },
         client,
       );
     } catch (error) {
+      if (error instanceof Response && error.status === 504) {
+        // Shopify didn't answer in time: this group and every later one stay pending, untouched.
+        for (const d of groups.slice(g).flat()) {
+          unsent.add(d.id);
+          result.failed++;
+          result.outcomes.push({ id: d.id, status: "failed", reason: "SHOPIFY_UNAVAILABLE" });
+        }
+        break;
+      }
       // Deleted in Shopify since it was translated: outdated, like a changed source.
       if (!(error instanceof ResourceNotFoundError)) throw error;
-      outcomes = group.map((d) => ({ key: d.key, status: "conflict" as const, reason: "SOURCE_CHANGED" as const }));
+      gone = true;
     }
     const byKey = new Map(outcomes.map((o) => [o.key, o]));
     await withTenant(
       input.shopId,
       async (tx) => {
         for (const d of group) {
-          const outcome = byKey.get(d.key);
-          const status = outcome?.status === "saved" ? "PUBLISHED" : outcome?.status === "conflict" ? "STALE" : null;
+          const saved = byKey.get(d.key);
+          const outcome: DraftOutcome = gone
+            ? { id: d.id, status: "stale", reason: "RESOURCE_GONE" }
+            : saved?.status === "saved"
+              ? { id: d.id, status: "published" }
+              : saved?.status === "conflict"
+                ? { id: d.id, status: "stale", reason: saved.reason }
+                : saved?.status === "error"
+                  ? {
+                      id: d.id,
+                      status: "failed",
+                      reason: saved.code,
+                      ...(saved.code === "SHOPIFY_REJECTED" ? { detail: saved.message.slice(0, SHOPIFY_DETAIL_MAX) } : {}),
+                    }
+                  : { id: d.id, status: "failed", reason: "UNKNOWN" };
+          result.outcomes.push(outcome);
+          const status = outcome.status === "published" ? "PUBLISHED" : outcome.status === "stale" ? "STALE" : null;
           if (status === "PUBLISHED") result.published++;
           else if (status === "STALE") result.stale++;
           else result.failed++;
@@ -491,6 +600,19 @@ export async function approveDrafts(
       client,
     );
   }
-  await refreshCoverageOverlays(input.shopId, drafts, client);
+  await refreshCoverageOverlays(
+    input.shopId,
+    drafts.filter((d) => !unsent.has(d.id)),
+    client,
+  );
   return result;
+}
+
+/**
+ * Publishes approved drafts (approveDraftsDetailed, counted). Drafts whose
+ * source changed since translation are marked STALE and not published.
+ */
+export async function approveDrafts(input: ApproveDraftsInput, client: PrismaClient = defaultClient): Promise<ApprovalResult> {
+  const { published, stale, failed, changed } = await approveDraftsDetailed(input, client);
+  return { published, stale, failed, changed };
 }

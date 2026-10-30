@@ -8,7 +8,7 @@ Status: 2026-10-28. Competitor facts come from their public App Store listings, 
 |---|---|---|---|
 | Rating and reviews | 4.7 from 728 (§1.1) | 4.5 from 2,565, Built for Shopify (§2.1) | None (not launched) |
 | Since | 2014 | 2020 | — |
-| Paid plans (monthly) | $17.50, $29.95, $59.95 (§1.2) | $29, $69, $99 on the listing; $14.9 and $599 more on the website (§2.2) | Proposal: $19, $59, $179 (COST_MODEL.md; owner decision) |
+| Paid plans (monthly) | $17.50, $29.95, $59.95 (§1.2) | $29, $69, $99 on the listing; $14.9 and $599 more on the website (§2.2) | $29, $99, $299; yearly $290 and $990 (2 months free), Business monthly only; 7-day trial with 100,000 AI characters (decided 2026-10-30, [PRICING_DECISION.md](PRICING_DECISION.md)) |
 | What AI use costs | Words included **once** at sign-up (10k / 50k / 200k), then packages of $0.29–0.50 per 1,000 words (§1.3) | Token wallet, about $1.20 per 1,000 words, non-refundable; product caps and monthly add-on quotas (§2.3) | Monthly character allowance per plan (300k / 1.2M / 4M), resets each month; text reused from translation memory is free |
 | Engines | DeepL, Google fallback (§1.4) | OpenAI, DeepL, Gemini, Google and more; own API key (§2.4) | DeepL only; languages it covers are read from DeepL and shown per language; second engine planned (AI_ENGINES.md) |
 | Automatic translation of new/changed content | **Not offered** ("will not automatically translate your store without your input", §1.4) | Rules capped by plan (10 products + 10 collections on Regional; real-time only at $99+) (§2.3, §2.4) | Products and collections by webhook; pages, blog posts, blogs and missed webhooks by a 30-minute check; **no item cap**; results wait in Review by default |
@@ -27,6 +27,15 @@ Status: 2026-10-28. Competitor facts come from their public App Store listings, 
 | App interface languages | 5 (§1.1) | 13 (§2.1) | 4 (EN, DE; FR and ES awaiting native review) |
 | Privacy | Website policy only; DeepL/Google not named (§1.5) | Collects visitor IP/geo and 60 days of orders; providers not named (§2.1, §2.5) | No customer or order scopes (ADR-007); store text goes to DeepL only after the merchant's consent; data deleted on uninstall/redact |
 
+Other apps (read 2026-10-30; plans, volumes and trials in PRICING_DECISION.md §7.1, with the positioning in §7.2): Weglot, LangShop, T Lab, GTranslate and Shopify's Translate & Adapt (see also research §3), and four more seen when setting the prices:
+
+- **Langwill** (4.6 from 635, Built for Shopify): $9.99 / $19.99 / $49.99 for 30,000 / 80,000 / 300,000 words **a month**; 3-day trial.
+- **EA AI Language Translate** (4.8 from 119, Built for Shopify): $9.99 (live Google translation), then $24.99 and $49.99 for 1,000,000 / 4,000,000 words a month into 5 / 20 languages; 7-day trial (Live Translate).
+- **Translingo** (no reviews): $9.90 / $29.90 for 500,000 / 5,000,000 characters a month with its own engine, then $12 / $8 per million.
+- **Deep Shop Translate** (2 reviews, launched 2026-05-15): pay as you go with tokens; a review queue and a glossary, the closest concept to Linguva.
+
+Apps on Google or LLM engines include far more volume per dollar than Linguva's DeepL allowance; Linguva competes on review before publishing, enforced glossary, free memory reuse and an allowance that renews every month (PRICING_DECISION.md §7.2).
+
 ## 2. What merchants complain about, and how Linguva answers it
 
 Complaint themes come from the newest reviews of each app (§1.6, §2.6). Counts are small samples, not market statistics.
@@ -34,7 +43,7 @@ Complaint themes come from the newest reviews of each app (§1.6, §2.6). Counts
 | Complaint (competitor) | Linguva's answer | Evidence in Linguva | Honest limit |
 |---|---|---|---|
 | Automatic translation doesn't happen or is capped (Langify §1.6 #6; Transcy §2.6 #4, the newest review on 2026-10-27) | Automatic translation without an item cap, plus a periodic check that catches missed webhooks and covers pages and blog posts | `tests/integration/auto-translate.test.ts`, `auto-sweep.test.ts` | Webhook delivery not yet seen on a real store |
-| Billing surprises: tokens, forced plan changes, charges after uninstall (Transcy §2.6 #1, 9–10 of 17 negative reviews with text; Langify §1.6 #3) | A plain monthly allowance; Shopify's own billing (no wallet); memory reuse costs nothing; daily and monthly caps so a large job can't surprise | `tests/integration/billing.test.ts`, `usage-ledger.test.ts`, `ai-limits.test.ts` | Prices not set; Shopify bills, so cancellation rules are Shopify's |
+| Billing surprises: tokens, forced plan changes, charges after uninstall (Transcy §2.6 #1, 9–10 of 17 negative reviews with text; Langify §1.6 #3) | A plain monthly allowance; Shopify's own billing (no wallet); memory reuse costs nothing; daily and monthly caps so a large job can't surprise; list prices on the Plan page, no overage | `tests/integration/billing.test.ts`, `usage-ledger.test.ts`, `ai-limits.test.ts`, `tests/ui/plan.spec.ts` | Plans not yet entered in the Partner Dashboard; Shopify bills, so cancellation rules are Shopify's |
 | Untrustworthy machine translation, also on legal pages (Langify §1.6 #1; Transcy §2.6 #6) | Drafts first, quality checks (numbers, glossary, length, script, form of address), legal pages and Liquid templates flagged for care | `tests/unit/validate.test.ts`, `formality-check.test.ts`, content-type caution notes | DeepL quality not measured yet (no key) |
 | SEO damage, changed links, leftover code (Transcy §2.6 #5) | Only Shopify's native translations API; no storefront script, nothing to leave behind; handle changes need confirmation | `tests/security/structure.test.ts` (only two write paths), handle tests | Storefront output not verified on a store |
 | Slow at scale (Langify §1.6 #5; Transcy §2.6 #3) | Paged bulk jobs, fair queue between stores, Review and memory search indexed | PERFORMANCE.md (50,000 drafts, 5,000 products, 20 shops at once) | Real Shopify latency not measured |

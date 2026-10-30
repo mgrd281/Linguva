@@ -22,14 +22,13 @@ import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { redirect } from "react-router";
 import { prisma as defaultClient } from "../lib/db";
 import { getConfig } from "../lib/config";
-import { logger } from "../lib/logger";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import { currentShopLocales } from "../locales/current-locales";
 import { fetchAndSyncShopLocales, type LocaleSummary } from "../locales/shop-locales";
 import { loadCoverageState, loadCoverageSummary } from "../coverage/summary";
 import { loadCounts } from "../coverage/items";
 import { COVERAGE_TYPES } from "../coverage/coverage";
-import { measurementState, type Measurement, type MeasurementState } from "../overview/measurement";
+import { measurementState, scanningOf, UNDER_WAY } from "../overview/measurement";
 import type { MarketCountriesResult } from "../markets/countries";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
@@ -38,9 +37,11 @@ import { getMonthlyUsage } from "../usage/usage-ledger";
 import { getQueues } from "../queue/client";
 import { getTranslationProvider } from "../providers";
 import { BackgroundJobsUnavailableError, startBulkJob } from "../jobs/start-job";
-import { ACTIVE_JOB_STATUSES, ATTACHED_BULK_TYPES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
+import { ATTACHED_BULK_TYPES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
+import { activeJobs, categoryJob } from "../jobs/active-jobs";
 import { translatableByIds } from "../shopify/attached-resources";
 import { PREVIEW_NODE_TYPES, readPreviewNodes, type PreviewNode } from "../shopify/preview-nodes";
+import { settle, sizedImage } from "../shopify/preview-images";
 import { isSearchableType, searchIds, type SearchableType } from "../shopify/search-ids";
 import { AccessDeniedError, type TranslatableResourceData } from "../shopify/translations-api";
 import { loadSmartCoverageNote, smartBadge, smartContext, smartWorkOn, type SmartBadge, type SmartCoverageNote } from "../smart/panel";
@@ -60,7 +61,6 @@ import {
   bulkTypesOf,
   CATEGORIES,
   CATEGORY_IDS,
-  categoryOf,
   categoryPath,
   categoryState,
   categoryTallies,
@@ -77,9 +77,8 @@ import {
   type ItemState,
 } from "../../lib/language-categories";
 import { analyzeCountries } from "../../lib/country-coverage";
-import { jobProgress } from "../../lib/job-display";
 import type { Entitlements } from "../../lib/plans";
-import { itemEditorPath, numericId, RESOURCE_KINDS } from "../../lib/resource-kinds";
+import { itemEditorPath, numericId } from "../../lib/resource-kinds";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 type ShopRef = { id: string; shopifyShopGid: string | null };
@@ -91,9 +90,6 @@ export const PREVIEW_IMAGE_WIDTH = 192;
 export const ROW_IMAGE_WIDTH = 128;
 /** Rows of a category list per page. */
 export const CATEGORY_PAGE_SIZE = 50;
-
-/** Measurements reading the store now (a stalled one can be started again). */
-const UNDER_WAY: ReadonlySet<MeasurementState> = new Set(["queued", "waiting", "running"]);
 
 /** Field states that are work to do: translating starts on these texts. */
 const OPEN_STATES = ["missing", "outdated", "failed"] as const;
@@ -141,14 +137,6 @@ function stateOfKey(row: Pick<ItemRow, "sourceKeys" | "fieldStates">, key: strin
   return state && isFieldState(state) ? ITEM_STATE_OF[state] : null;
 }
 
-/** Segments are "TYPE|locale": whether a measurement reads the language. */
-const readsLocale = (segments: readonly string[], locale: string) => segments.some((s) => s.slice(s.indexOf("|") + 1) === locale);
-
-/** A measurement under way reads the language now. */
-function scanningOf(report: { segments: readonly string[] } | null, measurement: Measurement, locale: string) {
-  return UNDER_WAY.has(measurement.state) && Boolean(report && readsLocale(report.segments, locale));
-}
-
 /**
  * The language of a route's :locale: one of the shop's additional languages
  * (404 otherwise). The primary language has no page of its own: its texts
@@ -170,57 +158,16 @@ function primaryOf(locales: LocaleSummary) {
   return locales.primary ? { locale: locales.primary.locale, name: locales.primary.name } : null;
 }
 
-/** Translation jobs into the language that are queued or running. */
-function activeJobs(shopId: string, locale: string, client: PrismaClient) {
-  return withTenant(
-    shopId,
-    (tx) =>
-      tx.translationJob.findMany({
-        where: { shopId, targetLocale: locale, status: { in: [...ACTIVE_JOB_STATUSES] } },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, resourceType: true, totalItems: true, succeededItems: true, skippedItems: true, failedItems: true, discoveryDone: true },
-      }),
-    client,
-  );
-}
-
-type ActiveJob = Awaited<ReturnType<typeof activeJobs>>[number];
-
-/** A category's running translation, in items: its job's page, or the Jobs page when several of its types run. */
-export interface CategoryJob {
-  href: string;
-  done: number;
-  total: number;
-  /** Every job has found all its items (until then, the total still grows). */
-  discoveryDone: boolean;
-}
-
-function categoryJob(jobs: readonly ActiveJob[], category: CategoryId): CategoryJob | null {
-  const own = jobs.filter((job) => categoryOf(job.resourceType) === category);
-  if (!own.length) return null;
-  const progress = own.map((job) => jobProgress(job));
-  return {
-    href: own.length === 1 ? `/app/jobs/${own[0]!.id}` : "/app/jobs",
-    done: progress.reduce((n, p) => n + p.done, 0),
-    total: progress.reduce((n, p) => n + p.total, 0),
-    discoveryDone: own.every((job) => job.discoveryDone),
-  };
-}
-
 /**
- * The category's texts waiting for approval, and Review showing them: with
- * Review's type filter where it has one (products, collections, pages, blog
- * posts and blogs, with their images and custom fields), else the language.
+ * The category's texts waiting for approval, and Review showing exactly
+ * them: Review gives every text the area this page gives it (images and
+ * custom fields their own, review-areas.ts), so its area filter shows the
+ * same N texts.
  */
-function categoryReview(rows: readonly CountInput[], locale: string, category: CategoryId, figure: Tally) {
+function categoryReview(locale: string, category: CategoryId, figure: Tally) {
   const count = stepCounts(figure.counts).waiting;
   if (!count) return null;
-  const waiting = (CATEGORIES[category].types as readonly string[]).filter((type) =>
-    rows.some((r) => r.locale === locale && r.resourceType === type && countsInHeadline(r.resourceType, r.fieldGroup) && (r.state === "draft" || r.state === "review") && r.count > 0),
-  );
-  const params = new URLSearchParams({ lang: locale });
-  if (waiting.length === 1 && Object.hasOwn(RESOURCE_KINDS, waiting[0]!)) params.set("type", waiting[0]!);
-  return { count, href: `/app/review?${params}` };
+  return { count, href: `/app/review?${new URLSearchParams({ lang: locale, area: category })}` };
 }
 
 /** Whether the smart schedule translates the category into the language (it is on, and its scope has them). */
@@ -438,7 +385,7 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
     state: categoryState(summary.segments, locale, id, { scanning }),
     /** Things its texts belong to (48 products); null for a category of several kinds (its description says what). */
     items: itemCount(id),
-    review: categoryReview(summary.counts, locale, id, tallies[id]),
+    review: categoryReview(locale, id, tallies[id]),
     job: categoryJob(jobs, id),
     /** What "Translate" would do; null when bulk jobs have nothing to translate here (its list can still be viewed). */
     bulk: estimates.get(id) ?? null,
@@ -483,19 +430,6 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
 
 export type LanguagePage = Awaited<ReturnType<typeof loadLanguagePage>>;
 
-/** A Shopify CDN image at the width shown (Shopify's width parameter); null for anything but an http(s) URL. */
-function sizedImage(image: PreviewNode["image"] | undefined, width: number) {
-  if (!image) return null;
-  try {
-    const url = new URL(image.url);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    url.searchParams.set("width", String(width));
-    return { url: url.toString(), alt: image.alt };
-  } catch {
-    return null;
-  }
-}
-
 /** Plain-text kinds of Shopify's translatable content (no HTML, rich text, JSON lists or links). */
 const PLAIN_TEXT = new Set(["SINGLE_LINE_TEXT_FIELD", "MULTI_LINE_TEXT_FIELD", "STRING"]);
 /** Keys that name a thing (a menu's title, an option's name, a filter's label), shown before any other text. */
@@ -520,17 +454,6 @@ function shownText(data: TranslatableResourceData, row: Pick<ItemRow, "resourceT
     return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
   };
   return { key: chosen.key, original: shorten(chosen.value)!, translated: shorten(data.translations.find((t) => t.key === chosen.key)?.value) };
-}
-
-/** A read the page can do without (it shows icons or ids instead): null when it failed, never a failed page. */
-async function settle<T>(shopId: string, what: string, read: Promise<T>): Promise<T | null> {
-  try {
-    return await read;
-  } catch (error) {
-    // A thrown Response is a Shopify timeout (admin-timeout.ts). Names only: a message may quote merchant data.
-    logger.warn({ shopId, err: error instanceof Error ? error.name : "Response" }, `${what}: Shopify could not be read`);
-    return null;
-  }
 }
 
 /** Categories shown by pictures with their names; pages as a list of names; the rest as originals beside their translations. */
@@ -860,7 +783,7 @@ export async function loadCategoryItems(
       // Figures only for a fully measured language (COVERAGE_RULES §3).
       tally: measured ? figure : null,
       payoff: measured ? reviewPayoff(figure) : null,
-      review: categoryReview(coverage.counts, locale, category, figure),
+      review: categoryReview(locale, category, figure),
       job: categoryJob(jobs, category),
       /** Shopify can search its items by title. */
       searchable: searchable.length > 0,

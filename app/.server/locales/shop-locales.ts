@@ -153,3 +153,29 @@ export async function storedLocaleNames(shopId: string, client: PrismaClient = d
   const rows = await withTenant(shopId, (tx) => tx.shopLocale.findMany({ where: { shopId }, select: { locale: true, name: true } }), client);
   return Object.fromEntries(rows.map((r) => [r.locale, r.name]));
 }
+
+export interface StoredShopLocales {
+  /** The store's primary language, or null before the first sync. */
+  primary: string | null;
+  /** Its additional languages, or null before the first sync (nothing to tell them apart by). */
+  targets: string[] | null;
+  /** Shopify's names by code (a fallback for codes Intl doesn't name). */
+  names: Record<string, string>;
+  /** Whether customers can choose each language. */
+  published: Record<string, boolean>;
+}
+
+/** The store's languages from the last sync, in one read (no Shopify call). */
+export async function storedShopLocales(shopId: string, client: PrismaClient = defaultClient): Promise<StoredShopLocales> {
+  const rows = await withTenant(
+    shopId,
+    (tx) => tx.shopLocale.findMany({ where: { shopId }, select: { locale: true, name: true, primary: true, published: true } }),
+    client,
+  );
+  return {
+    primary: rows.find((r) => r.primary)?.locale ?? null,
+    targets: rows.length ? rows.filter((r) => !r.primary).map((r) => r.locale) : null,
+    names: Object.fromEntries(rows.map((r) => [r.locale, r.name])),
+    published: Object.fromEntries(rows.map((r) => [r.locale, r.published])),
+  };
+}

@@ -70,8 +70,10 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **G3** CSV import with one invalid line → nothing imported, the line is named; export opens safely in a spreadsheet (no formulas).
 
 ### H. Review, history, restore, remove
-- **H1** Review page → filter by language, field group and warnings; search; pagination.
-- **H2** Approve some drafts → published; reject others → not drafted again by the next job.
+- **H1** Review page (redesigned 2026-10-30) after a bulk job with images: one card per product and language with the product's picture from Shopify's CDN, its image descriptions inside; language tabs, area chips that add up to "All areas", "With notes", search while typing, "Next page" / "Back to the start" with more than 50 texts. On a language page, an area's "Review N" link opens Review on exactly those N texts.
+- **H2** Approve one text, then a whole card, then the page ("Approve all", after its dialog) → each text says "Approved" in its place and is live on the storefront. Reject one text in place (after its question) and others with "Reject all" → not published, and not drafted again by the next job.
+- **H6** Edit a text and approve it → published as written, and the editor shows it. Empty a text → it can't be approved. A new web address → approved only after its own question; record whether the old address in that language still opens on the storefront (the question says old links stop working). An invalid one says why.
+- **H7** A hidden (unpublished) language: its tab and cards say "hidden", approving says customers see the texts only after the language is published in Shopify; publish it in Shopify → the texts are live.
 - **H3** Editor history → an earlier version restored and live.
 - **H4** After a source change → restoring the old version is refused with an explanation.
 - **H5** "Remove translation" (two clicks) → storefront shows the source text; the removed value is in the history and can be restored.
@@ -105,6 +107,8 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **K11** Theme content and notification templates appear on their own rows, "Not in the totals".
 - **K12** After `shopify app deploy` (the delete topics are new), delete a product with a custom field in Shopify's admin → it and its custom field leave the coverage figures within seconds, in every language (`products/delete`); same for a collection. Record whether `products/delete` really sends only the numeric `id`.
 - **K13** Add and publish a language after a scan → the whole-store figure says "measured in N of M published languages" and the next step asks to scan; remove a language in Shopify → its figures and pending drafts disappear (Overview and Review); add it back → "not fully read yet" until the next scan.
+- **K14** Content page with two or more optional content scopes missing (for example legal texts and menus; see J4 and K7 for the single-scope cases): one card lists them all, and "Allow access" opens **one** Shopify screen asking for all of them; back in the app the card is gone, the areas say "Access allowed – included in the next count" and a notice offers counting; after counting, their figures show. `read_markets` is never in that list.
+- **K15** Content page → More texts → the theme's texts: open the group in a real theme (Dawn or the store's own) and check that each of the 7 parts' one-line hints matches what its list shows (buttons and fixed texts, texts in templates, header and footer, shared sections, theme settings, app embeds, other theme texts). Note any part whose hint doesn't fit or whose list is empty although the theme has such texts.
 
 ### K2. Import and export
 - **K2.1** Export Products for German (only gaps) → CSV opens in a spreadsheet without formulas firing; columns as documented.
@@ -126,7 +130,11 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **L7** Cancel the subscription → Partner API reports none → after the 6 h cache (or the welcome link) the plan page is shown again.
 - **L8** Wrong Partner API token → paying shop keeps its plan (stale state), no redirect; warning in the logs only.
 - **L9** Partner Dashboard: confirm that no charge or invoice was created for the dev store.
-- **L10** Owner complimentary access (BILLING_DESIGN §4), on a second dev store standing in for an own store: without a plan, `pnpm ops:complimentary grant --shop-gid …` plus the GID in `COMPLIMENTARY_SHOP_GIDS` → Plan page shows "Complimentary access", all features work, no redirect to plan selection with `BILLING_REQUIRED=true`; AI usage appears in `pnpm ops:complimentary report`; revoke → plan selection again. The first dev store (not granted) is unaffected.
+- **L10** Owner complimentary access (BILLING_DESIGN §4), on a second dev store standing in for an own store: without a plan, `pnpm ops:complimentary grant --shop-gid …` plus the GID in `COMPLIMENTARY_SHOP_GIDS` → Plan page shows "Owner access" (no plan buttons, the internal AI cost), all features work, no redirect to plan selection with `BILLING_REQUIRED=true`; AI usage appears in `pnpm ops:complimentary report`; revoke → plan selection again. The first dev store (not granted) is unaffected.
+- **L11** Prices (PRICING_DECISION.md §9 step 5): Shopify's plan page (`https://admin.shopify.com/store/linguva-test-lab/charges/<app-handle>/pricing_plans`) lists Free, Starter, Pro, Business with $29 / $99 / $299 and "7-day free trial"; with yearly selected, Starter $290 and Pro $990; note how Business (monthly only) appears there. Compare every price with Linguva's Plan page (cards and the table's price row, `PLAN_PRICES`) in English and German: none differs.
+- **L12** Trial: choose Starter for the first time → welcome link → the Plan page shows "Trial until {date}", "During the trial you have 100,000 AI characters, then 300,000 a month" and the meter "of 100,000". During the trial, editor AI and bulk jobs stop at 100,000 characters; the smart budgets explain why they can't be higher. After the trial ends, the plan's allowance applies without a refresh.
+- **L13** Trial text: a store without a plan sees "Up to 7 days free, with 100,000 AI characters" on the three paid cards, a store with a plan doesn't. With 0 trial days in the Partner Dashboard (and `TRIAL_DAYS = 0`), no trial text anywhere.
+- **L14** Changes: Starter → Pro → Business → Free on Shopify's page; Linguva's Plan page follows each change after the welcome link. A change that waits for the end of the cycle shows "Changes to {plan} on {date}" and the badge on that card. "Refresh" confirms the plan with a message; every plan button opens Shopify's page in the whole window, never inside the app.
 
 ### M. Cost limits
 - **M1** Daily limit set low → AI refused with the daily message; resets at midnight UTC.
@@ -183,7 +191,7 @@ Preparation: the test store on the `business` plan ($0 on development stores, P7
 These run in CI on every push and should pass on the dev store too; the dev store run confirms Shopify's real behaviour:
 
 - `pnpm test:live` (dev store only): API contract (digests, outdated, error codes, handles, removal, images, metafields, markets).
-- `pnpm test:ui` (Playwright, simulated Shopify): A1/A2 install and auth, B1, C1–C3, D1, H1 (content), I1–I2, L-pages, empty and error states, accessibility and phone layout (docs/UI_TESTING.md).
+- `pnpm test:ui` (Playwright, simulated Shopify): A1/A2 install and auth, B1, C1–C3, D1, H1, H2, H6 and H7 (Review), I1–I2, L-pages, empty and error states, accessibility and phone layout (docs/UI_TESTING.md).
 
 ## 2. Beta exit criteria
 
@@ -191,7 +199,7 @@ The first beta can start when:
 
 1. `pnpm test:live` passes read-only and with writes, and every case in A–N passes, or its failure is fixed or accepted by the owner in writing.
 2. C7 passes with DeepL (or the chosen provider), with the owner's approval of the key and its cost.
-3. Billing L1–L9 pass with the real Partner Dashboard plans, and no charge was created.
+3. Billing L1–L9 and L11–L14 pass with the real Partner Dashboard plans, and no charge was created.
 4. Hosting, backups and monitoring are set up and approved (separate from any existing production systems).
 5. Privacy policy, data processing terms and the App Store listing are reviewed by the owner.
 

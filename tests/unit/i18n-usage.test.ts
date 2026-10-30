@@ -26,6 +26,8 @@ const DYNAMIC = [
   "automatic.activity.reason.",
   "automatic.error.",
   "common.kind.",
+  "content.part.",
+  "content.access.scope.",
   "common.group.",
   "common.field.",
   "common.issue.",
@@ -63,6 +65,10 @@ const DYNAMIC = [
   "markets.countries.reason.",
   "overview.countries.status.",
   "settings.auto.paused.",
+  "review.hint.",
+  "review.result.failed.",
+  "review.result.stale.",
+  "review.scope.group.",
 ];
 
 describe("interface texts", () => {

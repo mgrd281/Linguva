@@ -108,6 +108,22 @@ describe("content overview", () => {
     const entries = await loadContentHub(s.asAdmin(), ["read_legal_policies"]);
     expect(entries.find((e) => e.type === "SHOP_POLICY")?.status).toBe("unavailable");
   });
+
+  it("marks a type Shopify didn't answer for as unknown instead of failing the page", async () => {
+    const s = store();
+    // A GraphQL error that isn't about access, every time for menus.
+    s.brokenTypes.add("MENU");
+    const entries = await loadContentHub(s.asAdmin(), ["read_online_store_navigation"]);
+    expect(entries.filter((e) => e.status === "unknown").map((e) => e.type)).toEqual(["MENU"]);
+    expect(entries.find((e) => e.type === "PRODUCT")?.status).toBe("has-content");
+
+    // One failing call (a dropped connection): only the first probe's type is unknown.
+    const once = store();
+    once.failNext = { count: 1, error: () => new Error("socket hang up") };
+    const second = await loadContentHub(once.asAdmin(), ["read_online_store_navigation"]);
+    expect(second.filter((e) => e.status === "unknown")).toHaveLength(1);
+    expect(second).toHaveLength(26);
+  });
 });
 
 describe("shared editor for every content type", () => {

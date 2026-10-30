@@ -6,9 +6,13 @@ import { useFetcher, useLoaderData } from "react-router";
 import type { loadResourceList, runResourceListAction } from "../.server/translation/resource-list";
 import { useI18n } from "../i18n/react";
 import { kindLabel, kindPlural, kindSingular } from "../i18n/labels";
+import { Breadcrumbs } from "./LanguageLayout";
 
 type ListLoader = () => ReturnType<typeof loadResourceList>;
 type ListAction = () => ReturnType<typeof runResourceListAction>;
+
+/** The Content page in the list's language (where every list opens from). */
+const contentHref = (locale: string | null) => (locale ? `/app/content?lang=${encodeURIComponent(locale)}` : "/app/content");
 
 export function ResourceList() {
   const data = useLoaderData<ListLoader>();
@@ -38,7 +42,7 @@ export function ResourceList() {
                 </s-button>
               </permission.Form>
             ) : null}
-            <s-link href="/app/content">{t("resources.denied.back")}</s-link>
+            <s-link href={contentHref(data.target?.locale ?? null)}>{t("resources.denied.back")}</s-link>
           </s-stack>
         </s-section>
       </s-page>
@@ -60,9 +64,14 @@ export function ResourceList() {
 
   const locale = data.target.locale;
   const bulkError = bulk.data && "error" in bulk.data ? bulk.data.error : null;
+  const back = contentHref(locale);
 
   return (
     <s-page heading={label}>
+      <s-link slot="breadcrumb-actions" href={back}>
+        {t("common.nav.content")}
+      </s-link>
+      <Breadcrumbs i18n={i18n} trail={[{ href: back, label: t("common.nav.content") }]} current={label} />
       {data.bulk.available && !data.bulk.consent ? (
         <s-banner tone="info" heading={t("resources.consent.heading")}>
           <s-paragraph>
@@ -110,17 +119,19 @@ export function ResourceList() {
       <s-section>
         <s-stack direction="inline" gap="small" alignItems="center">
           <s-text>{t("resources.translateInto")}</s-text>
-          {data.targets.map((t) =>
-            t.locale === locale ? (
-              <s-badge key={t.locale} tone="info">
-                {i18n.language(t.locale, t.name)}
+          {data.targets.map((target) => {
+            // Hidden languages say so: customers can't choose them yet.
+            const name = target.published ? i18n.language(target.locale, target.name) : t("resources.hiddenLanguage", { language: i18n.language(target.locale, target.name) });
+            return target.locale === locale ? (
+              <s-badge key={target.locale} tone="info">
+                {name}
               </s-badge>
             ) : (
-              <s-link key={t.locale} href={`${data.kind.path}?lang=${encodeURIComponent(t.locale)}`}>
-                {i18n.language(t.locale, t.name)}
+              <s-link key={target.locale} href={`${data.kind.path}?lang=${encodeURIComponent(target.locale)}`}>
+                {name}
               </s-link>
-            ),
-          )}
+            );
+          })}
         </s-stack>
       </s-section>
 
@@ -158,7 +169,7 @@ export function ResourceList() {
                   disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
                   {...(bulk.state !== "idle" ? { loading: true } : {})}
                 >
-                  {t("resources.bulk.submit", { language: data.target.name })}
+                  {t("resources.bulk.submit", { language: i18n.language(data.target.locale, data.target.name) })}
                 </s-button>
               </s-stack>
             </bulk.Form>

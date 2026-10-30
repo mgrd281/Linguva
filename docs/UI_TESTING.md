@@ -21,14 +21,17 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 
 | Shop | Purpose |
 |---|---|
-| `ui-full` | 30 products, collections, pages, posts, image and metafield, German, French and Arabic, Pro plan, seeded review-mode job with French drafts |
+| `ui-full` | 30 products, collections, pages, posts, image and metafield, German, French and Arabic (hidden), Pro plan, seeded review-mode job with French drafts, and one Arabic draft (Review's language tabs, the hidden marker, right to left) |
 | `ui-empty` | Only the primary language, no subscription |
 | `ui-nocatalog` | German enabled, no products, no jobs, no drafts |
 | `ui-failing` | Admin API answers 503 for resource queries (Shopify outage) |
 | `ui-owner` | Owner complimentary access (granted by the operator tool in the setup) |
 | `ui-visual` | Fixed content for screenshot comparisons (counted once, three product pictures); no test changes it |
 | `ui-catalog` | 55 products (more than one page of an area's list) in every state, counted, with pictures; German is only read, the French tests start a translation |
-| `ui-demo` | A realistic outdoor store (App Store screenshots, Overview by country, language page): a picture for every product and collection, German partly translated, French drafts, markets |
+| `ui-coverage-items` | The coverage drill-down's own store (`coverage.spec.ts`): 30 products with German like `ui-full`'s (titles on 1–10, Product 2's description outdated), counted once; no test changes it, so its figures hold in any order of the specs |
+| `ui-demo` | A realistic outdoor store (App Store screenshots, Overview by country, language page): a picture for every product and collection, German partly translated, French drafts (one from a CSV import, flagged by the number check with its numbers), markets |
+| `ui-review`, `ui-review-phone` | Review's own stores (`review.spec.ts`), one per project so the desktop and phone runs never decide each other's texts: a finished German job with pictures and a custom field, and texts in a particular state (a Google title too long, an imported new web address, collections and a page, Spanish with an original changed since, Arabic still hidden); counted, with the languages synced as after a first visit (`fixtures/review-store.ts`) |
+| `ui-plan-*` | The Plan page's billing states (`plan.spec.ts`): a running trial (`ui-plan-trial`), a change at the end of the cycle, a cancellation, Shopify not answering (never checked, or last checked as Pro seven hours ago), four languages on Starter, automatic publishing switched on under Starter, Free used up |
 | `ui-slow` | Shopify answers translation queries only after 20 s (longer than the app's time limit, 3 s in these tests) |
 | `ui-fresh` | Not seeded: installs during the test |
 
@@ -37,20 +40,22 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | File | Covers |
 |---|---|
 | `install.spec.ts` | Install through token exchange, shop GID stored, tokens encrypted; forged session tokens and cross-store requests get no data |
-| `pages.spec.ts` | Overview, Languages, Products, Editor, Review, Jobs, Plan: content, axe (WCAG 2.1 A/AA, no serious or critical findings), accessible tables, no horizontal scrolling on desktop and phone (`@responsive`) |
+| `pages.spec.ts` | Overview, Languages, Content, Products, Editor, Review, Jobs, Plan: content, axe (WCAG 2.1 A/AA, no serious or critical findings), accessible tables, no horizontal scrolling on desktop and phone (`@responsive`) |
 | `states.spec.ts` | Empty states, Shopify outage (clear message, Try again, no internal details), not found, loading state of AI translation, a language page's examples loading after it and failing without taking the page down, admin loading bar on navigation |
-| `flows.spec.ts` | Translate with AI → edit → publish → read back; history; alt text; Plan page for subscribed, unsubscribed and complimentary stores |
+| `flows.spec.ts` | Translate with AI → edit → publish → read back; history; alt text; Plan page for subscribed, unsubscribed and owner-access stores |
+| `plan.spec.ts` | The Plan page: list prices computed from `PLAN_PRICES` (English and German), the yearly lines, "Monthly only", no switch, the footnote, one "Fits your store" badge per store and never a popularity claim, the trial line only without a plan, a running trial with its allowance, owner access without plan buttons, an icon for every feature, pending change, cancellation, stale and unknown states, Refresh and Try again with their toasts, cards stacked on a phone (`@responsive`). Billing off is rendered in `tests/unit/plan-components.test.ts` (this server has billing on) |
+| `review.spec.ts` | Review on its own stores (`ui-review` on desktop, `ui-review-phone` on the phone; 26 tests, each on both): approving a text, a card and the page (after its dialog), with each result in place and the counts following; rejecting in place after its question; an edited text approved as written; an emptied text holding the buttons with the reason; Google lengths checked while typing; rendered HTML and "Edit HTML"; a new web address after its question, an invalid one refused; area chips that add up, image descriptions in their products' cards, and the language page's link landing on them; "With notes"; search while typing; a page whose original changed meanwhile; a job's texts with "Show all"; leaving and Reload with edits asking first; the page's buttons waiting for a card's request; the pager and the pictures loading; Arabic still hidden, right to left; every filter in view; an empty selection said once; axe and no sideways scrolling at 390 px. The last tests change the store while the page is open, through the owner role with `app.shop_id` set |
 | `preview.spec.ts` | Rendered HTML in sandboxed frames (editor and Review), live preview with an attack payload that must not run, original and translation side by side (desktop) or stacked (phone), HTML code toggle |
-| `content.spec.ts` | All content overview, menu flow, theme texts with search and pages, permission prompt, invalid references |
+| `content.spec.ts` | The Content page for one language: the language chips (visible languages first, the shown one no link, a hidden one marked), the language picked without `?lang` (never a hidden one), the select with more than six languages, when it was last counted and the way to its next steps, one permission card with one button that asks for every missing scope (allow-listed scopes only), each area as one link with its figure in the link's name and no figure while a part is refused or not counted, More texts (the theme's and notifications' parts open below their row, opened and scrolled to from a language page with `?open`), the folds of what isn't in the store and what Shopify doesn't let apps read, no language, nothing to translate (no count offered); then menu flow, theme texts with search and pages, permission prompt, invalid references, bulk options |
 | `settings.spec.ts` | Translation style saved per language; usage figures from the plan |
 | `tools.spec.ts` | Glossary (language by name, market number validation), translation memory, coverage report, Markets |
 | `rtl.spec.ts` / `unsaved.spec.ts` | Right-to-left input; question before losing unpublished changes |
-| `keyboard.spec.ts` | Translate, edit and publish with the keyboard only; visible focus; focus on "Stay" when leaving; Review checkboxes with Space |
+| `keyboard.spec.ts` | Translate, edit and publish with the keyboard only; visible focus; focus on "Stay" when leaving; Review: a text's Approve and the page's primary button reached by keyboard, Enter approves and focus moves to the next text; the Plan page's links, full comparison and questions |
 | `network.spec.ts` | Hanging Shopify ends in a clear page within the time limit; loading bar on slow navigation; AI translation can't be sent twice |
 | `timings.spec.ts` | Server response times of the main pages (PERFORMANCE.md) |
 | `language-page.spec.ts` | A language's page: breadcrumb, figure (ring and words), one next step with the page's only primary button (at least 44 px high on a phone), the three steps to live, the areas in the order customers meet them with loaded pictures and alt attributes, "View all" (also on a phone), what the percentage leaves out, the folded words, the confirm dialog (contents, Cancel starts nothing, confirming opens the job), not counted, hidden, no access, unknown and primary language |
 | `category-list.spec.ts` | One area of a language: figure and next step, filter chips that add up to "All", groups by state, rows with pictures, texts and the editor link, filters, paging (50 per page), search that keeps the filter, the confirm dialog, no access, not counted, unknown area or language |
-| `visual.spec.ts` | Screenshot comparison of 9 pages on desktop and phone (see below) |
+| `visual.spec.ts` | Screenshot comparison of 11 screens on desktop and phone (see below) |
 | `editor-states.spec.ts` | Every editor field starts with its state; the original description's preview fits its list |
 | `ui-review-screenshots.spec.ts` | On demand (`UI_REVIEW_SCREENSHOTS=<folder>`): full-page screenshots of the key screens for the design review (docs/UI_REVIEW.md) |
 | `i18n.spec.ts` | German interface from Shopify's `locale` parameter: 12 pages (with a language's page and its products) with axe, phone layout and no English interface text left; navigation stays German inside the app; the target language (`?lang=`) never changes the interface; German error page; browser language without the parameter |
@@ -64,7 +69,9 @@ Polaris web components set ARIA roles through `ElementInternals`, which axe-core
 
 ## Visual comparisons
 
-`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings and Plan pages, a language's page and one of its areas (German, Products), desktop and phone, with reference images (up to 1 % of pixels may differ). It uses the `ui-visual` store, waits until the Inter web font is loaded, and replaces dates (with their time, where a page shows it) with a fixed one. Polaris text has no box of its own, so masking can't cover it.
+`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings, Plan and Content pages, the Plan page without a plan (`ui-empty` store), a language's page and one of its areas (German, Products), desktop and phone, with reference images (up to 1 % of pixels may differ). It uses the `ui-visual` store unless another is named, waits until the Inter web font is loaded, and replaces dates (with their time, where a page shows it, or a day without a year, like "on November 1") with a fixed one. Polaris text has no box of its own, so masking can't cover it.
+
+Redesign 2 (2026-10-30) added `content` and `plan-none` and changed `products` (the breadcrumb back to Content, "French (hidden)"), `plan` and `review-empty`. Their `*-ci.png` images come from the first CI run after the merge (steps below); until then those comparisons fail in CI.
 
 **CI is the reference.** GitHub's Ubuntu runners render the committed images `tests/ui/visual.spec.ts-snapshots/*-ci.png`. Other machines can render text differently: this development container has Inter installed as a system font, which the browser uses instead of Shopify's web font, with slightly different glyph widths (2–4 % of pixels). So other machines compare against their own `*-local.png` images. Those are created on the first run and not committed.
 

@@ -62,6 +62,17 @@ export async function loadMarketCountries(
   }
 }
 
+/**
+ * The countries of the active markets if they were read in the last few
+ * minutes (COUNTRIES_CACHE_MS), else null: never a Shopify read. Flags of
+ * languages spoken in many countries (localeCountry) pick one of them.
+ */
+export function peekMarketCountries(shopId: string, now = Date.now()): string[] | null {
+  const cached = cache.get(shopId);
+  if (!cached || now - cached.at >= COUNTRIES_CACHE_MS) return null;
+  return [...new Set(cached.markets.filter((m) => m.status === "ACTIVE").flatMap((m) => m.countries.map((c) => c.code.toUpperCase())))];
+}
+
 /** Tests only: forget cached markets. */
 export function clearMarketCountriesCache() {
   cache.clear();

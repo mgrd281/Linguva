@@ -19,6 +19,10 @@ import { storeWide } from "../../app/lib/coverage-view";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
+import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
+import { getBillingStatus } from "../../app/.server/billing/subscription";
+import { nextPeriodStart, periodKey } from "../../app/.server/usage/usage-ledger";
+import { TRIAL_AI_CHARS } from "../../app/lib/plans";
 
 const app = new PrismaClient();
 beforeEach(resetDatabase);
@@ -99,6 +103,27 @@ describe("AI usage level", () => {
     expect(usageLevel(800, 1000)).toBe("high");
     expect(usageLevel(1000, 1000)).toBe("exhausted");
     expect(usageLevel(5, 0)).toBe("exhausted");
+  });
+
+  it("names the trial's end when the trial allowance is used up before the month renews", async () => {
+    const now = new Date();
+    let n = 0;
+    /** A store on a Business trial ending at `trialEndsAt`, its trial allowance used up. */
+    async function trialStore(trialEndsAt: Date) {
+      const { shop } = await upsertInstalledShop({ shopDomain: `trial-${++n}.myshopify.com`, name: "Trial store", shopifyShopGid: `gid://shopify/Shop/${9100 + n}` }, app);
+      await withTenant(shop.id, (tx) => tx.usageLedger.create({ data: { shopId: shop.id, periodKey: periodKey(now), kind: "RESERVE", chars: TRIAL_AI_CHARS, provider: "mock", idempotencyKey: `trial-used-${n}` } }), app);
+      const fetchImpl = fakePartnerApi({ handle: "business", trialEndsAt: trialEndsAt.toISOString() }).fetchImpl;
+      const billing = await getBillingStatus({ prisma: app, settings: PARTNER_SETTINGS, required: true, fetchImpl, now: () => now }, shop);
+      return loadOverview(new FakeShopifyStore(1).asAdmin(), shop, app, { billing });
+    }
+
+    // Ends before the 1st (always between now and the renewal): AI resumes then.
+    const early = new Date((now.getTime() + nextPeriodStart(now).getTime()) / 2);
+    expect((await trialStore(early)).usage).toMatchObject({ used: TRIAL_AI_CHARS, limit: TRIAL_AI_CHARS, level: "exhausted", trialEndsAt: early.toISOString() });
+
+    // Ends after the renewal: the month's renewal comes first, as without a trial.
+    const late = new Date(nextPeriodStart(now).getTime() + 2 * 24 * 60 * 60 * 1000);
+    expect((await trialStore(late)).usage).toMatchObject({ level: "exhausted", trialEndsAt: null });
   });
 });
 

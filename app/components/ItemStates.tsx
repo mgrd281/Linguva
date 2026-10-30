@@ -63,6 +63,39 @@ export function StateCountList({ counts, i18n }: { counts: StateCounts; i18n: I1
   );
 }
 
+/** Open work in the order it is dealt with: approving first, then failed, outdated and missing texts. */
+const OPEN_WORK = ["waiting", "failed", "outdated", "missing"] as const satisfies readonly ItemState[];
+
+/**
+ * "◷ 18 waiting for approval  ! 2 failed": an area's open work, at most
+ * `max` states, each icon and words; "✓ Everything done" when every text is
+ * done; nothing without texts.
+ */
+export function OpenWorkLine({ counts, i18n, max = 2 }: { counts: StateCounts; i18n: I18n; max?: number }) {
+  const texts = textCounts(counts);
+  const total = SHOWN_STATES.reduce((n, s) => n + texts[s], 0);
+  if (total > 0 && texts.complete === total) {
+    return (
+      <s-stack direction="inline" gap="small-300" alignItems="center">
+        <StateIcon state="complete" size="small" />
+        <s-text color="subdued">{i18n.t("overview.card.done")}</s-text>
+      </s-stack>
+    );
+  }
+  const shown = OPEN_WORK.filter((s) => texts[s] > 0).slice(0, max);
+  if (!shown.length) return null;
+  return (
+    <s-stack direction="inline" gap="small-100 base" alignItems="center">
+      {shown.map((s) => (
+        <s-stack key={s} direction="inline" gap="small-300" alignItems="center">
+          <StateIcon state={s} size="small" />
+          <s-text color="subdued">{i18n.t(`language.count.${s}`, { count: texts[s] })}</s-text>
+        </s-stack>
+      ))}
+    </s-stack>
+  );
+}
+
 /** "✓ 15 done – customers see them": one line per state with texts, the figure first (a hero's list). */
 export function StateLines({ counts, i18n }: { counts: StateCounts; i18n: I18n }) {
   const texts = textCounts(counts);

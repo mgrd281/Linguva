@@ -109,18 +109,25 @@ async function adminGraphql(shop: UiShop, body: { query: string; variables?: Rec
 }
 
 function partnerApi(body: { variables?: { shopId?: string } }) {
-  const shop = Object.values(UI_SHOPS).find((s) => s.gid === body.variables?.shopId);
+  const shop: UiShop | undefined = Object.values(UI_SHOPS).find((s) => s.gid === body.variables?.shopId);
+  const extra = shop?.subscription ?? {};
+  if (extra.partnerDown) return json({ errors: [{ message: "Service unavailable" }] }, 503);
   const handle = shop?.plan ?? null;
+  // Dates relative to now, so a trial or a pending change is always ahead.
+  const days = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
   return json({
     data: {
       activeSubscription: handle
         ? {
             billingPeriod: "EVERY_30_DAYS",
-            cancelAtEndOfCycle: false,
-            trialEndsAt: null,
-            currentBillingCycle: { startTime: "2026-10-01T00:00:00Z", endTime: "2026-11-01T00:00:00Z" },
+            cancelAtEndOfCycle: extra.cancelAtEndOfCycle ?? false,
+            trialEndsAt: extra.trialDays ? days(extra.trialDays) : null,
+            currentBillingCycle:
+              extra.periodEndDays !== undefined
+                ? { startTime: days(extra.periodEndDays - 30), endTime: days(extra.periodEndDays) }
+                : { startTime: "2026-10-01T00:00:00Z", endTime: "2026-11-01T00:00:00Z" },
             items: [{ handle }],
-            pendingUpdate: null,
+            pendingUpdate: extra.pendingPlan ? { items: [{ handle: extra.pendingPlan }] } : null,
           }
         : null,
     },

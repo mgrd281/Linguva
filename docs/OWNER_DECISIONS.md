@@ -10,12 +10,12 @@ Everything that can be built without accounts, money or legal decisions is done 
 
 ## 2. DeepL API key (unblocks: measured translation quality and real cost per product)
 
-**What:** a DeepL API account. DeepL's developer documentation confirms a free API plan and paid ("Pro") plans; the amounts below come from third-party pages and must be checked at sign-up.
+**What:** a DeepL API account. DeepL API Pro and API Free can no longer be bought (DeepL help center, updated 2026-10-29).
 
-| Plan | What third-party pages say (estimate, verify) | Use |
+| Plan | Price (read 2026-10-30, PRICING_DECISION.md §4) | Use |
 |---|---|---|
-| DeepL API Free | about 500,000 characters per month, no fee | Tests with the demo catalog only: some sources say texts on the free plan may be used by DeepL, so **never real store data** |
-| DeepL API Pro | about $5.49 per month plus about $25 per million characters | Production, with DeepL's data processing agreement |
+| DeepL API Developer | Free, 1,000,000 characters in total (never reset) | Tests with the demo catalog only; check DeepL's data terms before any real store text |
+| DeepL API Growth | $32.50 a month including 1,000,000 characters, then $27.50 per million (Germany: €25.00 net a month plus €22.00 per extra million; confirm VAT at checkout); at most 50,000,000 characters a month | Production, with DeepL's data processing agreement; set cost control in the DeepL account to €150 a month at launch |
 
 **Steps:** create the account at deepl.com → API, copy the key, set it only as `DEEPL_API_KEY` in your local `.env` (keys of the free plan end in `:fx`). Never paste it into the PR or chat.
 
@@ -23,23 +23,23 @@ Everything that can be built without accounts, money or legal decisions is done 
 
 **Then I can:** run a reference set (product texts with HTML, numbers, brand names) in German, French and Spanish, record quality and characters per product, and update COST_MODEL.md with measured values.
 
-## 3. Prices and plans (unblocks: billing tests and the listing's pricing section)
+## 3. Prices and plans: decided 2026-10-30 (delegated by the owner)
 
-Plans are configured in the Partner Dashboard (Shopify App Pricing); the app reads the plan handle. **Proposal** (the handles must match `app/lib/plans.ts`):
+Decided in [PRICING_DECISION.md](PRICING_DECISION.md) and verified the same day. The app shows these prices from `PLAN_PRICES` (`app/lib/plans.ts`); merchants are charged only once you enter exactly these plans in the Partner Dashboard.
 
-| Handle | Proposed price | AI characters per month | Languages | Bulk and automatic translation | Glossary, automatic publishing |
+| Handle | Monthly | Yearly | AI characters per month | Languages with AI | What the plan adds |
 |---|---|---|---|---|---|
-| free | $0 | 20,000 | 1 | No | No |
-| starter | $19 | 300,000 | 3 | Yes | No |
-| pro | $59 | 1,200,000 | 10 | Yes | Yes |
-| business | $179 | 4,000,000 | 20 | Yes | Yes |
+| free | $0 | — | 20,000 | 1 | Review and approve, translation memory, translating by hand in every language, AI one item at a time |
+| starter | $29 | $290 (2 months free) | 300,000 | 3 | Translate whole areas at once; new and changed content translated automatically |
+| pro | $99 | $990 (2 months free) | 1,200,000 | 10 | Glossary editing; optional automatic publishing |
+| business | $299 | monthly only | 4,000,000 | 20 | Smart schedule (Smart Auto-Translate) |
 
-- Text reused from translation memory doesn't count. A character allowance of 300,000 is roughly 50,000 words.
-- Competitor anchors (COMPETITIVE_ANALYSIS.md): Langify $17.50–59.95 with words included only once; Transcy $29–99 plus tokens.
-- Proposed trial: 14 days on paid plans; annual plans with two months free.
-- Margins at full use, DeepL only, before hosting: about 44–61% (COST_MODEL.md §2, assumptions).
+- Trial: 7 days on Starter, Pro and Business, with at most 100,000 AI characters while it runs (the app enforces this limit). Free has no trial.
+- Yearly: Starter and Pro cost 10 × the monthly price; Business is billed monthly only.
+- Free stays. The allowances are unchanged. No overage charges at launch.
+- Shopify's rule: a plan's price and its trial length change only in the Partner Dashboard; one store's trial extension or discount in the Dev Dashboard. The app never creates or changes a charge.
 
-**Decide:** prices, trial length, annual discount, and whether the free plan stays (it helps installs; it costs at most 20,000 characters per store per month, roughly $0.50 at Pro rates).
+**Your steps:** create exactly these plans in the Partner Dashboard (PRICING_DECISION.md §9), check them on the dev store (DEV_STORE_TEST_PLAN.md L11–L14), then set the production values of §9 step 6, `BILLING_REQUIRED=true` last. Later price changes: Partner Dashboard, `PLAN_PRICES` and both listing languages on the same day.
 
 ## 4. Hosting and running costs (unblocks: production, monitoring)
 
@@ -53,7 +53,7 @@ The app needs a web process, a worker process, PostgreSQL 16 and Redis 7, plus b
 | Database backups | Included or $5–20 | Daily backups, tested restore |
 | Error tracking and uptime alerts | $0 at launch (free tiers) | Sentry or similar; no store content in events |
 | Domain and email for support | $1–10 | |
-| DeepL API Pro | $5.49 base + usage | Usage is covered by plan prices |
+| DeepL API Growth | $32.50 including 1M characters, then $27.50 per million (€25 net + €22 per million) | Usage is covered by plan prices; cost control in the DeepL account at €150 a month at launch |
 
 **Decide:** provider and region (EU recommended for GDPR), who receives alerts. **Then I can:** add the deployment configuration and the production checks (posture check, migrations, secrets) without deploying anything until you approve.
 
@@ -76,5 +76,13 @@ These need a lawyer or a reviewed template; I can draft the technical facts (wha
 | 6.5 | 3–5 beta merchants from your network (not your production stores) | Complimentary access for 60 days |
 | 6.6 | App name in the listing | "Linguva: Translate & Review" |
 | 6.7 | Merge of PR #1 | Only after your review and the dev store checks |
+| 6.8 | Plan page: which languages does a plan's AI cover? The first ones by their English names, or the ones the merchant picks? | Today: the first N by English name (a Starter store with Danish, Dutch, French and German gets no AI for German); the Plan page explains the rule and names the language outside the plan |
+| 6.9 | Content page: a "Translate" button on every area tile? | Today: a tile opens its area's list, where "Translate" starts the AI after a short confirmation. One click more, but one place with one set of buttons |
+| 6.10 | Content page: for content Shopify doesn't let apps read (payment methods, for example), keep the hint to Shopify's own translation app, or only say that Linguva can't read it? | Today: the hint shows; the app's name "Translate & Adapt" appears only on English pages |
+| 6.11 | Content page: a tile with content added since the last count, or not counted completely, says "count the store again", but the page shows no count button then. Add a notice with "Count again" (new texts in four languages), or change the tile's words? | Today: only the words; "Count store again" on the Overview counts the store |
+| 6.12 | Review: a button that approves everything waiting at once, across pages? It would publish texts nobody has looked at | Today: at most one page (about 50 texts, never more than 100), after a question. Keep it |
+| 6.13 | Review: reject after a question, or at once with "Undo" for a few seconds? Undo means a rejected text could come back, which changes the rule that Linguva doesn't translate a rejected original again | Today: a question first ("This can't be undone") |
+| 6.14 | Review on a phone: put the language label above each text box, so rendered texts (descriptions, pages) line up with plain ones? Today the label sits inside the box, 12 px further from a rendered text | Today: inside the box. The change needs a new artboard |
+| 6.15 | Plan page on a wide screen: show "Fits your store" as a band at the top of its card instead of a badge? Cards without a badge keep an empty strip of about 28 px under their icon | Today: a badge, and the strip stays |
 
 Nothing on this list is done automatically: no purchase, no deployment, no connection to a production store, no merge.

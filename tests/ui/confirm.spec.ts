@@ -1,8 +1,8 @@
 /**
- * Actions that can't be undone ask first (Polaris modal): rejecting drafts,
- * cancelling a job, deleting memory entries and glossary terms. Cancel
- * leaves everything as it was; confirming does the action and a toast
- * confirms it.
+ * Actions that can't be undone ask first: rejecting a page of translations,
+ * cancelling a job, deleting memory entries and glossary terms (Polaris
+ * modal), and rejecting one translation (a question in its place). Cancel
+ * leaves everything as it was; confirming does the action and says so.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible, expectToast, openApp } from "./helpers";
@@ -12,28 +12,41 @@ const dialogOpen = (page: Page, heading: string) => page.getByRole("dialog", { n
 // The modal's buttons are its slotted children, not part of the dialog's shadow tree.
 const modalButton = (page: Page, id: string, name: string) => modal(page, id).getByRole("button", { name, exact: true });
 
-test("rejecting drafts asks first; Cancel keeps them, confirming rejects only the selected", async ({ page }) => {
+test("rejecting asks first: Cancel keeps every text, one text is rejected after its own question", async ({ page }) => {
   await openApp(page, "full", "/app/review");
-  const intro = page.getByText(/translations waiting for review/);
-  const before = Number((await intro.innerText()).match(/\d+/)![0]);
+  const summary = page.getByText(/^\d+ translations? on this page/);
+  const before = Number((await summary.innerText()).match(/\d+/)![0]);
+  const allTab = page.getByRole("navigation", { name: "Languages" }).locator('[aria-current="true"]');
+  await expect(allTab).toContainText(String(before));
 
-  await page.locator("s-button", { hasText: "Reject selected" }).first().click();
-  const dialog = dialogOpen(page, "Reject the selected translations?");
+  await page.locator("s-button", { hasText: "Reject all" }).click();
+  const dialog = page.getByRole("dialog", { name: /^Reject \d+ translations\?$/ });
   await expect(dialog).toBeVisible();
   await expectAccessible(page);
   await modalButton(page, "review-reject", "Cancel").click();
   await expect(dialog).toBeHidden();
-  await expect(intro).toHaveText(new RegExp(`^${before} `));
+  await expect(summary).toHaveText(new RegExp(`^${before} `));
 
-  // Keep only the last draft selected, then confirm.
-  const boxes = page.locator('s-checkbox[name="draft"]');
-  const count = await boxes.count();
-  for (let i = 0; i < count - 1; i++) await boxes.nth(i).getByRole("checkbox").uncheck();
-  await page.locator("s-button", { hasText: "Reject selected" }).first().click();
-  await modalButton(page, "review-reject", "Reject selected").click();
-  await expectToast(page, "1 draft discarded. It won't be published.");
-  await expect(intro).toHaveText(new RegExp(`^${before - 1} `));
+  // One text: its ✕ asks in place, says it can't be undone, and only then rejects.
+  await page.getByRole("button", { name: "Reject: Name – Product 2 jacket" }).filter({ visible: true }).click();
+  const question = page.locator("s-banner", { hasText: "This can't be undone." });
+  await expect(question).toBeVisible();
+  await question.getByRole("button", { name: "Reject: Name – Product 2 jacket" }).click();
+  await expect(page.getByText("Rejected – won't be published.", { exact: true })).toBeVisible();
+  await expect(summary).toHaveText(new RegExp(`^${before - 1} `));
+  await expect(allTab).toContainText(String(before - 1));
   await expect(modal(page, "review-reject")).toHaveCount(1);
+});
+
+test("confirming Reject all rejects the page's texts and a toast says so", async ({ page }) => {
+  // One product's French texts (a search narrows the page), so the shared store keeps the rest.
+  await openApp(page, "full", "/app/review?lang=fr&q=Product%208%20jacket");
+  await expect(page.getByText(/^2 translations on this page/)).toBeVisible();
+  await page.locator("s-button", { hasText: "Reject all" }).click();
+  await expect(page.getByRole("dialog", { name: "Reject 2 translations?" })).toBeVisible();
+  await modalButton(page, "review-reject", "Reject 2").click();
+  await expectToast(page, /^\d+ translations rejected\. They won't be published\.$/);
+  await expect(page.locator("#review-done-heading")).toBeVisible();
 });
 
 test("deleting a glossary term asks first", async ({ page }) => {
@@ -56,19 +69,21 @@ test("deleting a glossary term asks first", async ({ page }) => {
   await expect(row).toHaveCount(0);
 });
 
-test("choosing a language and then 'All languages' again shows everything", async ({ page }) => {
+test("choosing a language tab and then All again shows every language", async ({ page }) => {
+  // As a merchant arrives: the Overview reads the store's languages (names, which are hidden).
+  await openApp(page, "full", "/app");
   await openApp(page, "full", "/app/review");
-  const intro = page.getByText(/translations waiting for review/);
-  const all = Number((await intro.innerText()).match(/\d+/)![0]);
-  const language = page.getByRole("combobox", { name: "Language", exact: true });
-  const apply = page.getByRole("button", { name: "Apply", exact: true });
-  await language.selectOption({ label: "French" });
-  await apply.click();
+  const tabs = page.getByRole("navigation", { name: "Languages" });
+  // Arabic waits too, and customers can't choose it yet.
+  await expect(tabs.getByRole("link", { name: /^Arabic hidden \d+$/ })).toBeVisible();
+  await tabs.getByRole("link", { name: /^French \d+$/ }).click();
   await expect(page).toHaveURL(/lang=fr/);
-  await language.selectOption({ label: "All languages" });
-  await apply.click();
-  await expect(page).toHaveURL(/lang=all/);
-  await expect(page.getByText(`${all} on this page. Untick the ones you don't want to change.`)).toBeVisible();
+  await expect(tabs.locator('[aria-current="true"]')).toContainText("French");
+  await tabs.getByRole("link", { name: /^All \d+$/ }).click();
+  await expect(page).not.toHaveURL(/lang=/);
+  await expect(tabs.locator('[aria-current="true"]')).toContainText("All");
+  const all = Number(((await tabs.locator('[aria-current="true"]').textContent()) ?? "").match(/\d+/)![0]);
+  await expect(page.getByText(new RegExp(`^${all} translations on this page`))).toBeVisible();
 });
 
 test("a glossary CSV is imported from the drop zone and confirmed with a toast", async ({ page }) => {

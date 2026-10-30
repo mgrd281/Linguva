@@ -13,6 +13,7 @@
 import type { CategoryPreview, LanguagePage, PreviewItem } from "../.server/languages/language-page";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { itemKindLabel } from "../i18n/labels";
+import type { IconName } from "../lib/icons";
 import { CATEGORIES, type CategoryId } from "../lib/language-categories";
 import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
@@ -48,26 +49,31 @@ const SMALL_ROW = 3;
 /** Narrower than this, only the featured card shows examples (one row of pictures). */
 const WIDE = "@container (inline-size > 500px) auto, none";
 
-const BIG_FIGURE = { fontSize: 24, lineHeight: "28px", fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", whiteSpace: "nowrap" } as const;
+export const BIG_FIGURE = { fontSize: 24, lineHeight: "28px", fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", whiteSpace: "nowrap" } as const;
 const CLAMP = (lines: number) => ({ display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" }) as const;
 
 export function categoryName(i18n: I18n, id: CategoryId): string {
   return i18n.t(`language.category.${id}.name`);
 }
 
-/** "48 products · Name, description and texts for Google". */
-function detailLine(i18n: I18n, category: LanguageCategory): string {
+/** "48 products · Name, description and texts for Google" (also the Content page's tiles). */
+export function detailLine(i18n: I18n, category: { id: CategoryId; items: number | null; textTypes: readonly string[] }): string {
   const items = ITEM_COUNT_KEYS[category.id];
   const plans = category.textTypes.some((type) => type === "SELLING_PLAN_GROUP" || type === "SELLING_PLAN");
   const detail = category.id === "checkout" && plans ? "language.category.checkout.detailPlans" : DETAIL[category.id];
   return [items && category.items ? i18n.t(items, { count: category.items }) : null, detail ? i18n.t(detail) : null].filter(Boolean).join(" · ");
 }
 
-/** The category's picture in a soft square, for areas without pictures of their own and items without one. */
-export function IconTile({ icon, size = 36 }: { icon: (typeof CATEGORIES)[CategoryId]["icon"]; size?: number }) {
+/**
+ * An icon in a soft square: an area's, a content type's or a notice's
+ * picture, and the Plan page's plan, meter and feature tiles
+ * (`color="base"`). Squares under 32 px take the small icon unless
+ * `iconSize` says otherwise.
+ */
+export function IconTile({ icon, size = 36, color = "subdued", iconSize }: { icon: IconName; size?: number; color?: "base" | "subdued"; iconSize?: "small" | "base" }) {
   return (
     <s-stack background="subdued" borderRadius="base" inlineSize={`${size}px`} blockSize={`${size}px`} alignItems="center" justifyContent="center">
-      <s-icon type={icon} color="subdued" />
+      <s-icon type={icon} color={color} size={iconSize ?? (size < 32 ? "small" : "base")} />
     </s-stack>
   );
 }

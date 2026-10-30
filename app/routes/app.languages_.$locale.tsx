@@ -56,10 +56,10 @@ const CONFIRM = "language-translate";
 const POLL_MS = 3_000;
 const LANGUAGE_SETTINGS = "shopify://admin/settings/languages";
 
-/** Where the extras' texts are listed. */
+/** Where the extras' texts are listed: the theme's and the notifications' parts open on Inhalte, in this language. */
 const EXTRA_HREF: Record<ExtraId, (locale: string) => string> = {
-  theme: () => "/app/content/theme",
-  notifications: () => "/app/content/email-templates",
+  theme: (locale) => `/app/content?lang=${encodeURIComponent(locale)}&open=theme`,
+  notifications: (locale) => `/app/content?lang=${encodeURIComponent(locale)}&open=notifications`,
   urls: (locale) => itemsHref({ lang: locale, group: "url" }),
 };
 

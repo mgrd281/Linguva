@@ -686,9 +686,10 @@ export default function Overview() {
 
         {recounter.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
         {data.aiAvailable && data.usage.level === "exhausted" ? (
-          <s-banner tone="critical" heading={t("overview.banner.exhausted.heading")}>
+          <s-banner tone="critical" heading={t(data.usage.trialEndsAt ? "overview.banner.exhausted.headingTrial" : "overview.banner.exhausted.heading")}>
             <s-paragraph>
-              {t("overview.banner.exhausted.body")} <s-link href="/app/plan">{t("common.action.changePlan")}</s-link>
+              {data.usage.trialEndsAt ? t("overview.banner.exhausted.bodyTrial", { date: i18n.date(data.usage.trialEndsAt) }) : t("overview.banner.exhausted.body")}{" "}
+              <s-link href="/app/plan">{t("common.action.changePlan")}</s-link>
             </s-paragraph>
           </s-banner>
         ) : data.aiAvailable && data.usage.level === "high" ? (

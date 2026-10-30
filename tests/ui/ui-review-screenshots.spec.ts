@@ -25,7 +25,9 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "coverage-items", shop: "full", path: "/app/coverage/items?lang=de&type=PRODUCT" },
   { name: "products", shop: "demo", path: "/app/products?lang=de" },
   { name: "editor", shop: "demo", path: "/app/products/2?lang=de", phone: true },
-  { name: "review", shop: "demo", path: "/app/review" },
+  { name: "review", shop: "demo", path: "/app/review", phone: true },
+  // Review, redesigned (UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign2): nothing waiting.
+  { name: "review-empty", shop: "visual", path: "/app/review", phone: true },
   { name: "import-export", shop: "full", path: "/app/translations", phone: true },
   { name: "jobs", shop: "full", path: "/app/jobs" },
   { name: "empty-overview", shop: "empty", path: "/app" },
@@ -35,10 +37,18 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "language-not-counted", shop: "measure", path: "/app/languages/de" },
   { name: "category", shop: "demo", path: "/app/languages/de/products", phone: true },
   { name: "category-list", shop: "catalog", path: "/app/languages/de/products", phone: true },
+  // Redesign 2 (UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign2): the Content page, area by area for one language.
+  { name: "content", shop: "full", path: "/app/content", phone: true },
+  { name: "content-pictures", shop: "demo", path: "/app/content" },
+  { name: "content-not-counted", shop: "measure", path: "/app/content" },
   // Smart Auto-Translate (UI_REVIEW_SCREENSHOTS=docs/ui-review/smart-auto).
   { name: "smart-settings", shop: "business", path: "/app/settings", phone: true },
   { name: "smart-page", shop: "business", path: "/app/settings/automatic", phone: true },
   { name: "smart-upsell", shop: "full", path: "/app/settings", phone: true },
+  // The Plan page with prices (UI_REVIEW_SCREENSHOTS=docs/ui-review/plan): a plan, no plan (trial offer), a running trial.
+  { name: "plan", shop: "full", path: "/app/plan", phone: true },
+  { name: "plan-none", shop: "empty", path: "/app/plan", phone: true },
+  { name: "plan-trial", shop: "planTrial", path: "/app/plan" },
 ];
 
 /** The smart schedule's screens also on a tablet and an iPhone (Chromium with their viewports). */

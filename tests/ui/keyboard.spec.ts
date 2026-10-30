@@ -82,17 +82,36 @@ test("leaving with unpublished changes: focus is on Stay, Enter stays", async ({
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Veste 7");
 });
 
-test("Review: untick a draft with Space and reach the actions by keyboard", async ({ page }) => {
-  await openApp(page, "full", "/app/review");
+test("Review: reach a text's Approve and the page's primary by keyboard, approve with Enter", async ({ page }) => {
+  await openApp(page, "full", "/app/review?lang=fr");
   await page.locator("body").focus();
-  const first = await tabTo(page, (f) => f.tag === "s-checkbox" && f.name === "draft", 80);
+  const first = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Approve", 80);
   expect(first.visible).toBe(true);
-  const box = page.locator('s-checkbox[name="draft"]').first();
-  await expect(box).toHaveJSProperty("checked", true);
-  await page.keyboard.press("Space");
-  await expect(box).toHaveJSProperty("checked", false);
-  await page.keyboard.press("Space");
-  await expect(box).toHaveJSProperty("checked", true);
-  const action = await tabTo(page, (f) => f.tag === "s-button" && /^(Approve and publish selected|Reject selected)$/.test(f.text), 20, "Shift+Tab");
-  expect(action.visible).toBe(true);
+  const primary = await tabTo(page, (f) => f.tag === "s-button" && /^Approve all \d+/.test(f.text), 20, "Shift+Tab");
+  expect(primary.visible).toBe(true);
+  await tabTo(page, (f) => f.tag === "s-button" && f.text === "Approve", 20);
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Approved – customers see it now.").first()).toBeVisible();
+  // Focus moves on to the next text's Approve.
+  await expect.poll(async () => (await focused(page)).text).toBe("Approve");
+  expect((await focused(page)).visible).toBe(true);
+});
+
+test("Plan: the plan links and both lists of details are reached by keyboard, Enter opens them", async ({ page }) => {
+  await openApp(page, "full", "/app/plan");
+  await page.locator("body").focus();
+  const change = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Change plan", 30);
+  expect(change.visible).toBe(true);
+  const choose = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Choose Starter", 30);
+  expect(choose.visible).toBe(true);
+
+  const table = await tabTo(page, (f) => f.tag === "summary" && f.text.startsWith("Compare all features"), 40);
+  expect(table.visible).toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(page.locator("details", { hasText: "Compare all features" })).toHaveAttribute("open", "");
+
+  const question = await tabTo(page, (f) => f.tag === "summary" && f.text === "What counts as an AI character?", 60);
+  expect(question.visible).toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/^Every character of your original text that the AI translates/)).toBeVisible();
 });

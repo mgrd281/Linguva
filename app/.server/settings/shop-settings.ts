@@ -235,11 +235,20 @@ export function autoTranslatePaused(settings: { autoPausedUntil: Date | null }, 
  * translation pauses until it can work again, instead of creating a failed
  * job for every change. The periodic check keeps its position meanwhile, so
  * the changes are translated after the pause. Returns the end of the pause,
- * or null for a stop that isn't a pause.
+ * or null for a stop that isn't a pause. `allowanceRisesAt`: a Shopify
+ * trial's lower allowance ends then (the plan's applies), so a pause for the
+ * used-up allowance ends then too when that is sooner than the next month.
  */
-export async function autoPauseAfterStop(shopId: string, code: string, now = new Date(), client: PrismaClient = defaultClient): Promise<Date | null> {
-  const until = PAUSE_FOR[code]?.(now) ?? null;
-  if (!until) return null;
+export async function autoPauseAfterStop(
+  shopId: string,
+  code: string,
+  now = new Date(),
+  client: PrismaClient = defaultClient,
+  allowanceRisesAt: Date | null = null,
+): Promise<Date | null> {
+  const scheduled = PAUSE_FOR[code]?.(now) ?? null;
+  if (!scheduled) return null;
+  const until = code === "QUOTA_EXCEEDED" && allowanceRisesAt && allowanceRisesAt > now && allowanceRisesAt < scheduled ? allowanceRisesAt : scheduled;
   await withTenant(
     shopId,
     (tx) =>

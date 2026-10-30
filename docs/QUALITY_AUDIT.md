@@ -31,14 +31,14 @@ Rules:
 | SEO | 7 | 7 | 7 | 7.5 | 7.5 | 7.5 | 7.5 | 7.5 | **7.5** | Storefront output (hreflang, translated URLs) not verified |
 | Performance | 4.5 | 6.5 | 6.5 | 6.5 | 7 | 7.5 | 7.5 | 7.5 | **7.5** | First real measurement: 34 API pages in 16 s on an almost empty store; a real catalog not yet measured; no production monitoring |
 | Security | 6.5 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | **8** | No external review; branch protection off; no production operations |
-| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Plans and prices not created; characters per real product not measured |
+| Billing | 5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | 5.5 | **5.5** | Prices decided (2026-10-30), plans not yet created in the Partner Dashboard; characters per real product not measured |
 | Shopify integration | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | 6.5 | **7** | Read path verified on the dev store (gate, session, read contract, every type probed, scan = recount); writes, webhooks, App Bridge in the admin not yet |
 | Error handling and loading states | 6 | 7 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | 8.5 | **8.5** | Errors are logged, but no error tracking service |
 | **Average** | **5.4** | **6.8** | **7.1** | **7.3** | **7.4** | **7.5** | 7.5 | 7.6 | **7.6** | |
 
 Scored against the same criteria each time. Round 1 changes are in §4, phase A changes in §4a, phase B changes in §4b, phase C changes in §4c, phase D in §4d, phase F in §4f, phase G in §4g, phase H in §4h, phase I in §4i, phase J in §4j (phases D–F added evidence, not new scores). A criterion only changes with new evidence; work that no criterion covers (for example clearer glossary inputs) doesn't change a score.
 
-**Honest overall verdict: 7.6/10.** Since 2026-10-28 the read path is Verified on Shopify on the development store (read-only live run passed); everything that writes, the admin integration and billing are still Tested Locally only. Reaching 9–10 needs what code can't supply: the remaining store checks, the owner's decisions and accounts (DeepL key, prices, hosting), real merchants and an external security review. Those are listed in §5.
+**Honest overall verdict: 7.6/10.** Since 2026-10-28 the read path is Verified on Shopify on the development store (read-only live run passed); everything that writes, the admin integration and billing are still Tested Locally only. Reaching 9–10 needs what code can't supply: the remaining store checks, the owner's decisions and accounts (DeepL key, the plans in the Partner Dashboard, hosting), real merchants and an external security review. Those are listed in §5.
 
 ## 3. Areas in detail
 
@@ -188,12 +188,12 @@ Scored against the same criteria each time. Round 1 changes are in §4, phase A 
 | 4 | Character caps per month, day and platform, also under concurrency | ✅ | Real PostgreSQL and Redis |
 | 5 | Usage visible to the merchant, with warnings from 80 % | ✅ | Overview and Plan page; UI tests |
 | 6 | Owner complimentary access, secure and audited | ✅ | Security tests |
-| 7 | Plans and prices decided and created in the Partner Dashboard | ❌ | Owner decision |
-| 8 | Verified with test charges on a development store | ❌ | L1–L10 |
-| 9 | Usage-based billing beyond the plan (App Events) | ❌ | Planned |
-| 10 | Prices backed by real AI costs | ❌ | Estimate only (COST_MODEL.md) |
+| 7 | Plans and prices decided and created in the Partner Dashboard | ❌ | Prices decided 2026-10-30 (PRICING_DECISION.md); plans not yet created in the Partner Dashboard |
+| 8 | Verified with test charges on a development store | ❌ | L1–L14 |
+| 9 | Usage-based billing beyond the plan (App Events) | ❌ | Not at launch: Managed Pricing gives merchants no spending cap (PRICING_DECISION.md §6.3) |
+| 10 | Prices backed by real AI costs | ❌ | Margins from DeepL's list rate of 2026-10-30 (PRICING_DECISION.md §6); real usage not measured |
 
-**Plan:** owner: prices (BILLING_DESIGN §2), plans in the Partner Dashboard, Partner API client. Then L1–L10 on the dev store, where test charges cost nothing. (10) after real DeepL usage.
+**Plan:** owner: create exactly the decided plans in the Partner Dashboard (PRICING_DECISION.md §9), Partner API client. Then L1–L14 on the dev store, where test charges cost nothing. (10) after real DeepL usage.
 
 ### 3.10 Shopify integration: 6.5/10
 
@@ -383,7 +383,7 @@ Scores unchanged: every criterion this touches is either met already (performanc
 
 1. On the development store (connected; read-only run passed): import the fictional catalog, run the read-only live tests again, then the checklist of DEV_STORE_VERIFICATION.md §3 (editor, CSV import, review, webhooks, admin UI, phone). This affects every area.
 2. Free DeepL API key, then a measured quality reference set
-3. Prices and plans in the Partner Dashboard
+3. Plans in the Partner Dashboard (prices decided 2026-10-30: PRICING_DECISION.md §9)
 4. Branch protection on `main`
 5. Hosting, backups, monitoring, error tracking
 6. Privacy policy, data processing terms, App Store listing

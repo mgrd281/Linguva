@@ -26,6 +26,24 @@ Under row-level security PostgreSQL can't use an index for `ILIKE` (not leakproo
 
 Since phase G, text of three characters or more goes through `linguva_draft_search()`, a reviewed `SECURITY DEFINER` function with a partial trigram index on pending drafts (same pattern as the memory search; SECURITY_MODEL.md §5l, review in SECURITY_REVIEW_MEMORY_FUZZY.md §10): 12.5 ms at 50,000 drafts. Shorter text, and text so common that it matches more than 5,000 drafts, still scans (correct, slower).
 
+### Review's cards (Redesign 2, 2026-10-30)
+
+Since Redesign 2 the Review page reads whole cards: `searchReviewPage` (`app/.server/review/page.ts`) returns the page, the matching count, the page's position and the counts of the tabs and chips. The Review rows of the first table measure the earlier list query (`searchPendingDrafts`), which the test still runs; the pending count is the Overview's.
+
+Same file and the same 50,000 pending drafts, of which 5 % are image descriptions drafted without their owner (the coverage scan knows the product). Medians measured when the page was built:
+
+| Operation | Quiet machine | Beside another test run on the same 4 CPUs | CI limit |
+|---|---|---|---|
+| First page (page, counts, position, tab and chip counts) | 120 ms | 154 ms | 300 ms |
+| Later page (cursor, position) | 163 ms | 225 ms | 300 ms |
+| Language and area (owner look-up) | 87 ms | 165 ms | 300 ms |
+| Language and "With notes" | 82 ms | 108 ms | 300 ms |
+| Text search (indexed) | 125 ms | 170 ms | 300 ms |
+
+Per query: the page 47–55 ms, the matching count 14 ms, the position 33 ms, the tab and chip counts 55–62 ms. The page query stays under 100 ms, so no index was added for the card order. The tab and chip counts are the largest part of every load: if CI comes close to its limit, keeping them for a short time or an expression index would cut it. `tests/integration/review-cards.test.ts` also opens pages with 20,000 waiting texts (under 3 s each, a generous bound).
+
+The pictures load after the page (`app/routes/app.review_.previews.tsx`): one `nodes()` read per 100 items, kept a minute per shop and item.
+
 ## 2. Bulk jobs with a large catalog
 
 Same test file, 5,000 products. Discovery runs in pages of at most 50 resources, with exactly one Shopify request per page: 100 pages, 2.3 s in total, 23 ms per page without Shopify latency. Memory use stays bounded because a page is processed and stored before the next one is read. Real throughput is limited by Shopify's API cost limits (handled by the shop rate limiter) and by the AI provider.
@@ -59,6 +77,16 @@ Not measured: real Shopify and DeepL latency and limits, several worker processe
 | Settings | 37 ms |
 
 Content checks its 26 content types (products and collections included) in batches of 6, so in a real store its time is dominated by Shopify's API latency: about 5 round trips.
+
+The Content page keeps those checks for 60 seconds per shop and set of granted optional scopes (`loadContentHub`, at most 2,000 entries; a view in which Shopify didn't answer for a type is not kept, and asking for a permission forgets the shop's entry). What each type's state is (has content, needs a permission, not available to apps) is worked out from the kept answers and the granted scopes on every view.
+
+| Content page | Shopify Admin calls | Database |
+|---|---|---|
+| First view, after 60 s, or with other granted scopes | 28: scopes, locales and the 26 checks (markets for the flags cached 5 minutes, billing cached), about 6 round trips; locales and coverage are read beside the checks | The language's counts, report and segments; one indexed GROUP BY on `CoverageItem` for one language (the tiles' item counts); the language's active jobs |
+| Repeat view within 60 s | 2: scopes, locales | The same |
+| After the page shows | The language's previews (pictures), 1 `nodes()` read cached 60 s and shared with the language page | — |
+
+It polls only while a count reads the shown language (every 5 s). `tests/performance/coverage-scale.perf.test.ts` checks the item counts and the whole page data for one language of a large shop (under 300 ms and 1,500 ms); `tests/integration/content-hub.test.ts` counts the checks per view.
 
 ## 4. Client bundle
 

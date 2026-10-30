@@ -234,7 +234,7 @@ export const de: Translation<typeof en> = {
   "common.action.next": "Weiter",
   "common.action.previous": "Zurück",
   "common.action.seePlans": "Tarife ansehen",
-  "common.action.changePlan": "Tarif ändern",
+  "common.action.changePlan": "Tarif wechseln",
   "common.action.delete": "Löschen",
   "common.state.on": "An",
   "common.state.off": "Aus",

@@ -1,6 +1,6 @@
 # UI/UX review and premium improvement plan (phase J)
 
-Status 2026-10-28; the redesign of 2026-10-30 is §3c. Everything here is **Tested Locally** (production build, simulated Shopify, Playwright). Nothing in this document is verified inside the real Shopify admin yet; that is checklist U and V in DEV_STORE_VERIFICATION.md §3.6–3.7.
+Status 2026-10-28; the redesigns of 2026-10-30 are §3c (Overview, language pages) and §3d (Content, Review and Plan). Everything here is **Tested Locally** (production build, simulated Shopify, Playwright). Nothing in this document is verified inside the real Shopify admin yet; that is checklist U and V in DEV_STORE_VERIFICATION.md §3.6–3.7.
 
 Scope agreed with the owner: improve the existing interface with sound product-design principles, **no speculative redesign**. A full competitor-based specification (T Lab, Langify, Transcy screenshots) follows separately; nothing here claims an advantage over them.
 
@@ -129,6 +129,96 @@ Open points:
 7. The language page counts open items per bulk type on each load (for the confirm dialog), also while it polls during a job: well within budget at 50,000 products (performance test), but it scales with the catalog. An indexed item state would make it constant.
 8. The confirm dialog's AI-character estimate leaves out image descriptions and custom fields when "Also translate…" is ticked.
 
+## 3d. Redesign 2: Content, Review and Plan (owner request, 2026-10-30, Tested Locally)
+
+Redesign 2 covers the three pages the first redesign left as they were. For Content the owner asked for a "redesign with icons, very modern, the highest possible UX, easy to understand 10/10"; for the Plan page: "You set the prices yourself now. On the plan page I want the highest modern level, with an icon for every feature." The prices come from PRICING_DECISION.md. Each page got a spec and canvas artboards (desktop and phone), which an adversarial review checked against the code; each was built on its own branch and reviewed twice (code, then UX) before the three branches were merged. The reader is still the non-technical store owner who reads German as a second language.
+
+Screenshots (fictional stores, production build) are taken on demand and are **not in the repository yet**. Take them from commit 3cf4fbc or later (Review's look changed in its last commits):
+
+| Screens | Command | Files |
+|---|---|---|
+| Content, Review | `UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign2 pnpm test:ui tests/ui/ui-review-screenshots.spec.ts -g "content\|review"` | `content-desktop`, `content-phone`, `content-pictures-desktop`, `content-not-counted-desktop`, `review-desktop`, `review-phone`, `review-empty-desktop`, `review-empty-phone` |
+| Plan | `UI_REVIEW_SCREENSHOTS=docs/ui-review/plan pnpm test:ui tests/ui/ui-review-screenshots.spec.ts -g "plan"` | `plan-desktop`, `plan-phone`, `plan-none-desktop`, `plan-none-phone`, `plan-trial-desktop` |
+
+Review before Redesign 2: [ui-review/after/review-desktop.png](ui-review/after/review-desktop.png) (phase J).
+
+### Content ("Inhalte")
+
+| Before | After | Why |
+|---|---|---|
+| A table of 26 content types in Shopify's words, with no figures and no language | One language at a time: chips with flag and percentage (a select with more than six languages; visible languages first, a hidden one marked). The language page's areas as tiles with icon, name, figure, bar, open work and the store's pictures | The same map as the language page and the Overview; figures only for a counted language |
+| Eight identical "Translate" buttons that only opened a list | Each tile is one link to its area's list, where "Translate" starts the job after its dialog | One place and one set of buttons per area |
+| Up to 12 "Allow access" buttons for 5 permissions | One card: what Linguva can't read yet, and one button that asks for every missing optional scope on one Shopify screen | One decision, one confirmation |
+| The theme's texts as seven technical rows | "More texts": the theme's and the notifications' parts in plain names, each with a one-line hint, opened in place (also from a language page) | The merchant's words |
+| Walls of "not yet" and "not available" text | Two folds with counts and icons: what isn't in the store yet, and what Shopify doesn't let apps read | A short page, nothing hidden |
+| 27 Shopify calls on every view; one failed check took the page down | Shopify's answers kept a minute per shop and granted scopes (2 calls on a repeat view); a type Shopify didn't answer for is named, with "Load again" | Speed (PERFORMANCE.md §3) and an honest page |
+| Lists opened in a hidden language when no language was given | Every link carries the language; a list without one opens in a visible language, marks hidden ones and leads back to Content | No surprise languages |
+
+Accessible names: the link text of a chip or a tile is a screen-reader-only label (`s-text accessibilityVisibility="exclusive"`: "Products: 47% translated. …"), and the visible words inside are hidden from screen readers. Nothing is read twice, and the name contains the visible label (WCAG 2.5.3) without an `aria-label`.
+
+After the UX review: names are semibold through a small `Strong` element (600), because Polaris' `s-text type="strong"` draws at body weight; language chips are as wide as their words (at least 168 px, equal height per row) instead of equal columns, so no name is cut; an open theme or notifications group indents its parts under the group's name on wide pages; the folds use columns of at least 340 px (two on a desktop), so every item stays on one line; a store with nothing to translate shows an icon card and no count.
+
+### Review ("Übersetzungen prüfen")
+
+| Before | After | Why |
+|---|---|---|
+| One card per field, in key order (Description before Title), Product 10 before Product 2, images and custom fields far from their product | One card per item and language with its picture, name, area and language; texts in their natural order; products, then collections, pages, blog posts and blogs, by number; image texts and custom fields inside their item's card | The merchant decides per product, as on the language page |
+| Raw HTML in a text area next to a rendered copy | Rendered only, at the size of the plain text boxes; "Edit HTML" opens the raw text with a live preview | One look for every text |
+| Pre-ticked "Include" boxes and "Approve and publish selected" | No checkboxes: "Approve" and "Reject" on every text, "Approve all N" on a card, and for the page after a dialog that names its languages, the hidden ones and the notes | Nothing goes live that the merchant didn't see |
+| A warning at the bottom of the card, without detail | A note beside the text's label ("Note: Numbers changed (12 → 6)"), the numbers marked in both texts; numbers and Google lengths are checked again while the merchant types | The problem is visible, and a fixed note goes away |
+| Three control cards and an Apply button | One control card: language tabs with counts, search while typing, area chips that add up to "All areas" and match the language pages, "With notes", a job's scope as a chip with "Show all" | Every filter at a glance, no extra step |
+| Partial results as four counts; a Shopify timeout replaced the page | Each text's result in its place (approved, still hidden, outdated, not published and why); after a timeout the texts not sent yet keep waiting | Every partial failure explained beside its text |
+| Clearing a text and approving it published the AI draft | An emptied text can't be approved; the server refuses it too | No accidental publishing |
+| A bare empty state | "All reviewed" with a tinted check, what happens next and the languages with their figures; an empty selection says "No translations for this selection." with the way back | Never a dead end |
+
+After the code review: about 50 texts a page in whole cards with "Next page", "Back to the start" and "1–50 of N"; each result shows once; the page's buttons wait while a text's or card's request runs. Reload with unsaved edits is a navigation to the same address, so the leave question asks first (the spec reloaded the data in place; a deviation). A job's or field group's page with nothing left says "No translations for this selection." with "Show all" instead of "All reviewed", from texts that already existed (`review.filtered.none`, `review.filter.showAll`; no new keys).
+
+After the UX review: rendered descriptions and page bodies fit their boxes at every width. Review's frames use the text-box size (13 px on 20 px lines) and a height for each width a card can have (`app/lib/text-box-height.ts`), instead of `HtmlPreview`'s `previewHeight`; `HtmlPreview`'s Review-only props are `tone`, `blockSize`, `textBox` and `label`, and the editor is unchanged. Text names are semibold (650); the filter chips are all in view on wide screens, and a phone's row starts at the chosen chip; on a phone, decided cards and the "page done" panel keep the picture or tick beside the words, with "Continue" on the thumb side; right-to-left translations start at the right; an empty selection says so once, without the page's strip; the payoff line goes once its language is fully decided.
+
+### Plan ("Tarif") with prices
+
+| Before | After | Why |
+|---|---|---|
+| No prices on the page (v1 rule) | Four aligned cards with list prices from `PLAN_PRICES` (Free as a word), Starter and Pro with "or $290 / year" and "2 months free", Business "Monthly only", no switch, a footnote on US dollars, Shopify's billing and taxes | Merchants compare before Shopify's page; one exact savings claim, no pressure |
+| Features as check rows without icons | One Polaris icon per feature, the same in the cards, "In every plan" (all eleven) and the full comparison (with a price row) | The owner's request; recognition at a glance |
+| No hint which plan suits the store | "Fits your store: Pro. The smallest plan for your 4 languages.", computed from the store's own use, with a badge on that card; never "popular" | Honest guidance (PRICING_DECISION.md §10.3, rule 5) |
+| Usage as text lines | A hero with the plan's icon and state, and two meters: AI characters with the allowance in force (also a trial's) and the day they renew; languages with the plan's places and those outside it | What do I have, what's left, when does it renew: in one look |
+
+On a card, the state badges ("Your plan", "Applies now", "from …") sit beside the plan's icon, and a badge too wide for the row moves below it. The current plan's 2 px ring lies inside the card, so the cards' edges line up. The hero has one heading ("Your plan: Pro"), and the meter names are h3 headings. Lead phrases, meter names, the table title and the questions are set in semibold (600). German "KI-" compounds keep a non-breaking hyphen, so no line ends in "KI-" (I18N_REVIEW.md).
+
+### Measured in Polaris (2026-10-30)
+
+- `s-text type="strong"` draws at body weight (450), the same as plain text. Where a page needs emphasis, it sets the weight inline, as the language page does for its summary: the Plan page at 600 (`EMPHASIS`, `METER_LABEL` in `app/components/plan/styles.ts`), Content through its `Strong` element (600), Review's text names at 650. Names that still rely on `type="strong"` show no emphasis: the Overview's card titles (`app._index.tsx`) and `CountryCards`, `CategoryList`, the Settings tool labels, `StepStrip`, the language page's next-step titles and extras rows, and `DialogPoint`'s titles. A shared semibold helper would fix them together.
+- A neutral badge with `color="strong"` looks exactly like a plain neutral one ("Hidden"), so the current plan's "Your plan" badge is info with `color="strong"`.
+- `s-text` has no size, so the artboards' 12 px captions can't be built: two meter captions wrap at 1,280 px, and the trial line takes three lines in a four-column card.
+- A sandboxed frame can't report its own height. Review counts lines per block at the text-box size for each range of card widths, at the narrowest width of each range, and gives the frame a Polaris responsive height, so no box changes height after the page shows and no text is cut. The price: on a 390 px phone a long multi-paragraph box can keep 1–3 spare lines.
+- Polaris' touch look draws flat sections without a border, so on a phone Review's cards are separated by white space only.
+
+**Colour:** `MARK_COLOUR` (`#ffef9d`, `app/components/Coverage.tsx`) is a new named colour: the light yellow behind the numbers marked in Review's notes, in plain texts and inside rendered frames. It keeps the text's contrast and sits in the one colour source with `STATE_COLOURS`, `TRACK_COLOUR` and `SURFACE_COLOUR` (§5).
+
+### Open points (named by the reviews)
+
+Content:
+1. The theme parts' lists (`ResourceList`) still use Shopify-style titles that don't match the Content page's row names, and order languages by their English names. A follow-up in the spec.
+2. "Allow access" on other pages still leads to the type's own page (`/app/content/<type>`), not to the new card. A follow-up.
+3. Tiles that are new since the last count or not counted completely say to count the store again, but the page shows no count button then (the Overview's "Count store again" does it). Owner decision (OWNER_DECISIONS.md §6).
+4. The word-only state lines ("Not counted yet", "Being counted now", "Nothing to translate") have no icon, while "Translating now" has one. This matches the language page and the artboard, so it stays.
+5. While a count is only queued (no worker running yet), the counting card shows no progress until the job runs; the spec defines a bar for the running state only.
+6. The pictures' request also loads examples for text areas (at most 5 each); limiting it to picture areas would save a little. Also possible later: count only the page's 26 types in `contentItemCounts` (3.5× faster at 300,000 items per language), key the pictures by language (no one-frame flash of the previous language's pictures), shorten the name lists in "Newly unlocked" and "Not checked".
+7. Not yet seen in the real admin: one Shopify screen for several scopes (DEV_STORE_TEST_PLAN K14), the theme parts' hints (K15), and pictures from Shopify's CDN inside the admin.
+
+Review:
+1. On a phone, the language label inside a rendered box sits 12 px further from the text than in a plain box: the sandboxed frame's own padding can't depend on whether the label shows. A real fix moves the labels out of the boxes, a design change (OWNER_DECISIONS.md §6).
+2. As designed: the strip says "30 translations on this page" while the button says "Approve all 29" (a new web address is approved on its own; the dialog says so), and a web address's note repeats while its question is open.
+3. Before any page has synced the store's languages (Review makes no Shopify call), the originals carry no language name, hidden languages aren't marked and "All reviewed" lists no languages. This affects only a store's very first visit.
+4. An image text drafted without its owner (an import, a smart check of the image) gets a card of its own: the coverage scan stores owners for custom fields, not for images. Changing that touches the scan or the job and import paths.
+5. Smaller ones from the code review: the "page done" panel's "N more are waiting" leaves out failed or changed texts of the page that still wait; the "changed" result says "there is a newer version" also when the text was decided in another tab; focus can jump into the search field after a navigation the leave question blocked; the approve dialog's "Customers see them right away" takes its plural from all texts, hidden languages included; `aria-busy` is set only during the page's own request, not while filters navigate; image texts' pictures have a 10 px radius (spec: 6).
+
+Plan:
+1. At four columns a card without a badge keeps an empty band under its icon: 28 px, about 56 px in French with a pending change and the fitting plan, because the column is 966 px wide where the artboard assumed 992 px. Removing it needs a design decision, for example "Fits your store" as a band at the top of the card (OWNER_DECISIONS.md §6).
+2. Deviations from the spec, kept for now: the meter names are h3 headings (spec: strong text); the hero section has no accessibility label (Polaris would add a second, hidden heading); a new key `plan.row.languages.detail`; at four columns "Fits your store" sits below the plan icon in German, French and Spanish (artboard: at the right).
+3. A plan change that keeps the plan handle (for example Pro monthly to Pro yearly at the cycle's end, if Shopify reports it so) would read "Changes to Pro on …" on a Pro store, because the app doesn't read the billing period. To check on the dev store (DEV_STORE_TEST_PLAN L14).
+
 ## 4. Tests for the changes
 
 | Change | Test |
@@ -141,11 +231,15 @@ Open points:
 | Four interface languages complete, nothing left in English | `tests/unit/i18n.test.ts`, `tests/unit/i18n-usage.test.ts` |
 | Accessibility (axe WCAG 2.1 AA), no sideways scrolling on phones, touch targets, keyboard | Existing suites on every changed page |
 | Language page and area lists (redesign) | `tests/ui/language-page.spec.ts`, `tests/ui/category-list.spec.ts`, `states.spec.ts` (examples loading and failing), `i18n.spec.ts` (German, French, Spanish), `touch.spec.ts`, `csp.spec.ts`, `visual.spec.ts` (language and category, desktop and phone); areas adding up: `tests/unit/language-categories.test.ts` |
+| Content page (Redesign 2) | `tests/ui/content.spec.ts`, `pages.spec.ts`, `i18n.spec.ts`, `touch.spec.ts`, `csp.spec.ts`, `visual.spec.ts` (content); `tests/integration/content-page.test.ts`, `content-hub.test.ts`, `resource-list.test.ts`; `tests/unit/content-areas.test.ts`, `content-language.test.ts` |
+| Review (Redesign 2) | `tests/ui/review.spec.ts` (26 tests, desktop and phone), `confirm.spec.ts`, `keyboard.spec.ts`, `preview.spec.ts`, `states.spec.ts`, `visual.spec.ts` (review-empty); `tests/integration/review-cards.test.ts`, `review-previews.test.ts`, `review-protection.test.ts`; `tests/unit/review-areas.test.ts`, `review-cards.test.ts`, `review-hints.test.ts`, `text-box-height.test.ts` |
+| Plan page with prices | `tests/ui/plan.spec.ts`, `tests/unit/plan-components.test.ts`, `plan-view`, `plan-features`, `plan-prices`; `keyboard.spec.ts`, `pages.spec.ts`, `flows.spec.ts`, `visual.spec.ts` (plan, plan-none) |
 
 ## 5. Design system rules kept
 
 - Polaris web components and App Bridge only; no CSS framework or icon set added. Custom drawing only where Polaris has no component (segmented coverage bars, length bars), with the same information as text for screen readers.
-- One colour source for coverage and progress: `STATE_COLOURS` and `TRACK_COLOUR` in `app/components/Coverage.tsx` (the progress bar and SEO length bar use them).
+- One colour source for coverage and progress: `STATE_COLOURS` and `TRACK_COLOUR` in `app/components/Coverage.tsx` (the progress bar and SEO length bar use them), and `MARK_COLOUR` there for numbers marked in Review's notes.
+- Emphasis: `s-text type="strong"` draws at body weight, so a name or lead phrase that must stand out is set inline at 600 (650 for Review's text names), never with a new font or colour (§3d).
 - Numbers that are compared down a column use tabular figures; a large standalone figure (the Overview's headline numbers) keeps proportional ones.
 - Country statuses use their own status colours (`app/components/CountryStatus.tsx`), always next to their label; the bar itself is hidden from screen readers because its key says the same.
 - Every page: one primary action at most per section; navigation as links, actions as buttons.

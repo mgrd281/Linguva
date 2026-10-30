@@ -1,8 +1,11 @@
+import type { ShopSubscription } from "@prisma/client";
 import { describe, expect, it } from "vitest";
-import { entitlementsFor, planSelectionUrl, PLANS, UNMETERED } from "../../app/lib/plans";
+import { entitlementsFor, planSelectionUrl, PLANS, TRIAL_AI_CHARS, UNMETERED } from "../../app/lib/plans";
 import { fetchActiveSubscription, PartnerApiError } from "../../app/.server/billing/partner-api";
 import { aiLimitsFor } from "../../app/.server/billing/billing";
+import { statusFrom, type BillingDeps } from "../../app/.server/billing/subscription";
 import { getConfig } from "../../app/.server/lib/config";
+import { normaliseSmartSettings, type SmartSettingsInput } from "../../app/.server/smart/validate";
 import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
 
 const SHOP = "gid://shopify/Shop/5678";
@@ -64,5 +67,91 @@ describe("Partner API client", () => {
     const api = fakePartnerApi(null);
     await expect(fetchActiveSubscription(PARTNER_SETTINGS, "gid://shopify/Shop/1 OR 1", api.fetchImpl)).rejects.toBeInstanceOf(PartnerApiError);
     expect(api.calls).toHaveLength(0);
+  });
+});
+
+describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
+  const NOW = new Date("2026-10-30T09:00:00Z");
+  const deps: BillingDeps = { settings: PARTNER_SETTINGS, required: false, now: () => NOW };
+  const row = (planHandle: string, trialEndsAt: Date | null): ShopSubscription => ({
+    shopId: "00000000-0000-4000-8000-000000000001",
+    state: "ACTIVE",
+    planHandle,
+    pendingPlanHandle: null,
+    billingPeriod: "EVERY_30_DAYS",
+    trialEndsAt,
+    cancelAtEndOfCycle: false,
+    currentPeriodEnd: new Date("2026-11-29T00:00:00Z"),
+    checkedAt: NOW,
+    updatedAt: NOW,
+  });
+  const config = getConfig({
+    DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+    TOKEN_ENCRYPTION_KEYS: `k1:${Buffer.alloc(32, 1).toString("base64")}`,
+    AI_DAILY_CHAR_LIMIT: "1000000",
+  } as NodeJS.ProcessEnv);
+
+  it("caps the allowance while a trial runs, and exposes the trial's end", () => {
+    const ends = new Date("2026-11-05T00:00:00Z");
+    const status = statusFrom(row("business", ends), deps, false);
+    expect(status.entitlements).toEqual({ ...PLANS.business, monthlyChars: TRIAL_AI_CHARS });
+    expect(status.entitlements.monthlyChars).toBe(TRIAL_AI_CHARS);
+    expect(status.trialEndsAt).toEqual(ends);
+    // Every limit follows: the monthly allowance and the daily cap (min(1,000,000, 100,000)).
+    expect(aiLimitsFor(config, status)).toMatchObject({ limit: TRIAL_AI_CHARS, dailyLimit: TRIAL_AI_CHARS });
+    // Only the allowance changes; the plan's features stay.
+    expect(status).toMatchObject({ state: "ACTIVE", configured: true, mustChoosePlan: false, entitlements: { plan: "business", smartAuto: true, maxTargetLocales: 20 } });
+  });
+
+  it("gives the plan's allowance once the trial is over, and without a trial", () => {
+    for (const trialEndsAt of [new Date("2026-10-29T00:00:00Z"), NOW, null]) {
+      const status = statusFrom(row("pro", trialEndsAt), deps, false);
+      expect(status.entitlements, String(trialEndsAt)).toEqual(PLANS.pro);
+      expect(status.trialEndsAt, String(trialEndsAt)).toBeUndefined();
+    }
+  });
+
+  it("follows the clock, not the cached check: the full allowance starts when the trial ends", () => {
+    const ends = new Date("2026-10-30T12:00:00Z");
+    const cached = row("starter", ends);
+    expect(statusFrom(cached, { ...deps, now: () => new Date("2026-10-30T11:59:59Z") }, false).entitlements.monthlyChars).toBe(TRIAL_AI_CHARS);
+    expect(statusFrom(cached, { ...deps, now: () => new Date("2026-10-30T12:00:01Z") }, false).entitlements.monthlyChars).toBe(300_000);
+  });
+
+  it("never raises an allowance: a plan or an unknown handle below the trial allowance keeps its own", () => {
+    const ends = new Date("2026-11-05T00:00:00Z");
+    expect(statusFrom(row("mystery", ends), deps, false).entitlements).toEqual(PLANS.free);
+    expect(statusFrom(row("free", ends), deps, false).entitlements.monthlyChars).toBe(20_000);
+  });
+
+  it("applies to the last known state too, and leaves no subscription and NONE as they are", () => {
+    expect(statusFrom(row("pro", new Date("2026-11-05T00:00:00Z")), deps, true)).toMatchObject({ stale: true, entitlements: { monthlyChars: TRIAL_AI_CHARS } });
+    expect(statusFrom(null, deps, false)).toEqual({ configured: true, state: "UNKNOWN", entitlements: PLANS.free, subscription: null, stale: false, mustChoosePlan: false });
+    const none = { ...row("pro", new Date("2026-11-05T00:00:00Z")), state: "NONE" as const, planHandle: null };
+    expect(statusFrom(none, deps, false)).toMatchObject({ state: "NONE", entitlements: PLANS.free });
+    expect(statusFrom(none, deps, false).trialEndsAt).toBeUndefined();
+  });
+
+  it("refuses smart schedule budgets above the trial allowance while a trial runs", () => {
+    const form = (budget: string): SmartSettingsInput => ({
+      mode: "daily",
+      timeZone: "Europe/Berlin",
+      times: ["03:00"],
+      weekdays: [],
+      locales: ["de"],
+      resourceTypes: ["PRODUCT"],
+      fieldGroups: "all",
+      includeAttached: false,
+      publishMode: "DRAFT",
+      confirmPublish: false,
+      replaceOutdatedMachine: true,
+      dailyBudget: "",
+      monthlyBudget: budget,
+    });
+    const context = (entitlements: typeof PLANS.business) => ({ targets: ["de"], allowed: ["de"], shopTimeZone: "Europe/Berlin", entitlements, currentPublishMode: "DRAFT" as const });
+    const trial = statusFrom(row("business", new Date("2026-11-05T00:00:00Z")), deps, false).entitlements as typeof PLANS.business;
+    expect(normaliseSmartSettings(form(String(TRIAL_AI_CHARS + 50_000)), context(trial))).toEqual({ ok: false, problem: "BUDGET" });
+    expect(normaliseSmartSettings(form(String(TRIAL_AI_CHARS)), context(trial))).toMatchObject({ ok: true, value: { monthlyBudget: TRIAL_AI_CHARS } });
+    expect(normaliseSmartSettings(form("150000"), context(PLANS.business))).toMatchObject({ ok: true, value: { monthlyBudget: 150_000 } });
   });
 });

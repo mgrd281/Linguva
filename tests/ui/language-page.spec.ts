@@ -175,6 +175,17 @@ test("an area Linguva can't read shows no figure, and the way to allow it", asyn
   await expect(page.getByText("Everything is translated")).toHaveCount(0);
 });
 
+test("the theme's texts open their group on the Content page, in this language", async ({ page }) => {
+  await openApp(page, "full", "/app/languages/de");
+  const theme = page.getByRole("link", { name: /^Texts of your theme/ });
+  await expect(theme).toHaveAttribute("href", "/app/content?lang=de&open=theme");
+  await theme.click();
+  await expect(page).toHaveURL(/\/app\/content\?lang=de&open=theme/);
+  await expect(page.locator("details#theme")).toHaveAttribute("open", "");
+  await expect(page.locator("details#theme > summary")).toContainText("Texts of your theme");
+  await expect(page.getByRole("navigation", { name: "Choose a language" }).locator('[aria-current="page"]')).toHaveText(/German/);
+});
+
 test("an unknown language is not found; the store's own language leads to the Overview", async ({ page }) => {
   const response = await openApp(page, "full", "/app/languages/xx");
   expect(response?.status()).toBe(404);

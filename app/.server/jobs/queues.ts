@@ -240,6 +240,16 @@ function isFinalAttempt(job: Job): boolean {
   return job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 }
 
+/** The end of the shop's running Shopify trial (its lower allowance ends then), or null; never fails a stop. */
+async function trialEnd(deps: JobDependencies, shopId: string): Promise<Date | null> {
+  if (!deps.billingFor) return null;
+  try {
+    return (await deps.billingFor(shopId)).trialEndsAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function createItemProcessor(deps: JobDependencies) {
   return async (job: Job<ItemPayload>, token?: string) => {
     const parsed = itemPayloadSchema.safeParse(job.data);
@@ -276,10 +286,13 @@ export function createItemProcessor(deps: JobDependencies) {
           if (item) {
             await stopJob(payload.shopId, item.jobId, decision.code, deps.prisma);
             await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: decision.code }, deps.prisma);
+            const automatic = item.job.requestedBy === AUTO_REQUESTED_BY || item.job.requestedBy === SMART_REQUESTED_BY;
+            // A trial's lower allowance ends with the trial, mostly before the month: a pause for it ends then too.
+            const allowanceRisesAt = automatic && decision.code === "QUOTA_EXCEEDED" ? await trialEnd(deps, payload.shopId) : null;
             // Automatic translation waits for the limit or the provider instead of failing again on every change.
-            if (item.job.requestedBy === AUTO_REQUESTED_BY) await autoPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma);
+            if (item.job.requestedBy === AUTO_REQUESTED_BY) await autoPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma, allowanceRisesAt);
             // So does the smart schedule: its other jobs stop at their next item, and its page says why.
-            if (item.job.requestedBy === SMART_REQUESTED_BY) await smartPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma);
+            if (item.job.requestedBy === SMART_REQUESTED_BY) await smartPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma, allowanceRisesAt);
           }
           log.warn({ code: decision.code }, "job stopped");
           throw new UnrecoverableError(decision.code);

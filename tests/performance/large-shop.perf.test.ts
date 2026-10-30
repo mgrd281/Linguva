@@ -1,7 +1,8 @@
 /**
- * A large shop: 50,000 drafts waiting for review, 5,000 jobs and a catalog
- * of 5,000 products, next to a second shop. Measures the pages merchants
- * open most (Review, Jobs) and how a bulk job walks a large catalog.
+ * A large shop: 50,000 drafts waiting for review (5 % of them image
+ * descriptions whose owner only the coverage scan knows), 5,000 jobs and a
+ * catalog of 5,000 products, next to a second shop. Measures the pages
+ * merchants open most (Review, Jobs) and how a bulk job walks a large catalog.
  */
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -9,6 +10,7 @@ import { createBulkJob, listJobsPage } from "../../app/.server/jobs/bulk-jobs";
 import { runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { countPendingDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
+import { searchReviewPage, type ReviewFilter } from "../../app/.server/review/page";
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { ownerDb, resetDatabase } from "../support/db";
@@ -29,21 +31,32 @@ async function asTenant(shopId: string, sql: string, ...params: unknown[]) {
 }
 
 async function seedDrafts(shopId: string, count: number, marker: string) {
-  // 4 languages x 3 fields per product; every 7th draft has a warning.
+  // 4 languages x 3 fields per product; every 7th draft has a warning. Every
+  // 20th is an image description drafted without its owner (a smart check of
+  // the image, an import): the coverage scan knows the product.
   await asTenant(
     shopId,
     `INSERT INTO "TranslationDraft" ("shopId","resourceGid","resourceTitle","locale","key","sourceDigest","sourceValue","value","issues","status","updatedAt")
      SELECT $1::uuid,
-            'gid://shopify/Product/' || (g / 12),
+            CASE WHEN g % 20 = 0 THEN 'gid://shopify/MediaImage/' || g ELSE 'gid://shopify/Product/' || (g / 12) END,
             '${marker} product ' || (g / 12) || ' jacket',
             (ARRAY['de','fr','it','es'])[1 + (g / 3) % 4],
-            (ARRAY['title','body_html','meta_title'])[1 + g % 3],
+            CASE WHEN g % 20 = 0 THEN 'alt' ELSE (ARRAY['title','body_html','meta_title'])[1 + g % 3] END,
             md5(g::text),
             'Warm waterproof jacket number ' || g,
             '${marker} Warme wasserdichte Jacke Nummer ' || g,
             CASE WHEN g % 7 = 0 THEN '[{"code":"LENGTH_RATIO","severity":"warning"}]'::jsonb ELSE NULL END,
             'PENDING', now()
      FROM generate_series(0, $2::int - 1) g`,
+    shopId,
+    count,
+  );
+  await asTenant(
+    shopId,
+    `INSERT INTO "CoverageItem" ("shopId","locale","resourceType","resourceGid","parentGid","sourceKeys","currentKeys","outdatedKeys","draftKeys","reviewKeys","fieldStates","syncedAt","seenAt","updatedAt")
+     SELECT $1::uuid, (ARRAY['de','fr','it','es'])[1 + (g / 3) % 4], 'MEDIA_IMAGE', 'gid://shopify/MediaImage/' || g, 'gid://shopify/Product/' || (g / 12),
+            ARRAY['alt'], ARRAY[]::text[], ARRAY[]::text[], ARRAY['alt'], ARRAY[]::text[], ARRAY['alt:draft'], now(), now(), now()
+     FROM generate_series(0, $2::int - 1) g WHERE g % 20 = 0`,
     shopId,
     count,
   );
@@ -83,6 +96,7 @@ beforeAll(async () => {
   await seedJobs(shopA, JOBS);
   await seedJobs(shopB, 1_000);
   await ownerDb.$executeRawUnsafe(`ANALYZE "TranslationDraft"`);
+  await ownerDb.$executeRawUnsafe(`ANALYZE "CoverageItem"`);
   await ownerDb.$executeRawUnsafe(`ANALYZE "TranslationJob"`);
 }, 180_000);
 
@@ -128,6 +142,40 @@ describe(`Review with ${DRAFTS.toLocaleString()} pending drafts`, () => {
     for (const t of [open, deep, byLocale, count, search]) expect(t.median).toBeLessThan(300);
     // Shorter text scans the shop's pending drafts (ILIKE isn't leakproof under RLS).
     expect(shortSearch.median).toBeLessThan(1_000);
+  }, 120_000);
+});
+
+describe(`Review's cards with ${DRAFTS.toLocaleString()} pending drafts`, () => {
+  const filter = (f: Partial<ReviewFilter> = {}): ReviewFilter => ({ locale: null, area: null, flagged: false, search: null, jobId: null, group: null, after: null, ...f });
+  const review = (f: Partial<ReviewFilter> = {}) => searchReviewPage(shopA, filter(f), { targets: null }, app);
+
+  it("opens, pages by cards, filters by area and counts quickly, images in their product's card", async () => {
+    const first = await review();
+    expect(first.matching).toBe(DRAFTS);
+    expect(first.facets.total).toBe(DRAFTS);
+    expect(first.facets.areas.find((a) => a.area === "images")?.count).toBe(DRAFTS / 20);
+    expect(first.cards.flatMap((c) => c.rows).every((r) => r.draft.value.startsWith("A "))).toBe(true);
+    // Product 0's German card holds its owner-less image description (draft 0) after its own texts.
+    expect(first.cards[0]!.key).toBe("gid://shopify/Product/0|de");
+    expect(first.cards[0]!.rows.map((r) => r.key)).toEqual(["body_html", "meta_title", "alt"]);
+
+    const open = await measure(() => review());
+    let after = first.nextCursor;
+    for (let i = 0; i < 3; i++) after = (await review({ after })).nextCursor;
+    const deep = await measure(() => review({ after }));
+    expect((await review({ after })).from).toBeGreaterThan(150);
+    const images = await measure(() => review({ locale: "fr", area: "images" }));
+    expect((await review({ locale: "fr", area: "images" })).cards.every((c) => c.key.startsWith("gid://shopify/Product/"))).toBe(true);
+    const flagged = await measure(() => review({ locale: "de", flagged: true }));
+    const search = await measure(() => review({ search: "number 4711" }));
+
+    report("review cards: first page (page, counts, position, facets)", open);
+    report("review cards: later page (cursor, position)", deep);
+    report("review cards: language + area (owner look-up)", images);
+    report("review cards: language + notes", flagged);
+    report("review cards: text search (indexed)", search);
+    // The CI limit for every page of Review; the measured values are reported above.
+    for (const t of [open, deep, images, flagged, search]) expect(t.median).toBeLessThan(300);
   }, 120_000);
 });
 

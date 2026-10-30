@@ -33,6 +33,16 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     },
   },
   {
+    name: "Content",
+    path: "/app/content",
+    check: async (page) => {
+      // Area by area, each a link with its figure; one primary button, for the missing permission.
+      await expect(page.getByRole("link", { name: /^Products: \d+% translated\. / })).toBeVisible();
+      await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+      await expect(page.locator('s-button[variant="primary"]')).toHaveText("Allow access");
+    },
+  },
+  {
     name: "Products",
     path: "/app/products?lang=de",
     check: async (page) => {
@@ -55,10 +65,13 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Review",
     path: "/app/review",
     check: async (page) => {
-      await expect(page.getByText(/translations waiting for review/)).toBeVisible();
-      await expect(page.getByText("Product 1 jacket · Title · French")).toBeVisible();
-      // The actions are reachable without scrolling through every draft.
-      await expect(page.getByRole("button", { name: "Approve and publish selected" }).first()).toBeInViewport();
+      await expect(page.getByRole("heading", { level: 1, name: "Review translations" })).toBeVisible();
+      // One card per item and language: its name, then its area and language.
+      const card = page.locator('s-section[accessibilitylabel="Product 1 jacket, French"]');
+      await expect(card.getByRole("heading", { level: 2, name: "Product 1 jacket", exact: true })).toBeVisible();
+      await expect(card.getByText("French", { exact: true }).first()).toBeVisible();
+      // The page's one primary action is in the first screen, without scrolling through the texts.
+      await expect(page.getByRole("button", { name: /^Approve all \d+( on this page)?$/ })).toBeInViewport();
     },
   },
   {
@@ -74,9 +87,10 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Plan",
     path: "/app/plan",
     check: async (page) => {
-      await expect(page.getByText("Current plan: Pro")).toBeVisible();
-      await expect(page.getByText(/AI characters this month: [\d,]+ of 1,200,000/)).toBeVisible();
-      await expect(page.getByText("Change plan")).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Your plan: Pro" })).toBeVisible();
+      await expect(page.getByText("AI characters this month", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("of 1,200,000", { exact: true })).toBeVisible();
+      await expect(page.locator("s-button", { hasText: "Change plan" })).toBeVisible();
     },
   },
 ];

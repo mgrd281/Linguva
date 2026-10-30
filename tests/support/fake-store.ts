@@ -87,7 +87,7 @@ export class FakeShopifyStore {
    * instead of returning them in the body.
    */
   throwsLikeLibrary = false;
-  /** Resource types whose listing always fails with a GraphQL error (not access). */
+  /** Resource types whose listing (and the content page's probe) always fails with a GraphQL error (not access). */
   readonly brokenTypes = new Set<string>();
   /** Throw this error for the next N calls (any operation). */
   failNext: { count: number; error: () => Error } | null = null;
@@ -219,7 +219,7 @@ export class FakeShopifyStore {
     }
     const vars = options?.variables ?? {};
 
-    if (name === "LinguvaTranslatableResources" && this.brokenTypes.has(String(vars.resourceType))) {
+    if ((name === "LinguvaTranslatableResources" || name === "LinguvaProbeTranslatable") && this.brokenTypes.has(String(vars.resourceType))) {
       throw new GraphqlQueryError({ message: "Internal error. Looks like something went wrong on our end.", response: {} as never, body: { errors: [{ message: "Internal error" }] } });
     }
     if ((name === "LinguvaTranslatableResources" || name === "LinguvaProbeTranslatable") && this.deniedTypes.has(String(vars.resourceType))) {

@@ -30,7 +30,7 @@ import { reserveUsage } from "../../app/.server/usage/usage-ledger";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
-import { PLANS } from "../../app/lib/plans";
+import { PLANS, TRIAL_AI_CHARS } from "../../app/lib/plans";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
 import { deletePrefix, testPrefix, testRedis, waitFor } from "../support/redis";
@@ -369,6 +369,23 @@ describe("automatic translation follows the shop and its plan", () => {
     // A new choice by the merchant lifts the pause.
     await setAutoTranslate({ shopId: shop.id, enabled: true, locales: ["de"], allowedLocales: ["de"], actorId: "7" }, app);
     expect((await getShopSettings(shop.id, app)).autoPausedUntil).toBeNull();
+  });
+
+  it("pauses at a trial's allowance only until the trial ends, when the plan's allowance applies", async () => {
+    const { shop, deps } = await setup();
+    const first = await createAutoItems(app, { shopId: shop.id, ...P });
+    // A Pro trial that ends in an hour; its 100,000 characters are all but used up.
+    const trialEndsAt = new Date(Date.now() + 60 * 60_000);
+    await reserveUsage({ shopId: shop.id, key: "trial-work", chars: TRIAL_AI_CHARS - 5, limit: TRIAL_AI_CHARS, provider: "mock" }, app);
+    const billing = { configured: true, entitlements: { ...PLANS.pro, monthlyChars: TRIAL_AI_CHARS }, trialEndsAt };
+    const processor = createItemProcessor({ ...deps, billingFor: async () => billing });
+    const job = { data: { shopId: shop.id, itemId: first.itemIds[0]! }, id: first.itemIds[0]!, attemptsMade: 0, opts: { attempts: 5 } };
+    await expect(processor(job as never)).rejects.toThrow("QUOTA_EXCEEDED");
+    const settings = await getShopSettings(shop.id, app);
+    expect(settings.autoPauseReason).toBe("QUOTA_EXCEEDED");
+    expect(settings.autoPausedUntil!.getTime()).toBeGreaterThan(Date.now());
+    // Not until the next month: from the trial's end the plan's 1,200,000 apply.
+    expect(settings.autoPausedUntil!.getTime()).toBeLessThanOrEqual(trialEndsAt.getTime());
   });
 
   it("doesn't check a change again that a later check already read", async () => {

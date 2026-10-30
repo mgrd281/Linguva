@@ -3,7 +3,10 @@
  * per language and the "translate all" bulk action.
  */
 import { randomUUID } from "node:crypto";
+import type { PrismaClient } from "@prisma/client";
+import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { redirect } from "react-router";
+import { prisma as defaultClient } from "../lib/db";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { requireShop } from "../shopify/require-shop";
 import { AccessDeniedError, isAccessDenied, listTranslatableResources } from "../shopify/translations-api";
@@ -26,48 +29,78 @@ import {
 import { ATTACHED_BULK_TYPES, isBulkResourceType } from "../jobs/bulk-jobs";
 
 export async function loadResourceList(request: Request, kind: TranslatableKind) {
-  const { admin, shop } = await requireShop(request);
-  const meta = kindMeta(kind);
+  const { admin, shop, scopes } = await requireShop(request);
   const url = new URL(request.url);
-  const locales = await fetchAndSyncShopLocales(admin, shop.id);
+  return resourceListPage(admin, shop, kind, {
+    lang: url.searchParams.get("lang"),
+    after: url.searchParams.get("after"),
+    granted: async () => (await scopes.query()).granted,
+  });
+}
+
+export interface ResourceListInput {
+  /** The URL's ?lang (the language to translate into) and ?after (where the previous page ended). */
+  lang: string | null;
+  after: string | null;
+  /** The optional scopes the store granted; read only when Shopify refuses the list. */
+  granted: () => Promise<readonly string[]>;
+}
+
+/**
+ * One page of a type's list in a language: `?lang` when it is one of the
+ * store's additional languages, else the first visible one (a hidden one
+ * only when none is visible), with each item's coverage and what "Translate
+ * all" may do. Refused by Shopify: the permission the merchant can grant,
+ * or none when it is granted already and Shopify refuses anyway.
+ */
+export async function resourceListPage(
+  admin: Pick<AdminApiContext, "graphql">,
+  shop: { id: string; shopifyShopGid: string | null },
+  kind: TranslatableKind,
+  input: ResourceListInput,
+  client: PrismaClient = defaultClient,
+) {
+  const meta = kindMeta(kind);
+  const locales = await fetchAndSyncShopLocales(admin, shop.id, client);
   const targets = locales.locales.filter((l) => !l.primary);
   const caution = isContentType(kind) ? ((CONTENT_TYPES[kind] as { caution?: "legal" | "liquid" }).caution ?? null) : null;
   // English names as before; the page names the type by `type` in its language.
   const kindInfo = { type: kind, label: meta.label, singular: meta.singular, plural: meta.plural, path: meta.path, caution, bulk: isBulkResourceType(kind) };
 
-  const requested = url.searchParams.get("lang");
-  const target = targets.find((l) => l.locale === requested) ?? targets[0];
+  const target = targets.find((l) => l.locale === input.lang) ?? targets.find((l) => l.published) ?? targets[0];
   if (!target) {
     return { kind: kindInfo, targets: [], target: null, items: [], nextCursor: null, isFirstPage: true, bulk: null, denied: null };
   }
+  const languages = targets.map((l) => ({ locale: l.locale, name: l.name, published: l.published }));
 
-  const after = url.searchParams.get("after");
+  const after = input.after;
   let page: Awaited<ReturnType<typeof listTranslatableResources>>;
   try {
     page = await listTranslatableResources(admin, { resourceType: kind, locale: target.locale, after, first: 25 });
   } catch (error) {
     if (!(error instanceof AccessDeniedError) && !isAccessDenied(error)) throw error;
-    // An optional permission the merchant hasn't granted (yet).
+    // An optional permission the merchant hasn't granted (yet); once granted, asking again can't help.
     const scope = isContentType(kind) ? CONTENT_TYPES[kind].scope : null;
+    const grantable = scope !== null && !(await input.granted()).includes(scope);
     return {
       kind: kindInfo,
-      targets: targets.map((l) => ({ locale: l.locale, name: l.name })),
+      targets: languages,
       target: { locale: target.locale, name: target.name },
       items: [],
       nextCursor: null,
       isFirstPage: true,
       bulk: null,
-      denied: { scope },
+      denied: { scope: grantable ? scope : null },
     };
   }
   const { resources, pageInfo } = page;
-  const settings = await getShopSettings(shop.id);
+  const settings = await getShopSettings(shop.id, client);
   const billing = await shopBilling(admin, shop);
   const allowed = allowedTargetLocales(billing.entitlements, targets.map((l) => l.locale));
 
   return {
     kind: kindInfo,
-    targets: targets.map((l) => ({ locale: l.locale, name: l.name })),
+    targets: languages,
     target: { locale: target.locale, name: target.name },
     items: resources.map((r) => ({
       // Content types (theme resources included) are addressed by an encoded GID.

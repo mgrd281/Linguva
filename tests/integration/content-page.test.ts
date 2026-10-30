@@ -361,4 +361,28 @@ describe("the Content page", () => {
     expect(page.language?.locale).toBe("fr");
     expect(page.measured).toBe(false);
   });
+
+  it("never says there is nothing to translate while Shopify didn't answer for a type, or a permission is missing", async () => {
+    const store = new FakeShopifyStore(0);
+    store.locales = [...LOCALES];
+    const shop = await shopFor(store, []);
+    // Products weren't checked: there may be some.
+    store.brokenTypes.add("PRODUCT");
+    const unchecked = await load(store, shop);
+    expect(unchecked.unknown).toEqual(["PRODUCT"]);
+    expect(unchecked.nothing).toBe(false);
+    // Every type unanswered (Shopify had a bad moment).
+    for (const type of HUB_TYPES) store.brokenTypes.add(type);
+    expect((await load(store, shop)).nothing).toBe(false);
+    // Legal texts Linguva may not read yet: they may exist.
+    store.brokenTypes.clear();
+    store.deniedTypes.add("SHOP_POLICY");
+    const locked = await load(store, shop, { granted: [] });
+    expect(locked.access).toEqual([{ scope: "read_legal_policies", types: ["SHOP_POLICY"] }]);
+    expect(locked.nothing).toBe(false);
+    // What Shopify doesn't let apps read is no work for Linguva: nothing to translate.
+    const refused = await load(store, shop, { granted: ["read_legal_policies"] });
+    expect(refused.unavailable).toEqual(["SHOP_POLICY"]);
+    expect(refused.nothing).toBe(true);
+  });
 });

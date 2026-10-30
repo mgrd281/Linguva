@@ -297,8 +297,12 @@ export async function loadContentPage(admin: Admin, shop: ShopRef, input: Conten
     empty: HUB_TYPES.filter((type) => statusOf(type) === "empty"),
     unavailable: HUB_TYPES.filter((type) => statusOf(type) === "unavailable"),
     unknown: HUB_TYPES.filter((type) => statusOf(type) === "unknown"),
-    /** The store has nothing to translate at all. */
-    nothing: !entries.some((e) => e.status === "has-content"),
+    /**
+     * The store has nothing to translate at all: every type was checked and
+     * is in a fold (none in a tile, the permission card or the "couldn't
+     * check" banner, where content may be hiding).
+     */
+    nothing: HUB_TYPES.every((type) => statusOf(type) === "empty" || statusOf(type) === "unavailable"),
     open: openParam,
     /** One key per page view: a repeated "Count now" starts nothing twice. */
     idempotencyKey: randomUUID(),

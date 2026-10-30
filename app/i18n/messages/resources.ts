@@ -32,6 +32,7 @@ export const en = {
   "resources.caution.liquidBody": "Only visible text is translated; Liquid code is kept as is. They are translated one by one, with review.",
 
   "resources.translateInto": "Translate into:",
+  "resources.hiddenLanguage": "{language} (hidden)",
 
   "resources.bulk.heading": "Translate all {plural}",
   "resources.bulk.intro":
@@ -88,6 +89,7 @@ export const de: Translation<typeof en> = {
   "resources.caution.liquidBody": "Nur sichtbarer Text wird übersetzt; Liquid-Code bleibt unverändert. Sie werden einzeln und mit Prüfung übersetzt.",
 
   "resources.translateInto": "Übersetzen in:",
+  "resources.hiddenLanguage": "{language} (versteckt)",
 
   "resources.bulk.heading": "Alle {plural} übersetzen",
   "resources.bulk.intro":
@@ -145,6 +147,7 @@ export const fr: Translation<typeof en> = {
   "resources.caution.liquidBody": "Seul le texte visible est traduit ; le code Liquid reste inchangé. Ces modèles sont traduits individuellement, avec révision.",
 
   "resources.translateInto": "Traduire en :",
+  "resources.hiddenLanguage": "{language} (masquée)",
 
   "resources.bulk.heading": "Traduire l'ensemble des {plural}",
   "resources.bulk.intro":
@@ -203,6 +206,7 @@ export const es: Translation<typeof en> = {
     "Solo se traduce el texto visible; el código Liquid se mantiene tal cual. Estas plantillas se traducen de forma individual y con revisión.",
 
   "resources.translateInto": "Traducir a:",
+  "resources.hiddenLanguage": "{language} (oculto)",
 
   "resources.bulk.heading": "Traducción masiva de {plural}",
   "resources.bulk.intro":

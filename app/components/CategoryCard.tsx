@@ -14,6 +14,7 @@ import type { CategoryPreview, LanguagePage, PreviewItem } from "../.server/lang
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { itemKindLabel } from "../i18n/labels";
 import { CATEGORIES, type CategoryId } from "../lib/language-categories";
+import type { IconType } from "../lib/icons";
 import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
 import { ProgressBar } from "./ProgressBar";
@@ -63,11 +64,15 @@ function detailLine(i18n: I18n, category: LanguageCategory): string {
   return [items && category.items ? i18n.t(items, { count: category.items }) : null, detail ? i18n.t(detail) : null].filter(Boolean).join(" · ");
 }
 
-/** The category's picture in a soft square, for areas without pictures of their own and items without one. */
-export function IconTile({ icon, size = 36 }: { icon: (typeof CATEGORIES)[CategoryId]["icon"]; size?: number }) {
+/**
+ * An icon in a soft square: the category's picture for areas without
+ * pictures of their own and items without one; the Plan page's plan,
+ * meter and feature tiles (`color="base"`).
+ */
+export function IconTile({ icon, size = 36, color = "subdued" }: { icon: IconType; size?: number; color?: "base" | "subdued" }) {
   return (
     <s-stack background="subdued" borderRadius="base" inlineSize={`${size}px`} blockSize={`${size}px`} alignItems="center" justifyContent="center">
-      <s-icon type={icon} color="subdued" />
+      <s-icon type={icon} color={color} />
     </s-stack>
   );
 }

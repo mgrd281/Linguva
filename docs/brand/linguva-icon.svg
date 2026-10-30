@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0C8A62"/>
+      <stop offset="0.5" stop-color="#0A3D4C"/>
+      <stop offset="1" stop-color="#151C4D"/>
+    </linearGradient>
+    <linearGradient id="stem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5BF5BE"/>
+      <stop offset="1" stop-color="#1CC2DC"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5A4CF0"/>
+      <stop offset="0.6" stop-color="#2E8EF0"/>
+      <stop offset="1" stop-color="#2BE0C8"/>
+    </linearGradient>
+    <linearGradient id="back" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#B9A8FF"/>
+      <stop offset="1" stop-color="#7C6CF5"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2FDDA0"/>
+      <stop offset="1" stop-color="#11946C"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="1200" fill="url(#bg)"/>
+  <!-- L as a folded ribbon: the stem bends into the foot -->
+  <path d="M270 330a100 100 0 0 1 100-100h70a100 100 0 0 1 100 100v380H270z" fill="url(#stem)"/>
+  <path d="M270 700c0-10 8-18 18-18h510a90 90 0 0 1 82 54l52 118a64 64 0 0 1-58 90H380a110 110 0 0 1-110-110z" fill="url(#foot)"/>
+  <path d="M270 682h270L290 880L270 860z" fill="#1E2B8C" opacity="0.5"/>
+  <!-- original (A) and translation (文) -->
+  <g transform="rotate(-12 730 335)">
+    <rect x="610" y="215" width="240" height="240" rx="58" fill="#EEF1FF"/>
+    <path d="M650 392L702 276L754 392M671 350H733" fill="none" stroke="#1B2350" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="rotate(6 850 480)">
+    <rect x="715" y="345" width="270" height="270" rx="64" fill="#0A2E44"/>
+    <rect x="725" y="355" width="250" height="250" rx="58" fill="url(#card)"/>
+    <path d="M850 398V420M782 432H918M808 456C830 512 862 540 912 556M892 456C870 512 838 540 788 556" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

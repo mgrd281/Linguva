@@ -70,7 +70,7 @@ These need a lawyer or a reviewed template; I can draft the technical facts (wha
 | # | Decision | Suggestion |
 |---|---|---|
 | 6.1 | Branch protection on `main` (GitHub setting, free) | Require the CI check and a review before merging |
-| 6.2 | App icon (1200 × 1200, no text) | A simple mark in two colours |
+| 6.2 | App icon (1200 × 1200) | **Decided 2026-10-30:** the ribbon L with the A and 文 cards (docs/BRAND_ASSETS.md §1); upload `docs/brand/linguva-icon-1200.png` in the Partner Dashboard |
 | 6.3 | Support address and response promise | One business day |
 | 6.4 | Native speakers for the French and Spanish interface | One person per language, 2–3 hours each (I18N_REVIEW.md) |
 | 6.5 | 3–5 beta merchants from your network (not your production stores) | Complimentary access for 60 days |

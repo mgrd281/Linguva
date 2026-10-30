@@ -210,6 +210,8 @@ export interface LanguageStepsInput {
    * allow it).
    */
   categories: ReadonlyArray<{ id: CategoryId; tally: Tally; state: CategoryState; bulk: boolean }>;
+  /** A measurement is under way: types it hasn't reached yet still show their last read, so never "done". */
+  scanning?: boolean;
 }
 
 /**
@@ -250,7 +252,7 @@ export function nextSteps(input: LanguageStepsInput): LanguageStep[] {
     steps.push({ kind: "access", categories: denied.map((c) => c.id), href: denied.find((c) => c.href)?.href ?? null });
   }
   if (steps.length) return steps;
-  const settled = input.categories.every((c) => c.state.kind === "ok");
+  const settled = !input.scanning && input.categories.every((c) => c.state.kind === "ok");
   return settled && input.headline.total > 0 && input.headline.complete >= input.headline.total ? [{ kind: "done" }] : [];
 }
 

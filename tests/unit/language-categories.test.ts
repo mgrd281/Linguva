@@ -311,6 +311,8 @@ describe("next steps for a language", () => {
   it("says done only when everything was read and every text is live", () => {
     expect(nextSteps(input({ headline: { complete: 100 } }))).toEqual([{ kind: "done" }]);
     expect(nextSteps(input({ headline: { complete: 100 }, states: { pages: { kind: "counting" } } }))).toEqual([]);
+    // A count under way reads the language again: types it hasn't reached yet show their last read.
+    expect(nextSteps({ ...input({ headline: { complete: 100 } }), scanning: true })).toEqual([]);
     expect(nextSteps(input({ headline: { complete: 100 }, states: { images: { kind: "no-access", types: ["MEDIA_IMAGE"], href: null } } }))).toEqual([
       { kind: "access", categories: ["images"], href: null },
     ]);

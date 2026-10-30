@@ -125,6 +125,9 @@ Open points:
 3. On a phone the first step's button is 44 px high but not full width (the canvas shows it full width); Polaris buttons can't change width by container size.
 4. Collection and blog post image descriptions have no picture (Shopify's translatable resources don't link them to their image).
 5. Seen in the real admin: not yet (checklist U, V) — the flags and Shopify CDN pictures inside the admin frame in particular.
+6. A category with one type Linguva can't read (policies without `read_legal_policies`, menus without `read_online_store_navigation`) shows "Kein Zugriff" instead of its figures, although the texts that were read count in the language's percentage (COVERAGE_RULES §11). Showing the read part plus a "no access" line needs a product decision.
+7. The language page counts open items per bulk type on each load (for the confirm dialog), also while it polls during a job: well within budget at 50,000 products (performance test), but it scales with the catalog. An indexed item state would make it constant.
+8. The confirm dialog's AI-character estimate leaves out image descriptions and custom fields when "Also translate…" is ticked.
 
 ## 4. Tests for the changes
 

@@ -17,6 +17,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return loadLanguagePreviews(admin, shop, params.locale ?? "");
 };
 
+// Loaded once per page view: the page's polling while a job runs re-reads its figures, not Shopify.
+export const shouldRevalidate = () => false;
+
 export const clientLoader = async ({ serverLoader }: ClientLoaderFunctionArgs): Promise<LanguagePreviews> => {
   try {
     return await serverLoader<typeof loader>();

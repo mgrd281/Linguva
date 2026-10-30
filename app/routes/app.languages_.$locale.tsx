@@ -283,10 +283,11 @@ function NextSteps(ctx: StepContext) {
   const { data, i18n } = ctx;
   const { t } = i18n;
   const gate = data.bulk.gate && data.categories.some((c) => c.bulk) ? data.bulk.gate : null;
+  // Not counted and nothing to offer: background jobs are missing, or a count of other languages runs.
   const empty = !data.measured
-    ? data.scanning
-      ? t("language.next.counting")
-      : t("coverage.error.JOBS_UNAVAILABLE")
+    ? data.measurement.state === "unavailable"
+      ? t("coverage.error.JOBS_UNAVAILABLE")
+      : t("language.next.counting")
     : t("language.next.empty");
   return (
     <s-stack direction="block" gap="base">

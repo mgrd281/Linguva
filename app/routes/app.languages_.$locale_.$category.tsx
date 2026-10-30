@@ -322,7 +322,7 @@ function NextSteps(ctx: StepContext) {
   const { t } = i18n;
   const steps = areaSteps(ctx);
   const gate = data.bulk.estimate && !data.category.job ? data.bulk.gate : null;
-  const empty = !data.measured ? (data.scanning ? t("language.next.counting") : t("coverage.error.JOBS_UNAVAILABLE")) : t("language.next.empty");
+  const empty = !data.measured ? (data.measurement.state === "unavailable" ? t("coverage.error.JOBS_UNAVAILABLE") : t("language.next.counting")) : t("language.next.empty");
   return (
     <s-stack direction="block" gap="base">
       <s-heading>{t("language.next.heading")}</s-heading>

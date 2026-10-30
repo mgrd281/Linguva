@@ -472,6 +472,7 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
       canCount,
       headline,
       categories: categories.map((c) => ({ id: c.id, tally: c.tally, state: c.state, bulk: gate === null && c.bulk !== null })),
+      scanning,
     }),
     bulk: { gate, publishMode: publishModeOf(settings, billing.entitlements), aiRemaining: aiRemaining(billing, used) },
     smart: note ? { status: note.status, mode: note.mode, zone: note.zone, nextCheck: note.nextCheck, inSchedule: note.scope.locales.includes(locale) } : null,

@@ -504,7 +504,7 @@ describe("a category's list", () => {
 describe("translating a category", () => {
   const form = (fields: Record<string, string>) => {
     const data = new FormData();
-    for (const [key, value] of Object.entries({ intent: "translate-category", idempotencyKey: "0b8a3c2e-5d41-4c1e-9a7f-2f6d8e1b3c4a", ...fields })) data.append(key, value);
+    for (const [key, value] of Object.entries({ intent: "translate-category", idempotencyKey: "0b8a3c2e-5d41-4c1e-9a7f-2f6d8e1b3c4a", ...fields })) data.append(key, value); // gitleaks:allow (a fixed test key)
     return data;
   };
   const jobs = (shopId: string) =>

@@ -11,15 +11,12 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     path: "/app",
     check: async (page) => {
       // One next step, the only primary button: drafts wait in this store.
-      await expect(page.locator('s-section[heading="Next step"]').getByText(/^Review \d+ translations?$/)).toBeVisible();
+      await expect(page.locator('s-section[heading="Next"]').getByText(/^Approve \d+ translations?$/)).toBeVisible();
       await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
-      // Languages with their storefront state.
-      const languages = page.locator('s-section[heading="Your languages"]');
-      await expect(languages.getByText("Arabic", { exact: true })).toBeVisible();
-      await expect(languages.getByText("Hidden", { exact: true })).toBeVisible();
-      const ai = page.locator('s-section[heading="AI translation"]');
-      await expect(ai.getByText("On", { exact: true })).toBeVisible();
-      await expect(ai.getByRole("progressbar", { name: "AI usage this month" })).toBeVisible();
+      // Languages with their storefront state, each opening its page.
+      await expect(page.getByRole("link", { name: /^Arabic Hidden/ })).toHaveAttribute("href", "/app/languages/ar");
+      // AI usage this month, in characters.
+      await expect(page.getByText(/^AI translation this month: [\d,]+ of [\d,]+ characters$/)).toBeVisible();
     },
   },
   {
@@ -29,6 +26,10 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
       await expect(page.getByText("Arabic (RTL)")).toBeVisible();
       await expect(page.getByText("Unpublished")).toBeVisible();
       await expect(page.getByText(/4 of 20 languages enabled, 3 published/)).toBeVisible();
+      // Each additional language opens its own page; the original has none.
+      await expect(page.getByRole("link", { name: "German" })).toHaveAttribute("href", "/app/languages/de");
+      await expect(page.getByRole("link", { name: /^Arabic/ })).toHaveAttribute("href", "/app/languages/ar");
+      await expect(page.getByRole("link", { name: /^English/ })).toHaveCount(0);
     },
   },
   {

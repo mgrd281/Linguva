@@ -9,9 +9,9 @@ test.describe("empty states", () => {
   test("a store with only its primary language is guided to add one", async ({ page }) => {
     await openApp(page, "empty", "/app");
     // The next step is adding a language, as the primary action.
-    await expect(page.locator('s-section[heading="Next step"]').getByText("Add a language")).toBeVisible();
+    await expect(page.locator('s-section[heading="Next"]').getByText("Add a language")).toBeVisible();
     await expect(page.locator('s-button[variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
-    await expect(page.getByText(/Your store only has its primary language/)).toBeVisible();
+    await expect(page.getByText("Your store only has its original language (English).")).toBeVisible();
     await openApp(page, "empty", "/app/products");
     await expect(page.getByText("No languages to translate into")).toBeVisible();
     await expect(page.locator("s-button", { hasText: "Open language settings" })).toBeVisible();
@@ -86,15 +86,40 @@ test.describe("loading states", () => {
     await expect(page.getByText("AI draft")).toHaveCount(0);
   });
 
+  test("a language's examples load after its page, and their failure leaves the page as it is @responsive", async ({ page }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/app/languages/de/previews.data**", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await openApp(page, "demo", "/app/languages/de");
+    // The page is there before its examples: grey shapes where the pictures will be.
+    const products = page.locator('s-section[accessibilitylabel="Products"]');
+    await expect(products.getByRole("link", { name: "Products", exact: true })).toBeVisible();
+    await expect(products.locator("img")).toHaveCount(0);
+    release();
+    await expect.poll(() => products.locator("img").count()).toBeGreaterThan(0);
+
+    // A failed request (here: the server errs) says so on each card; the page stays.
+    await page.unroute("**/app/languages/de/previews.data**");
+    await page.route("**/app/languages/de/previews.data**", (route) => route.fulfill({ status: 500, body: "" }));
+    await openApp(page, "demo", "/app/languages/de");
+    await expect(products.getByText("Names and pictures can't be loaded right now.")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "German" })).toBeVisible();
+    await expect(page.locator('s-banner[tone="critical"]')).toHaveCount(0);
+    await expectAccessible(page);
+  });
+
   test("navigating between pages shows the admin loading bar", async ({ page }) => {
     await openApp(page, "full", "/app");
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route("**/app/coverage.data**", async (route) => {
+    await page.route("**/app/jobs.data**", async (route) => {
       await held;
       await route.continue();
     });
-    await page.getByRole("link", { name: "See coverage details" }).click();
+    await page.getByRole("link", { name: "All jobs" }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(true);
     release();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __loading: boolean[] }).__loading.at(-1))).toBe(false);

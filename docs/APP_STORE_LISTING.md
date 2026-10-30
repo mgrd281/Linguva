@@ -68,10 +68,11 @@ Generated from the real app on the production build with a fictional demo catalo
 | 4-review.png | Review queue with a flagged draft | Review queue with French drafts to approve or reject; one draft is flagged because a number changed |
 | 5-glossary.png | Brand terms and rules | Glossary with brand names that are never translated and preferred terms per language |
 | 6-settings.png | Automatic translation and safe publishing | Settings for automatic translation of new content, with results waiting for review |
-| 7-overview.png | Guided start | Overview with the next steps to set up translations |
+| 7-overview.png | How far the store is, by country | Overview with the share of texts translated, the next step, and a card for each country the store sells to |
 | 8-mobile-editor.png | The editor on a phone | Translation editor on a phone, with the original above the translation |
+| 9-language.png | One language, area by area, with the store's pictures | German language page with the products and collections as pictures, each marked done, outdated or missing |
 
-Recommended order in the listing: 4, 2, 1, 5, 6, 8 (six images; 3 and 7 as spares).
+Recommended order in the listing: 4, 9, 2, 1, 5, 6 (six images; 3, 7 and 8 as spares).
 
 ## Feature media
 

@@ -74,6 +74,7 @@ app/
   lib/              code shared by server and UI
   routes/           pages (app.*) and webhook endpoints (webhooks.*)
 prisma/             schema and migrations (incl. RLS policies)
+public/flags/       country flags (third-party, docs/THIRD_PARTY_NOTICES.md)
 worker/             background worker entrypoint
 scripts/db/         local/CI database roles
 tests/              unit/, integration/, security/ and live/ (dev store only)
@@ -101,6 +102,7 @@ docs/               architecture, security, billing, roadmap
 | [docs/RAILWAY_STAGING.md](docs/RAILWAY_STAGING.md) | Hosting on Railway: staging (test stores only, mock AI), image, roles, variables, approvals; KARINEX production plan |
 | [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
 | [docs/SECURITY_REVIEW_MEMORY_FUZZY.md](docs/SECURITY_REVIEW_MEMORY_FUZZY.md) | Security review of the fuzzy search function, roles and grants |
+| [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) | Third-party files shipped with the app and their licenses |
 | [CHANGELOG.md](CHANGELOG.md) | Change history |
 
 ## Project boundaries

@@ -6,7 +6,7 @@ export const en = {
   "resources.denied.needsScope": "To translate {plural}, Linguva needs permission to read them. It never changes the originals.",
   "resources.denied.unavailable": "Shopify doesn't allow apps to read {plural} in this store yet.",
   "resources.denied.allow": "Allow access",
-  "resources.denied.back": "Back to all content",
+  "resources.denied.back": "Back to Content",
 
   "resources.noLanguages.heading": "No languages to translate into",
   "resources.noLanguages.body": "Add a language under Settings → Languages in the Shopify admin to start translating your {plural}.",
@@ -18,7 +18,7 @@ export const en = {
 
   "resources.bulkError.heading": "Bulk translation couldn't start",
   "resources.bulkError.JOBS_UNAVAILABLE": "Background processing isn't configured for this app yet.",
-  "resources.bulkError.plan": "Your plan doesn't include this. See Plan to change it.",
+  "resources.bulkError.plan": "Your plan doesn't include this. Change it in Linguva under Settings → Plan.",
   "resources.bulkError.generic": "Please reload the page and try again.",
 
   "resources.plan.bulkHeading": "Bulk translation is part of paid plans",
@@ -62,7 +62,7 @@ export const de: Translation<typeof en> = {
   "resources.denied.needsScope": "Um {plural} zu übersetzen, braucht Linguva die Berechtigung, sie zu lesen. Die Originale werden nie geändert.",
   "resources.denied.unavailable": "Shopify erlaubt Apps in diesem Shop noch nicht, {plural} zu lesen.",
   "resources.denied.allow": "Zugriff erlauben",
-  "resources.denied.back": "Zurück zu „Alle Inhalte“",
+  "resources.denied.back": "Zurück zu den Inhalten",
 
   "resources.noLanguages.heading": "Keine Sprachen zum Übersetzen",
   "resources.noLanguages.body": "Füge im Shopify-Adminbereich unter „Einstellungen → Sprachen“ eine Sprache hinzu, um {plural} zu übersetzen.",
@@ -74,7 +74,7 @@ export const de: Translation<typeof en> = {
 
   "resources.bulkError.heading": "Die Massenübersetzung konnte nicht gestartet werden",
   "resources.bulkError.JOBS_UNAVAILABLE": "Die Hintergrundverarbeitung ist für diese App noch nicht eingerichtet.",
-  "resources.bulkError.plan": "Dein Tarif enthält das nicht. Du kannst ihn unter „Tarif“ ändern.",
+  "resources.bulkError.plan": "Dein Tarif enthält das nicht. Du kannst ihn in Linguva unter „Einstellungen“ → „Tarif“ ändern.",
   "resources.bulkError.generic": "Bitte lade die Seite neu und versuche es noch einmal.",
 
   "resources.plan.bulkHeading": "Massenübersetzung ist in den kostenpflichtigen Tarifen enthalten",
@@ -119,7 +119,7 @@ export const fr: Translation<typeof en> = {
   "resources.denied.needsScope": "Pour traduire vos {plural}, Linguva a besoin de l'autorisation de les lire. Linguva ne modifie jamais les originaux.",
   "resources.denied.unavailable": "Shopify ne permet pas encore aux applications de lire les {plural} de cette boutique.",
   "resources.denied.allow": "Autoriser l'accès",
-  "resources.denied.back": "Retour à tout le contenu",
+  "resources.denied.back": "Retour aux contenus",
 
   "resources.noLanguages.heading": "Aucune langue vers laquelle traduire",
   "resources.noLanguages.body": "Ajoutez une langue dans l'interface administrateur Shopify, sous Paramètres → Langues, pour commencer à traduire vos {plural}.",
@@ -131,7 +131,7 @@ export const fr: Translation<typeof en> = {
 
   "resources.bulkError.heading": "Impossible de lancer la traduction groupée",
   "resources.bulkError.JOBS_UNAVAILABLE": "Le traitement en arrière-plan n'est pas encore configuré pour cette application.",
-  "resources.bulkError.plan": "Votre forfait n'inclut pas cette fonctionnalité. Consultez la page Forfait pour le modifier.",
+  "resources.bulkError.plan": "Votre forfait n'inclut pas cette fonctionnalité. Modifiez-le dans Linguva, sous Paramètres → Forfait.",
   "resources.bulkError.generic": "Veuillez actualiser la page et réessayer.",
 
   "resources.plan.bulkHeading": "La traduction groupée est incluse dans les forfaits payants",
@@ -176,7 +176,7 @@ export const es: Translation<typeof en> = {
   "resources.denied.needsScope": "Para traducir tus {plural}, Linguva necesita permiso de lectura. Nunca modifica los originales.",
   "resources.denied.unavailable": "Shopify todavía no permite que las aplicaciones lean {plural} en esta tienda.",
   "resources.denied.allow": "Permitir acceso",
-  "resources.denied.back": "Volver a todo el contenido",
+  "resources.denied.back": "Volver al contenido",
 
   "resources.noLanguages.heading": "No hay idiomas a los que traducir",
   "resources.noLanguages.body": "Agrega un idioma en Configuración → Idiomas del panel de control de Shopify para empezar a traducir tus {plural}.",
@@ -188,7 +188,7 @@ export const es: Translation<typeof en> = {
 
   "resources.bulkError.heading": "No se pudo iniciar la traducción masiva",
   "resources.bulkError.JOBS_UNAVAILABLE": "El procesamiento en segundo plano aún no está configurado para esta aplicación.",
-  "resources.bulkError.plan": "Tu plan no incluye esta función. Ve a Plan para cambiarlo.",
+  "resources.bulkError.plan": "Tu plan no incluye esta función. Cámbialo en Linguva, en Configuración → Plan.",
   "resources.bulkError.generic": "Vuelve a cargar la página e inténtalo de nuevo.",
 
   "resources.plan.bulkHeading": "La traducción masiva está incluida en los planes de pago",

@@ -1,8 +1,9 @@
 /**
  * The script policy (Content-Security-Policy script-src) on the production
  * build: the app works under it (Polaris from Shopify's CDN, React Router's
- * inline data with the page's nonce, previews, dialogs), nothing is
- * reported as blocked, and an injected inline script doesn't run.
+ * inline data with the page's nonce, previews, dialogs, a language's
+ * pictures and flags), nothing is reported as blocked, and an injected
+ * inline script doesn't run.
  * App Bridge is simulated; the real one is checked on the development store.
  */
 import { expect, test, type Page } from "@playwright/test";
@@ -47,6 +48,14 @@ test("the app works under the policy and nothing is blocked", async ({ page }) =
   await page.locator("s-button", { hasText: "Reject selected" }).first().click();
   await expect(page.getByRole("dialog", { name: "Reject the selected translations?" })).toBeVisible();
   for (const path of ["/app/settings", "/app/glossary", "/app/coverage", "/app/jobs"]) await openApp(page, "full", path);
+
+  // A language's page loads its examples and the store's pictures after the page; flags come from the app.
+  await openApp(page, "demo", "/app/languages/de");
+  const products = page.locator('s-section[accessibilitylabel="Products"]');
+  await expect.poll(() => products.locator("img").evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.complete && img.naturalWidth > 0))).toBe(true);
+  await expect.poll(() => page.locator('img[src^="/flags/"]').evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.naturalWidth > 0))).toBe(true);
+  await openApp(page, "catalog", "/app/languages/de/products");
+  await expect(page.getByRole("navigation", { name: "Show" })).toBeVisible();
 
   expect(await violations()).toEqual([]);
 });

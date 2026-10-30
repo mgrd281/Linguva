@@ -7,7 +7,7 @@
 import { expect, test } from "@playwright/test";
 import { openApp } from "./helpers";
 
-const PAGES = ["/app", "/app/products?lang=fr", "/app/products/2?lang=fr", "/app/review", "/app/jobs", "/app/coverage", "/app/translations", "/app/glossary", "/app/memory", "/app/settings", "/app/plan", "/app/content", "/app/languages", "/app/markets"];
+const PAGES = ["/app", "/app/products?lang=fr", "/app/products/2?lang=fr", "/app/review", "/app/jobs", "/app/coverage", "/app/translations", "/app/glossary", "/app/memory", "/app/settings", "/app/plan", "/app/content", "/app/languages", "/app/markets", "/app/languages/de", "/app/languages/de/products"];
 
 for (const path of PAGES) {
   test(`touch targets on ${path} @responsive`, async ({ page }, info) => {

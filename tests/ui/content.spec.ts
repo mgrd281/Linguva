@@ -15,6 +15,10 @@ test("the content overview lists every content type with its status @responsive"
   const headings = await page.locator("s-section[heading]").evaluateAll((els) => els.map((e) => e.getAttribute("heading")));
   expect(headings).toEqual(["Ready to translate", "Needs your permission", "Not in your store yet"]);
   await expect(page.locator('s-section[heading="Not in your store yet"]').getByText(/Shipping methods/)).toBeVisible();
+  // Every list opens here (they left the navigation): products and collections first.
+  const ready = page.locator('s-section[heading="Ready to translate"] s-table-row');
+  await expect(ready.nth(0).getByRole("link", { name: "Products", exact: true })).toHaveAttribute("href", "/app/products");
+  await expect(ready.nth(1).getByRole("link", { name: "Collections", exact: true })).toHaveAttribute("href", "/app/collections");
   await expect(page.getByRole("link", { name: "Menus", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Translate Menus" })).toBeVisible();
   await expect(page.locator("s-button", { hasText: "Allow access" }).first()).toBeVisible();

@@ -132,6 +132,42 @@ export type LinguvaOwnerMetafieldsAfterQueryVariables = AdminTypes.Exact<{
 
 export type LinguvaOwnerMetafieldsAfterQuery = { node?: AdminTypes.Maybe<{ metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } } | { metafields: { nodes: Array<Pick<AdminTypes.Metafield, 'id' | 'translatable'>>, pageInfo: Pick<AdminTypes.PageInfo, 'hasNextPage' | 'endCursor'> } }> };
 
+export type LinguvaPreviewNodesQueryVariables = AdminTypes.Exact<{
+  ids: Array<AdminTypes.Scalars['ID']['input']> | AdminTypes.Scalars['ID']['input'];
+  locale: AdminTypes.Scalars['String']['input'];
+}>;
+
+
+export type LinguvaPreviewNodesQuery = { nodes: Array<AdminTypes.Maybe<(
+    { __typename: 'Article' }
+    & Pick<AdminTypes.Article, 'id' | 'title'>
+    & { image?: AdminTypes.Maybe<Pick<AdminTypes.Image, 'url' | 'altText'>>, translations: Array<Pick<AdminTypes.Translation, 'key' | 'value'>> }
+  ) | (
+    { __typename: 'Blog' }
+    & Pick<AdminTypes.Blog, 'id' | 'title'>
+    & { translations: Array<Pick<AdminTypes.Translation, 'key' | 'value'>> }
+  ) | (
+    { __typename: 'Collection' }
+    & Pick<AdminTypes.Collection, 'id' | 'title'>
+    & { image?: AdminTypes.Maybe<Pick<AdminTypes.Image, 'url' | 'altText'>>, translations: Array<Pick<AdminTypes.Translation, 'key' | 'value'>> }
+  ) | (
+    { __typename: 'MediaImage' }
+    & Pick<AdminTypes.MediaImage, 'id' | 'alt'>
+    & { image?: AdminTypes.Maybe<Pick<AdminTypes.Image, 'url' | 'altText'>>, translations: Array<Pick<AdminTypes.Translation, 'key' | 'value'>> }
+  ) | (
+    { __typename: 'Metafield' }
+    & Pick<AdminTypes.Metafield, 'id' | 'key'>
+    & { definition?: AdminTypes.Maybe<Pick<AdminTypes.MetafieldDefinition, 'name'>> }
+  ) | (
+    { __typename: 'Page' }
+    & Pick<AdminTypes.Page, 'id' | 'title'>
+    & { translations: Array<Pick<AdminTypes.Translation, 'key' | 'value'>> }
+  ) | (
+    { __typename: 'Product' }
+    & Pick<AdminTypes.Product, 'id' | 'title'>
+    & { featuredMedia?: AdminTypes.Maybe<{ preview?: AdminTypes.Maybe<{ image?: AdminTypes.Maybe<Pick<AdminTypes.Image, 'url' | 'altText'>> }> }>, translations: Array<Pick<AdminTypes.Translation, 'key' | 'value'>> }
+  )>> };
+
 export type LinguvaRecentProductsQueryVariables = AdminTypes.Exact<{
   first: AdminTypes.Scalars['Int']['input'];
   after?: AdminTypes.InputMaybe<AdminTypes.Scalars['String']['input']>;
@@ -342,6 +378,7 @@ interface GeneratedQueryTypes {
   "#graphql\n  query LinguvaMetafieldOwnersPages($first: Int!, $after: String) {\n    pages(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersPagesQuery, variables: LinguvaMetafieldOwnersPagesQueryVariables},
   "#graphql\n  query LinguvaMetafieldOwnersArticles($first: Int!, $after: String) {\n    articles(first: $first, after: $after) {\n      nodes {\n        id\n        metafields(first: 50) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": {return: LinguvaMetafieldOwnersArticlesQuery, variables: LinguvaMetafieldOwnersArticlesQueryVariables},
   "#graphql\n  query LinguvaOwnerMetafieldsAfter($id: ID!, $after: String) {\n    node(id: $id) {\n      ... on HasMetafields {\n        metafields(first: 100, after: $after) {\n          nodes {\n            id\n            translatable\n          }\n          pageInfo {\n            hasNextPage\n            endCursor\n          }\n        }\n      }\n    }\n  }\n": {return: LinguvaOwnerMetafieldsAfterQuery, variables: LinguvaOwnerMetafieldsAfterQueryVariables},
+  "#graphql\n  query LinguvaPreviewNodes($ids: [ID!]!, $locale: String!) {\n    nodes(ids: $ids) {\n      ... on Product {\n        __typename\n        id\n        title\n        featuredMedia {\n          preview {\n            image {\n              url\n              altText\n            }\n          }\n        }\n        translations(locale: $locale) {\n          key\n          value\n        }\n      }\n      ... on Collection {\n        __typename\n        id\n        title\n        image {\n          url\n          altText\n        }\n        translations(locale: $locale) {\n          key\n          value\n        }\n      }\n      ... on Article {\n        __typename\n        id\n        title\n        image {\n          url\n          altText\n        }\n        translations(locale: $locale) {\n          key\n          value\n        }\n      }\n      ... on Page {\n        __typename\n        id\n        title\n        translations(locale: $locale) {\n          key\n          value\n        }\n      }\n      ... on Blog {\n        __typename\n        id\n        title\n        translations(locale: $locale) {\n          key\n          value\n        }\n      }\n      ... on MediaImage {\n        __typename\n        id\n        alt\n        image {\n          url\n          altText\n        }\n        translations(locale: $locale) {\n          key\n          value\n        }\n      }\n      ... on Metafield {\n        __typename\n        id\n        key\n        definition {\n          name\n        }\n      }\n    }\n  }\n": {return: LinguvaPreviewNodesQuery, variables: LinguvaPreviewNodesQueryVariables},
   "#graphql\n  query LinguvaRecentProducts($first: Int!, $after: String, $query: String!) {\n    products(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentProductsQuery, variables: LinguvaRecentProductsQueryVariables},
   "#graphql\n  query LinguvaRecentCollections($first: Int!, $after: String, $query: String!) {\n    collections(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentCollectionsQuery, variables: LinguvaRecentCollectionsQueryVariables},
   "#graphql\n  query LinguvaRecentPages($first: Int!, $after: String, $query: String!) {\n    pages(first: $first, after: $after, sortKey: UPDATED_AT, query: $query) {\n      nodes { id updatedAt }\n      pageInfo { hasNextPage endCursor }\n    }\n  }\n": {return: LinguvaRecentPagesQuery, variables: LinguvaRecentPagesQueryVariables},

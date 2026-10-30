@@ -35,22 +35,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
+/**
+ * Five entries for the daily work. Every list of content opens from Content
+ * (/app/content), the tools (languages, countries, coverage in detail,
+ * glossary, memory, import and export, plan) from Settings.
+ */
 function AppNav() {
   const { t } = useI18n();
   return (
     <s-app-nav>
       <s-link href="/app">{t("common.nav.overview")}</s-link>
-      <s-link href="/app/products">{t("common.nav.products")}</s-link>
-      <s-link href="/app/collections">{t("common.nav.collections")}</s-link>
       <s-link href="/app/content">{t("common.nav.content")}</s-link>
       <s-link href="/app/review">{t("common.nav.review")}</s-link>
       <s-link href="/app/jobs">{t("common.nav.jobs")}</s-link>
-      <s-link href="/app/coverage">{t("common.nav.coverage")}</s-link>
-      <s-link href="/app/translations">{t("common.nav.transfer")}</s-link>
-      <s-link href="/app/markets">{t("common.nav.markets")}</s-link>
-      <s-link href="/app/glossary">{t("common.nav.glossary")}</s-link>
-      <s-link href="/app/memory">{t("common.nav.memory")}</s-link>
-      <s-link href="/app/plan">{t("common.nav.plan")}</s-link>
       <s-link href="/app/settings">{t("common.nav.settings")}</s-link>
     </s-app-nav>
   );

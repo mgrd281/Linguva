@@ -63,7 +63,7 @@ export const UI_SHOPS = {
       store.updateSource("gid://shopify/Product/2", "body_html", "<p>Very warm <b>jacket</b> number 2.</p>");
       store.setField("gid://shopify/Product/1", "meta_title", "Warm winter jacket for cold days");
       store.setField("gid://shopify/Product/1", "meta_description", "A warm jacket with two pockets, made for long winter walks in the cold.");
-      store.addImage("gid://shopify/Product/1", "Red wool jacket, front view");
+      store.addImage("gid://shopify/Product/1", "Red wool jacket, front view", "jacket");
       store.addMetafield("gid://shopify/Product/1", { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Hand wash cold." });
       // Lists and links, translated item by item.
       store.addMetafield("gid://shopify/Product/14", {
@@ -201,6 +201,27 @@ export const UI_SHOPS = {
     plan: "pro",
     build: () => new FakeShopifyStore(3),
   },
+  catalog: {
+    // 55 products (more than one page of an area's list) in every state, counted, with pictures.
+    // German is only read; the French tests start translations.
+    domain: "ui-catalog.myshopify.com",
+    gid: "gid://shopify/Shop/91020",
+    name: "Catalog Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }],
+    plan: "pro",
+    build() {
+      const store = new FakeShopifyStore(55);
+      const P = (n: number) => `gid://shopify/Product/${n}`;
+      // Done: 1–8. Name only, the description still missing: 9–20.
+      for (let n = 1; n <= 20; n++) store.translate(P(n), "de", "title", `Produkt ${n} Jacke`);
+      for (let n = 1; n <= 8; n++) store.translate(P(n), "de", "body_html", `<p>Warme <b>Jacke</b> Nummer ${n}.</p>`);
+      // Outdated: the description changed after it was translated.
+      store.updateSource(P(8), "body_html", "<p>Very warm <b>jacket</b> number 8.</p>");
+      const pictures = ["jacket", "sweater", "trousers", "vest", "socks", "shoes"] as const;
+      pictures.forEach((picture, i) => store.addImage(P(i + 1), `Product ${i + 1} picture`, picture));
+      return store;
+    },
+  },
   customFields: {
     // A German job with custom fields: a list of links waits on Review.
     domain: "ui-fields.myshopify.com",
@@ -220,13 +241,20 @@ export const UI_SHOPS = {
     },
   },
   visual: {
-    // Fixed content for screenshot comparisons; no test changes it.
+    // Fixed content for screenshot comparisons, counted once; no test changes it.
     domain: "ui-visual.myshopify.com",
     gid: "gid://shopify/Shop/91008",
     name: "Visual Test Store",
     locales: [en, de, { locale: "fr", name: "French", primary: false, published: false }],
     plan: "pro",
-    build: () => new FakeShopifyStore(6),
+    build() {
+      // Pictures for the language page; not on product 2, whose editor is compared.
+      const store = new FakeShopifyStore(6);
+      store.addImage("gid://shopify/Product/1", "Product 1 picture", "jacket");
+      store.addImage("gid://shopify/Product/3", "Product 3 picture", "sweater");
+      store.addImage("gid://shopify/Product/4", "Product 4 picture", "shoes");
+      return store;
+    },
   },
   slow: {
     // Shopify hangs on translation queries: longer than the app's time limit.
@@ -317,10 +345,13 @@ export function shopByDomain(domain: string): UiShop | undefined {
   return Object.values(UI_SHOPS).find((s) => s.domain === domain);
 }
 
+// Another port (UI_PORT) lets two checkouts run their UI tests at the same time.
+const UI_PORT = Number(process.env.UI_PORT ?? 4317);
+
 export const UI_ENV = {
   apiKey: "ui-test-api-key",
   // A fixed, test-only secret: session tokens in the tests are signed with it.
   apiSecret: "ui-test-api-secret-not-used-anywhere-else",
-  appUrl: "http://localhost:4317",
-  port: 4317,
+  appUrl: `http://localhost:${UI_PORT}`,
+  port: UI_PORT,
 } as const;

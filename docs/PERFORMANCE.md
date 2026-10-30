@@ -54,11 +54,11 @@ Not measured: real Shopify and DeepL latency and limits, several worker processe
 | Product editor | 43 ms |
 | Review | 54 ms |
 | Jobs | 22 ms |
-| All content | 26 ms |
+| Content | 26 ms |
 | Plan | 25 ms |
 | Settings | 37 ms |
 
-All content checks the 30 content types in batches of 6, so in a real store its time is dominated by Shopify's API latency: about 5 round trips.
+Content checks its 26 content types (products and collections included) in batches of 6, so in a real store its time is dominated by Shopify's API latency: about 5 round trips.
 
 ## 4. Client bundle
 

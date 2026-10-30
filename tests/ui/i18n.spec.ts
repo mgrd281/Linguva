@@ -26,7 +26,10 @@ const GERMAN_PAGES = [
   { path: "/app/memory", heading: "Übersetzungsspeicher" },
   { path: "/app/plan", heading: "Tarif" },
   { path: "/app/languages", heading: null },
-  { path: "/app/content", heading: "Alle Inhalte" },
+  { path: "/app/content", heading: "Inhalte" },
+  // A language and one of its areas, with the store's own names and pictures in them.
+  { path: "/app/languages/fr", heading: "Französisch" },
+  { path: "/app/languages/fr/products", heading: "Produkte auf Französisch" },
 ];
 
 for (const { path, heading, merchantText } of GERMAN_PAGES as Array<{ path: string; heading: string | null; merchantText?: boolean }>) {
@@ -69,8 +72,8 @@ for (const { locale, nav } of [
 
 test("navigation, product list and editor are German; merchant content stays as it is", async ({ page }) => {
   await openApp(page, "full", "/app/products?lang=fr", { locale: "de" });
-  await expect(page.locator("s-app-nav s-link", { hasText: "Produkte" })).toHaveCount(1);
-  await expect(page.locator("s-app-nav s-link", { hasText: "Einstellungen" })).toHaveCount(1);
+  // Five entries; every list opens from Inhalte, the tools from Einstellungen.
+  await expect(page.locator("s-app-nav s-link")).toHaveText(["Übersicht", "Inhalte", "Prüfen", "Aufträge", "Einstellungen"]);
   await expect(page.getByText("Product 1 jacket").first()).toBeVisible();
   // Language names in German, not Shopify's English names.
   await expect(page.locator("s-badge", { hasText: "Französisch" })).toBeVisible();
@@ -85,7 +88,7 @@ test("the app's target language never changes the interface language", async ({ 
   // ?lang=de is the language to translate into; the admin user is English.
   await openApp(page, "full", "/app/products?lang=de");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.locator("s-app-nav s-link", { hasText: "Products" })).toHaveCount(1);
+  await expect(page.locator("s-app-nav s-link", { hasText: "Content" })).toHaveCount(1);
 });
 
 test("an error page is German for a German admin user", async ({ page }) => {

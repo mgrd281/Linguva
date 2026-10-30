@@ -1,6 +1,7 @@
 /**
  * Settings: the translation style (form of address per language and the
- * store description for the AI) is saved and shown again after a reload.
+ * store description for the AI) is saved and shown again after a reload;
+ * the tools outside the navigation open from here.
  */
 import { expect, test } from "@playwright/test";
 import { UI_ENV, UI_SHOPS } from "./fixtures/shops";
@@ -28,6 +29,29 @@ test("the translation style is saved per language @responsive", async ({ page })
   await expect(section.getByRole("combobox", { name: "French", exact: true })).toHaveValue("more");
   await expect(section.getByRole("combobox", { name: "Arabic", exact: true })).toHaveValue("default");
   await expect(section.getByRole("textbox", { name: "About your store" })).toHaveValue("Outdoor clothing for families, friendly and simple.");
+});
+
+test("the tools outside the navigation open from Settings, one link each @responsive", async ({ page }) => {
+  await openApp(page, "full", "/app/settings");
+  const tools = page.locator('s-section[heading="Tools"]');
+  const links: Array<[RegExp, string]> = [
+    [/^Languages/, "/app/languages"],
+    [/^Countries & markets/, "/app/markets"],
+    [/^Coverage in detail/, "/app/coverage"],
+    [/^Glossary/, "/app/glossary"],
+    [/^Translation memory/, "/app/memory"],
+    [/^Import & export/, "/app/translations"],
+    [/^Plan/, "/app/plan"],
+  ];
+  for (const [name, href] of links) await expect(tools.getByRole("link", { name })).toHaveAttribute("href", href);
+  // Each says what it is for, inside its link.
+  await expect(tools.getByRole("link", { name: /^Glossary\s*Brand names and fixed terms/ })).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  await tools.getByRole("link", { name: /^Glossary/ }).click();
+  await expect(page).toHaveURL(/\/app\/glossary(\?|$)/);
+  await expect(page.locator("s-page")).toHaveAttribute("heading", "Glossary");
 });
 
 test("usage on Settings uses the plan's allowance, like the Overview and Plan page", async ({ page }) => {

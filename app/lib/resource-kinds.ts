@@ -186,6 +186,15 @@ export function isImageCoverageType(type: string): type is ImageCoverageType {
   return Object.prototype.hasOwnProperty.call(IMAGE_COVERAGE_TYPES, type);
 }
 
+/**
+ * The editor of a coverage item: custom fields and images are edited on
+ * their owner's page; an image whose owner coverage doesn't know has none.
+ */
+export function itemEditorPath(item: { resourceType: string; resourceGid: string; parentGid: string | null }, locale: string): string | null {
+  if (item.parentGid) return editorPathFor(item.parentGid, locale);
+  return isImageCoverageType(item.resourceType) ? null : editorPathFor(item.resourceGid, locale, item.resourceType);
+}
+
 /** Label of a coverage report row type ("Products", "Product images (alt text)"). */
 export function coverageTypeLabel(type: string): string {
   if (isImageCoverageType(type)) return IMAGE_COVERAGE_TYPES[type].label;

@@ -9,9 +9,15 @@
  * - POST https://partners.shopify.com/...          Partner API subscription
  * Any other request to a Shopify host is refused, so a test can never reach
  * a real store.
+ *
+ * The stores' images point at this server, which serves their pictures
+ * (tests/support/fixture-images.ts) under /__fixtures/img/ the way
+ * Shopify's CDN serves a store's images, before the app sees the request.
  */
-import { shopByDomain, UI_SHOPS, type UiShop } from "../fixtures/shops";
+import { Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { shopByDomain, UI_ENV, UI_SHOPS, type UiShop } from "../fixtures/shops";
 import type { FakeShopifyStore } from "../../support/fake-store";
+import { FIXTURE_IMAGE_PATH, fixturePicture } from "../../support/fixture-images";
 
 const realFetch = globalThis.fetch.bind(globalThis);
 const REQUIRED_SCOPES = ["read_products", "read_content", "read_online_store_pages", "read_translations", "write_translations", "read_locales", "write_locales"];
@@ -19,7 +25,10 @@ const OPTIONAL_SCOPES = ["read_markets", "read_online_store_navigation", "read_m
 const stores = new Map<string, FakeShopifyStore>();
 const storeFor = (shop: UiShop) => {
   let store = stores.get(shop.domain);
-  if (!store) stores.set(shop.domain, (store = shop.build()));
+  if (!store) {
+    stores.set(shop.domain, (store = shop.build()));
+    store.imageOrigin = UI_ENV.appUrl;
+  }
   return store;
 };
 
@@ -139,6 +148,23 @@ globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => 
     throw new Error(`[ui-fake-shopify] refused request to ${url.hostname}: UI tests never call real Shopify`);
   }
   return realFetch(input, init);
+};
+
+/** Answers a request for one of the stores' pictures; false for any other request. */
+function servePicture(request: IncomingMessage, response: ServerResponse): boolean {
+  const path = new URL(request.url ?? "/", UI_ENV.appUrl).pathname;
+  if (!path.startsWith(FIXTURE_IMAGE_PATH)) return false;
+  const picture = request.method === "GET" || request.method === "HEAD" ? fixturePicture(path.slice(FIXTURE_IMAGE_PATH.length)) : null;
+  if (picture) response.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=3600" }).end(request.method === "HEAD" ? undefined : picture);
+  else response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+  return true;
+}
+
+// react-router-serve creates its own HTTP server; its requests pass here first.
+const emit = Server.prototype.emit;
+Server.prototype.emit = function (this: Server, event: string | symbol, ...args: unknown[]) {
+  if (event === "request" && servePicture(args[0] as IncomingMessage, args[1] as ServerResponse)) return true;
+  return Reflect.apply(emit, this, [event, ...args]) as boolean;
 };
 
 console.log("[ui-fake-shopify] simulated Shopify active for", Object.values(UI_SHOPS).map((s) => s.domain).join(", "));

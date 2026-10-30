@@ -1,11 +1,11 @@
-/** Texts of the "All content" page. Keys start with "content.". */
+/** Texts of the Content page, where every list opens. Keys start with "content.". */
 import type { Message, Translation } from "./define";
 
 export const en = {
   "content.intro":
-    "Everything in your store that Shopify lets you translate: {ready} of {total} content types have something to translate. Products and collections have their own pages in the navigation.",
+    "Everything in your store that Shopify lets you translate, in one place: {ready} of {total} content types have something to translate.",
   "content.ready.heading": "Ready to translate",
-  "content.ready.none": "Nothing besides products and collections yet.",
+  "content.ready.none": "Nothing to translate yet. Add products or other content in Shopify, and it appears here.",
   "content.table.area": "Area",
   "content.table.how": "How",
   "content.table.action": "Action",
@@ -27,9 +27,9 @@ export const en = {
 
 export const de: Translation<typeof en> = {
   "content.intro":
-    "Alles in deinem Shop, was Shopify übersetzen lässt: {ready} von {total} Inhaltsarten haben etwas zu übersetzen. Produkte und Kollektionen haben eigene Seiten in der Navigation.",
+    "Alles in deinem Shop, was Shopify übersetzen lässt, an einem Ort: {ready} von {total} Inhaltsarten haben etwas zu übersetzen.",
   "content.ready.heading": "Bereit zum Übersetzen",
-  "content.ready.none": "Noch nichts außer Produkten und Kollektionen.",
+  "content.ready.none": "Noch nichts zu übersetzen. Füge in Shopify Produkte oder andere Inhalte hinzu, dann erscheinen sie hier.",
   "content.table.area": "Bereich",
   "content.table.how": "Vorgehen",
   "content.table.action": "Aktion",
@@ -51,9 +51,9 @@ export const de: Translation<typeof en> = {
 
 export const fr: Translation<typeof en> = {
   "content.intro":
-    "Tout ce que Shopify vous permet de traduire dans votre boutique : {ready} types de contenu sur {total} ont quelque chose à traduire. Les produits et les collections ont leurs propres pages dans la navigation.",
+    "Tout ce que Shopify vous permet de traduire dans votre boutique, au même endroit : {ready} types de contenu sur {total} ont quelque chose à traduire.",
   "content.ready.heading": "Prêt à traduire",
-  "content.ready.none": "Rien d'autre que les produits et les collections pour l'instant.",
+  "content.ready.none": "Rien à traduire pour l'instant. Ajoutez des produits ou d'autres contenus dans Shopify, ils apparaîtront ici.",
   "content.table.area": "Domaine",
   "content.table.how": "Méthode",
   "content.table.action": "Action",
@@ -75,9 +75,9 @@ export const fr: Translation<typeof en> = {
 
 export const es: Translation<typeof en> = {
   "content.intro":
-    "Todo lo que Shopify te permite traducir en tu tienda: {ready} de {total} tipos de contenido tienen algo que traducir. Los productos y las colecciones tienen sus propias páginas en la navegación.",
+    "Todo lo que Shopify te permite traducir en tu tienda, en un solo lugar: {ready} de {total} tipos de contenido tienen algo que traducir.",
   "content.ready.heading": "Listo para traducir",
-  "content.ready.none": "Por ahora, nada aparte de los productos y las colecciones.",
+  "content.ready.none": "Todavía no hay nada que traducir. Agrega productos u otro contenido en Shopify y aparecerá aquí.",
   "content.table.area": "Área",
   "content.table.how": "Método",
   "content.table.action": "Acción",

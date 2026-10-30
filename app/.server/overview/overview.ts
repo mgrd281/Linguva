@@ -1,6 +1,7 @@
 /**
- * The Overview page: the one next step, how complete each language is
- * (from the newest completed measurement only), the countries the store
+ * The Overview page: the one next step and what else needs the merchant,
+ * how complete the store and each language is (from the newest completed
+ * measurement only), the translations running now, the countries the store
  * sells to and their languages, and AI usage against the allowance.
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
@@ -13,7 +14,8 @@ import { countPendingDrafts } from "../review/drafts";
 import { loadCoverageSummary } from "../coverage/summary";
 import { COVERAGE_TYPES } from "../coverage/coverage";
 import { headlineByLocale, measuredLocales as wholeLocales, unreadableTypes } from "../../lib/coverage-view";
-import { addCounts, emptyCounts, HEADLINE_EXCLUDED_TYPES, totalOf } from "../../lib/coverage-rules";
+import { addCounts, coveragePercent, emptyCounts, HEADLINE_EXCLUDED_TYPES, totalOf } from "../../lib/coverage-rules";
+import { reviewPayoff } from "../../lib/language-categories";
 import { CONTENT_TYPES, isContentType } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage } from "../usage/usage-ledger";
@@ -23,8 +25,14 @@ import { usageLevel } from "../../lib/usage";
 import { analyzeCountries, countByStatus, missingLanguages } from "../../lib/country-coverage";
 import type { MarketCountriesResult } from "../markets/countries";
 import type { MessageRef } from "../../i18n/i18n";
+import { ACTIVE_JOB_STATUSES } from "../jobs/bulk-jobs";
+import { jobProgress } from "../../lib/job-display";
+import { reliableEta } from "../../lib/eta";
 import { measurementState } from "./measurement";
-import { nextStep } from "./next-step";
+import { attention, nextStep } from "./next-step";
+
+/** Running translations the Overview shows (the Jobs page has them all). */
+export const OVERVIEW_JOBS = 4;
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -62,10 +70,35 @@ export async function loadOverview(
     getShopSettings(shop.id, client),
     shopBilling(admin, shop),
   ]);
-  const [pendingDrafts, published, activeJobs, coverage, used, usedToday, markets] = await Promise.all([
+  const active = { shopId: shop.id, status: { in: [...ACTIVE_JOB_STATUSES] } };
+  const [pendingDrafts, published, [activeJobs, running], coverage, used, usedToday, markets] = await Promise.all([
     countPendingDrafts(shop.id, client),
     withTenant(shop.id, (tx) => tx.translationRevision.count({ where: { shopId: shop.id, origin: { in: ["AI", "MANUAL"] } } }), client),
-    withTenant(shop.id, (tx) => tx.translationJob.count({ where: { shopId: shop.id, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } } }), client),
+    withTenant(
+      shop.id,
+      (tx) =>
+        Promise.all([
+          tx.translationJob.count({ where: active }),
+          tx.translationJob.findMany({
+            where: active,
+            orderBy: { createdAt: "asc" },
+            take: OVERVIEW_JOBS,
+            select: {
+              id: true,
+              resourceType: true,
+              targetLocale: true,
+              totalItems: true,
+              succeededItems: true,
+              skippedItems: true,
+              failedItems: true,
+              discoveryDone: true,
+              startedAt: true,
+              publishMode: true,
+            },
+          }),
+        ]),
+      client,
+    ),
     loadCoverageSummary(shop.id, client),
     getMonthlyUsage(shop.id, undefined, client),
     getDailyUsage(shop.id, client),
@@ -169,7 +202,18 @@ export async function loadOverview(
   const sum = emptyCounts();
   for (const l of shared) addCounts(sum, l.counts!);
   const publishedLanguages = progress.filter((l) => l.published).length;
-  const storeShare = shared.length ? { complete: sum.complete, total: totalOf(sum), languages: shared.length, published: publishedLanguages } : null;
+  const total = totalOf(sum);
+  const storeShare = shared.length
+    ? {
+        complete: sum.complete,
+        total,
+        counts: sum,
+        languages: shared.length,
+        published: publishedLanguages,
+        /** The share once every waiting draft is approved, when that gains a point. */
+        payoff: reviewPayoff({ counts: sum, complete: sum.complete, total, percent: coveragePercent(sum.complete, total) }),
+      }
+    : null;
 
   // Countries the shop sells to, and whether they can read it in their language.
   const countries = !markets
@@ -188,7 +232,7 @@ export async function loadOverview(
           })();
 
   const firstTranslation = checklist.find((s) => s.id === "first-translation")!;
-  const next = nextStep({
+  const stepInput = {
     targets: targets.map((l) => ({ locale: l.locale, name: l.name, published: l.published })),
     consent,
     firstTranslation: { done: firstTranslation.done, href: firstTranslation.href },
@@ -200,10 +244,28 @@ export async function loadOverview(
     unreadable,
     countries: countries && "rows" in countries ? countries : null,
     remainingLocales: locales.remainingEnabled,
+  };
+  const next = nextStep(stepInput);
+  const now = new Date(options.now ?? Date.now());
+  const jobs = running.map((job) => {
+    const progress = jobProgress(job);
+    return {
+      id: job.id,
+      resourceType: job.resourceType,
+      locale: job.targetLocale,
+      done: progress.done,
+      total: progress.total,
+      percent: progress.percent,
+      discoveryDone: job.discoveryDone,
+      remainingMs: job.discoveryDone ? reliableEta({ done: progress.done, total: progress.total, startedAt: job.startedAt, now }) : null,
+      /** The results wait in Review (DRAFT) or go live directly. */
+      publishMode: job.publishMode,
+    };
   });
 
   const limits = aiLimitsFor(getConfig(), billing);
   return {
+    shopName: shop.name,
     primary: locales.primary?.name ?? null,
     primaryLocale: locales.primary?.locale ?? null,
     maxLocales: MAX_ENABLED_LOCALES,
@@ -216,9 +278,11 @@ export async function loadOverview(
     measuredAt: coverage.lastCompleted?.finishedAt ?? null,
     measurement,
     next,
+    attention: attention(stepInput, next),
     countries,
     pendingDrafts,
     activeJobs,
+    jobs,
     usage: { used, limit: limits.limit, usedToday, dailyLimit: limits.dailyLimit, level: usageLevel(used, limits.limit) },
   };
 }

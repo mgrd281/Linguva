@@ -10,7 +10,8 @@ import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar, StateLe
 import { ProgressBar } from "../components/ProgressBar";
 import { SmartStateBadge, SmartStateBanner } from "../components/SmartAutoCard";
 import { byFieldGroup, byType, coverageNextStep, headlineByLocale, storeWide, unreadableTypes, type CoverageNextStep, type Tally } from "../lib/coverage-view";
-import { inParentheses, languageList } from "../lib/name-lists";
+import { inParentheses, languageList, upperFirst } from "../lib/name-lists";
+import { languagePath } from "../lib/language-categories";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES } from "../lib/coverage-rules";
 import { localeFlag } from "../lib/flags";
 import { CONTENT_TYPES, isContentType, RESOURCE_KINDS, type ResourceKind } from "../lib/resource-kinds";
@@ -318,14 +319,16 @@ export default function Coverage() {
             <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, (inline-size > 900px) 1fr 1fr 1fr, 1fr" gap="base">
               {data.targets.map((l) => {
                 const tally = headline.get(l.locale) ?? EMPTY;
-                const name = i18n.language(l.locale, l.name);
+                const name = upperFirst(i18n.language(l.locale, l.name));
                 const flag = localeFlag(l.locale);
                 return (
                   <s-box key={l.locale} padding="base" border="base" borderRadius="base" background={l.locale === selected ? "subdued" : "base"}>
                     <s-stack direction="block" gap="small">
                       <s-stack direction="inline" gap="small" alignItems="center">
                         {flag ? <span aria-hidden="true">{flag}</span> : null}
-                        <s-heading>{name}</s-heading>
+                        <s-heading>
+                          <s-link href={languagePath(l.locale)}>{name}</s-link>
+                        </s-heading>
                         {l.published ? <s-badge tone="success">{t("coverage.languages.published")}</s-badge> : <s-badge tone="warning">{t("coverage.languages.unpublished")}</s-badge>}
                       </s-stack>
                       {measured.has(l.locale) ? (

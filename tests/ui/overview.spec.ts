@@ -1,52 +1,88 @@
 /**
- * The Overview: one next step (the only primary button), the share per
- * language from a completed measurement, the countries without their
- * language, and measuring without fake progress.
+ * The Overview: the store's figure next to the next step (the only primary
+ * button) and what else needs the merchant, the customers by country or by
+ * language (every card opens that language's page), and counting without
+ * fake progress.
  */
 import { expect, test } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
-test("one next step, the share per language and the countries missing their language @responsive", async ({ page }) => {
+/** A card or section by its accessibility label (Polaris sets it as an attribute). */
+const labelled = (label: string) => `s-section[accessibilitylabel="${label}"]`;
+
+test("the store's figure, one next step, and a card per country that opens its language @responsive", async ({ page }) => {
   await openApp(page, "demo", "/app");
-  const next = page.locator('s-section[heading="Next step"]');
-  await expect(next.getByText(/^Review \d+ translations?$/)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByText("Alpine Demo Store · Original language: English · sells to 14 countries")).toBeVisible();
+
+  const store = page.locator(labelled("Your store"));
+  await expect(store.getByText("Your store in 2 languages")).toBeVisible();
+  await expect(store.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts are done and live$/ })).toBeVisible();
+  await expect(store.getByText("Where nothing is translated yet, customers see English.")).toBeVisible();
+
+  const next = page.locator('s-section[heading="Next"]');
+  await expect(next.getByText(/^Approve \d+ translations?$/)).toBeVisible();
   await expect(next.locator('s-button[variant="primary"]')).toHaveAttribute("href", "/app/review");
   await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+  // Beneath it, quieter: the outdated text and the country whose language is hidden (Spain).
+  await expect(next.getByText("1 text is outdated")).toBeVisible();
+  await expect(next.getByRole("link", { name: "German: View" })).toHaveAttribute("href", "/app/languages/de");
+  await expect(next.getByText("A language is missing in 1 country")).toBeVisible();
+  await expect(next.locator('s-button[href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
 
-  const languages = page.locator('s-section[heading="Your languages"]');
-  await expect(languages.getByText("translated across your 2 published languages")).toBeVisible();
-  // One line per language: its name leads to what's missing, the bar and share beside it.
-  const french = languages.getByRole("link", { name: /^French, \d+% translated: show what's missing$/ });
-  await expect(french).toBeVisible();
-  await expect(languages.getByRole("img", { name: /^French translated/ })).toBeVisible();
-  await expect(languages.getByText("44%", { exact: true })).toBeVisible();
-  await expect(languages.getByText("Hidden", { exact: true })).toHaveCount(1);
-  await expect(languages.getByRole("listitem")).toHaveCount(3);
-  // Name and share on one line, on a phone too.
-  const german = await languages.getByRole("link", { name: /^German, / }).boundingBox();
-  const share = await languages.getByText("44%", { exact: true }).boundingBox();
-  expect(Math.abs(german!.y + german!.height / 2 - (share!.y + share!.height / 2))).toBeLessThan(8);
+  // Countries first (the markets are known), each card opening the language its customers read.
+  await expect(page.getByRole("heading", { name: "Your customers by country" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Countries", pressed: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^France French/ })).toHaveAttribute("href", "/app/languages/fr");
+  await expect(page.getByRole("link", { name: /^Germany German/ })).toHaveAttribute("href", "/app/languages/de");
+  // Switzerland reads three languages: a row each, the one the store hasn't added not a link.
+  const switzerland = page.locator(labelled("Switzerland"));
+  await expect(switzerland.getByRole("link", { name: /^French/ })).toHaveAttribute("href", "/app/languages/fr");
+  await expect(switzerland.getByRole("link", { name: /^German/ })).toHaveAttribute("href", "/app/languages/de");
+  await expect(switzerland.getByText("not set up")).toBeVisible();
+  await expect(switzerland.getByRole("link")).toHaveCount(2);
+  // Canada reads the original too: marked, nothing to open.
+  await expect(page.locator(labelled("Canada")).getByText("Original")).toBeVisible();
+  await expect(page.locator(labelled("Canada")).getByRole("link")).toHaveCount(1);
+  // Countries without a language of their own, together, with the way to add one.
+  const missing = page.locator(labelled("No language of their own"));
+  await expect(missing.getByText("Czechia")).toBeVisible();
+  await expect(missing.locator('s-button[href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
+  // Spain's language is hidden; the United States read the original; the draft market (Japan) doesn't count.
+  await expect(page.getByRole("link", { name: /^Spain Hidden Customers can't choose Spanish there yet\./ })).toHaveAttribute("href", "/app/languages/es");
+  await expect(page.getByText("Customers here read your original in English. Nothing to do.")).toBeVisible();
+  await expect(page.getByText(/Japan/)).toHaveCount(0);
 
-  const countries = page.locator('s-section[heading="Countries you sell to"]');
-  await expect(countries.getByText(/^Not added to your store: Italian \(Italy, Switzerland\), Dutch \(Netherlands, Belgium\)/)).toBeVisible();
-  await expect(countries.getByText("Added, but hidden from customers: Spanish (Spain)")).toBeVisible();
-  await expect(countries.locator('s-link[href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
-  await expect(countries.getByRole("link", { name: "See all countries" })).toBeVisible();
-  // Links only, no buttons; the draft market (Japan) doesn't count.
-  await expect(countries.locator("s-button")).toHaveCount(0);
-  await expect(countries.getByText(/Japan/)).toHaveCount(0);
+  // The languages view, kept in the address, without loading the page again.
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes(".data")) requests.push(request.url());
+  });
+  await page.getByRole("button", { name: "Languages" }).click();
+  await expect(page.getByRole("button", { name: "Languages", pressed: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your languages" })).toBeVisible();
+  await expect(page).toHaveURL(/[?&]view=languages/);
+  await expect(page.getByRole("link", { name: /^Spanish Hidden/ })).toHaveAttribute("href", "/app/languages/es");
+  expect(requests).toEqual([]);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
 
-test("names the content Linguva can't read beside the share, with the way to allow it @responsive", async ({ page }) => {
+test("names the content Linguva can't read beside the figure, with the way to allow it @responsive", async ({ page }) => {
   // Policies need read_legal_policies, which this store didn't grant.
   await openApp(page, "full", "/app");
-  const languages = page.locator('s-section[heading="Your languages"]');
-  await expect(languages.getByText("Not in these figures: 1 content type Linguva can't read yet.")).toBeVisible();
-  await expect(languages.getByRole("link", { name: "Allow access" })).toHaveAttribute("href", "/app/content/policies");
-  // No language is called fully translated while a content type it counts can't be read.
-  await expect(languages.getByRole("link", { name: /fully translated/ })).toHaveCount(0);
+  const store = page.locator(labelled("Your store"));
+  await expect(store.getByText(/Not in these figures: 1 content type Linguva can't read yet\./)).toBeVisible();
+  await expect(store.getByRole("link", { name: "Allow access" })).toHaveAttribute("href", "/app/content/policies");
+  // No markets access: languages only, and the offer to show countries.
+  await expect(page.getByRole("heading", { name: "Your languages" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow access to markets" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Countries" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^Arabic Hidden/ })).toHaveAttribute("href", "/app/languages/ar");
+  // The running French job, with its language and area.
+  await expect(page.locator(labelled("Running now")).getByRole("link", { name: "French · Products" })).toBeVisible();
+  // Nothing is called done while a content type it counts can't be read.
+  await expect(page.getByText("Everything done")).toHaveCount(0);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -65,58 +101,57 @@ test("the Markets page lists every country with its languages @responsive", asyn
   await expectNoHorizontalScroll(page);
 });
 
-test("a store without a measurement starts it from the Overview, without a progress bar stuck at 0", async ({ page }) => {
+test("a store that was never counted starts counting from the Overview, without a progress bar stuck at 0", async ({ page }) => {
   await openApp(page, "measure", "/app");
-  const next = page.locator('s-section[heading="Next step"]');
+  const next = page.locator('s-section[heading="Next"]');
   await expect(next.getByText("See how much of your store is translated")).toBeVisible();
-  await expect(page.getByText("Percentages appear after the first measurement.")).toBeVisible();
-  await expect(page.getByText("Other languages on your storefront: German")).toBeVisible();
-  await expect(page.locator('s-section[heading="Your languages"]').getByRole("img")).toHaveCount(0);
-  // Markets aren't connected: an offer, not an error.
-  await expect(page.locator('s-section[heading="Countries you sell to"]').getByRole("button", { name: "Show countries" })).toBeVisible();
+  await expect(page.getByText("The percentages appear once your store has been counted.")).toBeVisible();
+  await expect(page.getByText("Customers can choose this language: German")).toBeVisible();
+  // No figures yet, and nothing to count again from the header.
+  await expect(page.getByRole("link", { name: /^German/ })).toHaveAttribute("href", "/app/languages/de");
+  await expect(page.getByRole("button", { name: "Count store again" })).toHaveCount(0);
 
-  await next.getByRole("button", { name: "Measure now" }).click();
+  await next.getByRole("button", { name: "Count now" }).click();
   // The page's live region (the button's own spinner is a status too while it loads).
   const status = next.locator('div[role="status"]');
   await expect(status).toHaveText("Starting…");
   // The button is gone: the focus moved to the status that replaced it.
   await expect(status).toBeFocused();
-  await expect(next.getByRole("button", { name: "Measure now" })).toHaveCount(0);
-  await expect(page.getByRole("progressbar", { name: "Coverage measurement" })).toHaveCount(0);
-  await expect(page.getByText(/Measuring… 0 of/)).toHaveCount(0);
+  await expect(next.getByRole("button", { name: "Count now" })).toHaveCount(0);
+  await expect(page.getByRole("progressbar", { name: "Counting progress" })).toHaveCount(0);
+  await expect(page.getByText(/^Part 0 of/)).toHaveCount(0);
   await expectAccessible(page);
 });
 
-test("a measurement that never started can be started again, in German, without polling @responsive", async ({ page }) => {
+test("a count that never started can be started again, in German, without polling @responsive", async ({ page }) => {
   const requests: string[] = [];
   page.on("request", (request) => {
     if (request.url().includes(".data")) requests.push(request.url());
   });
   await openApp(page, "stalled", "/app", { locale: "de" });
-  const next = page.locator('s-section[heading="Nächster Schritt"]');
-  await expect(next.getByText(/^Die Messung kommt seit .+ nicht voran$/)).toBeVisible();
+  await expect(page.getByText("Stalled Store · Original: Deutsch · verkauft in 28 Ländern")).toBeVisible();
+  const next = page.locator('s-section[heading="Als Nächstes"]');
+  await expect(next.getByText(/^Das Zählen kommt seit .+ nicht voran$/)).toBeVisible();
   // No worker runs in these tests (no heartbeat): the card says so instead of "start it again".
   await expect(next.getByText(/^Hintergrundaufgaben laufen gerade nicht/)).toBeVisible();
-  await expect(next.locator('s-button[variant="primary"]', { hasText: "Erneut messen" })).toHaveCount(1);
+  await expect(next.locator('s-button[variant="primary"]', { hasText: "Neu zählen" })).toHaveCount(1);
   await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
-  // No measuring bar stuck at 0: the only bar on the page is the AI usage in the sidebar.
-  await expect(page.getByRole("progressbar")).toHaveCount(1);
-  await expect(page.getByRole("progressbar", { name: "KI-Nutzung in diesem Monat" })).toHaveCount(1);
-  await expect(page.getByText(/Wird gemessen/)).toHaveCount(0);
+  // No bar stuck at 0 anywhere.
+  await expect(page.getByRole("progressbar")).toHaveCount(0);
 
-  const languages = page.locator('s-section[heading="Deine Sprachen"]');
-  await expect(languages.getByText("Die Prozente erscheinen nach der ersten Messung.")).toBeVisible();
-  const live = languages.getByText(/^Weitere Sprachen im Onlineshop: /);
+  const store = page.locator(labelled("Dein Shop"));
+  await expect(store.getByText("Noch nicht gezählt", { exact: true })).toBeVisible();
+  const live = store.getByText(/^Diese 12 Sprachen können Kunden wählen: /);
   await expect(live).toBeVisible();
-  expect((await live.textContent())!.split(":")[1]!.split(",")).toHaveLength(12);
-  await expect(languages.getByRole("link", { name: "Sprachen verwalten" })).toHaveAttribute("href", "/app/languages");
+  expect((await live.textContent())!.split(": ")[1]!.split(", ")).toHaveLength(12);
 
-  const countries = page.locator('s-section[heading="Länder, in die du verkaufst"]');
-  await expect(countries.getByText("9 ohne ihre Sprache")).toBeVisible();
-  await expect(countries.getByText("19 in ihrer Sprache angeboten")).toBeVisible();
-  await expect(countries.getByText(/^Nicht in deinem Shop: /)).toBeVisible();
-  await expect(countries.getByText(/du kannst also noch 7 hinzufügen\.$/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Produkte" })).toBeVisible();
+  // The countries: nine without their language together, the original ones in one quiet card.
+  await expect(next.getByText("In 9 Ländern fehlt eine Sprache")).toBeVisible();
+  const missing = page.locator(labelled("Keine eigene Sprache"));
+  await expect(missing.getByText("Bulgarien")).toBeVisible();
+  await expect(missing.getByText(/du kannst also noch 7 hinzufügen\.$/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Dänemark Dänisch/ })).toHaveAttribute("href", "/app/languages/da");
+  await expect(page.getByText("Hier lesen Kunden dein Original auf Deutsch. Nichts zu tun.")).toBeVisible();
 
   // Nothing under way: the page doesn't reload itself.
   await page.waitForTimeout(4_000);
@@ -125,19 +160,19 @@ test("a measurement that never started can be started again, in German, without 
   await expectNoHorizontalScroll(page);
 });
 
-test("a stuck newer measurement keeps the figures and can be started again from the languages", async ({ page }) => {
+test("a stuck newer count keeps the figures and can be started again from the header", async ({ page }) => {
   await openApp(page, "remeasure", "/app");
-  const languages = page.locator('s-section[heading="Your languages"]');
-  await expect(languages.getByRole("listitem")).toHaveCount(1);
-  // No worker runs in these tests: the note says so (with a worker: "A newer measurement didn't complete…").
-  await expect(languages.getByText(/^Background jobs aren't running right now/)).toBeVisible();
+  const store = page.locator(labelled("Your store"));
+  await expect(store.getByText("Your store in 1 language")).toBeVisible();
+  // No worker runs in these tests: the note says so (with a worker: "A newer count didn't finish…").
+  await expect(store.getByText(/^Background jobs aren't running right now/)).toBeVisible();
   // A secondary action: the next step keeps the page's only primary button.
   await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
-  await languages.getByRole("button", { name: "Measure again" }).click();
-  const status = languages.locator('div[role="status"]');
+  await page.getByRole("button", { name: "Count store again" }).click();
+  const status = store.locator('div[role="status"]');
   await expect(status).toContainText("Starting…");
   await expect(status).toBeFocused();
-  await expect(languages.getByRole("button", { name: "Measure again" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Count store again" })).toHaveCount(0);
   await expectAccessible(page);
 });
 

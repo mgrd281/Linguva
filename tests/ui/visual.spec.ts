@@ -17,9 +17,12 @@ const PAGES: Array<[string, string]> = [
   ["glossary", "/app/glossary"],
   ["settings", "/app/settings"],
   ["plan", "/app/plan"],
+  ["language", "/app/languages/de"],
+  ["category", "/app/languages/de/products"],
 ];
 
-const DATE = /\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b|\b[A-Z][a-z]{2} \d{1,2}, \d{4}/;
+// With the time and zone where a page shows them ("Oct 30, 2026, 9:15 AM UTC").
+const DATE = /(\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b|\b[A-Z][a-z]{2} \d{1,2}, \d{4})(, \d{1,2}:\d{2}\s?[AP]M UTC)?/;
 
 async function settle(page: Page) {
   // Polaris uses the Inter web font. `document.fonts.ready` doesn't wait for

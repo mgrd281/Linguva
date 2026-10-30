@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { GraphqlQueryError } from "@shopify/shopify-api";
+import { FIXTURE_IMAGE_PATH, FIXTURE_PICTURE_NAMES, type FixturePicture } from "./fixture-images";
 
 interface Field {
   key: string;
@@ -58,10 +59,15 @@ export class FakeShopifyStore {
   readonly translations = new Map<string, { value: string; digest: string }>();
   /** The store's time zone (Settings → General). */
   timeZone = "Europe/Berlin";
-  /** Product media (MediaImage GIDs; null = a video or 3D model). */
-  readonly media = new Map<string, Array<{ id: string; url: string } | null>>();
-  /** Nested image resources of collections and articles, by parent. */
-  readonly nestedImages = new Map<string, Array<{ id: string; type: string }>>();
+  /** Product media (MediaImage GIDs and their pictures; null = a video or 3D model). */
+  readonly media = new Map<string, Array<{ id: string; picture: FixturePicture } | null>>();
+  /** Nested image resources of collections and articles, by parent (the first is the featured image). */
+  readonly nestedImages = new Map<string, Array<{ id: string; type: string; picture: FixturePicture }>>();
+  /**
+   * Origin of image URLs. Pictures load only where something serves them:
+   * the UI test server does (tests/ui/server/preload.ts sets its own origin).
+   */
+  imageOrigin = "https://cdn.example";
   readonly metafields = new Map<
     string,
     Array<{ id: string; namespace: string; key: string; type: string; translatable: boolean; definition: { name: string } | null }>
@@ -119,21 +125,29 @@ export class FakeShopifyStore {
 
   /**
    * Adds an image with alt text to a product (as MediaImage), collection or
-   * article (as a nested image resource). Returns the image's GID.
+   * article (as a nested image resource; the first is its featured image).
+   * The picture defaults to one of the fixtures, by the image's number.
+   * Returns the image's GID.
    */
-  addImage(parentGid: string, alt: string) {
+  addImage(parentGid: string, alt: string, picture?: FixturePicture) {
     const n = ++this.nextSubId;
+    const drawn = picture ?? FIXTURE_PICTURE_NAMES[n % FIXTURE_PICTURE_NAMES.length]!;
     if (parentGid.includes("/Product/")) {
       const id = `gid://shopify/MediaImage/${n}`;
-      this.media.set(parentGid, [...(this.media.get(parentGid) ?? []), { id, url: `https://cdn.example/${n}.jpg` }]);
+      this.media.set(parentGid, [...(this.media.get(parentGid) ?? []), { id, picture: drawn }]);
       this.products.set(id, [{ key: "alt", value: alt, type: "STRING" }]);
       return id;
     }
     const type = parentGid.includes("/Collection/") ? "COLLECTION_IMAGE" : "ARTICLE_IMAGE";
     const id = `gid://shopify/${type === "COLLECTION_IMAGE" ? "CollectionImage" : "ArticleImage"}/${n}`;
-    this.nestedImages.set(parentGid, [...(this.nestedImages.get(parentGid) ?? []), { id, type }]);
+    this.nestedImages.set(parentGid, [...(this.nestedImages.get(parentGid) ?? []), { id, type, picture: drawn }]);
     this.products.set(id, [{ key: "alt", value: alt, type: "STRING" }]);
     return id;
+  }
+
+  /** The URL a picture is served at (see imageOrigin). */
+  imageUrl(picture: FixturePicture) {
+    return `${this.imageOrigin}${FIXTURE_IMAGE_PATH}${picture}.svg`;
   }
 
   /**
@@ -317,8 +331,13 @@ export class FakeShopifyStore {
     if (name === "LinguvaProductMedia") {
       const gid = String(vars.id);
       if (!this.products.has(gid)) return Response.json({ data: { product: null } });
-      const nodes = (this.media.get(gid) ?? []).map((m) => (m ? { id: m.id, image: { url: m.url } } : {}));
+      const nodes = (this.media.get(gid) ?? []).map((m) => (m ? { id: m.id, image: { url: this.imageUrl(m.picture) } } : {}));
       return Response.json({ data: { product: { media: { nodes } } } });
+    }
+    if (name === "LinguvaPreviewNodes") {
+      // nodes(ids:) answers in the order asked, null for an id it doesn't know.
+      const nodes = (vars.ids as string[]).map((id) => this.previewNode(id, String(vars.locale)));
+      return Response.json({ data: { nodes } });
     }
     if (name === "LinguvaTranslatableByIds") {
       const ids = (vars.ids as string[]).filter((id) => this.products.has(id));
@@ -380,6 +399,45 @@ export class FakeShopifyStore {
     }
     throw new Error(`FakeShopifyStore: unsupported operation ${name}`);
   };
+
+  /**
+   * A node as LinguvaPreviewNodes selects it: titles, images and translations
+   * of products, collections, blog posts, pages, blogs and product images,
+   * and the names of custom fields.
+   */
+  private previewNode(gid: string, locale: string) {
+    const type = /^gid:\/\/shopify\/(\w+)\//.exec(gid)?.[1];
+    const metafield = type === "Metafield" ? [...this.metafields.values()].flat().find((m) => m.id === gid) : undefined;
+    if (metafield) return { __typename: "Metafield", id: gid, key: metafield.key, definition: metafield.definition };
+    const fields = this.products.get(gid);
+    if (!type || !fields) return null;
+    const value = (key: string) => fields.find((f) => f.key === key)?.value ?? null;
+    const translations = fields
+      .filter((f) => this.translations.has(`${gid}|${locale}|${f.key}`))
+      .map((f) => ({ key: f.key, value: this.translations.get(`${gid}|${locale}|${f.key}`)!.value }));
+    const featured = (images: ReadonlyArray<{ id: string; picture: FixturePicture } | null> | undefined) => {
+      const first = images?.[0];
+      return first ? { url: this.imageUrl(first.picture), altText: this.products.get(first.id)?.find((f) => f.key === "alt")?.value ?? null } : null;
+    };
+    switch (type) {
+      case "Product": {
+        const media = this.media.get(gid);
+        return { __typename: type, id: gid, title: value("title"), featuredMedia: media?.length ? { preview: { image: featured(media) } } : null, translations };
+      }
+      case "Collection":
+      case "Article":
+        return { __typename: type, id: gid, title: value("title"), image: featured(this.nestedImages.get(gid)), translations };
+      case "Page":
+      case "Blog":
+        return { __typename: type, id: gid, title: value("title"), translations };
+      case "MediaImage": {
+        const entry = [...this.media.values()].flat().find((m) => m?.id === gid);
+        return { __typename: type, id: gid, alt: value("alt"), image: entry ? { url: this.imageUrl(entry.picture), altText: value("alt") } : null, translations };
+      }
+      default:
+        return { __typename: type, id: gid };
+    }
+  }
 
   /** One page of an owner's metafields (id and translatable), in the order they were added. */
   private metafieldPage(ownerGid: string, start: number, first: number) {

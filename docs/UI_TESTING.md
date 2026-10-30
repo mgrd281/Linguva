@@ -11,6 +11,7 @@
 | Database, Redis | **Real**: PostgreSQL with row-level security (runtime role), Redis |
 | Polaris web components | **Real**: `polaris.js` from Shopify's CDN |
 | Shopify Admin API, token exchange, Partner API | **Simulated** by `tests/ui/server/preload.ts`, loaded with `node --import` into the test server only. Any other request to a Shopify host is refused, so the tests can't reach a real store |
+| Store images (Shopify's CDN) | **Simulated**: the simulated stores' images point at the test server, whose preload answers `/__fixtures/img/<name>.svg` with small drawings (`tests/support/fixture-images.ts`; `addImage(parent, alt, picture)` picks one) before the app sees the request. The app adds Shopify's `width` parameter as it does for real images |
 | App Bridge | **Stub** (`tests/ui/helpers.ts`). The real script redirects to the admin outside its iframe. Like App Bridge, the stub adds the session token to the app's requests and records `shopify.loading()` and toasts. The navigation (`s-app-nav`), which the admin renders outside the app, is hidden |
 | AI | Mock provider (`[de] …` pseudo-translations) |
 
@@ -25,7 +26,9 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `ui-nocatalog` | German enabled, no products, no jobs, no drafts |
 | `ui-failing` | Admin API answers 503 for resource queries (Shopify outage) |
 | `ui-owner` | Owner complimentary access (granted by the operator tool in the setup) |
-| `ui-visual` | Fixed content for screenshot comparisons; no test changes it |
+| `ui-visual` | Fixed content for screenshot comparisons (counted once, three product pictures); no test changes it |
+| `ui-catalog` | 55 products (more than one page of an area's list) in every state, counted, with pictures; German is only read, the French tests start a translation |
+| `ui-demo` | A realistic outdoor store (App Store screenshots, Overview by country, language page): a picture for every product and collection, German partly translated, French drafts, markets |
 | `ui-slow` | Shopify answers translation queries only after 20 s (longer than the app's time limit, 3 s in these tests) |
 | `ui-fresh` | Not seeded: installs during the test |
 
@@ -35,7 +38,7 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 |---|---|
 | `install.spec.ts` | Install through token exchange, shop GID stored, tokens encrypted; forged session tokens and cross-store requests get no data |
 | `pages.spec.ts` | Overview, Languages, Products, Editor, Review, Jobs, Plan: content, axe (WCAG 2.1 A/AA, no serious or critical findings), accessible tables, no horizontal scrolling on desktop and phone (`@responsive`) |
-| `states.spec.ts` | Empty states, Shopify outage (clear message, Try again, no internal details), not found, loading state of AI translation, admin loading bar on navigation |
+| `states.spec.ts` | Empty states, Shopify outage (clear message, Try again, no internal details), not found, loading state of AI translation, a language page's examples loading after it and failing without taking the page down, admin loading bar on navigation |
 | `flows.spec.ts` | Translate with AI → edit → publish → read back; history; alt text; Plan page for subscribed, unsubscribed and complimentary stores |
 | `preview.spec.ts` | Rendered HTML in sandboxed frames (editor and Review), live preview with an attack payload that must not run, original and translation side by side (desktop) or stacked (phone), HTML code toggle |
 | `content.spec.ts` | All content overview, menu flow, theme texts with search and pages, permission prompt, invalid references |
@@ -45,10 +48,12 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `keyboard.spec.ts` | Translate, edit and publish with the keyboard only; visible focus; focus on "Stay" when leaving; Review checkboxes with Space |
 | `network.spec.ts` | Hanging Shopify ends in a clear page within the time limit; loading bar on slow navigation; AI translation can't be sent twice |
 | `timings.spec.ts` | Server response times of the main pages (PERFORMANCE.md) |
-| `visual.spec.ts` | Screenshot comparison of 7 pages on desktop and phone (see below) |
+| `language-page.spec.ts` | A language's page: breadcrumb, figure (ring and words), one next step with the page's only primary button (at least 44 px high on a phone), the three steps to live, the areas in the order customers meet them with loaded pictures and alt attributes, "View all" (also on a phone), what the percentage leaves out, the folded words, the confirm dialog (contents, Cancel starts nothing, confirming opens the job), not counted, hidden, no access, unknown and primary language |
+| `category-list.spec.ts` | One area of a language: figure and next step, filter chips that add up to "All", groups by state, rows with pictures, texts and the editor link, filters, paging (50 per page), search that keeps the filter, the confirm dialog, no access, not counted, unknown area or language |
+| `visual.spec.ts` | Screenshot comparison of 9 pages on desktop and phone (see below) |
 | `editor-states.spec.ts` | Every editor field starts with its state; the original description's preview fits its list |
-| `ui-review-screenshots.spec.ts` | On demand (`UI_REVIEW_SCREENSHOTS=<folder>`): full-page screenshots of 10 key screens for the design review (docs/UI_REVIEW.md) |
-| `i18n.spec.ts` | German interface from Shopify's `locale` parameter: 10 pages with axe, phone layout and no English interface text left; navigation stays German inside the app; the target language (`?lang=`) never changes the interface; German error page; browser language without the parameter |
+| `ui-review-screenshots.spec.ts` | On demand (`UI_REVIEW_SCREENSHOTS=<folder>`): full-page screenshots of the key screens for the design review (docs/UI_REVIEW.md) |
+| `i18n.spec.ts` | German interface from Shopify's `locale` parameter: 12 pages (with a language's page and its products) with axe, phone layout and no English interface text left; navigation stays German inside the app; the target language (`?lang=`) never changes the interface; German error page; browser language without the parameter |
 | `job-report.spec.ts` | Job page results by reason, timing and support reference; CSV report in English and German; another store's report is 404 |
 
 `openApp(page, shop, path, { locale: "de" })` opens a page as a German admin user would (Shopify adds `locale` to the app's URL). The app's own language parameter for the translation target is `lang`.
@@ -59,7 +64,7 @@ Polaris web components set ARIA roles through `ElementInternals`, which axe-core
 
 ## Visual comparisons
 
-`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings and Plan pages, desktop and phone, with reference images (up to 1 % of pixels may differ). It uses the `ui-visual` store, waits until the Inter web font is loaded, and replaces dates with a fixed one. Polaris text has no box of its own, so masking can't cover it.
+`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings and Plan pages, a language's page and one of its areas (German, Products), desktop and phone, with reference images (up to 1 % of pixels may differ). It uses the `ui-visual` store, waits until the Inter web font is loaded, and replaces dates (with their time, where a page shows it) with a fixed one. Polaris text has no box of its own, so masking can't cover it.
 
 **CI is the reference.** GitHub's Ubuntu runners render the committed images `tests/ui/visual.spec.ts-snapshots/*-ci.png`. Other machines can render text differently: this development container has Inter installed as a system font, which the browser uses instead of Shopify's web font, with slightly different glyph widths (2–4 % of pixels). So other machines compare against their own `*-local.png` images. Those are created on the first run and not committed.
 

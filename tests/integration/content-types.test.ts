@@ -79,7 +79,14 @@ describe("content overview", () => {
     s.deniedTypes.add("PAYMENT_GATEWAY"); // no documented scope
     const entries = await loadContentHub(s.asAdmin(), ["read_online_store_navigation"]);
     const status = Object.fromEntries(entries.map((e) => [e.type, e.status]));
+    // Every list opens here: the catalog first (it left the navigation).
+    expect(entries.slice(0, 2).map((e) => [e.type, e.path, e.group])).toEqual([
+      ["PRODUCT", "/app/products", "Catalog"],
+      ["COLLECTION", "/app/collections", "Catalog"],
+    ]);
     expect(status).toMatchObject({
+      PRODUCT: "has-content",
+      COLLECTION: "empty",
       MENU: "has-content",
       LINK: "has-content",
       SHOP: "has-content",

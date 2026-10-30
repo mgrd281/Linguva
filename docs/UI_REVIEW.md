@@ -1,6 +1,6 @@
 # UI/UX review and premium improvement plan (phase J)
 
-Status 2026-10-28. Everything here is **Tested Locally** (production build, simulated Shopify, Playwright). Nothing in this document is verified inside the real Shopify admin yet; that is checklist U and V in DEV_STORE_VERIFICATION.md §3.6–3.7.
+Status 2026-10-28; the redesign of 2026-10-30 is §3c. Everything here is **Tested Locally** (production build, simulated Shopify, Playwright). Nothing in this document is verified inside the real Shopify admin yet; that is checklist U and V in DEV_STORE_VERIFICATION.md §3.6–3.7.
 
 Scope agreed with the owner: improve the existing interface with sound product-design principles, **no speculative redesign**. A full competitor-based specification (T Lab, Langify, Transcy screenshots) follows separately; nothing here claims an advantage over them.
 
@@ -88,6 +88,47 @@ An independent review of the deployed page (2026-10-29) found a few states where
 - "Fully translated" no longer appears over content the measurement skipped or over a published language that was never measured; countries count as "in their language" only when their languages are measured; the store-wide figure names how many languages it covers; the primary language appears in the admin's language.
 - While a scan ran, the Coverage page promised it would read a type again that it had already skipped (or whose language it doesn't cover); it now says to scan again once it has finished, and promises a new read only for types still ahead of it.
 
+## 3c. Redesign: five entries, a page per language, areas with pictures (owner request, 2026-10-30, Tested Locally)
+
+The owner: "When I click a country, show each area on its own with product images, in the best order, with a percentage per category. Everything is hard to understand now." The reader is a non-technical store owner who reads German as a second language. Three concepts were designed on a canvas and judged on the merchant's five-second read, on what Polaris and the app's data can honestly show, and on accessibility; the approved design took the best of each. Screenshots (fictional stores, production build): [`ui-review/redesign/`](ui-review/redesign/).
+
+| Before | After | Why |
+|---|---|---|
+| 13 navigation entries (Products, Collections, Coverage, Transfer, Markets, Glossary, Memory, Plan …) | Five: Overview, Content, Review, Jobs, Settings. Products and collections lead under Content; the tools sit in Settings › Tools, each with a one-line explanation | One place per question; nothing became unreachable |
+| A language was a row with a bar; clicking it opened the coverage tables or the product list | A page per language, opened from every language and country: the figure as a ring and in words, what customers see where nothing is translated, up to three numbered next steps with one black button, the three steps to live ("Translate → You approve → Customers see it") | Answers "how far, and what next?" in one look; the strip explains why the percentage rises only after approving |
+| Coverage by Shopify's content types ("Product options", "Metaobjects", "Selling plan groups") | Ten areas in the merchant's words, by tier and why it matters ("What customers see first – this is where people decide to buy"), each with its percentage, bar, states and real examples: the store's product, collection and blog pictures with their translated names, page names, each original beside its translation | Recognition by pictures rather than German words; the areas add up to the language's figure (COVERAGE_RULES §11) |
+| Several names for one state; "prüfen" for both rescanning and approving | One word per state, always with its icon: done, waiting for approval, outdated ("You changed the original – customers still see the old translation"), failed, missing. Rescanning is "count" ("Count store again"); "Review" only means approving | The confusion the owner described |
+| Bulk translation started from a table row without saying what it does | A dialog first: what gets translated (in products and texts), that results wait under Review (or go live with automatic publishing), that own translations stay, the AI characters it may use of what's left | No surprise costs or overwritten work |
+| Product list per type, sorted by product | An area's list: items in groups by their one state (open work first, each group saying what it means), filters that add up to "All", search, the state of each text as a neutral chip with a coloured icon, "Open ›" to the editor | Work order, and counts that add up |
+| Overview: one row per language, a countries summary | The store's figure beside the next step; running jobs; the customers by country (or by language), each card opening its language's page | The owner thinks in countries; one translation serves every country of its language, so the page is per language and names its countries |
+
+Measured on the fictional stores (CSS pixels, full page): the demo store's German page 2,723 px on a desktop (1,280 px wide) and about 2,840 px on a phone (412 px wide, every area with its "View all"); its products list 1,494 px; the list of a 55-product store 6,051 px for a page of 50 items.
+
+| Screen | Desktop | Phone |
+|---|---|---|
+| Overview by country (demo store) | [overview-countries-desktop](ui-review/redesign/overview-countries-desktop.png) | [overview-countries-phone](ui-review/redesign/overview-countries-phone.png) |
+| German, area by area (demo store) | [language-desktop](ui-review/redesign/language-desktop.png) | [language-phone](ui-review/redesign/language-phone.png) |
+| A language not counted yet | [language-not-counted-desktop](ui-review/redesign/language-not-counted-desktop.png) | — |
+| Products in German (demo store) | [category-desktop](ui-review/redesign/category-desktop.png) | [category-phone](ui-review/redesign/category-phone.png) |
+| Products in German, 55 products, paged | [category-list-desktop](ui-review/redesign/category-list-desktop.png) | [category-list-phone](ui-review/redesign/category-list-phone.png) |
+
+Taken with `UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign pnpm test:ui tests/ui/ui-review-screenshots.spec.ts -g "overview-countries|language|category"` (the pattern also takes `coverage-language`, which belongs to §3); phone images scaled to 2× and compressed.
+
+Found and fixed while testing the redesign in the browser:
+- The language page or area list opened for the store's own language redirected to a bare `/app` and left the admin's session (an empty page); it now uses Shopify's redirect, which keeps the embedded app's parameters.
+- When the examples' request failed, React Router showed the page's error screen in place of the whole language page; the examples are now optional (each card says "Names and pictures can't be loaded right now").
+- Examples and list rows came in the database rows' random order, so each count showed other examples and reshuffled the list; both now go by state, then by resource.
+
+Open points:
+1. Rows inside a state group are in the order of Shopify's ids (the same after every count), not by name: names are read live from Shopify and not stored (COVERAGE_RULES §8). Sorting by name would need Shopify's search for every page.
+2. No selection of single items to translate ("Ausgewählte übersetzen" in the canvas): bulk jobs cover a whole content type. Retrying one failed item happens in the editor or through the area's "Translate".
+3. On a phone the first step's button is 44 px high but not full width (the canvas shows it full width); Polaris buttons can't change width by container size.
+4. Collection and blog post image descriptions have no picture (Shopify's translatable resources don't link them to their image).
+5. Seen in the real admin: not yet (checklist U, V) — the flags and Shopify CDN pictures inside the admin frame in particular.
+6. A category with one type Linguva can't read (policies without `read_legal_policies`, menus without `read_online_store_navigation`) shows "Kein Zugriff" instead of its figures, although the texts that were read count in the language's percentage (COVERAGE_RULES §11). Showing the read part plus a "no access" line needs a product decision.
+7. The language page counts open items per bulk type on each load (for the confirm dialog), also while it polls during a job: well within budget at 50,000 products (performance test), but it scales with the catalog. An indexed item state would make it constant.
+8. The confirm dialog's AI-character estimate leaves out image descriptions and custom fields when "Also translate…" is ticked.
+
 ## 4. Tests for the changes
 
 | Change | Test |
@@ -99,6 +140,7 @@ An independent review of the deployed page (2026-10-29) found a few states where
 | Item rows grouped by state | `tests/ui/coverage.spec.ts` ("Outdated: Descriptions") |
 | Four interface languages complete, nothing left in English | `tests/unit/i18n.test.ts`, `tests/unit/i18n-usage.test.ts` |
 | Accessibility (axe WCAG 2.1 AA), no sideways scrolling on phones, touch targets, keyboard | Existing suites on every changed page |
+| Language page and area lists (redesign) | `tests/ui/language-page.spec.ts`, `tests/ui/category-list.spec.ts`, `states.spec.ts` (examples loading and failing), `i18n.spec.ts` (German, French, Spanish), `touch.spec.ts`, `csp.spec.ts`, `visual.spec.ts` (language and category, desktop and phone); areas adding up: `tests/unit/language-categories.test.ts` |
 
 ## 5. Design system rules kept
 

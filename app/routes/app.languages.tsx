@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { MAX_ENABLED_LOCALES } from "../lib/locale-limits";
+import { languagePath } from "../lib/language-categories";
 import { getTranslationProvider } from "../.server/providers";
 import { aiLanguageSupport } from "../.server/providers/language-support";
 import { useI18n } from "../i18n/react";
@@ -56,7 +57,8 @@ export default function Languages() {
             {summary.locales.map((l) => (
               <s-table-row key={l.locale}>
                 <s-table-cell>
-                  {language(l.locale, l.name)}
+                  {/* An additional language opens its own page; the primary one holds the originals. */}
+                  {l.primary ? language(l.locale, l.name) : <s-link href={languagePath(l.locale)}>{language(l.locale, l.name)}</s-link>}
                   {l.rtl ? " (RTL)" : ""}
                 </s-table-cell>
                 <s-table-cell>{l.locale}</s-table-cell>

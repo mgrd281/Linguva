@@ -30,6 +30,20 @@ afterAll(async () => {
 const steps = (o: Awaited<ReturnType<typeof loadOverview>>) => Object.fromEntries(o.checklist.map((s) => [s.id, s.done]));
 
 describe("getting started", () => {
+  it("lists the translations running now, oldest first, with what happens to their results", async () => {
+    const store = new FakeShopifyStore(2);
+    const { shop } = await upsertInstalledShop({ shopDomain: "running.myshopify.com", name: "Running store" }, app);
+    for (const [n, resourceType] of (["PRODUCT", "COLLECTION", "PAGE", "ARTICLE", "BLOG"] as const).entries()) {
+      await createBulkJob({ shopId: shop.id, resourceType, targetLocale: "de", requestedBy: null, idempotencyKey: `run-${n}` }, app);
+    }
+    const overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.shopName).toBe("Running store");
+    expect(overview.activeJobs).toBe(5);
+    // The first four; the Jobs page has them all.
+    expect(overview.jobs.map((j) => j.resourceType)).toEqual(["PRODUCT", "COLLECTION", "PAGE", "ARTICLE"]);
+    expect(overview.jobs[0]).toMatchObject({ locale: "de", done: 0, total: 0, discoveryDone: false, remainingMs: null, publishMode: "DRAFT" });
+  });
+
   it("guides a new store step by step and follows its progress", async () => {
     const store = new FakeShopifyStore(2);
     store.locales = [{ locale: "en", name: "English", primary: true, published: true }];
@@ -125,7 +139,7 @@ describe("percentages from completed measurements only", () => {
     // The headline equals the Coverage page's whole-store figure.
     const summary = await loadCoverageSummary(shop.id, app);
     const whole = storeWide(summary.counts, ["de"]);
-    expect(overview.storeShare).toEqual({ complete: whole.complete, total: whole.total, languages: 1, published: 1 });
+    expect(overview.storeShare).toEqual({ complete: whole.complete, total: whole.total, counts: whole.counts, languages: 1, published: 1, payoff: null });
     expect(overview.next?.id).not.toBe("measure");
   });
 

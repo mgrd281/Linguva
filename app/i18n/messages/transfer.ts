@@ -36,7 +36,7 @@ export const en = {
   "transfer.problem.UNCHANGED": "Same as the current translation.",
   "transfer.problem.STRUCTURE_CHANGED": "The list, links or formatting don't match the original.",
   "transfer.problem.DUPLICATE": "The same field appears twice; the first row was used.",
-  "transfer.noLanguages": "Add a language under Settings → Languages first.",
+  "transfer.noLanguages": "Add a language in Shopify under Settings → Languages first.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -74,7 +74,7 @@ export const de: Translation<typeof en> = {
   "transfer.problem.UNCHANGED": "Gleich wie die aktuelle Übersetzung.",
   "transfer.problem.STRUCTURE_CHANGED": "Liste, Links oder Formatierung passen nicht zum Original.",
   "transfer.problem.DUPLICATE": "Dasselbe Feld kommt doppelt vor; die erste Zeile wurde verwendet.",
-  "transfer.noLanguages": "Füge zuerst unter „Einstellungen“ → „Sprachen“ eine Sprache hinzu.",
+  "transfer.noLanguages": "Füge zuerst in Shopify unter „Einstellungen“ → „Sprachen“ eine Sprache hinzu.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -112,7 +112,7 @@ export const fr: Translation<typeof en> = {
   "transfer.problem.UNCHANGED": "Identique à la traduction actuelle.",
   "transfer.problem.STRUCTURE_CHANGED": "La liste, les liens ou la mise en forme ne correspondent pas à l'original.",
   "transfer.problem.DUPLICATE": "Le même champ apparaît deux fois ; la première ligne a été utilisée.",
-  "transfer.noLanguages": "Ajoutez d'abord une langue dans Paramètres → Langues.",
+  "transfer.noLanguages": "Ajoutez d'abord une langue dans Shopify, sous Paramètres → Langues.",
 };
 
 export const es: Translation<typeof en> = {
@@ -150,5 +150,5 @@ export const es: Translation<typeof en> = {
   "transfer.problem.UNCHANGED": "Igual que la traducción actual.",
   "transfer.problem.STRUCTURE_CHANGED": "La lista, los enlaces o el formato no coinciden con el original.",
   "transfer.problem.DUPLICATE": "El mismo campo aparece dos veces; se usó la primera fila.",
-  "transfer.noLanguages": "Primero agrega un idioma en Configuración → Idiomas.",
+  "transfer.noLanguages": "Primero agrega un idioma en Shopify, en Configuración → Idiomas.",
 };

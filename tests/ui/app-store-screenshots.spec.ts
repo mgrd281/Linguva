@@ -29,8 +29,9 @@ const DESKTOP = [
   { file: "3-outdated.png", path: "/app/products/2?lang=de" },
   { file: "4-review.png", path: "/app/review" },
   { file: "5-glossary.png", path: "/app/glossary" },
-  { file: "6-settings.png", path: "/app/settings", scrollTo: 's-section[heading="Automatic translation"]' },
+  { file: "6-settings.png", path: "/app/settings", scrollTo: "Automatic translation" },
   { file: "7-overview.png", path: "/app" },
+  { file: "9-language.png", path: "/app/languages/de", scrollTo: "Area by area" },
 ];
 
 test.describe("desktop", () => {
@@ -40,7 +41,8 @@ test.describe("desktop", () => {
       test.skip(info.project.name !== "desktop", "Desktop screenshots once");
       await openApp(page, "demo", shot.path);
       await settle(page);
-      if (shot.scrollTo) await page.locator(shot.scrollTo).evaluate((el) => el.scrollIntoView({ block: "start" }));
+      // To a section by its heading (a section's own element has no box to scroll to).
+      if (shot.scrollTo) await page.getByRole("heading", { name: shot.scrollTo, exact: true }).first().evaluate((el) => el.scrollIntoView({ block: "start" }));
       await page.waitForTimeout(200);
       const image = await page.screenshot({ path: `${OUT}/${shot.file}`, animations: "disabled", caret: "hide" });
       expect(image.length).toBeGreaterThan(10_000);

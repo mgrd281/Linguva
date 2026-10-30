@@ -17,7 +17,7 @@ import type { Entitlements } from "../../lib/plans";
 import { upcomingOccurrences } from "../../lib/schedule";
 import { budgetWindows, checkSpec, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_REQUESTED_BY, smartCoverageTypes, smartStatus, type SmartStatus } from "../../lib/smart-auto";
 import { editorPathFor, kindOfGid } from "../../lib/resource-kinds";
-import { listSmartExclusions } from "./config";
+import { excludedAmong, listSmartExclusions } from "./config";
 
 /** What the smart schedule's state depends on beyond its own settings: the same for every page that shows it. */
 export interface SmartContext {
@@ -262,4 +262,46 @@ export function waitsForSmartCheck(note: Pick<SmartCoverageNote, "scope">, item:
     const [group, state] = entry.split(":") as [string, string];
     return note.scope.groups.includes(group) && note.scope.states.includes(state);
   });
+}
+
+/** The listed items the smart schedule translates now or leaves alone (one query each, for the page shown). */
+export async function smartWorkOn(
+  shopId: string,
+  locale: string,
+  items: ReadonlyArray<{ resourceGid: string; parentGid: string | null }>,
+  client: PrismaClient = defaultClient,
+) {
+  const gids = items.map((i) => i.resourceGid);
+  const owners = items.flatMap((i) => (i.parentGid ? [i.parentGid] : []));
+  return withTenant(
+    shopId,
+    async (tx) => {
+      const [active, excluded] = await Promise.all([
+        tx.translationJobItem.findMany({
+          where: { shopId, resourceGid: { in: gids }, status: { in: ["PENDING", "RUNNING"] }, job: { targetLocale: locale, status: { in: ["PENDING", "DISCOVERING", "RUNNING"] } } },
+          select: { resourceGid: true },
+        }),
+        excludedAmong(tx, shopId, [...gids, ...owners]),
+      ]);
+      return { translating: new Set(active.map((a) => a.resourceGid)), excluded };
+    },
+    client,
+  );
+}
+
+export type SmartBadge = "translating" | "excluded" | "waiting";
+
+/**
+ * What the smart schedule does with a listed item (smartWorkOn for the page
+ * shown): translating it now, leaving it alone (also with its owner left
+ * alone), or translating it at its next check.
+ */
+export function smartBadge(
+  work: Awaited<ReturnType<typeof smartWorkOn>>,
+  note: SmartCoverageNote,
+  item: { locale: string; resourceType: string; resourceGid: string; parentGid: string | null; fields: readonly string[] },
+): SmartBadge | null {
+  if (work.translating.has(item.resourceGid)) return "translating";
+  if (work.excluded.has(item.resourceGid) || Boolean(item.parentGid && work.excluded.has(item.parentGid))) return "excluded";
+  return note.nextCheck && waitsForSmartCheck(note, item) ? "waiting" : null;
 }

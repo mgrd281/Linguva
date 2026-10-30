@@ -45,7 +45,7 @@ Already in the app: guided start checklist, usage warnings before limits, plan s
 
 - **Activation target:** at least 40% of installs publish a translation within 3 days. If lower, look at where they stop (Overview checklist steps) and fix that step first.
 - **Conversion to paid:** the free plan (1 language, small AI allowance) shows value; the paid plans unlock more languages, bulk jobs and automatic translation. Prompt the upgrade at the moment of need (second language, "Translate all", automatic translation), which the plan gating already does, and nowhere else.
-- **Trial:** 14 days on paid plans (Shopify's free trial in the Partner Dashboard), so merchants can translate their catalog once before paying.
+- **Trial:** 7 days on Starter, Pro and Business (Shopify's free trial in the Partner Dashboard), with at most 100,000 AI characters while it runs: enough to judge quality, bulk translation and Review on part of the catalog, not a free first pass of the whole store (PRICING_DECISION.md §3.4).
 - **Do not** add pop-ups, email sequences or discounts in this phase: the target group distrusts aggressive upselling (competitors' billing complaints).
 
 ## 4. Week 4 (days 22–30): reviews, learning, next steps

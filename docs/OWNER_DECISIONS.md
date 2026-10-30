@@ -76,5 +76,13 @@ These need a lawyer or a reviewed template; I can draft the technical facts (wha
 | 6.5 | 3–5 beta merchants from your network (not your production stores) | Complimentary access for 60 days |
 | 6.6 | App name in the listing | "Linguva: Translate & Review" |
 | 6.7 | Merge of PR #1 | Only after your review and the dev store checks |
+| 6.8 | Plan page: which languages does a plan's AI cover? The first ones by their English names, or the ones the merchant picks? | Today: the first N by English name (a Starter store with Danish, Dutch, French and German gets no AI for German); the Plan page explains the rule and names the language outside the plan |
+| 6.9 | Content page: a "Translate" button on every area tile? | Today: a tile opens its area's list, where "Translate" starts the AI after a short confirmation. One click more, but one place with one set of buttons |
+| 6.10 | Content page: for content Shopify doesn't let apps read (payment methods, for example), keep the hint to Shopify's own translation app, or only say that Linguva can't read it? | Today: the hint shows; the app's name "Translate & Adapt" appears only on English pages |
+| 6.11 | Content page: a tile with content added since the last count, or not counted completely, says "count the store again", but the page shows no count button then. Add a notice with "Count again" (new texts in four languages), or change the tile's words? | Today: only the words; "Count store again" on the Overview counts the store |
+| 6.12 | Review: a button that approves everything waiting at once, across pages? It would publish texts nobody has looked at | Today: at most one page (about 50 texts, never more than 100), after a question. Keep it |
+| 6.13 | Review: reject after a question, or at once with "Undo" for a few seconds? Undo means a rejected text could come back, which changes the rule that Linguva doesn't translate a rejected original again | Today: a question first ("This can't be undone") |
+| 6.14 | Review on a phone: put the language label above each text box, so rendered texts (descriptions, pages) line up with plain ones? Today the label sits inside the box, 12 px further from a rendered text | Today: inside the box. The change needs a new artboard |
+| 6.15 | Plan page on a wide screen: show "Fits your store" as a band at the top of its card instead of a badge? Cards without a badge keep an empty strip of about 28 px under their icon | Today: a badge, and the strip stays |
 
 Nothing on this list is done automatically: no purchase, no deployment, no connection to a production store, no merge.

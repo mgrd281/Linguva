@@ -70,8 +70,10 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **G3** CSV import with one invalid line → nothing imported, the line is named; export opens safely in a spreadsheet (no formulas).
 
 ### H. Review, history, restore, remove
-- **H1** Review page → filter by language, field group and warnings; search; pagination.
-- **H2** Approve some drafts → published; reject others → not drafted again by the next job.
+- **H1** Review page (redesigned 2026-10-30) after a bulk job with images: one card per product and language with the product's picture from Shopify's CDN, its image descriptions inside; language tabs, area chips that add up to "All areas", "With notes", search while typing, "Next page" / "Back to the start" with more than 50 texts. On a language page, an area's "Review N" link opens Review on exactly those N texts.
+- **H2** Approve one text, then a whole card, then the page ("Approve all", after its dialog) → each text says "Approved" in its place and is live on the storefront. Reject one text in place (after its question) and others with "Reject all" → not published, and not drafted again by the next job.
+- **H6** Edit a text and approve it → published as written, and the editor shows it. Empty a text → it can't be approved. A new web address → approved only after its own question; record whether the old address in that language still opens on the storefront (the question says old links stop working). An invalid one says why.
+- **H7** A hidden (unpublished) language: its tab and cards say "hidden", approving says customers see the texts only after the language is published in Shopify; publish it in Shopify → the texts are live.
 - **H3** Editor history → an earlier version restored and live.
 - **H4** After a source change → restoring the old version is refused with an explanation.
 - **H5** "Remove translation" (two clicks) → storefront shows the source text; the removed value is in the history and can be restored.
@@ -189,7 +191,7 @@ Preparation: the test store on the `business` plan ($0 on development stores, P7
 These run in CI on every push and should pass on the dev store too; the dev store run confirms Shopify's real behaviour:
 
 - `pnpm test:live` (dev store only): API contract (digests, outdated, error codes, handles, removal, images, metafields, markets).
-- `pnpm test:ui` (Playwright, simulated Shopify): A1/A2 install and auth, B1, C1–C3, D1, H1 (content), I1–I2, L-pages, empty and error states, accessibility and phone layout (docs/UI_TESTING.md).
+- `pnpm test:ui` (Playwright, simulated Shopify): A1/A2 install and auth, B1, C1–C3, D1, H1, H2, H6 and H7 (Review), I1–I2, L-pages, empty and error states, accessibility and phone layout (docs/UI_TESTING.md).
 
 ## 2. Beta exit criteria
 

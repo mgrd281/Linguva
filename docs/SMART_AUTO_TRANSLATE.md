@@ -120,7 +120,7 @@ New tenant tables:
 
 Every 60 s the worker runs the tick, as its other periodic work: one worker per minute takes the Redis lock `smart-tick-lock`, and a second one (a deploy overlap) would still start each occurrence once (unique occurrence, per-shop advisory lock). Before deciding, the tick finishes runs whose measurement ended without finishing them (`repairSmartRuns`, also in the 5-minute sweep).
 
-A run's start comes after the commit that created it, so the shop's hint is at most a minute away while a run is QUEUED or WAITING: should the start not get through (a database timeout, a restart), the next tick starts it, also in manual mode, where no schedule would bring the tick back. One function computes the hint for every write of the schedule (the tick, saving, turning on or off, pausing for a stop, resuming, Check now): the next scheduled check, a minute while a run waits or hasn't started, and 15 minutes while paused for the plan or consent, so such a pause lifts soon after its cause, also in manual mode; giving consent lifts a consent pause at once. Saving or resuming never drops a recheck. A run that waited and was paused meanwhile is recorded as SKIPPED (`PAUSED`) instead of started. Each tick:
+A run's start comes after the commit that created it, so the shop's hint is at most a minute away while a run is QUEUED or WAITING: should the start not get through (a database timeout, a restart), the next tick starts it, also in manual mode, where no schedule would bring the tick back. One function computes the hint for every write of the schedule (the tick, saving, turning on or off, pausing for a stop, resuming, Check now): the next scheduled check, a minute while a run waits or hasn't started, and 15 minutes while paused for the plan or consent, so such a pause lifts soon after its cause, also in manual mode; giving consent settles a consent pause at once with the same rule as the tick (it lifts, or another cause it was covering, such as a new primary language, pauses in its place). Saving or resuming never drops a recheck. A run that waited and was paused meanwhile is recorded as SKIPPED (`PAUSED`) instead of started. Each tick:
 
 1. Lists up to 100 ACTIVE `Shop` rows with `smartNextRunAt <= now` (oldest first). It also starts WAITING runs whose blocking measurement has finished.
 2. **Outside any transaction**, per shop, it reads the facts:
@@ -128,7 +128,7 @@ A run's start comes after the commit that created it, so the shop's hint is at m
    - AI consent;
    - the provider;
    - the shop's languages (`currentShopLocales`).
-3. In a tenant transaction with `pg_advisory_xact_lock(hashtextextended('smart:'||shopId, 0))`, it re-reads the config. If the config is no longer due, it fixes the hint and stops. Otherwise it decides:
+3. In a tenant transaction with `pg_advisory_xact_lock(hashtextextended('smart:'||shopId, 0))`, it re-reads the config and settles the pauses with the facts (a cause pauses, a pause whose time passed or whose cause is gone lifts). A shop that was looked at only for a recheck (a waiting run, a pause for the plan or consent) goes no further than that and the waiting run below. When a scheduled check is due, it decides:
    - the merchant's own pause stays as it is: a cause below never replaces it (it would lift with the cause), and it skips the checks anyway;
    - not entitled → pause `PLAN`;
    - no consent → pause `CONSENT`;
@@ -137,7 +137,7 @@ A run's start comes after the commit that created it, so the shop's hint is at m
    - paused → SKIPPED run `PAUSED`;
    - a run already active → SKIPPED run `COALESCED`;
    - otherwise → insert `SmartAutoRun(SCHEDULED, occurrenceAt = nextRunAt)` with `ON CONFLICT DO NOTHING`.
-   In every case it advances `nextRunAt` and `Shop.smartNextRunAt` to `nextOccurrence(spec, now)`.
+   A due check advances `nextRunAt` to `nextOccurrence(spec, now)`. Then a run that waited for a measurement (or whose start didn't get through) is started, or recorded as SKIPPED when the schedule was paused meanwhile, and `Shop.smartNextRunAt` gets the rule above: the earliest of `nextRunAt`, a minute while a run waits and 15 minutes into a pause for the plan or consent.
 4. After the commit it starts the new run (§5.2).
 
 ### 5.2 A run: one full measurement that plans translation while it reads
@@ -159,7 +159,7 @@ A run's start comes after the commit that created it, so the shop's hint is at m
 - Attached content needs no owner lookup. Its "failed" overlay works per resource, too.
 
 **One active job per type and language.** The run's job is found or created under the lock every job creation takes (`job:<shop>:<type>:<locale>`, as `createBulkJob` and real-time checks), so the rule holds for smart checks too:
-- an automatic job (basic, or the smart schedule's real-time one) for the type and language hands over to the run's new job: its items that haven't started move there and run once under the run's rules; what it did earlier stays its own (the run counts and translates only its own work, also a resource the automatic job finished earlier that day). It completes once its running items are done, which keep their resources busy meanwhile;
+- an automatic job (basic, or the smart schedule's real-time one) for the type and language hands over to the run's new job: its items that haven't started move there and run once under the run's rules; what it did earlier stays its own (the run counts and translates only its own work, also a resource the automatic job finished earlier that day). It completes once its running items are done; meanwhile those resources get no item in the new job (the run's planning, a bulk job's discovery and real-time changes all leave them to it), a waiting item already in the new job is never moved there twice, and an item a worker takes after the handover is billed, drafted and counted in the new job;
 - any other active job (a merchant's bulk job, another run's) keeps the type and language, as does a merchant's job that includes the images and custom fields of their owner: the run plans nothing for them, and its counts say what it translated itself. The next check picks up whatever is left;
 - once the run's own job was stopped (Jobs page, a limit), nothing more is added to it.
 
@@ -241,7 +241,7 @@ Usage is reserved with `origin 'smart'` and the run's budgets (§5.4).
 
 ### 5.6 Languages and the primary language
 
-- At every tick, run start, real-time check and smart item, the worker reads the shop's languages (`currentShopLocales`, at most every 5 minutes per process). Targets that are gone or became primary are not translated (the stored choice stays, so a restored language comes back).
+- At every tick, run start, real-time check and smart item, the worker reads the shop's languages (`currentShopLocales`: a copy at most 5 minutes old per process, never treated as "fresh"). Before an item is cancelled for a language that is gone, or the schedule pauses for a new primary language, Shopify is asked again. Targets that are gone or became primary are not translated (the stored choice stays, so a restored language comes back).
 - A primary language different from the config's snapshot pauses with `PRIMARY_LANGUAGE`, and a banner asks the merchant to review the languages. Nothing is deleted or replaced.
 - Shopify's primary language is never changed: the app sends no locale mutation, and `structure.test.ts` pins this.
 - `processItem` refuses a target equal to the resource's source language (`SAME_LANGUAGE`).

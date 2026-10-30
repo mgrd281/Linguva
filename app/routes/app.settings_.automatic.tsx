@@ -10,7 +10,6 @@ import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
-import { retryJobItems } from "../.server/jobs/bulk-jobs";
 import { enqueueCoveragePage, enqueueItems } from "../.server/jobs/queues";
 import { getConfig } from "../.server/lib/config";
 import { prisma } from "../.server/lib/db";
@@ -20,17 +19,16 @@ import { getQueues } from "../.server/queue/client";
 import { getShopSettings, hasCurrentAiConsent } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchShopTimeZone } from "../.server/shopify/shop-time-zone";
-import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled, smartPaused } from "../.server/smart/config";
+import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled } from "../.server/smart/config";
 import { loadSmartPanel, smartContext } from "../.server/smart/panel";
-import { requestSmartRun, settleSmartPause } from "../.server/smart/runs";
+import { requestSmartRun, retrySmartRun } from "../.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsProblem } from "../.server/smart/validate";
-import { withTenant } from "../.server/tenancy/with-tenant";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
 import { smartErrorText, SmartPreview, SmartStateBadge, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
 import { groupLabel, itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
-import { CONTENT_TYPES, isContentType } from "../lib/resource-kinds";
+import { CONTENT_TYPES, isContentType, stillWithoutAccess } from "../lib/resource-kinds";
 import { formatTime, MAX_TIMES_PER_DAY, nextOccurrence, normaliseSchedule, parseTime, WEEKDAYS } from "../lib/schedule";
 import { checkSpec, REALTIME_CHECK_MINUTE, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_PERSONAL_DATA_TYPES, SMART_TYPES } from "../lib/smart-auto";
 
@@ -40,7 +38,7 @@ const MODES = ["realtime", "daily", "weekly", "custom", "manual"] as const;
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => formatTime(i * 15));
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, shop } = await requireShop(request);
+  const { admin, shop, scopes } = await requireShop(request);
   const [settings, locales, billing, shopTimeZone] = await Promise.all([
     getShopSettings(shop.id),
     fetchAndSyncShopLocales(admin, shop.id),
@@ -50,7 +48,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const targets = locales.locales.filter((l) => !l.primary);
   const context = await smartContext(billing, settings, targets.map((l) => l.locale));
   const allowed = context.allowed;
-  const panel = await loadSmartPanel(shop.id, { ...context, shopTimeZone });
+  const measured = await loadSmartPanel(shop.id, { ...context, shopTimeZone });
+  // Access allowed since the last check: the next one reads the type, there is nothing left to do.
+  const granted = measured.noAccess.length ? (await scopes.query()).granted : [];
+  const panel = { ...measured, noAccess: stillWithoutAccess(measured.noAccess, granted) };
   // The shop's zone first (Shopify may spell it differently from Intl), then Intl's list.
   const zones = [...new Set([...(panel.config ? [panel.config.timeZone] : []), ...(shopTimeZone ? [shopTimeZone] : []), "UTC", ...Intl.supportedValuesOf("timeZone")])];
   return {
@@ -175,19 +176,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionRes
     if (!/^[0-9a-f-]{36}$/i.test(runId)) return { ok: false, error: "INVALID" };
     const queues = getQueues();
     if (!queues) return { ok: false, error: "UNAVAILABLE" };
-    // Retried items would only be cancelled while it is off, paused or without consent. A pause
-    // whose cause is gone (shown as on) is lifted first, so this agrees with the page.
-    const config = await settleSmartPause({ prisma, adminFor: async () => admin, billingFor: async () => billing }, shop);
-    if (!config?.enabled || smartPaused(config) || !hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "NOT_ON" };
-    // Only this shop's jobs of that run (read under its tenant).
-    const jobs = await withTenant(shop.id, (tx) => tx.translationJob.findMany({ where: { shopId: shop.id, smartRunId: runId, failedItems: { gt: 0 } }, select: { id: true } }));
-    let count = 0;
-    for (const job of jobs) {
-      const { itemIds } = await retryJobItems(shop.id, job.id);
-      await enqueueItems(queues, shop.id, itemIds, `retry${Date.now()}`);
-      count += itemIds.length;
-    }
-    return { ok: true, done: "retried", count };
+    const round = `retry${Date.now()}`;
+    const retried = await retrySmartRun({ prisma, adminFor: async () => admin, billingFor: async () => billing }, shop, runId, (ids) => enqueueItems(queues, shop.id, ids, round));
+    return retried.ok ? { ok: true, done: "retried", count: retried.count } : retried;
   }
   return { ok: false, error: "INVALID" };
 };
@@ -326,7 +317,7 @@ export default function SmartAutomatic() {
           {panel.noAccess.length ? (
             <s-banner tone="warning" heading={t("automatic.noAccess.heading")}>
               <s-paragraph>
-                {t("automatic.noAccess.body", { types: panel.noAccess.map((type) => kindLabel(i18n, type)).join(", ") })}{" "}
+                {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => kindLabel(i18n, type)), 4) })}{" "}
                 {accessHref ? <s-link href={accessHref}>{t("coverage.types.allowAccess")}</s-link> : null}
               </s-paragraph>
             </s-banner>

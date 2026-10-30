@@ -20,6 +20,7 @@ import type { Entitlements } from "../../lib/plans";
 import { SMART_REQUESTED_BY, type SmartPauseReason } from "../../lib/smart-auto";
 import { lockSmart, nextCheck, refreshDueHint, smartPaused, WAITING_RECHECK_MS } from "./config";
 import { repairSmartRuns } from "./plan";
+import { retryJobItems } from "../jobs/bulk-jobs";
 
 type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -148,6 +149,46 @@ export async function settleSmartPause(
     await deps.prisma.auditLog.createMany({ data: [{ shopId: shop.id, actorType: "SYSTEM", actorId: null, action: "smart_auto.paused", metadata: { reason: settled.paused } }] });
   }
   return settled.config;
+}
+
+/**
+ * Consent was just given (Settings, the editor): a pause for consent ends at
+ * once through the tick's own rule, so a cause it was covering (a new primary
+ * language) pauses in its place. No other pause is touched.
+ */
+export async function settleAfterConsent(
+  deps: Pick<SmartDeps, "prisma" | "adminFor" | "billingFor">,
+  shop: { id: string; shopDomain: string },
+  now = new Date(),
+): Promise<SmartAutoConfig | null> {
+  const config = await withTenant(shop.id, (tx) => tx.smartAutoConfig.findUnique({ where: { shopId: shop.id } }), deps.prisma);
+  if (!config?.enabled || !config.pausedAt || config.pauseReason !== "CONSENT") return config ?? null;
+  return settleSmartPause(deps, shop, now);
+}
+
+/**
+ * Retry of a check's failed items (the smart page): only while the schedule
+ * is on as every page shows it, so a pause whose cause is gone is settled
+ * first; retried items would otherwise only be cancelled again.
+ */
+export async function retrySmartRun(
+  deps: Pick<SmartDeps, "prisma" | "adminFor" | "billingFor">,
+  shop: { id: string; shopDomain: string },
+  runId: string,
+  enqueue: (itemIds: string[]) => Promise<void>,
+  now = new Date(),
+): Promise<{ ok: true; count: number } | { ok: false; error: "NOT_ON" }> {
+  const config = await settleSmartPause(deps, shop, now);
+  if (!config?.enabled || smartPaused(config, now) || !hasCurrentAiConsent(await getShopSettings(shop.id, deps.prisma))) return { ok: false, error: "NOT_ON" };
+  // Only this shop's jobs of that run (read under its tenant).
+  const jobs = await withTenant(shop.id, (tx) => tx.translationJob.findMany({ where: { shopId: shop.id, smartRunId: runId, failedItems: { gt: 0 } }, select: { id: true } }), deps.prisma);
+  let count = 0;
+  for (const job of jobs) {
+    const { itemIds } = await retryJobItems(shop.id, job.id, deps.prisma);
+    await enqueue(itemIds);
+    count += itemIds.length;
+  }
+  return { ok: true, count };
 }
 
 export interface TickSummary {

@@ -26,7 +26,7 @@ import { smartPaused } from "../smart/config";
 import { budgetWindows, SMART_REQUESTED_BY, smartCoverageTypes } from "../../lib/smart-auto";
 import { allowedTargetLocales } from "../billing/subscription";
 import { currentShopLocales, type CurrentLocales } from "../locales/current-locales";
-import { AUTO_REQUESTED_BY, finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
+import { ACTIVE_JOB_STATUSES, AUTO_REQUESTED_BY, finishItem, isBulkResourceType, recordBilled, stopJob, completeIfDone } from "./bulk-jobs";
 import { JobStopError, RateLimitedError } from "./errors";
 import { planResourceWork, scopeKeys } from "./needs-work";
 import { listAttachedResources } from "../shopify/attached-resources";
@@ -170,9 +170,25 @@ export async function runDiscoveryPage(
   const itemIds = await withTenant(
     payload.shopId,
     async (tx) => {
-      const created = gids.length
+      // A resource another active job is still translating (an automatic job finishing its running
+      // items after a handover) gets no second item: it would be translated and billed twice.
+      const busy = gids.length
+        ? await tx.translationJobItem.findMany({
+            where: {
+              shopId: payload.shopId,
+              resourceGid: { in: gids },
+              status: { in: ["PENDING", "RUNNING"] },
+              jobId: { not: job.id },
+              job: { targetLocale: job.targetLocale, status: { in: [...ACTIVE_JOB_STATUSES] } },
+            },
+            select: { resourceGid: true },
+          })
+        : [];
+      const taken = new Set(busy.map((b) => b.resourceGid));
+      const free = gids.filter((gid) => !taken.has(gid));
+      const created = free.length
         ? await tx.translationJobItem.createMany({
-            data: gids.map((resourceGid) => ({ shopId: payload.shopId, jobId: job.id, resourceGid })),
+            data: free.map((resourceGid) => ({ shopId: payload.shopId, jobId: job.id, resourceGid })),
             skipDuplicates: true,
           })
         : { count: 0 };
@@ -235,7 +251,7 @@ export async function processItem(
     return { status: "discarded", reason: "ALREADY_FINISHED" };
   }
 
-  const job = item.job;
+  let job = item.job;
   if (job.status === "CANCELLED" || job.status === "FAILED" || job.cancelRequestedAt) {
     await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: job.errorCode ?? "JOB_CANCELLED" }, deps.prisma);
     return { status: "CANCELLED", errorCode: job.errorCode ?? "JOB_CANCELLED" };
@@ -268,6 +284,20 @@ export async function processItem(
     deps.prisma,
   );
   if (claimed.count === 0) return { status: "discarded", reason: "NOT_CLAIMED" };
+  // A handover (handOverAutomaticJobTx) may have moved the waiting item to the job that took over;
+  // once it runs it stays put, so its job is read again: it is billed and drafted where it is counted.
+  const current = await withTenant(
+    payload.shopId,
+    (tx) => tx.translationJobItem.findFirst({ where: { id: item.id, shopId: payload.shopId }, select: { job: true } }),
+    deps.prisma,
+  );
+  if (current && current.job.id !== job.id) {
+    job = current.job;
+    if (job.status === "CANCELLED" || job.status === "FAILED" || job.cancelRequestedAt) {
+      await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: job.errorCode ?? "JOB_CANCELLED" }, deps.prisma);
+      return { status: "CANCELLED", errorCode: job.errorCode ?? "JOB_CANCELLED" };
+    }
+  }
 
   const settings = await getShopSettings(payload.shopId, deps.prisma);
   if (!hasCurrentAiConsent(settings)) throw new JobStopError("CONSENT_REQUIRED");

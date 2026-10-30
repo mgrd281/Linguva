@@ -15,7 +15,7 @@ vi.hoisted(() => {
 import { PrismaClient } from "@prisma/client";
 import { runCoveragePage, type CoverageDeps, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
 import { createAutoItems } from "../../app/.server/jobs/auto-translate";
-import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
+import { createBulkJob, retryJobItems } from "../../app/.server/jobs/bulk-jobs";
 import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { forgetCurrentLocales } from "../../app/.server/locales/current-locales";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
@@ -28,6 +28,7 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { getOriginUsageSince } from "../../app/.server/usage/usage-ledger";
 import { PLANS } from "../../app/lib/plans";
+import { SMART_REQUESTED_BY } from "../../app/lib/smart-auto";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
 
@@ -177,4 +178,74 @@ describe("a merchant's bulk job taking over the real-time job", () => {
     expect(await job(shop.id, taken.job.id)).toMatchObject({ succeededItems: 3, skippedItems: 0 });
   });
 
+});
+
+describe("while an automatic job finishes what it started", () => {
+  const itemsFor = (shopId: string, gid: string) => withTenant(shopId, (tx) => tx.translationJobItem.findMany({ where: { shopId, resourceGid: gid } }), app);
+
+  it("a merchant's bulk job adds no second item for a product the real-time job is translating", async () => {
+    const { shop, deps, jobs } = await setup(3);
+    const first = await createAutoItems(app, { shopId: shop.id, resourceGid: P(1), resourceType: "PRODUCT" }, deps.billingFor);
+    // Product 1 is being translated right now (claimed by a worker).
+    await withTenant(shop.id, (tx) => tx.translationJobItem.update({ where: { id: first.itemIds[0]! }, data: { status: "RUNNING" } }), app);
+    const taken = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: "bulk-0002" }, app);
+    const page = await runDiscoveryPage(jobs, { shopId: shop.id, jobId: taken.job.id });
+    expect(page.itemIds).toHaveLength(2);
+    expect((await itemsFor(shop.id, P(1))).map((i) => [i.jobId === taken.job.id, i.status])).toEqual([[false, "RUNNING"]]);
+  });
+
+  it("two automatic jobs waiting for the same product hand over one item; Retry of either waits for the new job", async () => {
+    const { shop } = await setup(3);
+    // An older automatic job reopened by Retry beside the day's real-time job: both wait for product 1.
+    const [older, today] = await withTenant(
+      shop.id,
+      async (tx) => {
+        const make = async (key: string) => {
+          const created = await tx.translationJob.create({
+            data: { shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: SMART_REQUESTED_BY, idempotencyKey: key, status: "RUNNING", discoveryDone: true, totalItems: 1 },
+          });
+          await tx.translationJobItem.create({ data: { shopId: shop.id, jobId: created.id, resourceGid: P(1) } });
+          return created;
+        };
+        return [await make("auto-older"), await make("auto-today")];
+      },
+      app,
+    );
+    const taken = await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: "bulk-0003" }, app);
+    expect(taken.created).toBe(true);
+    const items = await itemsFor(shop.id, P(1));
+    expect(items.filter((i) => i.jobId === taken.job.id).map((i) => i.status)).toEqual(["PENDING"]);
+    expect(items.filter((i) => i.jobId !== taken.job.id).map((i) => [i.status, i.errorCode])).toEqual([["SKIPPED", "TAKEN_OVER"]]);
+    for (const old of [older, today]) expect(await job(shop.id, old.id)).toMatchObject({ status: "COMPLETED" });
+    expect(await retryJobItems(shop.id, older.id, app)).toEqual({ itemIds: [], rediscover: false, busy: true });
+  });
+
+  it("bills and drafts an item where it is counted when a handover moved it just before a worker took it", async () => {
+    const { shop, deps, jobs } = await setup(3);
+    const waiting = await createAutoItems(app, { shopId: shop.id, resourceGid: P(2), resourceType: "PRODUCT" }, deps.billingFor);
+    const itemId = waiting.itemIds[0]!;
+    // The worker has read the item (in the real-time job) and waits for the rate limit when the merchant starts a bulk job.
+    let started = false;
+    const racing: JobDependencies = {
+      ...jobs,
+      shopifyLimiter: {
+        take: async () => {
+          if (!started) {
+            started = true;
+            await createBulkJob({ shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "1", idempotencyKey: "bulk-0004" }, app);
+          }
+          return 0;
+        },
+      },
+    };
+    expect(await processItem(racing, { shopId: shop.id, itemId }, 1)).toMatchObject({ status: "SUCCEEDED" });
+    const moved = await item(shop.id, itemId);
+    const bulk = await job(shop.id, moved.jobId);
+    expect(bulk).toMatchObject({ requestedBy: "1", succeededItems: 1 });
+    expect(bulk.charsBilled).toBe(moved.charsBilled);
+    expect(bulk.charsBilled).toBeGreaterThan(0);
+    const draftJobs = await withTenant(shop.id, (tx) => tx.translationDraft.findMany({ where: { shopId: shop.id, resourceGid: P(2) }, select: { jobId: true } }), app);
+    expect(draftJobs.length).toBeGreaterThan(0);
+    expect(new Set(draftJobs.map((d) => d.jobId))).toEqual(new Set([bulk.id]));
+  });
 });

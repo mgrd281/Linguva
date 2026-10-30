@@ -45,15 +45,17 @@ test("AI fills each item of a list; nothing is published until the merchant does
 
 test("Review shows a list of links as a list and approves it as translated", async ({ page }) => {
   await openApp(page, "customFields", "/app/review");
-  const draft = page.locator('s-section[heading*="Guides"]');
-  await expect(draft.locator("s-list-item", { hasText: "[de] Care guide" })).toHaveText("[de] Care guide (https://example.com/care)");
+  // In its product's card, under the product's own texts.
+  const card = page.locator('s-section[accessibilitylabel^="Product 1 jacket"]');
+  const draft = card.locator("li", { hasText: "Extra detail: Guides" });
+  await expect(draft.locator("s-list-item", { hasText: "[de] Care guide" }).first()).toHaveText("[de] Care guide (https://example.com/care)");
   // Approved as shown: no JSON to edit here; single items are changed in the editor.
   await expect(draft.locator("s-text-area")).toHaveCount(0);
   await expect(draft.getByText(/to change single items, open the editor/)).toBeVisible();
   await expectAccessible(page);
 
-  await page.getByRole("button", { name: "Approve and publish selected" }).first().click();
-  await expectToast(page, /^Published: \d+$/);
+  await draft.getByRole("button", { name: "Approve: Extra detail: Guides – Product 1 jacket" }).filter({ visible: true }).click();
+  await expect(draft.getByText("Approved – customers see it now.")).toBeVisible();
   await openApp(page, "customFields", "/app/products/1?lang=de");
   await expect(page.locator('s-text-field[details="Links to https://example.com/care"] input')).toHaveValue("[de] Care guide");
 });

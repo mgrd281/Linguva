@@ -6,33 +6,17 @@
  * left this month. Open it with a button that has `commandFor={id}` and
  * `command="--show"`.
  */
-import { useRef, type ReactNode } from "react";
+import { useRef } from "react";
 import type { BulkEstimate } from "../.server/languages/language-page";
 import { INTL_LOCALE, type I18n } from "../i18n/i18n";
 import { CATEGORIES, type CategoryId } from "../lib/language-categories";
 import { categoryName, ITEM_COUNT_KEYS } from "./CategoryCard";
+import { DialogPoint as Point } from "./DialogPoint";
 
 /** "29 products" for an area of one kind with a count, else the area's name ("Menus & filters"). */
 export function translateWhat(i18n: I18n, category: CategoryId, estimate: BulkEstimate): string {
   const items = ITEM_COUNT_KEYS[category];
   return items && estimate.items ? i18n.t(items, { count: estimate.items }) : categoryName(i18n, category);
-}
-
-// AI characters have one icon in the whole app (gauge, as on the Plan page); wand means "translate with AI".
-type PointIcon = (typeof CATEGORIES)[CategoryId]["icon"] | "clock" | "check-circle" | "shield-check-mark" | "gauge";
-
-function Point({ icon, title, children }: { icon: PointIcon; title: string; children: ReactNode }) {
-  return (
-    <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="start">
-      <s-stack background="subdued" borderRadius="base" inlineSize="32px" blockSize="32px" alignItems="center" justifyContent="center">
-        <s-icon type={icon} color="subdued" />
-      </s-stack>
-      <s-stack direction="block" gap="small-500">
-        <s-text type="strong">{title}</s-text>
-        {children}
-      </s-stack>
-    </s-grid>
-  );
 }
 
 export interface TranslateConfirmProps {
@@ -83,6 +67,7 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
           <Point icon="shield-check-mark" title={t("language.confirm.keep")}>
             <s-text color="subdued">{t("language.confirm.keepDetail")}</s-text>
           </Point>
+          {/* AI characters have one icon in the whole app (gauge, as on the Plan page); wand means "translate with AI". */}
           <Point icon="gauge" title={t("language.confirm.chars")}>
             <s-text color="subdued">
               {estimate.chars !== null ? t("language.confirm.charsDetail", { chars: estimate.chars, remaining: aiRemaining }) : t("language.confirm.charsUnknown", { remaining: aiRemaining })}

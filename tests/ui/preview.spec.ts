@@ -59,6 +59,10 @@ test("Review shows HTML drafts rendered next to the editable translation @respon
   const first = page.frameLocator('iframe[title$=", Description, original"]').first();
   await expect(first.locator("b")).toHaveText("jacket");
   await expect(page.locator('iframe[title$=", Description, translation preview"]').first()).toHaveAttribute("sandbox", "");
+  // The translation is rendered too, without opening the editor: the sanitised draft.
+  const translation = page.frameLocator('iframe[title$=", Description, translation preview"]').first();
+  await expect(translation.locator("body")).toContainText(/^\[fr\] Warm jacket number \d+\.$/);
+  await expect(translation.locator("b")).toHaveText("jacket");
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

@@ -27,7 +27,9 @@ test.describe("empty states", () => {
     await openApp(page, "emptyCatalog", "/app/jobs");
     await expect(page.getByText(/No jobs yet/)).toBeVisible();
     await openApp(page, "emptyCatalog", "/app/review");
-    await expect(page.getByText(/Nothing to review/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "All reviewed" })).toBeVisible();
+    // What to look at instead: the store's languages.
+    await expect(page.getByRole("link", { name: /^German/ })).toHaveAttribute("href", "/app/languages/de");
     await expectAccessible(page);
   });
 });

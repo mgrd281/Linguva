@@ -5,6 +5,7 @@
  */
 import { FakeShopifyStore } from "../../support/fake-store";
 import { buildDemoStore } from "./demo-store";
+import { buildReviewStore, REVIEW_LOCALES } from "./review-store";
 
 export const UI_THEME_GID = "gid://shopify/OnlineStoreThemeJsonTemplate/index?theme_id=42";
 
@@ -417,6 +418,24 @@ export const UI_SHOPS = {
     locales: [en, de],
     plan: "free",
     build: () => new FakeShopifyStore(2),
+  },
+  review: {
+    // Review's own tests (review.spec.ts) on desktop: a German job's texts and more (fixtures/review-store.ts).
+    domain: "ui-review.myshopify.com",
+    gid: "gid://shopify/Shop/91031",
+    name: "Review Test Store",
+    locales: REVIEW_LOCALES,
+    plan: "pro",
+    build: buildReviewStore,
+  },
+  reviewPhone: {
+    // The same for the phone run, so the two runs never decide each other's texts.
+    domain: "ui-review-phone.myshopify.com",
+    gid: "gid://shopify/Shop/91032",
+    name: "Review Phone Store",
+    locales: REVIEW_LOCALES,
+    plan: "pro",
+    build: buildReviewStore,
   },
   fresh: {
     // Never seeded: installs through token exchange in the test.

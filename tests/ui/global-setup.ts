@@ -1,7 +1,7 @@
 /**
  * Seeds the test database for the UI tests: migrations, a clean database,
- * the test shops, AI consent, a completed review-mode bulk job (drafts for
- * the Review page), coverage scans and owner complimentary access. Shopify itself is
+ * the test shops, AI consent, completed review-mode bulk jobs and other
+ * drafts (for the Review page), coverage scans and owner complimentary access. Shopify itself is
  * simulated in the server process (tests/ui/server/preload.ts).
  */
 import { execFileSync } from "node:child_process";
@@ -12,6 +12,7 @@ import { createCoverageReport, runCoveragePage, type CoverageDeps, type Coverage
 import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { upsertTerms } from "../../app/.server/glossary/glossary";
+import { isRtlLocale, syncShopLocales } from "../../app/.server/locales/shop-locales";
 import { saveDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent, setAutoTranslate, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
 import { saveSmartSettings, setSmartEnabled } from "../../app/.server/smart/config";
@@ -21,6 +22,7 @@ import { periodKey } from "../../app/.server/usage/usage-ledger";
 import { testEnv } from "../support/env";
 import { setWorkerRunning } from "./helpers";
 import { DEMO_GLOSSARY, demoDrafts } from "./fixtures/demo-store";
+import { fullArabicDraft, REVIEW_LOCALES, reviewDrafts } from "./fixtures/review-store";
 import { UI_SHOPS } from "./fixtures/shops";
 
 export default async function globalSetup() {
@@ -41,7 +43,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "smartDowngraded"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "smartDowngraded", "review", "reviewPhone"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -60,6 +62,24 @@ export default async function globalSetup() {
     );
     const page = await runDiscoveryPage({ ...deps, discoveryPageSize: 8 }, { shopId: ids.full!, jobId: job.id });
     for (const itemId of page.itemIds) await processItem(deps, { shopId: ids.full!, itemId }, 1);
+    // One Arabic text (a language customers can't choose yet): Review's language tabs, hidden marker and right to left.
+    await saveDrafts(ids.full!, [fullArabicDraft()], app);
+
+    // Review's own stores (review.spec.ts), one per project: a finished German job with pictures and a
+    // custom field, and the texts beside it (fixtures/review-store.ts).
+    for (const key of ["review", "reviewPhone"] as const) {
+      const reviewStore = UI_SHOPS[key].build();
+      const reviewDeps: JobDependencies = { ...deps, adminFor: async () => reviewStore.asAdmin() };
+      const { job: reviewJob } = await createBulkJob(
+        { shopId: ids[key]!, resourceType: "PRODUCT", targetLocale: "de", requestedBy: null, idempotencyKey: `ui-seed-${key}-de`, includeAttached: true },
+        app,
+      );
+      const reviewPage = await runDiscoveryPage(reviewDeps, { shopId: ids[key]!, jobId: reviewJob.id });
+      for (const itemId of reviewPage.itemIds) await processItem(reviewDeps, { shopId: ids[key]!, itemId }, 1);
+      await saveDrafts(ids[key]!, reviewDrafts(reviewJob.id), app);
+      // As after the merchant's first visit: the store's languages are known (names, which are hidden).
+      await syncShopLocales(ids[key]!, REVIEW_LOCALES.map((l) => ({ ...l, rtl: isRtlLocale(l.locale) })), app);
+    }
 
     // The demo store (App Store screenshots): French drafts, glossary, automatic translation on.
     await saveDrafts(ids.demo!, demoDrafts(), app);
@@ -216,7 +236,7 @@ export default async function globalSetup() {
     for (const itemId of fieldsPage.itemIds) await processItem(fieldsDeps, { shopId: ids.customFields!, itemId }, 1);
 
     // A finished coverage scan (after the drafts above, so they show as drafts).
-    for (const key of ["full", "demo", "remeasure", "catalog", "visual"] as const) {
+    for (const key of ["full", "demo", "remeasure", "catalog", "visual", "review", "reviewPhone"] as const) {
       const shopStore = UI_SHOPS[key].build();
       const coverageDeps: CoverageDeps = { prisma: app, adminFor: async () => shopStore.asAdmin(), keyPrefix: "lv:ui-test" };
       const locales = UI_SHOPS[key].locales.filter((l) => !l.primary).map((l) => l.locale);

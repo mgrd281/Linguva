@@ -20,12 +20,15 @@ import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import type { TranslationProvider, TranslationRequest } from "../../app/.server/providers/types";
 import {
   approveDrafts,
+  approveDraftsDetailed,
   draftToken,
   pendingDraftDigests,
   rejectDrafts,
+  rejectDraftsDetailed,
   saveDrafts,
   type DraftInput,
 } from "../../app/.server/review/drafts";
+import { createCoverageReport, runCoveragePage, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
 import { setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
@@ -217,5 +220,193 @@ describe("fields the checks refused", () => {
       ["body_html", "REJECTED"],
       ["title", "PENDING"],
     ]);
+  });
+});
+
+/** Two products and a list custom field on the first, with German drafts the page shows (tokens). */
+async function reviewSetup() {
+  const { shop } = await upsertInstalledShop({ shopDomain: "outcomes.myshopify.com" }, app);
+  const store = new FakeShopifyStore(2);
+  const list = store.addMetafield(P1, { namespace: "custom", key: "features", type: "list.single_line_text_field", value: '["Warm","Waterproof"]' });
+  const digest = (gid: string, key: string) => createHash("sha256").update(store.products.get(gid)!.find((f) => f.key === key)!.value).digest("hex");
+  const input = (gid: string, key: string, value: string, extra: Partial<DraftInput> = {}): DraftInput => ({
+    jobId: null,
+    resourceGid: gid,
+    resourceTitle: "Product jacket",
+    locale: "de",
+    key,
+    sourceDigest: digest(gid, key),
+    sourceValue: store.products.get(gid)!.find((f) => f.key === key)!.value,
+    value,
+    segmentPairs: [],
+    issues: [],
+    provider: "mock",
+    currentDigest: "none",
+    ...extra,
+  });
+  const shown = async () => {
+    const all = await drafts(shop.id);
+    return { all, tokens: new Map(all.map((d) => [d.id, draftToken(d)])), byKey: (gid: string, key: string) => all.find((d) => d.resourceGid === gid && d.key === key)! };
+  };
+  return { shop, store, list, input, shown };
+}
+
+const P2 = "gid://shopify/Product/2";
+
+describe("approving says what happened to each text", () => {
+  it("refuses an emptied text (EMPTY_TRANSLATION): nothing is published and the draft keeps waiting", async () => {
+    const { shop, store, input, shown } = await reviewSetup();
+    await saveDrafts(shop.id, [input(P1, "title", "Produkt 1 Jacke")], app);
+    const { all, tokens } = await shown();
+    const result = await approveDraftsDetailed({ admin: store.asAdmin(), shopId: shop.id, actorId: "1", draftIds: [all[0]!.id], tokens, edits: new Map([[all[0]!.id, "   "]]) }, app);
+    expect(result).toMatchObject({ published: 0, stale: 0, failed: 1, changed: 0, outcomes: [{ id: all[0]!.id, status: "failed", reason: "EMPTY_TRANSLATION" }] });
+    expect(store.translationOf(P1, "de", "title")).toBeUndefined();
+    expect((await drafts(shop.id))[0]).toMatchObject({ status: "PENDING", value: "Produkt 1 Jacke" });
+  });
+
+  it("names the reason per text: original changed, another translation saved, item gone, structure changed, another version", async () => {
+    const { shop, store, list, input, shown } = await reviewSetup();
+    await saveDrafts(
+      shop.id,
+      [
+        input(P1, "title", "Produkt 1 Jacke"),
+        input(P1, "body_html", "<p>Warme <b>Jacke</b> Nummer 1.</p>"),
+        input(list, "value", '["Warm"]', { parentGid: P1, valueType: "LIST_SINGLE_LINE_TEXT_FIELD" }),
+        input(P2, "title", "Produkt 2 Jacke"),
+        input(P2, "body_html", "<p>Warme <b>Jacke</b> Nummer 2.</p>"),
+      ],
+      app,
+    );
+    await saveDrafts(
+      shop.id,
+      [{ ...input(P1, "title", "Weg"), resourceGid: "gid://shopify/Product/99", sourceDigest: "x".repeat(64), sourceValue: "Gone jacket" }],
+      app,
+    );
+    const { all, tokens, byKey } = await shown();
+    // Meanwhile: the original of one title changes, someone saves a description, product 99 never existed.
+    store.updateSource(P1, "title", "Product 1 jacket, waterproof");
+    store.translate(P1, "de", "body_html", "<p>Von Hand.</p>");
+    const forged = byKey(P2, "body_html").id;
+    tokens.set(forged, "forged");
+
+    const result = await approveDraftsDetailed({ admin: store.asAdmin(), shopId: shop.id, actorId: "1", draftIds: all.map((d) => d.id), tokens }, app);
+    const outcome = (id: string) => result.outcomes.find((o) => o.id === id);
+    expect(outcome(byKey(P1, "title").id)).toEqual({ id: byKey(P1, "title").id, status: "stale", reason: "SOURCE_CHANGED" });
+    expect(outcome(byKey(P1, "body_html").id)).toEqual({ id: byKey(P1, "body_html").id, status: "stale", reason: "TRANSLATION_CHANGED" });
+    expect(outcome(byKey(list, "value").id)).toEqual({ id: byKey(list, "value").id, status: "failed", reason: "STRUCTURE_CHANGED" });
+    expect(outcome(byKey("gid://shopify/Product/99", "title").id)).toMatchObject({ status: "stale", reason: "RESOURCE_GONE" });
+    expect(outcome(byKey(P2, "title").id)).toEqual({ id: byKey(P2, "title").id, status: "published" });
+    expect(outcome(forged)).toEqual({ id: forged, status: "changed" });
+    expect(result).toMatchObject({ published: 1, stale: 3, failed: 1, changed: 1 });
+    expect(result.outcomes).toHaveLength(all.length);
+    // Stale texts are retired, failed and changed ones keep waiting.
+    const after = await shown();
+    expect(after.byKey(P1, "title").status).toBe("STALE");
+    expect(after.byKey(list, "value").status).toBe("PENDING");
+    expect(after.byKey(P2, "body_html").status).toBe("PENDING");
+    expect(store.translationOf(P1, "de", "body_html")).toBe("<p>Von Hand.</p>");
+  });
+
+  it("keeps what Shopify published before it stopped answering, and leaves the rest waiting (504)", async () => {
+    const { shop, store, input, shown } = await reviewSetup();
+    store.locales = [
+      { locale: "en", name: "English", primary: true, published: true },
+      { locale: "de", name: "German", primary: false, published: true },
+    ];
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["de"], requestedBy: null, idempotencyKey: "outcomes-measure" }, app);
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage({ prisma: app, adminFor: async () => store.asAdmin(), keyPrefix: "lv:test:outcomes" }, next);
+    await saveDrafts(shop.id, [input(P1, "title", "Produkt 1 Jacke"), input(P2, "title", "Produkt 2 Jacke")], app);
+    const { all, tokens } = await shown();
+    const draftKeys = async () =>
+      Object.fromEntries(
+        (await withTenant(shop.id, (tx) => tx.coverageItem.findMany({ where: { shopId: shop.id, resourceGid: { in: [P1, P2] } }, select: { resourceGid: true, draftKeys: true } }), app)).map((i) => [i.resourceGid, i.draftKeys]),
+      );
+    expect(await draftKeys()).toEqual({ [P1]: ["title"], [P2]: ["title"] });
+
+    // The first product's read and write go through; the next read times out.
+    let calls = 0;
+    const admin = {
+      graphql: async (query: string, options?: { variables?: Record<string, unknown> }) => {
+        if (++calls === 3) throw new Response("Shopify took too long to respond.", { status: 504 });
+        return store.graphql(query, options);
+      },
+    } as unknown as ReturnType<FakeShopifyStore["asAdmin"]>;
+    const result = await approveDraftsDetailed({ admin, shopId: shop.id, actorId: "1", draftIds: all.map((d) => d.id), tokens }, app);
+    expect(result).toMatchObject({ published: 1, stale: 0, failed: 1, changed: 0 });
+    const published = result.outcomes.find((o) => o.status === "published")!;
+    const unsent = result.outcomes.find((o) => o.status === "failed")!;
+    expect(unsent).toMatchObject({ status: "failed", reason: "SHOPIFY_UNAVAILABLE" });
+    const sentGid = all.find((d) => d.id === published.id)!.resourceGid;
+    const unsentGid = all.find((d) => d.id === unsent.id)!.resourceGid;
+    expect(store.translationOf(sentGid, "de", "title")).toBeDefined();
+    expect(store.translationOf(unsentGid, "de", "title")).toBeUndefined();
+    const after = await shown();
+    // Saving the field retired its draft (STALE, as every save does); either way it no longer waits.
+    expect(after.all.find((d) => d.id === published.id)!.status).not.toBe("PENDING");
+    expect(after.all.find((d) => d.id === unsent.id)!.status).toBe("PENDING");
+    // The language figures follow what was published; the unsent text still counts as waiting.
+    expect(await draftKeys()).toEqual({ [sentGid]: [], [unsentGid]: ["title"] });
+  });
+});
+
+describe("rejecting", () => {
+  it("returns the texts it rejected and keeps one audit entry without any text", async () => {
+    const { shop, input, shown } = await reviewSetup();
+    await saveDrafts(shop.id, [input(P1, "title", "Produkt 1 Jacke"), input(P2, "title", "Produkt 2 Jacke"), { ...input(P2, "body_html", "<p>Jaqueta</p>"), locale: "pt-BR" }], app);
+    const { all, tokens } = await shown();
+    // The Portuguese text changed since the page showed it: left alone.
+    const changed = all.find((d) => d.locale === "pt-BR")!;
+    tokens.set(changed.id, "forged");
+    const { rejected } = await rejectDraftsDetailed(shop.id, all.map((d) => d.id), "7", app, tokens);
+    expect(rejected.sort()).toEqual(all.filter((d) => d.locale === "de").map((d) => d.id).sort());
+    const [, audit] = await ownerDb.$transaction([
+      ownerDb.$executeRaw`SELECT set_config('app.shop_id', ${shop.id}, true)`,
+      ownerDb.auditLog.findMany({ where: { shopId: shop.id, action: "drafts.rejected" } }),
+    ]);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ actorType: "MERCHANT_USER", actorId: "7", metadata: { count: 2, locales: ["de"] } });
+    expect(JSON.stringify(audit[0]!.metadata)).not.toMatch(/Jacke|Product/);
+    // Nothing left to reject: no entry.
+    expect((await rejectDraftsDetailed(shop.id, [rejected[0]!], "7", app)).rejected).toEqual([]);
+  });
+});
+
+describe("new web addresses (URL handles)", () => {
+  it("are published only after the merchant confirmed, and only valid ones", async () => {
+    const { shop, store, input, shown } = await reviewSetup();
+    await saveDrafts(shop.id, [input(P1, "handle", "produkt-1-jacke", { provider: "csv" }), input(P1, "title", "Produkt 1 Jacke")], app);
+    const { tokens, byKey } = await shown();
+    const handle = byKey(P1, "handle").id;
+    const title = byKey(P1, "title").id;
+
+    const unconfirmed = await approveDraftsDetailed({ admin: store.asAdmin(), shopId: shop.id, actorId: "1", draftIds: [handle, title], tokens, handles: { confirmed: new Set() } }, app);
+    expect(unconfirmed.outcomes).toEqual(
+      expect.arrayContaining([
+        { id: handle, status: "failed", reason: "HANDLE_NOT_CONFIRMED" },
+        { id: title, status: "published" },
+      ]),
+    );
+    expect(store.translationOf(P1, "de", "handle")).toBeUndefined();
+    expect((await shown()).byKey(P1, "handle").status).toBe("PENDING");
+
+    const invalid = await approveDraftsDetailed(
+      { admin: store.asAdmin(), shopId: shop.id, actorId: "1", draftIds: [handle], tokens, edits: new Map([[handle, "Neue Jacke"]]), handles: { confirmed: new Set([handle]) } },
+      app,
+    );
+    expect(invalid.outcomes).toEqual([{ id: handle, status: "failed", reason: "HANDLE_INVALID", detail: expect.any(String) }]);
+    expect(store.translationOf(P1, "de", "handle")).toBeUndefined();
+
+    const confirmed = await approveDraftsDetailed({ admin: store.asAdmin(), shopId: shop.id, actorId: "1", draftIds: [handle], tokens, handles: { confirmed: new Set([handle]) } }, app);
+    expect(confirmed.outcomes).toEqual([{ id: handle, status: "published" }]);
+    expect(store.translationOf(P1, "de", "handle")).toBe("produkt-1-jacke");
+  });
+
+  it("are approved like any text without the option (other callers, as before)", async () => {
+    const { shop, store, input, shown } = await reviewSetup();
+    await saveDrafts(shop.id, [input(P1, "handle", "produkt-1-jacke", { provider: "csv" })], app);
+    const { all, tokens } = await shown();
+    expect(await approveDrafts({ admin: store.asAdmin(), shopId: shop.id, actorId: "1", draftIds: [all[0]!.id], tokens }, app)).toEqual({ published: 1, stale: 0, failed: 0, changed: 0 });
+    expect(store.translationOf(P1, "de", "handle")).toBe("produkt-1-jacke");
   });
 });

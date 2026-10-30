@@ -2,7 +2,9 @@
  * The coverage dashboard and its drill-down on the production build, with
  * the scan seeded in global-setup (full store: German partly translated and
  * partly outdated, French AI drafts waiting, Arabic unpublished, theme texts,
- * policies without access).
+ * policies without access). The drill-down's exact figures come from a store
+ * no other test changes (coverageItems: German like the full store's
+ * products), so they hold in any order of the specs.
  */
 import { expect, test } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
@@ -69,7 +71,7 @@ test("by content type: excluded, unavailable and empty types are told apart", as
 });
 
 test("a number opens the exact items behind it, filtered and paged", async ({ page }) => {
-  await openApp(page, "full", "/app/coverage?lang=de");
+  await openApp(page, "coverageItems", "/app/coverage?lang=de");
   const legend = page.locator('s-section[heading="Languages"] s-box', { has: page.getByRole("heading", { name: "German" }) });
   await legend.getByRole("link", { name: /^Outdated: \d+ fields?/ }).click();
   await expect(page).toHaveURL(/\/app\/coverage\/items\?lang=de&state=outdated/);
@@ -82,7 +84,7 @@ test("a number opens the exact items behind it, filtered and paged", async ({ pa
   await expect(rows.first().getByRole("link", { name: "Product 2 jacket" })).toHaveAttribute("href", "/app/products/2?lang=de");
 
   // Missing titles of products, paged 50 at a time; search by title.
-  await openApp(page, "full", "/app/coverage/items?lang=de&type=PRODUCT&group=title&state=missing");
+  await openApp(page, "coverageItems", "/app/coverage/items?lang=de&type=PRODUCT&group=title&state=missing");
   await expect(rows).toHaveCount(20);
   await page.getByRole("searchbox", { name: "Search titles" }).fill("product 25");
   await page.getByRole("button", { name: "Show" }).click();

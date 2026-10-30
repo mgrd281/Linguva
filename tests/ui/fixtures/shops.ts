@@ -229,6 +229,23 @@ export const UI_SHOPS = {
       return store;
     },
   },
+  coverageItems: {
+    // The coverage drill-down's own store (coverage.spec.ts), counted once: German like the full store's
+    // products (titles on 1–10, Product 2's description changed after it was translated). Only read: the
+    // full store's German is published into by other tests, which changed the drill-down's figures.
+    domain: "ui-coverage-items.myshopify.com",
+    gid: "gid://shopify/Shop/91033",
+    name: "Coverage Items Store",
+    locales: [en, de],
+    plan: "pro",
+    build() {
+      const store = new FakeShopifyStore(30);
+      for (let i = 1; i <= 10; i++) store.translate(`gid://shopify/Product/${i}`, "de", "title", `Produkt ${i} Jacke`);
+      store.translate("gid://shopify/Product/2", "de", "body_html", "<p>Warme <b>Jacke</b> Nummer 2.</p>");
+      store.updateSource("gid://shopify/Product/2", "body_html", "<p>Very warm <b>jacket</b> number 2.</p>");
+      return store;
+    },
+  },
   customFields: {
     // A German job with custom fields: a list of links waits on Review.
     domain: "ui-fields.myshopify.com",

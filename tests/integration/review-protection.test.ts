@@ -33,6 +33,7 @@ import { setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { removeTranslation } from "../../app/.server/translation/history";
+import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
 import { ANY_SOURCE } from "../../app/.server/jobs/needs-work";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
@@ -342,11 +343,67 @@ describe("approving says what happened to each text", () => {
     expect(store.translationOf(sentGid, "de", "title")).toBeDefined();
     expect(store.translationOf(unsentGid, "de", "title")).toBeUndefined();
     const after = await shown();
-    // Saving the field retired its draft (STALE, as every save does); either way it no longer waits.
-    expect(after.all.find((d) => d.id === published.id)!.status).not.toBe("PENDING");
-    expect(after.all.find((d) => d.id === unsent.id)!.status).toBe("PENDING");
+    expect(after.all.find((d) => d.id === published.id)).toMatchObject({ status: "PUBLISHED", reviewedBy: "1" });
+    expect(after.all.find((d) => d.id === unsent.id)).toMatchObject({ status: "PENDING", reviewedAt: null });
     // The language figures follow what was published; the unsent text still counts as waiting.
     expect(await draftKeys()).toEqual({ [sentGid]: [], [unsentGid]: ["title"] });
+  });
+
+  it("records every approved text as published, with who approved it and when", async () => {
+    const { shop, store, input, shown } = await reviewSetup();
+    await saveDrafts(
+      shop.id,
+      [input(P1, "title", "Produkt 1 Jacke"), input(P2, "title", "Produkt 2 Jacke"), input(P2, "body_html", "<p>Warme <b>Jacke</b> Nummer 2.</p>", { provider: "csv" })],
+      app,
+    );
+    const { all, tokens, byKey } = await shown();
+    const started = Date.now();
+    const result = await approveDraftsDetailed(
+      { admin: store.asAdmin(), shopId: shop.id, actorId: "7", draftIds: all.map((d) => d.id), tokens, edits: new Map([[byKey(P2, "title").id, "Jacke Nummer 2"]]) },
+      app,
+    );
+    expect(result).toMatchObject({ published: 3, stale: 0, failed: 0, changed: 0 });
+    expect(store.translationOf(P2, "de", "title")).toBe("Jacke Nummer 2");
+    // As it is, edited, and a person's (CSV import): each one is published, not retired as outdated.
+    const after = await shown();
+    for (const draft of after.all) {
+      expect(draft).toMatchObject({ status: "PUBLISHED", reviewedBy: "7" });
+      expect(draft.reviewedAt?.getTime()).toBeGreaterThanOrEqual(started);
+    }
+  });
+
+  it("leaves a newer version waiting when it replaced the approved one while Shopify saved it", async () => {
+    const { shop, store, input, shown } = await reviewSetup();
+    await saveDrafts(shop.id, [input(P1, "title", "Produkt 1 Jacke")], app);
+    const { all, tokens } = await shown();
+    // While Shopify saves the approved version, a CSV import replaces the draft with a newer one.
+    const admin = {
+      graphql: async (query: string, options?: { variables?: Record<string, unknown> }) => {
+        const response = await store.graphql(query, options);
+        if (/mutation\s+LinguvaTranslationsRegister\b/.test(query)) {
+          await new Promise((r) => setTimeout(r, 5));
+          await saveDrafts(shop.id, [input(P1, "title", "Unsere Jacke Nr. 1", { provider: "csv" })], app);
+        }
+        return response;
+      },
+    } as unknown as ReturnType<FakeShopifyStore["asAdmin"]>;
+    const result = await approveDraftsDetailed({ admin, shopId: shop.id, actorId: "7", draftIds: [all[0]!.id], tokens }, app);
+    expect(result.outcomes).toEqual([{ id: all[0]!.id, status: "published" }]);
+    expect(store.translationOf(P1, "de", "title")).toBe("Produkt 1 Jacke");
+    // Nobody has seen the newer version yet: neither published nor retired, it waits for review.
+    expect((await shown()).all).toEqual([expect.objectContaining({ status: "PENDING", value: "Unsere Jacke Nr. 1", reviewedAt: null })]);
+  });
+
+  it("still retires a field's waiting draft when a translation is saved in the editor (no approval)", async () => {
+    const { shop, store, input, shown } = await reviewSetup();
+    await saveDrafts(shop.id, [input(P1, "title", "Produkt 1 Jacke")], app);
+    const [draft] = (await shown()).all;
+    const outcomes = await saveResourceTranslations(
+      { admin: store.asAdmin(), shopId: shop.id, actorId: "7", resourceId: P1, locale: "de", edits: [{ key: "title", value: "Jacke von Hand", digest: draft!.sourceDigest, origin: "MANUAL", approved: true }] },
+      app,
+    );
+    expect(outcomes).toEqual([{ key: "title", status: "saved" }]);
+    expect((await shown()).all).toEqual([expect.objectContaining({ status: "STALE", reviewedAt: null, reviewedBy: null })]);
   });
 });
 

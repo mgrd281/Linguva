@@ -544,6 +544,8 @@ export async function approveDraftsDetailed(input: ApproveDraftsInput, client: P
               ...(d.currentDigest ? { expectedCurrent: d.currentDigest } : {}),
             };
           }),
+          // Recorded below as published (not retired as outdated), only in the version read here.
+          publishing: group.map((d) => d.id),
         },
         client,
       );

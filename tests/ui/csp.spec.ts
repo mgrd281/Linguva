@@ -56,6 +56,10 @@ test("the app works under the policy and nothing is blocked", async ({ page }) =
   await expect.poll(() => page.locator('img[src^="/flags/"]').evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.naturalWidth > 0))).toBe(true);
   await openApp(page, "catalog", "/app/languages/de/products");
   await expect(page.getByRole("navigation", { name: "Show" })).toBeVisible();
+  // The Content page: its tiles' pictures (the language's previews) and the chips' flags.
+  await openApp(page, "demo", "/app/content");
+  await expect.poll(() => page.locator('img[src*="/__fixtures/img/"]').evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.complete && img.naturalWidth > 0))).toBe(true);
+  await expect.poll(() => page.locator('img[src^="/flags/"]').evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.naturalWidth > 0))).toBe(true);
 
   expect(await violations()).toEqual([]);
 });

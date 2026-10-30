@@ -33,6 +33,16 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     },
   },
   {
+    name: "Content",
+    path: "/app/content",
+    check: async (page) => {
+      // Area by area, each a link with its figure; one primary button, for the missing permission.
+      await expect(page.getByRole("link", { name: /^Products: \d+% translated\. / })).toBeVisible();
+      await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+      await expect(page.locator('s-button[variant="primary"]')).toHaveText("Allow access");
+    },
+  },
+  {
     name: "Products",
     path: "/app/products?lang=de",
     check: async (page) => {

@@ -60,6 +60,16 @@ Not measured: real Shopify and DeepL latency and limits, several worker processe
 
 Content checks its 26 content types (products and collections included) in batches of 6, so in a real store its time is dominated by Shopify's API latency: about 5 round trips.
 
+The Content page keeps those checks for 60 seconds per shop and set of granted optional scopes (`loadContentHub`, at most 2,000 entries; a view in which Shopify didn't answer for a type is not kept, and asking for a permission forgets the shop's entry). What each type's state is (has content, needs a permission, not available to apps) is worked out from the kept answers and the granted scopes on every view.
+
+| Content page | Shopify Admin calls | Database |
+|---|---|---|
+| First view, after 60 s, or with other granted scopes | 28: scopes, locales and the 26 checks (markets for the flags cached 5 minutes, billing cached), about 6 round trips; locales and coverage are read beside the checks | The language's counts, report and segments; one indexed GROUP BY on `CoverageItem` for one language (the tiles' item counts); the language's active jobs |
+| Repeat view within 60 s | 2: scopes, locales | The same |
+| After the page shows | The language's previews (pictures), 1 `nodes()` read cached 60 s and shared with the language page | — |
+
+It polls only while a count reads the shown language (every 5 s). `tests/performance/coverage-scale.perf.test.ts` checks the item counts and the whole page data for one language of a large shop (under 300 ms and 1,500 ms); `tests/integration/content-hub.test.ts` counts the checks per view.
+
 ## 4. Client bundle
 
 `pnpm build` (after phase C): **155 KB gzipped** JavaScript in total (was 122 KB). The increase is the interface texts in English and German (about 520 keys each), which are part of the shared code so pages render without waiting for a text file. The shared part (React, router, entry, texts) is about 116 KB gzipped. Pages are split by route: the largest page chunk is the translation editor at 7 KB gzipped. Polaris and App Bridge load from Shopify's CDN and are usually cached by the admin. With more interface languages, the catalogues should be loaded per language (one chunk each) instead of all at once.

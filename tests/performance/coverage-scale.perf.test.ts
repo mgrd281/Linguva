@@ -5,13 +5,15 @@
  * saved by a merchant updates one item and a handful of counts. A
  * language's page counts what translating would start, its previews pick a
  * few items per category, and a category's list counts its items per state
- * and pages them in state order, each with indexed queries.
+ * and pages them in state order, each with indexed queries. The Content
+ * page counts one language's items per type.
  */
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listCoverageItems, loadCoverageSummary } from "../../app/.server/coverage/summary";
 import { rebuildCountsTx, syncCoverage } from "../../app/.server/coverage/items";
 import { COVERAGE_TYPES } from "../../app/.server/coverage/coverage";
+import { contentItemCounts, loadContentPage } from "../../app/.server/content/content-page";
 import { clearLanguagePreviewsCache, loadCategoryItems, loadLanguagePage, loadLanguagePreviews } from "../../app/.server/languages/language-page";
 import { headlineByLocale } from "../../app/lib/coverage-view";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
@@ -192,5 +194,30 @@ describe(`a language's page with ${PRODUCTS.toLocaleString("en")} products`, () 
     expect(value.rows.every((r) => r.state === "missing")).toBe(true);
     console.info(`category list page, one state: ${ms.toFixed(0)} ms`);
     expect(ms).toBeLessThan(300);
+  });
+});
+
+describe(`the Content page with ${PRODUCTS.toLocaleString("en")} products`, () => {
+  const store = new FakeShopifyStore(PRODUCTS);
+  store.locales = [
+    { locale: "en", name: "English", primary: true, published: true },
+    ...LOCALES.map((locale) => ({ locale, name: locale, primary: false, published: true })),
+  ];
+
+  it("counts one language's items per type quickly (the tiles' item counts)", async () => {
+    await contentItemCounts(shop, "de", app);
+    const { ms, value } = await timed(() => contentItemCounts(shop, "de", app));
+    expect(value.get("PRODUCT")).toEqual({ all: PRODUCTS, texts: PRODUCTS });
+    console.info(`content page item counts: ${ms.toFixed(0)} ms`);
+    expect(ms).toBeLessThan(300);
+  });
+
+  it("shows the areas of a counted language quickly", async () => {
+    const input = { granted: [], lang: "de", open: null };
+    await loadContentPage(store.asAdmin(), { id: shop, shopifyShopGid: null }, input, app, { jobsAvailable: true });
+    const { ms, value } = await timed(() => loadContentPage(store.asAdmin(), { id: shop, shopifyShopGid: null }, input, app, { jobsAvailable: true }));
+    expect(value.areas.find((a) => a.id === "products")).toMatchObject({ items: PRODUCTS, state: "figure", tally: { total: PRODUCTS * 2 } });
+    console.info(`content page: ${ms.toFixed(0)} ms`);
+    expect(ms).toBeLessThan(1500);
   });
 });

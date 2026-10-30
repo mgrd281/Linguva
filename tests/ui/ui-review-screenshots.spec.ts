@@ -35,6 +35,10 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "language-not-counted", shop: "measure", path: "/app/languages/de" },
   { name: "category", shop: "demo", path: "/app/languages/de/products", phone: true },
   { name: "category-list", shop: "catalog", path: "/app/languages/de/products", phone: true },
+  // Redesign 2 (UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign2): the Content page, area by area for one language.
+  { name: "content", shop: "full", path: "/app/content", phone: true },
+  { name: "content-pictures", shop: "demo", path: "/app/content" },
+  { name: "content-not-counted", shop: "measure", path: "/app/content" },
   // Smart Auto-Translate (UI_REVIEW_SCREENSHOTS=docs/ui-review/smart-auto).
   { name: "smart-settings", shop: "business", path: "/app/settings", phone: true },
   { name: "smart-page", shop: "business", path: "/app/settings/automatic", phone: true },

@@ -29,7 +29,7 @@ import { fetchAndSyncShopLocales, type LocaleSummary } from "../locales/shop-loc
 import { loadCoverageState, loadCoverageSummary } from "../coverage/summary";
 import { loadCounts } from "../coverage/items";
 import { COVERAGE_TYPES } from "../coverage/coverage";
-import { measurementState, type Measurement, type MeasurementState } from "../overview/measurement";
+import { measurementState, scanningOf, UNDER_WAY } from "../overview/measurement";
 import type { MarketCountriesResult } from "../markets/countries";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
@@ -38,7 +38,8 @@ import { getMonthlyUsage } from "../usage/usage-ledger";
 import { getQueues } from "../queue/client";
 import { getTranslationProvider } from "../providers";
 import { BackgroundJobsUnavailableError, startBulkJob } from "../jobs/start-job";
-import { ACTIVE_JOB_STATUSES, ATTACHED_BULK_TYPES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
+import { ATTACHED_BULK_TYPES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
+import { activeJobs, categoryJob } from "../jobs/active-jobs";
 import { translatableByIds } from "../shopify/attached-resources";
 import { PREVIEW_NODE_TYPES, readPreviewNodes, type PreviewNode } from "../shopify/preview-nodes";
 import { isSearchableType, searchIds, type SearchableType } from "../shopify/search-ids";
@@ -60,7 +61,6 @@ import {
   bulkTypesOf,
   CATEGORIES,
   CATEGORY_IDS,
-  categoryOf,
   categoryPath,
   categoryState,
   categoryTallies,
@@ -77,7 +77,6 @@ import {
   type ItemState,
 } from "../../lib/language-categories";
 import { analyzeCountries } from "../../lib/country-coverage";
-import { jobProgress } from "../../lib/job-display";
 import type { Entitlements } from "../../lib/plans";
 import { itemEditorPath, numericId, RESOURCE_KINDS } from "../../lib/resource-kinds";
 
@@ -91,9 +90,6 @@ export const PREVIEW_IMAGE_WIDTH = 192;
 export const ROW_IMAGE_WIDTH = 128;
 /** Rows of a category list per page. */
 export const CATEGORY_PAGE_SIZE = 50;
-
-/** Measurements reading the store now (a stalled one can be started again). */
-const UNDER_WAY: ReadonlySet<MeasurementState> = new Set(["queued", "waiting", "running"]);
 
 /** Field states that are work to do: translating starts on these texts. */
 const OPEN_STATES = ["missing", "outdated", "failed"] as const;
@@ -141,14 +137,6 @@ function stateOfKey(row: Pick<ItemRow, "sourceKeys" | "fieldStates">, key: strin
   return state && isFieldState(state) ? ITEM_STATE_OF[state] : null;
 }
 
-/** Segments are "TYPE|locale": whether a measurement reads the language. */
-const readsLocale = (segments: readonly string[], locale: string) => segments.some((s) => s.slice(s.indexOf("|") + 1) === locale);
-
-/** A measurement under way reads the language now. */
-function scanningOf(report: { segments: readonly string[] } | null, measurement: Measurement, locale: string) {
-  return UNDER_WAY.has(measurement.state) && Boolean(report && readsLocale(report.segments, locale));
-}
-
 /**
  * The language of a route's :locale: one of the shop's additional languages
  * (404 otherwise). The primary language has no page of its own: its texts
@@ -168,43 +156,6 @@ function languageOf(language: LocaleSummary["locales"][number]) {
 
 function primaryOf(locales: LocaleSummary) {
   return locales.primary ? { locale: locales.primary.locale, name: locales.primary.name } : null;
-}
-
-/** Translation jobs into the language that are queued or running. */
-function activeJobs(shopId: string, locale: string, client: PrismaClient) {
-  return withTenant(
-    shopId,
-    (tx) =>
-      tx.translationJob.findMany({
-        where: { shopId, targetLocale: locale, status: { in: [...ACTIVE_JOB_STATUSES] } },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, resourceType: true, totalItems: true, succeededItems: true, skippedItems: true, failedItems: true, discoveryDone: true },
-      }),
-    client,
-  );
-}
-
-type ActiveJob = Awaited<ReturnType<typeof activeJobs>>[number];
-
-/** A category's running translation, in items: its job's page, or the Jobs page when several of its types run. */
-export interface CategoryJob {
-  href: string;
-  done: number;
-  total: number;
-  /** Every job has found all its items (until then, the total still grows). */
-  discoveryDone: boolean;
-}
-
-function categoryJob(jobs: readonly ActiveJob[], category: CategoryId): CategoryJob | null {
-  const own = jobs.filter((job) => categoryOf(job.resourceType) === category);
-  if (!own.length) return null;
-  const progress = own.map((job) => jobProgress(job));
-  return {
-    href: own.length === 1 ? `/app/jobs/${own[0]!.id}` : "/app/jobs",
-    done: progress.reduce((n, p) => n + p.done, 0),
-    total: progress.reduce((n, p) => n + p.total, 0),
-    discoveryDone: own.every((job) => job.discoveryDone),
-  };
 }
 
 /**

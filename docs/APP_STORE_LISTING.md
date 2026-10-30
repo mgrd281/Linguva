@@ -83,7 +83,7 @@ Generated from the real app on the production build with a fictional demo catalo
 | 1-products.png | Translation status per product and "Translate all" | Product list with the translation status of each product in German and an option to translate all products |
 | 2-editor.png | Original and translation side by side, formatted preview | Product editor with the English original and the German translation side by side, including a formatted preview |
 | 3-outdated.png | An outdated translation after the original changed | Product whose German translation is marked outdated because the English description changed |
-| 4-review.png | Review queue with a flagged draft | Review queue with French drafts to approve or reject; one draft is flagged because a number changed |
+| 4-review.png | Review: one card per product, an imported text with a note | Review page with French translations in one card per product, each text to approve or reject; an imported text has a note because a number changed |
 | 5-glossary.png | Brand terms and rules | Glossary with brand names that are never translated and preferred terms per language |
 | 6-settings.png | Automatic translation and safe publishing | Settings for automatic translation of new content, with results waiting for review |
 | 7-overview.png | How far the store is, by country | Overview with the share of texts translated, the next step, and a card for each country the store sells to |
@@ -91,6 +91,8 @@ Generated from the real app on the production build with a fictional demo catalo
 | 9-language.png | One language, area by area, with the store's pictures | German language page with the products and collections as pictures, each marked done, outdated or missing |
 
 Recommended order in the listing: 4, 9, 2, 1, 5, 6 (six images; 3, 7 and 8 as spares).
+
+`4-review.png` and `1-products.png` in the folder still show the pages before Redesign 2 (2026-10-30): Review's cards with the import note and the list's breadcrumb back to Content are missing. Regenerate both before submission; row 4 already describes the redesigned Review.
 
 ## Feature media
 

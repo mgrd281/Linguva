@@ -217,7 +217,7 @@ Usage is reserved with `origin 'smart'` and the run's budgets (§5.4).
 |---|---|---|
 | smart daily budget | `BUDGET_DAILY` | next local midnight |
 | smart monthly budget | `BUDGET_MONTHLY` | first day of the next local month |
-| plan allowance (`QUOTA_EXCEEDED`) | `PLAN_ALLOWANCE` | next UTC month |
+| plan allowance (`QUOTA_EXCEEDED`) | `PLAN_ALLOWANCE` | next UTC month, or the end of a Shopify trial if that comes first (the trial's 100,000 characters are used up; the plan's allowance applies then) |
 | `DAILY_LIMIT` / `PLATFORM_LIMIT` | `DAILY_CAP` | next UTC midnight |
 | provider not configured, auth or quota | `PROVIDER` | after 1 hour (re-checked) |
 | not entitled | `PLAN` | when the plan includes it again |
@@ -314,7 +314,7 @@ Actions: Turn on/off, Pause/Resume, Check now, and Change schedule and options.
   - locales against the shop's current non-primary languages and the plan's language limit;
   - types against the smart type list (personal-data-prone types only on explicit opt-in);
   - field groups against `FIELD_GROUPS` minus `url`;
-  - budgets as integers from 1 to the plan's monthly allowance;
+  - budgets as integers from 1 to the monthly allowance in force (during a Shopify trial, the trial's 100,000);
   - exclusion GIDs via `kindOfGid`;
   - automatic publishing only with the entitlement and an explicit confirmation.
 

@@ -2,10 +2,10 @@
 
 | Language | Texts | Written by | Reviewed by a native speaker |
 |---|---|---|---|
-| English | about 800 | Source | — |
-| German | about 800 | Translated and checked in the UI tests | No |
-| French | about 800 (phase G) | Machine-assisted translation | **No** |
-| Spanish (neutral, Latin American style like Shopify's) | about 800 (phase G) | Machine-assisted translation | **No** |
+| English | about 1,770 | Source | — |
+| German | about 1,770 | Translated and checked in the UI tests | No |
+| French | about 1,770 (since phase G; later texts machine-assisted too) | Machine-assisted translation | **No** |
+| Spanish (neutral, Latin American style like Shopify's) | about 1,770 (since phase G; later texts machine-assisted too) | Machine-assisted translation | **No** |
 
 Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.spec.ts`): same keys, same placeholders and plural forms as English, no English left over, no irregular whitespace, and each main page shown in the language passes the accessibility check (accessible names contain the visible labels). These checks can't judge tone or terminology. **Before French or Spanish is advertised in the App Store listing, a native speaker should read the texts in the app**, starting with the points below.
 
@@ -30,7 +30,6 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - `settings.tools.*`: the tool names "Pays et marchés" / "Países y mercados", "Couverture en détail" / "Cobertura en detalle" and their one-line explanations.
 
 **Editor, content, languages, landing page**
-- `content.table.area` / `content.table.how`: "Domaine" / "Área", "Méthode" / "Método".
 - `editor.badge.manualOnly`: "Manuel uniquement" / "Solo manual".
 - `editor.discard`: "Ignorer" / "Descartar" (Shopify's own save bar wording).
 - `editor.seo.heading`: "Aperçu du référencement" / "Listado en buscadores".
@@ -46,6 +45,20 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - `content.language.hidden` and `resources.hiddenLanguage`: "masquée" (feminine, for "langue") / "oculto" (masculine, for "idioma").
 - `content.tile.new`, `content.tile.recount`: "comptage" / "recuento" for a count of the store, as on the language page.
 - `content.unavailable.note`: names Shopify's translation app without its English name.
+
+**Review page (`review.*`, Redesign 2)**
+- `review.page.heading`: "Réviser les traductions" / "Revisar traducciones"; the menu item stays "Révision" / "Revisión".
+- `review.filter.areaLabel`, `review.filter.allAreas`: French calls the areas "Domaines" here, while the language page says "Partie par partie" (`language.areas.heading`); one word for both would be better. Spanish uses "Áreas" on both.
+- `review.lang.hidden`: "masquée" (feminine, for "langue") / "oculto" (masculine, for "idioma"), as `content.language.hidden`.
+- `review.hint.NUMBERS_*`: "Chiffre modifié", "Chiffres manquants" / "Número cambiado", "Faltan números". French "chiffre" is a digit, so "nombre" may fit better. `NUMBERS_ADDED` says "Número añadido": "añadido" is the word in Spain, the convention above asks for "agregado".
+- `review.done.approved`, `review.done.rejected`, `review.done.notPublished` and `review.result.partial.heading` have one form only: with 1 they read "1 approuvées" / "1 aprobadas" (English has no plural there either).
+- `review.approve.*` (the page's approval dialog): `review.approve.hints` "{count} d'entre elles a une remarque" / "{count} de ellas tiene un aviso"; `review.approve.handlesLeft` "La nueva dirección web la apruebas por separado."
+- `review.reject.body`, `review.field.rejectNote`: "Cette action est irréversible." / "Esta acción no se puede deshacer." and "No se puede deshacer."
+- `review.result.*`: one line per outcome, "Obsolète" / "Desactualizado" for outdated. `review.result.approvedHidden` puts the language in parentheses in French ("la langue ({language}) est encore masquée") to avoid its gender; Spanish says "el {language} aún está oculto".
+- `review.payoff`: "la traduction en {language} atteindra {percent}" / "la traducción al {language} llegará al {percent}" (the language name in lower case).
+- `review.field.customField`: "Information complémentaire : {name}" / "Información adicional: {name}", as `content.tile.attachedPart.customFields`.
+- `review.empty.heading` "Tout est vérifié" / "Todo revisado"; `review.leave.*` "Abandonner vos modifications ?" / "¿Descartar tus cambios?".
+- `overview.banner.exhausted.headingTrial` and `bodyTrial`: the Overview's banner when a trial's AI allowance is used up ("Le quota d'IA de votre essai est épuisé" / "La cuota de IA de tu prueba está agotada").
 
 **Jobs, glossary, memory, markets, plan**
 - `jobs.detail.timing.remaining`, `started`, `finished`: built so either value of `{duration}` fits.
@@ -68,9 +81,7 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 
 **Overview, lists, Review, Settings, coverage**
 - Consent and publishing texts (translated literally, please confirm): `settings.publish.confirm` ("traductions automatiques" is also the name of the automatic translation feature; alternative "traductions générées par machine"), `settings.auto.consent.body`, `settings.publish.autoBody` / `autoBodySince`, `settings.ai.withdraw`.
-- `coverage.byLanguage.translateGaps`: "Combler les lacunes" / "Traducir lo pendiente".
-- `overview.store.installed`: "Date d'installation : {date}".
-- Gender guessed from context: `overview.languages.hidden` / `unknown`, `resources.status.partial`, `review.saved.published` / `failed`.
+- Gender guessed from context: `overview.languages.unknown`, `resources.status.partial`.
 - `settings.style.body`: the examples (Sie/du, vous/tu) aren't extended with usted/tú.
 - `resources.caution.legalBody` (Spanish "calificada", Spain: "cualificada").
 - Counts are written as "label: number" ("Étapes terminées : {done} sur {total}") so singular and plural both read correctly.

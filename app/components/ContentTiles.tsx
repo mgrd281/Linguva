@@ -36,6 +36,8 @@ const AREAS_HEADING = { ...BIG_HEADING, fontSize: 17, lineHeight: "24px", fontWe
 const ROW_FIGURE = { fontWeight: 650, fontVariantNumeric: "tabular-nums", textAlign: "end", whiteSpace: "nowrap" } as const;
 /** A name that stays on one line (cut with "…" where it can't). */
 const ONE_LINE = { display: "block", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
+/** Lines of a tile's sentence broken evenly, without a last word alone ("… und / FAQ"). */
+const PRETTY = { display: "block", textWrap: "pretty" } as const;
 /** An icon inside a line of text (a link's chevron). */
 const INLINE_ICON = { display: "inline-flex", verticalAlign: "middle", marginInlineStart: 2 } as const;
 /** A native disclosure's summary as a plain block (no triangle; the browser's focus ring stays). */
@@ -573,7 +575,9 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
               <Strong>{name}</Strong>
               {wideDetail ? (
                 <s-box display="@container (inline-size > 420px) auto, none">
-                  <s-text color="subdued">{wideDetail}</s-text>
+                  <span style={PRETTY}>
+                    <s-text color="subdued">{wideDetail}</s-text>
+                  </span>
                 </s-box>
               ) : null}
               {narrowDetail ? (
@@ -635,7 +639,9 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
                   <s-icon key={part} type={ATTACHED_ICON[part]} size="small" color="subdued" />
                 ))}
               </s-stack>
-              <s-text color="subdued">{attachedNote}</s-text>
+              <span style={PRETTY}>
+                <s-text color="subdued">{attachedNote}</s-text>
+              </span>
             </s-grid>
           </s-stack>
         ) : null}
@@ -700,6 +706,8 @@ export function Areas({ areas, i18n, picturesOf, withKey }: { areas: ContentArea
 
 const ROW_GRID = "@container (inline-size > 560px) auto 1fr 140px 52px auto, auto 1fr auto auto";
 const PART_GRID = "@container (inline-size > 560px) auto 1fr 96px 52px auto, auto 1fr auto auto";
+/** An open group's parts start under its name: the width of its icon tile (36 px) and the row's gap. */
+const PARTS_INDENT = "@container (inline-size > 560px) 36px 1fr, 1fr";
 
 /** A row's bar (wide only; its information is in the row's words) and percentage. */
 function RowFigure({ tally, name, i18n }: { tally: ContentGroup["tally"]; name: string; i18n: I18n }) {
@@ -718,7 +726,7 @@ function PartRow({ part, i18n }: { part: ContentGroup["parts"][number]; i18n: I1
   const name = t(`content.part.${part.type}.name`);
   const inner = (
     <s-grid gridTemplateColumns={PART_GRID} gap="base" alignItems="center">
-      <s-icon type={PART_ICON[part.type]} color="subdued" size="small" />
+      <s-icon type={PART_ICON[part.type]} color="subdued" />
       <s-stack direction="block" gap="small-500">
         <Strong>{name}</Strong>
         <s-text color="subdued">{t(`content.part.${part.type}.hint`)}</s-text>
@@ -774,17 +782,21 @@ function GroupRow({ id, group, requested, i18n }: { id: GroupId; group: ContentG
           </s-grid>
         </s-stack>
       </summary>
+      {/* The parts sit under the group's name (on a wide page), as its items. */}
       <s-box padding="none base base">
-        <s-box border="base" borderRadius="base">
-          <ul style={PLAIN_LIST}>
-            {group.parts.map((part, i) => (
-              <li key={part.type}>
-                {i > 0 ? <s-divider /> : null}
-                <PartRow part={part} i18n={i18n} />
-              </li>
-            ))}
-          </ul>
-        </s-box>
+        <s-grid gridTemplateColumns={PARTS_INDENT} gap="base">
+          <s-box display="@container (inline-size > 560px) auto, none" />
+          <s-box border="base" borderRadius="base">
+            <ul style={PLAIN_LIST}>
+              {group.parts.map((part, i) => (
+                <li key={part.type}>
+                  {i > 0 ? <s-divider /> : null}
+                  <PartRow part={part} i18n={i18n} />
+                </li>
+              ))}
+            </ul>
+          </s-box>
+        </s-grid>
       </s-box>
     </details>
   );
@@ -888,7 +900,8 @@ function Fold({ heading, note, types, i18n }: { heading: string; note: string; t
       <s-box padding="none base base">
         <s-stack direction="block" gap="small-200">
           <s-paragraph color="subdued">{note}</s-paragraph>
-          <ul style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))", gap: "4px 16px" }}>
+          {/* Columns wide enough for the longest "Gemeinsame Abschnitte · Texte deines Designs" on one line: two on a wide page. */}
+          <ul style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: "4px 16px" }}>
             {types.map((type, i) => {
               const area = areaName(i18n, type);
               return (

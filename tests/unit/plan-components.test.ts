@@ -151,6 +151,13 @@ describe("type that stands out", () => {
   });
 });
 
+describe("the hero for screen readers", () => {
+  it("names the plan once: no hidden section label before the heading 'Your plan: …'", () => {
+    // Polaris turns a section's accessibilityLabel into a hidden heading ("Your plan" before "Your plan: Pro").
+    expect(hero("de")).not.toMatch(/<s-section[^>]*accessibilityLabel/i);
+  });
+});
+
 describe("states the browser tests can't show", () => {
   it("billing off (KARINEX today): list prices, no plan buttons, no recommendation, the short footnote", () => {
     const off = STATES.find((s) => s.name === "billing off")!;

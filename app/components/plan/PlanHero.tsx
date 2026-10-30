@@ -55,8 +55,10 @@ export interface PlanHeroProps {
 export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limits, aiAvailable, languages, costPerMillion, actions }: PlanHeroProps) {
   const { t } = i18n;
   const name = "handle" in hero.name ? planName(hero.name.handle) : t(hero.name.key);
+  // The section has no accessibilityLabel: Polaris would add a hidden "Your plan" heading right before the
+  // visible "Your plan: Pro", and screen readers would hear the plan's heading twice.
   return (
-    <s-section accessibilityLabel={t("plan.hero.label")}>
+    <s-section>
       <s-stack direction="block" gap="large">
         <s-query-container>
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="base" alignItems="start">

@@ -4,6 +4,7 @@
  * translation to review.
  */
 
+import { digitRuns } from "../../lib/digits";
 import type { SeoIssueCode } from "../../lib/seo";
 
 export type IssueCode =
@@ -38,24 +39,6 @@ export interface ValidationInput {
   /** Plain text of the translated segment (inline codes removed). */
   target: string;
   glossary?: readonly GlossaryRule[];
-}
-
-// Eastern Arabic (U+0660–0669) and Persian (U+06F0–06F9) digits count as the
-// same numbers as ASCII digits.
-function normalizeDigits(text: string): string {
-  return text
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0));
-}
-
-/**
- * Digit runs, sorted. "1.5 kg" and "1,5 kg" both yield ["1", "5"], so
- * locale-specific decimal separators are accepted.
- */
-function digitRuns(text: string): string[] {
-  return (normalizeDigits(text).match(/\d+/g) ?? [])
-    .map((run) => run.replace(/^0+(?=\d)/, ""))
-    .sort();
 }
 
 function containsTerm(text: string, term: string, caseSensitive: boolean): boolean {

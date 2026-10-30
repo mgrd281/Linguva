@@ -44,8 +44,17 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - `glossary.error.uploadTooLarge` / `fileTooLarge` / `csvTooLarge`: the difference is subtle in English too.
 - `memory.stats.reused`: rendered as a count of reuses.
 - `markets.finding.*`: "la langue {language}" reads "la langue allemand"; better wording welcome.
-- `plan.current.cost`: amounts aren't localised (`1.23`); French writes "{cost} $".
-- `plan.complimentary.heading`: "Accès offert" / "Acceso gratuito", also used as a plan name.
+- The Plan page with prices (`plan.*`, rewritten 2026-10-30; machine-assisted like the rest):
+  - `plan.price.*`: "Gratuit" / "Gratis" as the price of Free; "/ mois" / "/ mes"; "ou {amount} / an" / "o {amount} / año". The amounts come from `Intl.NumberFormat` ("29 $US", "29 US$"), not from the texts.
+  - `plan.price.monthsFree` ("2 mois offerts" / "2 meses gratis") and `plan.price.monthlyOnly` ("Mensuel uniquement" / "Solo mensual").
+  - `plan.price.trial`: "Jusqu'à … jours d'essai gratuit" / "Hasta … días de prueba gratis" ("up to": Shopify may shorten a trial); `plan.status.trial`, `plan.current.trialAllowance`.
+  - `plan.price.footnote` and `plan.price.usd`: "dollars américains" / "dólares estadounidenses".
+  - `plan.recommend.*`: "Adapté à votre boutique" / "Se adapta a tu tienda". The reasons are joined by `Intl.ListFormat` ("vos 4 langues et la publication automatique"); check the articles in each `plan.recommend.part.*`.
+  - `plan.hero.name.*`: "Accès propriétaire" / "Acceso de propietario" (the owner's own stores), "Toutes les fonctionnalités incluses" / "Todas las funciones incluidas" (billing not set up).
+  - `plan.languages.besides`: "Original : {language}, plus {count} autres" / "Original: {language}, más {count} otros".
+  - `plan.cost.internal`: amounts are now localised ("2,20 $").
+  - `plan.audience.*`, `plan.everyPlan.*`, `plan.row.*`, `plan.table.*` ("{value} M" for millions), `plan.faq.*`.
+- `automatic.budget.trial`: the trial note next to the smart budgets ("Essai jusqu'au {date} : …" / "Prueba hasta el {date}: …").
 
 **Overview, lists, Review, Settings, coverage**
 - Consent and publishing texts (translated literally, please confirm): `settings.publish.confirm` ("traductions automatiques" is also the name of the automatic translation feature; alternative "traductions générées par machine"), `settings.auto.consent.body`, `settings.publish.autoBody` / `autoBodySince`, `settings.ai.withdraw`.

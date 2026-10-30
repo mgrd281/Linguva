@@ -11,7 +11,7 @@ import { INTL_LOCALE } from "../../i18n/i18n";
 import { localeCountry } from "../../lib/flags";
 import { languageList } from "../../lib/name-lists";
 import { formatCostUsd } from "../../lib/plan-prices";
-import { languageRoom, planName, smallestPlanForLanguages, splitLanguages, usagePercent, type HeroView, type Words } from "../../lib/plan-view";
+import { languageRoom, nextCharsOn, planName, smallestPlanForLanguages, splitLanguages, usagePercent, type HeroView, type Words } from "../../lib/plan-view";
 import { estimatedCostUsd, type Entitlements } from "../../lib/plans";
 import { usageLevel } from "../../lib/usage";
 import { IconTile } from "../CategoryCard";
@@ -92,7 +92,8 @@ export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limit
         <s-divider />
         <s-query-container>
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="large-200">
-            <PlanUsage i18n={i18n} now={now} resetsOn={resetsOn} usage={usage} limits={limits} aiAvailable={aiAvailable} />
+            {/* During a trial the plan's bigger allowance may come before the month renews. */}
+            <PlanUsage i18n={i18n} now={now} resetsOn={nextCharsOn(hero, resetsOn)} usage={usage} limits={limits} aiAvailable={aiAvailable} />
             <PlanLanguages i18n={i18n} entitlements={entitlements} languages={languages} aiAvailable={aiAvailable} />
           </s-grid>
         </s-query-container>

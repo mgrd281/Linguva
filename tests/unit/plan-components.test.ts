@@ -174,3 +174,43 @@ describe("states the browser tests can't show", () => {
     expect(ownerHero).toContain("Heute: 2.600 von 1.000.000 (Tageslimit)");
   });
 });
+
+describe("the AI meter during a trial", () => {
+  // Business in its trial until 5 November; the month renews on 1 December.
+  const now = "2026-11-02T09:00:00.000Z";
+  const trialSub: NonNullable<PlanViewInput["subscription"]> = {
+    planHandle: "business",
+    pendingPlanHandle: null,
+    trialEndsAt: "2026-11-05T00:00:00.000Z",
+    cancelAtEndOfCycle: false,
+    currentPeriodEnd: null,
+    checkedAt: now,
+  };
+  const meter = (used: number, subscription = trialSub, resetsOn = "2026-12-01T00:00:00.000Z") =>
+    flat(
+      text(
+        hero("de", {
+          hero: planView({ configured: true, state: "ACTIVE", stale: false, subscription, choosePlanUrl: URL, now }),
+          now,
+          resetsOn,
+          entitlements: { ...PLANS.business, monthlyChars: TRIAL_AI_CHARS },
+          usage: { month: used, today: 0 },
+          limits: { limit: TRIAL_AI_CHARS, dailyLimit: TRIAL_AI_CHARS },
+          aiAvailable: true,
+        }),
+      ),
+    );
+
+  it("names the trial's end, when the plan's allowance starts, not the month's renewal after it", () => {
+    const usedUp = meter(TRIAL_AI_CHARS);
+    expect(usedUp).toContain("Aufgebraucht. Neue KI-Zeichen gibt es am 5. November.");
+    expect(usedUp).toContain("Neue KI-Zeichen am 5. November");
+    expect(usedUp).not.toContain("1. Dezember");
+    expect(meter(TRIAL_AI_CHARS - 15_000)).toContain("Fast aufgebraucht: Bis zum 5. November sind noch 15.000 Zeichen frei.");
+  });
+
+  it("keeps the month's renewal when it comes first, and without a trial", () => {
+    expect(meter(TRIAL_AI_CHARS, trialSub, "2026-11-01T00:00:00.000Z")).toContain("Aufgebraucht. Neue KI-Zeichen gibt es am 1. November.");
+    expect(meter(TRIAL_AI_CHARS, { ...trialSub, trialEndsAt: null })).toContain("Aufgebraucht. Neue KI-Zeichen gibt es am 1. Dezember.");
+  });
+});

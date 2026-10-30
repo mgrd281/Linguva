@@ -77,6 +77,8 @@ export interface HeroView {
   pending: { handle: PlanHandle; date: string | null } | null;
   /** A Shopify trial runs (its end, ISO). */
   trialEndsAt: string | null;
+  /** The trial's end when the plan's own allowance is bigger than the trial's (ISO): more AI characters from then on. */
+  allowanceRisesAt: string | null;
 }
 
 /**
@@ -87,7 +89,7 @@ export interface HeroView {
 export function planView(input: PlanViewInput): HeroView {
   const sub = input.subscription;
   const canChoose = input.choosePlanUrl !== null;
-  const base: Pick<HeroView, "lines" | "checkedAt" | "refresh" | "current" | "freeAppliesNow" | "pending" | "trialEndsAt" | "secondary"> = {
+  const base: Pick<HeroView, "lines" | "checkedAt" | "refresh" | "current" | "freeAppliesNow" | "pending" | "trialEndsAt" | "allowanceRisesAt" | "secondary"> = {
     lines: [],
     checkedAt: null,
     refresh: false,
@@ -95,6 +97,7 @@ export function planView(input: PlanViewInput): HeroView {
     freeAppliesNow: false,
     pending: null,
     trialEndsAt: null,
+    allowanceRisesAt: null,
     secondary: null,
   };
   if (input.state === "COMPLIMENTARY") {
@@ -173,8 +176,10 @@ export function planView(input: PlanViewInput): HeroView {
       ? { tone: "info", icon: "clock", words: { key: "plan.status.trial", dates: { date: sub!.trialEndsAt! } } }
       : { tone: "success", icon: "check-circle", words: { key: "plan.status.active" } };
   const lines: HeroView["lines"] = [];
-  if (trial && known && PLANS[known].monthlyChars > TRIAL_AI_CHARS) {
-    lines.push({ icon: null, words: { key: "plan.current.trialAllowance", vars: { trial: TRIAL_AI_CHARS, limit: PLANS[known].monthlyChars } } });
+  // The trial's allowance is lower than the plan's: the plan's applies when the trial ends.
+  const rises = trial && known !== null && PLANS[known].monthlyChars > TRIAL_AI_CHARS;
+  if (rises) {
+    lines.push({ icon: null, words: { key: "plan.current.trialAllowance", vars: { trial: TRIAL_AI_CHARS, limit: PLANS[known!].monthlyChars } } });
   }
   const pendingHandle = sub?.pendingPlanHandle ?? null;
   if (pendingHandle) {
@@ -201,7 +206,18 @@ export function planView(input: PlanViewInput): HeroView {
     freeAppliesNow: !known,
     pending: isPlanHandle(pendingHandle) ? { handle: pendingHandle, date: sub?.currentPeriodEnd ?? null } : null,
     trialEndsAt: trial ? sub!.trialEndsAt : null,
+    allowanceRisesAt: rises ? sub!.trialEndsAt : null,
   };
+}
+
+/**
+ * When the store next gets more AI characters: the 1st of the next UTC
+ * month, or a running trial's end when that comes first and the plan's own
+ * allowance starts then (enforcement follows the clock: subscription.ts).
+ */
+export function nextCharsOn(hero: Pick<HeroView, "allowanceRisesAt">, resetsOn: string): string {
+  const rises = hero.allowanceRisesAt;
+  return rises && Date.parse(rises) < Date.parse(resetsOn) ? rises : resetsOn;
 }
 
 /** "10 % used": whole percent, 0–100; `tiny` when something is used but less than 1 %. */

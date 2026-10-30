@@ -9,6 +9,7 @@ import { allowedTargetLocales } from "../../app/.server/billing/subscription";
 import {
   languageRoom,
   missedBy,
+  nextCharsOn,
   planName,
   planView,
   recommendPlan,
@@ -62,6 +63,18 @@ describe("the hero for each billing state", () => {
     expect(over.badge?.words.key).toBe("plan.status.active");
     expect(over.lines).toEqual([]);
     expect(over.trialEndsAt).toBeNull();
+  });
+
+  it("says when the plan's bigger allowance starts: the trial's end if it comes before the month renews", () => {
+    const trial = view({ subscription: sub({ planHandle: "business", trialEndsAt: "2026-11-05T00:00:00.000Z" }) });
+    expect(trial.allowanceRisesAt).toBe("2026-11-05T00:00:00.000Z");
+    expect(nextCharsOn(trial, "2026-11-01T00:00:00.000Z")).toBe("2026-11-01T00:00:00.000Z");
+    expect(nextCharsOn(trial, "2026-12-01T00:00:00.000Z")).toBe("2026-11-05T00:00:00.000Z");
+    // Nothing rises with an unknown plan (Free's limits stay), without a trial or when stale.
+    expect(view({ subscription: sub({ planHandle: "enterprise-private", trialEndsAt: "2026-11-05T00:00:00.000Z" }) }).allowanceRisesAt).toBeNull();
+    expect(view().allowanceRisesAt).toBeNull();
+    expect(view({ stale: true, subscription: sub({ trialEndsAt: "2026-11-05T00:00:00.000Z" }) }).allowanceRisesAt).toBeNull();
+    expect(nextCharsOn(view(), "2026-12-01T00:00:00.000Z")).toBe("2026-12-01T00:00:00.000Z");
   });
 
   it("names a pending change with its date, or the next billing period without one, and marks the plan's card", () => {

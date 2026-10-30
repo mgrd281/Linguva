@@ -4,3 +4,6 @@
  * Polaris' private list draw nothing, and TypeScript rejects them here.
  */
 export type IconName = Exclude<NonNullable<JSX.IntrinsicElements["s-icon"]["type"]>, "" | "empty">;
+
+/** The same names, under the name the Plan page's modules use. */
+export type IconType = IconName;

@@ -64,11 +64,16 @@ export function detailLine(i18n: I18n, category: { id: CategoryId; items: number
   return [items && category.items ? i18n.t(items, { count: category.items }) : null, detail ? i18n.t(detail) : null].filter(Boolean).join(" · ");
 }
 
-/** A picture in a soft square: an area's, a content type's or a notice's (a small icon in squares under 32 px). */
-export function IconTile({ icon, size = 36 }: { icon: IconName; size?: number }) {
+/**
+ * An icon in a soft square: an area's, a content type's or a notice's
+ * picture, and the Plan page's plan, meter and feature tiles
+ * (`color="base"`). Squares under 32 px take the small icon unless
+ * `iconSize` says otherwise.
+ */
+export function IconTile({ icon, size = 36, color = "subdued", iconSize }: { icon: IconName; size?: number; color?: "base" | "subdued"; iconSize?: "small" | "base" }) {
   return (
     <s-stack background="subdued" borderRadius="base" inlineSize={`${size}px`} blockSize={`${size}px`} alignItems="center" justifyContent="center">
-      <s-icon type={icon} color="subdued" size={size < 32 ? "small" : "base"} />
+      <s-icon type={icon} color={color} size={iconSize ?? (size < 32 ? "small" : "base")} />
     </s-stack>
   );
 }

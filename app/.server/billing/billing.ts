@@ -18,7 +18,7 @@ export function billingDeps(config: AppConfig = getConfig()): BillingDeps {
 export async function shopBilling(
   admin: Pick<AdminApiContext, "graphql">,
   shop: { id: string; shopifyShopGid: string | null },
-  options: { force?: boolean } = {},
+  options: { force?: boolean; minAgeMs?: number } = {},
 ) {
   const deps = billingDeps();
   // The GID (from Shopify) identifies the shop to the Partner API and for

@@ -7,9 +7,11 @@
  * its CDN): `pnpm test:visual:update`, look at every changed image, commit.
  */
 import { expect, test, type Page } from "@playwright/test";
+import type { UiShopKey } from "./fixtures/shops";
 import { openApp } from "./helpers";
 
-const PAGES: Array<[string, string]> = [
+// Every page of the "visual" store, unless another store is named.
+const PAGES: Array<[string, string, UiShopKey?]> = [
   ["overview", "/app"],
   ["products", "/app/products?lang=de"],
   ["editor", "/app/products/2?lang=de"],
@@ -17,13 +19,17 @@ const PAGES: Array<[string, string]> = [
   ["glossary", "/app/glossary"],
   ["settings", "/app/settings"],
   ["plan", "/app/plan"],
+  // No plan chosen: the trial offer on the paid cards (the empty store's data is fixed too).
+  ["plan-none", "/app/plan", "empty"],
   ["language", "/app/languages/de"],
   ["category", "/app/languages/de/products"],
   ["content", "/app/content"],
 ];
 
-// With the time and zone where a page shows them ("Oct 30, 2026, 9:15 AM UTC").
-const DATE = /(\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b|\b[A-Z][a-z]{2} \d{1,2}, \d{4})(, \d{1,2}:\d{2}\s?[AP]M UTC)?/;
+// With the time and zone where a page shows them ("Oct 30, 2026, 9:15 AM UTC"),
+// and a day of this year without the year (the Plan page: "on November 1").
+const DATE =
+  /(\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b|\b[A-Z][a-z]{2} \d{1,2}, \d{4})(, \d{1,2}:\d{2}\s?[AP]M UTC)?|\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}\b/;
 
 async function settle(page: Page) {
   // Polaris uses the Inter web font. `document.fonts.ready` doesn't wait for
@@ -42,7 +48,8 @@ async function settle(page: Page) {
     const pattern = new RegExp(source, "g");
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (pattern.test(node.nodeValue ?? "")) node.nodeValue = node.nodeValue!.replace(pattern, "January 1, 2026");
+      // A date with a year (and time) becomes "January 1, 2026", a day without one "January 1".
+      if (pattern.test(node.nodeValue ?? "")) node.nodeValue = node.nodeValue!.replace(pattern, (date) => (/\d{4}/.test(date) ? "January 1, 2026" : "January 1"));
       pattern.lastIndex = 0;
     }
   }, DATE.source);
@@ -51,9 +58,9 @@ async function settle(page: Page) {
   await page.waitForTimeout(300);
 }
 
-for (const [name, path] of PAGES) {
+for (const [name, path, shop] of PAGES) {
   test(`${name} looks as reviewed @responsive`, async ({ page }) => {
-    await openApp(page, "visual", path);
+    await openApp(page, shop ?? "visual", path);
     await settle(page);
     await expect(page).toHaveScreenshot(`${name}.png`, {
       animations: "disabled",

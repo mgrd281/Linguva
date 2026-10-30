@@ -1,3 +1,31 @@
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const shopify = vi.hoisted(() => {
+  // The Plan page reads the store's languages from Shopify. The Shopify
+  // library keeps the fetch it finds when it loads, so it is replaced first:
+  // that one query is answered here, and nothing else may reach Shopify.
+  const real = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (!url.hostname.endsWith(".myshopify.com")) return real(input, init);
+    const body = String(init?.body ?? "");
+    calls.push(url.hostname);
+    if (url.pathname.endsWith("/graphql.json") && body.includes("LinguvaShopLocales")) {
+      return Response.json({
+        data: {
+          shopLocales: [
+            { locale: "en", name: "English", primary: true, published: true },
+            { locale: "de", name: "German", primary: false, published: true },
+          ],
+        },
+      });
+    }
+    throw new Error(`No real Shopify request in tests: ${url.pathname}`);
+  }) as typeof fetch;
+  return { calls };
+});
+
 /**
  * Owner complimentary access: every feature without a subscription for the
  * operator's own stores, while AI usage stays metered and costed.
@@ -6,7 +34,6 @@ import { createHmac, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { Session } from "@shopify/shopify-api";
 import type { LoaderFunctionArgs } from "react-router";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   complimentaryUsageReport,
   grantComplimentaryAccess,
@@ -178,9 +205,18 @@ describe("the Plan page", () => {
     vi.stubEnv("COMPLIMENTARY_SHOP_GIDS", OWN);
     resetConfigCache();
     try {
-      expect(await planPage("own-store.myshopify.com")).toMatchObject({ state: "COMPLIMENTARY", costPerMillion: 25 });
+      const own = await planPage("own-store.myshopify.com");
+      expect(own).toMatchObject({ state: "COMPLIMENTARY", costPerMillion: 25, choosePlanUrl: null });
       // Billing isn't configured here: every feature, but no internal figures.
-      expect(await planPage("customer.myshopify.com")).toMatchObject({ configured: false, state: "ACTIVE", costPerMillion: null });
+      const customer = await planPage("customer.myshopify.com");
+      expect(customer).toMatchObject({ configured: false, state: "ACTIVE", costPerMillion: null, choosePlanUrl: null });
+      // The operator's platform-wide AI cap isn't any store's business.
+      for (const data of [own, customer]) {
+        expect(data.limits).not.toHaveProperty("platformDailyLimit");
+        expect(data.languages?.items.map((l) => l.locale)).toEqual(["de"]);
+      }
+      // Each store's own languages were read from Shopify (the stand-in above).
+      expect(shopify.calls).toEqual(["own-store.myshopify.com", "customer.myshopify.com"]);
     } finally {
       vi.unstubAllEnvs();
       resetConfigCache();

@@ -34,8 +34,8 @@ import type { SmartSettingsValue } from "../../app/.server/smart/validate";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { saveResourceTranslations } from "../../app/.server/translation/product-translation-service";
-import { getOriginUsageSince } from "../../app/.server/usage/usage-ledger";
-import { PLANS } from "../../app/lib/plans";
+import { getOriginUsageSince, reserveUsage } from "../../app/.server/usage/usage-ledger";
+import { PLANS, TRIAL_AI_CHARS } from "../../app/lib/plans";
 import { SMART_REQUESTED_BY } from "../../app/lib/smart-auto";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
@@ -274,6 +274,26 @@ describe("a scheduled run", () => {
     expect((await runRows(shop.id))[0]).toMatchObject({ status: "COMPLETED", errorCode: "SMART_BUDGET_DAILY" });
     // Not a "complete" check: something it found is still waiting.
     expect((await getSmartConfig(shop.id, app))!.lastSuccessAt).toBeNull();
+  });
+
+  it("stops at a trial's allowance: the schedule pauses only until the trial ends, when the plan's allowance applies", async () => {
+    const { shop, deps, pages, coverage, jobs } = await setup(2);
+    await turnOn(shop.id);
+    await smartTick(deps, DUE);
+    await measure(coverage, pages[0]!);
+    const [de] = await smartJobs(shop.id);
+    // A Business trial that ends in an hour; its 100,000 characters are all but used up.
+    const trialEndsAt = new Date(Date.now() + 60 * 60_000);
+    await reserveUsage({ shopId: shop.id, key: "trial-work", chars: TRIAL_AI_CHARS - 5, limit: TRIAL_AI_CHARS, provider: "mock" }, app);
+    const trial = { configured: true, entitlements: { ...PLANS.business, monthlyChars: TRIAL_AI_CHARS }, trialEndsAt };
+    const processor = createItemProcessor({ ...jobs, billingFor: async () => trial });
+    const item = de!.items[0]!;
+    await expect(processor({ data: { shopId: shop.id, itemId: item.id }, id: item.id, attemptsMade: 0, opts: { attempts: 5 } } as never)).rejects.toThrow("QUOTA_EXCEEDED");
+    const paused = (await getSmartConfig(shop.id, app))!;
+    expect(paused.pauseReason).toBe("PLAN_ALLOWANCE");
+    expect(paused.pausedUntil!.getTime()).toBeGreaterThan(Date.now());
+    // Not until the next month: from the trial's end Business's 4,000,000 apply.
+    expect(paused.pausedUntil!.getTime()).toBeLessThanOrEqual(trialEndsAt.getTime());
   });
 
   it("says so when part of it was read while paused, and isn't then the last complete check", async () => {

@@ -45,6 +45,11 @@ export function periodKey(date: Date = new Date()): string {
   return date.toISOString().slice(0, 7);
 }
 
+/** When the next usage period starts: the 1st of the next UTC month, 00:00 UTC (the allowance renews then). */
+export function nextPeriodStart(date: Date = new Date()): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+}
+
 /** UTC calendar day, e.g. "2026-10-27". */
 export function dayKey(date: Date = new Date()): string {
   return date.toISOString().slice(0, 10);

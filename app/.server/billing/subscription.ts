@@ -9,13 +9,17 @@
  *   free plan without being sent to the plan page.
  * - Without Partner API settings, billing is off: every shop is unmetered
  *   (development and the time before plans exist).
+ * - While a Shopify free trial runs, the AI allowance is capped at
+ *   TRIAL_AI_CHARS (docs/PRICING_DECISION.md §10.2): a trial can't be used
+ *   as a free first pass of the whole catalog. The cap only lowers the
+ *   allowance, and it ends by the clock, not with the next check.
  */
 import type { PrismaClient, ShopSubscription } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import { withTenant } from "../tenancy/with-tenant";
-import { entitlementsFor, PLANS, UNMETERED, type Entitlements } from "../../lib/plans";
+import { entitlementsFor, PLANS, TRIAL_AI_CHARS, UNMETERED, type Entitlements } from "../../lib/plans";
 import { activeComplimentaryAccess, complimentaryEntitlements } from "./complimentary";
 import { fetchActiveSubscription, PartnerApiError, type PartnerApiSettings } from "./partner-api";
 
@@ -46,6 +50,12 @@ export interface BillingStatus {
   stale: boolean;
   /** Send the merchant to the plan selection page (only with a verified NONE). */
   mustChoosePlan: boolean;
+  /**
+   * Set while a Shopify free trial runs (its end, from the cached
+   * subscription): the AI allowance is capped at TRIAL_AI_CHARS until then.
+   * Absent when no trial runs.
+   */
+  trialEndsAt?: Date;
 }
 
 const SHOP_ID_QUERY = `#graphql
@@ -69,7 +79,12 @@ export async function ensureShopGid(
   return gid;
 }
 
-function statusFrom(row: ShopSubscription | null, deps: BillingDeps, stale: boolean): BillingStatus {
+/**
+ * The status a cached subscription row stands for. Exported for tests.
+ * The trial is compared with the current time (deps.now), so the full
+ * allowance starts exactly when the trial ends, even with a cached row.
+ */
+export function statusFrom(row: ShopSubscription | null, deps: BillingDeps, stale: boolean): BillingStatus {
   if (!row) {
     return { configured: true, state: "UNKNOWN", entitlements: PLANS.free, subscription: null, stale, mustChoosePlan: false };
   }
@@ -78,16 +93,19 @@ function statusFrom(row: ShopSubscription | null, deps: BillingDeps, stale: bool
   }
   const resolved = entitlementsFor(row.planHandle);
   if (!resolved.known) logger.warn({ plan: row.planHandle }, "unknown plan handle; using the free plan");
+  const now = (deps.now ?? (() => new Date()))();
+  // A running trial only ever lowers the allowance (never above the plan's).
+  const trialEndsAt = row.trialEndsAt && row.trialEndsAt.getTime() > now.getTime() ? row.trialEndsAt : null;
   const entitlements: Entitlements = {
     plan: resolved.plan,
-    monthlyChars: resolved.monthlyChars,
+    monthlyChars: trialEndsAt ? Math.min(resolved.monthlyChars, TRIAL_AI_CHARS) : resolved.monthlyChars,
     maxTargetLocales: resolved.maxTargetLocales,
     bulk: resolved.bulk,
     glossary: resolved.glossary,
     autoPublish: resolved.autoPublish,
     smartAuto: resolved.smartAuto,
   };
-  return { configured: true, state: "ACTIVE", entitlements, subscription: row, stale, mustChoosePlan: false };
+  return { configured: true, state: "ACTIVE", entitlements, subscription: row, stale, mustChoosePlan: false, ...(trialEndsAt ? { trialEndsAt } : {}) };
 }
 
 /** Queries the Partner API now and updates the cache. */
@@ -123,12 +141,15 @@ export async function refreshSubscription(
 
 /**
  * The shop's billing status and entitlements. Uses the cache while it is
- * fresh; `force` re-checks (for example after the welcome link).
+ * fresh; `force` re-checks (for example after the welcome link). With
+ * `minAgeMs`, a forced check reuses a successful check younger than that
+ * (the Plan page's refresh); a failed check never updates `checkedAt`, so
+ * it is asked again.
  */
 export async function getBillingStatus(
   deps: BillingDeps,
   shop: { id: string; shopifyShopGid: string | null },
-  options: { force?: boolean } = {},
+  options: { force?: boolean; minAgeMs?: number } = {},
 ): Promise<BillingStatus> {
   // Complimentary access needs no subscription and wins over any plan.
   const complimentary = await activeComplimentaryAccess(
@@ -153,8 +174,10 @@ export async function getBillingStatus(
   const client = deps.prisma ?? defaultClient;
   const now = (deps.now ?? (() => new Date()))().getTime();
   const cached = await withTenant(shop.id, (tx) => tx.shopSubscription.findUnique({ where: { shopId: shop.id } }), client);
-  const fresh = cached && now - cached.checkedAt.getTime() < SUBSCRIPTION_TTL_MS;
-  if (cached && fresh && !options.force) return statusFrom(cached, deps, false);
+  const age = cached ? now - cached.checkedAt.getTime() : Infinity;
+  const fresh = age < SUBSCRIPTION_TTL_MS;
+  const recent = options.minAgeMs !== undefined && age < options.minAgeMs;
+  if (cached && fresh && (!options.force || recent)) return statusFrom(cached, deps, false);
   try {
     const row = await refreshSubscription(deps, shop);
     return statusFrom(row ?? cached, deps, !row && Boolean(cached));

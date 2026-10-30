@@ -99,6 +99,13 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 
 `PlatformUsageDay` holds only a date and a number, so it isn't under RLS. The runtime role can read, insert and update it, but not delete.
 
+**Production values when billing goes live** (PRICING_DECISION.md §8, §9 step 6):
+
+- `AI_DAILY_CHAR_LIMIT=1000000`: each shop gets min(1,000,000, its monthly allowance) per UTC day, so at most $27.50 of DeepL cost per shop and day. A store in Shopify's trial has at most 100,000 AI characters a month (`TRIAL_AI_CHARS`).
+- `AI_PLATFORM_DAILY_CHAR_LIMIT=3000000`: at most $82.50 a day across all shops. The code default stays 100,000 for development; with `BILLING_REQUIRED=true` and a platform cap below 1,000,000 the app logs a warning at start (`configWarnings` in `app/.server/lib/config.ts`), because one store's first pass would stop AI translation for every store.
+- **Raise rule:** raise the platform cap when any day in the last 7 reaches 70% of it, or when `PLATFORM_LIMIT` appears in a job. Target: max(3,000,000; 3 × the sum of paying shops' monthly allowances ÷ 30), rounded up to whole millions, and always at least 3× the per-shop cap, so one first pass never blocks other stores. Move from DeepL Growth to Enterprise when the monthly total nears 40,000,000 characters.
+- **Outer guard:** cost control in the DeepL account at €150 a month at launch, a backstop (DeepL then refuses every request until its billing period ends), not a throttle.
+
 ## 5b. No unintended publishing (implemented, tested)
 
 - Bulk jobs create drafts by default. Automatic publishing needs an explicit, recorded confirmation.

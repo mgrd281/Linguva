@@ -128,7 +128,11 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **L7** Cancel the subscription → Partner API reports none → after the 6 h cache (or the welcome link) the plan page is shown again.
 - **L8** Wrong Partner API token → paying shop keeps its plan (stale state), no redirect; warning in the logs only.
 - **L9** Partner Dashboard: confirm that no charge or invoice was created for the dev store.
-- **L10** Owner complimentary access (BILLING_DESIGN §4), on a second dev store standing in for an own store: without a plan, `pnpm ops:complimentary grant --shop-gid …` plus the GID in `COMPLIMENTARY_SHOP_GIDS` → Plan page shows "Complimentary access", all features work, no redirect to plan selection with `BILLING_REQUIRED=true`; AI usage appears in `pnpm ops:complimentary report`; revoke → plan selection again. The first dev store (not granted) is unaffected.
+- **L10** Owner complimentary access (BILLING_DESIGN §4), on a second dev store standing in for an own store: without a plan, `pnpm ops:complimentary grant --shop-gid …` plus the GID in `COMPLIMENTARY_SHOP_GIDS` → Plan page shows "Owner access" (no plan buttons, the internal AI cost), all features work, no redirect to plan selection with `BILLING_REQUIRED=true`; AI usage appears in `pnpm ops:complimentary report`; revoke → plan selection again. The first dev store (not granted) is unaffected.
+- **L11** Prices (PRICING_DECISION.md §9 step 5): Shopify's plan page (`https://admin.shopify.com/store/linguva-test-lab/charges/<app-handle>/pricing_plans`) lists Free, Starter, Pro, Business with $29 / $99 / $299 and "7-day free trial"; with yearly selected, Starter $290 and Pro $990; note how Business (monthly only) appears there. Compare every price with Linguva's Plan page (cards and the table's price row, `PLAN_PRICES`) in English and German: none differs.
+- **L12** Trial: choose Starter for the first time → welcome link → the Plan page shows "Trial until {date}", "During the trial you have 100,000 AI characters, then 300,000 a month" and the meter "of 100,000". During the trial, editor AI and bulk jobs stop at 100,000 characters; the smart budgets explain why they can't be higher. After the trial ends, the plan's allowance applies without a refresh.
+- **L13** Trial text: a store without a plan sees "Up to 7 days free, with 100,000 AI characters" on the three paid cards, a store with a plan doesn't. With 0 trial days in the Partner Dashboard (and `TRIAL_DAYS = 0`), no trial text anywhere.
+- **L14** Changes: Starter → Pro → Business → Free on Shopify's page; Linguva's Plan page follows each change after the welcome link. A change that waits for the end of the cycle shows "Changes to {plan} on {date}" and the badge on that card. "Refresh" confirms the plan with a message; every plan button opens Shopify's page in the whole window, never inside the app.
 
 ### M. Cost limits
 - **M1** Daily limit set low → AI refused with the daily message; resets at midnight UTC.
@@ -193,7 +197,7 @@ The first beta can start when:
 
 1. `pnpm test:live` passes read-only and with writes, and every case in A–N passes, or its failure is fixed or accepted by the owner in writing.
 2. C7 passes with DeepL (or the chosen provider), with the owner's approval of the key and its cost.
-3. Billing L1–L9 pass with the real Partner Dashboard plans, and no charge was created.
+3. Billing L1–L9 and L11–L14 pass with the real Partner Dashboard plans, and no charge was created.
 4. Hosting, backups and monitoring are set up and approved (separate from any existing production systems).
 5. Privacy policy, data processing terms and the App Store listing are reviewed by the owner.
 

@@ -7,7 +7,7 @@ Draft texts for the Shopify App Store submission form, in English and German. Wr
 - Only list interface languages the app fully supports.
 - Screenshots 1600 × 900, 3–6 for desktop, no browser chrome, no personal data, with alt text; add mobile screenshots if the app works on phones.
 
-Lengths are checked by `tests/unit/app-store-listing.test.ts`. **Nothing here is submitted**: submission needs the owner's account, privacy policy, demo store and prices (OWNER_DECISIONS.md).
+Lengths are checked by `tests/unit/app-store-listing.test.ts`. **Nothing here is submitted**: submission needs the owner's account, privacy policy, demo store and the plans entered in the Partner Dashboard (OWNER_DECISIONS.md; prices: PRICING_DECISION.md).
 
 ## Name and card
 
@@ -56,6 +56,24 @@ Lengths are checked by `tests/unit/app-store-listing.test.ts`. **Nothing here is
 - Integrations: none listed (DeepL is a service, not a Shopify app).
 - Sales channel requirement: Online Store not required (translations also serve other channels through Shopify), confirm on the dev store.
 
+## Pricing details
+
+Entered by the owner in the Partner Dashboard (Pricing content, per published language: PRICING_DECISION.md §9 step 3), from the decision of 2026-10-30. Display name = the plan name; Shopify shows the prices from the plans themselves ($0; $29 or $290 a year; $99 or $990 a year; $299 a month only). The app's Plan page shows the same prices from `PLAN_PRICES` (`app/lib/plans.ts`); change all three on the same day.
+
+| Plan | Top features (EN) | Top features (DE) |
+|---|---|---|
+| Free | 20,000 AI characters a month (DeepL) · AI translation into 1 language · Review and approve every draft · Translation memory: reused text is free · Translate by hand into every language | 20.000 KI-Zeichen pro Monat (DeepL) · KI-Übersetzung in 1 Sprache · Jeden Entwurf prüfen und freigeben · Übersetzungsspeicher: Wiederverwendetes kostet nichts · Selbst übersetzen in jeder Sprache |
+| Starter | 300,000 AI characters a month (DeepL) · AI translation into 3 languages · Translate whole areas at once · New and changed content translated automatically · 7-day trial with 100,000 AI characters | 300.000 KI-Zeichen pro Monat (DeepL) · KI-Übersetzung in 3 Sprachen · Ganze Bereiche auf einmal übersetzen · Neue und geänderte Inhalte automatisch übersetzen · 7 Tage testen, mit 100.000 KI-Zeichen |
+| Pro | 1,200,000 AI characters a month (DeepL) · AI translation into 10 languages · Glossary for brand names and fixed terms · Optional automatic publishing; texts with warnings wait · Everything in Starter; 7-day trial with 100,000 AI characters | 1.200.000 KI-Zeichen pro Monat (DeepL) · KI-Übersetzung in 10 Sprachen · Glossar für Markennamen und feste Begriffe · Automatisch veröffentlichen, wenn du willst; Texte mit Hinweis warten · Alles aus Starter; 7 Tage testen, mit 100.000 KI-Zeichen |
+| Business | 4,000,000 AI characters a month (DeepL) · AI translation into 20 languages · Smart schedule: your whole store on your timetable, with budgets · Everything in Pro · 7-day trial with 100,000 AI characters | 4.000.000 KI-Zeichen pro Monat (DeepL) · KI-Übersetzung in 20 Sprachen · Intelligenter Zeitplan: ganzer Shop nach deinem Zeitplan, mit Budgets · Alles aus Pro · 7 Tage testen, mit 100.000 KI-Zeichen |
+
+Under the plans:
+
+- **EN:** AI characters are the characters DeepL translates for you, spaces included. Text reused from your translation memory doesn't count. New allowance on the 1st of every month (UTC).
+- **DE:** KI-Zeichen sind die Zeichen, die DeepL für dich übersetzt, Leerzeichen inklusive. Text aus deinem Übersetzungsspeicher zählt nicht. Neues Kontingent am 1. jedes Monats (UTC).
+
+Rules: the trial feature goes in only once the trial allowance has been checked on the dev store (DEV_STORE_TEST_PLAN.md §L); with 0 trial days, no trial text anywhere. No price in any image, the icon or the logo (requirements 4.2.2 / 4.2.3): no listing screenshot shows the Plan page. No "popular" or "best value" claims (4.3.3).
+
 ## Screenshots
 
 Generated from the real app on the production build with a fictional demo catalog (`APP_STORE_SCREENSHOTS=1 pnpm test:ui tests/ui/app-store-screenshots.spec.ts`). Files: [app-store/screenshots/](app-store/screenshots/). Before submission, regenerate them inside the real admin on the dev store if the embedded frame looks different.
@@ -93,9 +111,9 @@ Read again on shopify.dev ("App Store requirements" §4.5, "Pass app review", "B
 | 4.5.6 Emergency developer contact | Owner, Partner Dashboard |
 | Only list interface languages fully supported | English and German; French and Spanish after native review |
 | Online store changes only through theme app extensions | Met: Linguva changes no theme files and adds no storefront script (STOREFRONT_LANGUAGE_SELECTOR.md) |
-| Billing through Shopify | Met in code (App Pricing); plans not created yet |
+| Billing through Shopify | Met in code (App Pricing); prices decided (PRICING_DECISION.md), plans not created in the Partner Dashboard yet |
 | Claims only for features verified on Shopify | Features 9 and 10 are Tested Locally; keep them out of the submitted listing until the dev-store checks K and K2 pass |
 
 ## Still needed from the owner
 
-App icon upload (`docs/brand/linguva-icon-1200.png`), privacy policy URL, support email and FAQ URL, demo store URL (dev store), pricing details as configured in the Partner Dashboard. See OWNER_DECISIONS.md.
+App icon upload (`docs/brand/linguva-icon-1200.png`), privacy policy URL, support email and FAQ URL, demo store URL (dev store). Pricing is decided (PRICING_DECISION.md, 2026-10-30): the owner enters exactly these plans and the pricing details above in the Partner Dashboard (PRICING_DECISION.md §9). See OWNER_DECISIONS.md.

@@ -4,7 +4,7 @@
  * that is the same on server and browser.
  */
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, formatMonth, formatNumber, languageName, resolveLocale, translate, translator } from "../../app/i18n/i18n";
+import { formatDate, formatDateTime, formatDayMonth, formatMonth, formatNumber, languageName, resolveLocale, translate, translator } from "../../app/i18n/i18n";
 import { MESSAGES, NAMESPACES, type Message } from "../../app/i18n/messages";
 import { fieldName, issueName, jobStatus, kindLabel } from "../../app/i18n/labels";
 
@@ -51,6 +51,18 @@ describe("interface language", () => {
     expect(formatDateTime("de", "2026-10-27T23:30:00Z")).toBe("27.10.2026, 23:30 UTC");
     expect(formatMonth("de", "2026-10")).toBe("Oktober 2026");
     expect(formatDate("en", "not a date")).toBe("");
+  });
+
+  it("names a day and month, with the year only when it isn't this year's (in UTC)", () => {
+    const now = "2026-10-30T09:00:00Z";
+    expect(formatDayMonth("de", "2026-11-01T00:00:00Z", now)).toBe("1. November");
+    expect(formatDayMonth("en", "2026-11-01T00:00:00Z", now)).toBe("November 1");
+    expect(formatDayMonth("de", "2027-01-01T00:00:00Z", now)).toBe("1. Januar 2027");
+    expect(formatDayMonth("en", "2027-01-01T00:00:00Z", now)).toBe("January 1, 2027");
+    // 23:30 UTC on the 31st is still the 31st, whatever the server's zone.
+    expect(formatDayMonth("de", "2026-10-31T23:30:00Z", now)).toBe("31. Oktober");
+    expect(translator("fr").dayMonth("2026-11-05T00:00:00Z", now)).toBe("5 novembre");
+    expect(formatDayMonth("de", "not a date", now)).toBe("");
   });
 
   it("has complete German, French and Spanish catalogues: same keys, same placeholders, same plural forms", () => {

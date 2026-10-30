@@ -18,7 +18,8 @@ export function translateWhat(i18n: I18n, category: CategoryId, estimate: BulkEs
   return items && estimate.items ? i18n.t(items, { count: estimate.items }) : categoryName(i18n, category);
 }
 
-type PointIcon = (typeof CATEGORIES)[CategoryId]["icon"] | "clock" | "check-circle" | "shield-check-mark" | "wand";
+// AI characters have one icon in the whole app (gauge, as on the Plan page); wand means "translate with AI".
+type PointIcon = (typeof CATEGORIES)[CategoryId]["icon"] | "clock" | "check-circle" | "shield-check-mark" | "gauge";
 
 function Point({ icon, title, children }: { icon: PointIcon; title: string; children: ReactNode }) {
   return (
@@ -82,7 +83,7 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
           <Point icon="shield-check-mark" title={t("language.confirm.keep")}>
             <s-text color="subdued">{t("language.confirm.keepDetail")}</s-text>
           </Point>
-          <Point icon="wand" title={t("language.confirm.chars")}>
+          <Point icon="gauge" title={t("language.confirm.chars")}>
             <s-text color="subdued">
               {estimate.chars !== null ? t("language.confirm.charsDetail", { chars: estimate.chars, remaining: aiRemaining }) : t("language.confirm.charsUnknown", { remaining: aiRemaining })}
             </s-text>

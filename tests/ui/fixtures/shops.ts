@@ -33,6 +33,12 @@ export interface UiShop {
   locales: UiLocale[];
   /** Partner API plan handle (null: no subscription). */
   plan: string | null;
+  /**
+   * More of the Partner API's answer (dates in days from now, so they stay
+   * in the future): a running trial, a plan change waiting for the cycle's
+   * end, a cancellation at the cycle's end, or no answer at all (HTTP 503).
+   */
+  subscription?: { trialDays?: number; pendingPlan?: string; cancelAtEndOfCycle?: boolean; periodEndDays?: number; partnerDown?: boolean };
   /** Every Admin API call fails (Shopify outage or revoked access). */
   failing?: boolean;
   /** Translation queries answer only after this many ms (a hanging Shopify). */
@@ -327,6 +333,90 @@ export const UI_SHOPS = {
     locales: [en, de],
     plan: null,
     build: () => new FakeShopifyStore(3),
+  },
+  planTrial: {
+    // Business in Shopify's free trial: the trial's AI allowance applies until it ends.
+    domain: "ui-plan-trial.myshopify.com",
+    gid: "gid://shopify/Shop/91021",
+    name: "Plan Trial Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }],
+    plan: "business",
+    subscription: { trialDays: 6, periodEndDays: 6 },
+    build: () => new FakeShopifyStore(2),
+  },
+  planPending: {
+    // Pro, changing to Starter at the end of the billing cycle.
+    domain: "ui-plan-pending.myshopify.com",
+    gid: "gid://shopify/Shop/91022",
+    name: "Plan Pending Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }],
+    plan: "pro",
+    subscription: { pendingPlan: "starter", periodEndDays: 29 },
+    build: () => new FakeShopifyStore(2),
+  },
+  planEnding: {
+    // Starter, cancelled: it ends with the billing cycle.
+    domain: "ui-plan-ending.myshopify.com",
+    gid: "gid://shopify/Shop/91023",
+    name: "Plan Ending Store",
+    locales: [en, de],
+    plan: "starter",
+    subscription: { cancelAtEndOfCycle: true, periodEndDays: 2 },
+    build: () => new FakeShopifyStore(2),
+  },
+  planDown: {
+    // Never checked, and the Partner API doesn't answer: the plan is unknown (Free's limits, no redirect).
+    domain: "ui-plan-down.myshopify.com",
+    gid: "gid://shopify/Shop/91024",
+    name: "Plan Down Store",
+    locales: [en, de],
+    plan: "pro",
+    subscription: { partnerDown: true },
+    build: () => new FakeShopifyStore(2),
+  },
+  planStale: {
+    // Checked as Pro seven hours ago; now the Partner API doesn't answer: the last known state applies.
+    domain: "ui-plan-stale.myshopify.com",
+    gid: "gid://shopify/Shop/91025",
+    name: "Plan Stale Store",
+    locales: [en, de],
+    plan: "pro",
+    subscription: { partnerDown: true },
+    build: () => new FakeShopifyStore(2),
+  },
+  planLanguages: {
+    // Starter (three languages) with four: by their English names Danish, Dutch and French come first,
+    // so German is outside the plan. 86 % of the AI characters are used this month.
+    domain: "ui-plan-languages.myshopify.com",
+    gid: "gid://shopify/Shop/91026",
+    name: "Plan Languages Store",
+    locales: [
+      en,
+      { locale: "da", name: "Danish", primary: false, published: true },
+      { locale: "nl", name: "Dutch", primary: false, published: true },
+      { locale: "fr", name: "French", primary: false, published: true },
+      de,
+    ],
+    plan: "starter",
+    build: () => new FakeShopifyStore(2),
+  },
+  planAutoPublish: {
+    // Starter with automatic publishing switched on (under Pro): the smallest plan that fits is Pro.
+    domain: "ui-plan-autopublish.myshopify.com",
+    gid: "gid://shopify/Shop/91027",
+    name: "Plan Auto Publish Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }],
+    plan: "starter",
+    build: () => new FakeShopifyStore(2),
+  },
+  planFreeUsed: {
+    // Free chosen on Shopify's page, and this month's 20,000 AI characters are used up.
+    domain: "ui-plan-free.myshopify.com",
+    gid: "gid://shopify/Shop/91028",
+    name: "Plan Free Store",
+    locales: [en, de],
+    plan: "free",
+    build: () => new FakeShopifyStore(2),
   },
   fresh: {
     // Never seeded: installs through token exchange in the test.

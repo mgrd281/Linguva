@@ -13,10 +13,11 @@ import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { upsertTerms } from "../../app/.server/glossary/glossary";
 import { saveDrafts } from "../../app/.server/review/drafts";
-import { setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
+import { setAiConsent, setAutoTranslate, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
 import { saveSmartSettings, setSmartEnabled } from "../../app/.server/smart/config";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
+import { periodKey } from "../../app/.server/usage/usage-ledger";
 import { testEnv } from "../support/env";
 import { setWorkerRunning } from "./helpers";
 import { DEMO_GLOSSARY, demoDrafts } from "./fixtures/demo-store";
@@ -244,6 +245,27 @@ export default async function globalSetup() {
         owner.$executeRaw`UPDATE "CoverageReport" SET "createdAt" = now() - interval '1 hour', "updatedAt" = now() - interval '1 hour' WHERE "shopId" = ${ids.stalled!}::uuid`,
       ]);
     }
+
+    // The Plan page's states: AI characters used this month (counted from the 1st), automatic
+    // publishing switched on under a bigger plan, and a plan last confirmed seven hours ago.
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    for (const [key, chars] of [["planTrial", 31_000], ["planLanguages", 258_000], ["planFreeUsed", 20_000]] as const) {
+      await withTenant(
+        ids[key]!,
+        (tx) => tx.usageLedger.create({ data: { shopId: ids[key]!, periodKey: periodKey(now), kind: "RESERVE", chars, provider: "mock", idempotencyKey: "ui-seed-month", createdAt: monthStart } }),
+        app,
+      );
+    }
+    await setBulkPublishMode({ shopId: ids.planAutoPublish!, mode: "AUTO_PUBLISH", confirmed: true, actorId: "1" }, app);
+    await withTenant(
+      ids.planStale!,
+      (tx) =>
+        tx.shopSubscription.create({
+          data: { shopId: ids.planStale!, state: "ACTIVE", planHandle: "pro", billingPeriod: "EVERY_30_DAYS", checkedAt: new Date(now.getTime() - 7 * 3_600_000) },
+        }),
+      app,
+    );
 
     // No worker runs in these tests: a heartbeat left from an earlier run would say otherwise.
     await setWorkerRunning(false);

@@ -34,11 +34,12 @@ import { CATEGORIES, categoryPath, languagePath, type CategoryId } from "../lib/
 import { languageList, upperFirst } from "../lib/name-lists";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, shop, scopes } = await requireShop(request);
+  const { admin, shop, scopes, redirect } = await requireShop(request);
   const url = new URL(request.url);
   const query = { state: url.searchParams.get("state"), q: url.searchParams.get("q"), after: url.searchParams.get("after") };
   return loadCategoryItems(admin, shop, params.locale ?? "", params.category ?? "", query, undefined, {
     markets: () => loadMarketCountries(shop.id, admin, () => scopes.query().then((s) => s.granted.includes(MARKETS_SCOPE))),
+    toOverview: () => redirect("/app", { target: "_self" }),
   });
 };
 

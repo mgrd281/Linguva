@@ -16,7 +16,7 @@ import { loadLanguagePage, translateCategoryAction } from "../.server/languages/
 import { startMeasurement } from "../.server/coverage/dashboard";
 import { loadMarketCountries } from "../.server/markets/countries";
 import { MARKETS_SCOPE } from "../.server/markets/markets";
-import type { loader as previewsLoader } from "./app.languages_.$locale_.previews";
+import type { clientLoader as previewsLoader } from "./app.languages_.$locale_.previews";
 import { CategoryCard, categoryName, type LanguageCategory } from "../components/CategoryCard";
 import { itemsHref, percentLabel } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
@@ -34,9 +34,10 @@ import { EXTRAS, TIERS, type CategoryId, type ExtraId, type LanguageStep } from 
 import { languageList, upperFirst } from "../lib/name-lists";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, shop, scopes } = await requireShop(request);
+  const { admin, shop, scopes, redirect } = await requireShop(request);
   return loadLanguagePage(admin, shop, params.locale ?? "", undefined, {
     markets: () => loadMarketCountries(shop.id, admin, () => scopes.query().then((s) => s.granted.includes(MARKETS_SCOPE))),
+    toOverview: () => redirect("/app", { target: "_self" }),
   });
 };
 

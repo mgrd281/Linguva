@@ -31,6 +31,7 @@ const DESKTOP = [
   { file: "5-glossary.png", path: "/app/glossary" },
   { file: "6-settings.png", path: "/app/settings", scrollTo: 's-section[heading="Automatic translation"]' },
   { file: "7-overview.png", path: "/app" },
+  { file: "9-language.png", path: "/app/languages/de", scrollTo: 'h2:has-text("Area by area")' },
 ];
 
 test.describe("desktop", () => {

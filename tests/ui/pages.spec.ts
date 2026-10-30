@@ -26,6 +26,10 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
       await expect(page.getByText("Arabic (RTL)")).toBeVisible();
       await expect(page.getByText("Unpublished")).toBeVisible();
       await expect(page.getByText(/4 of 20 languages enabled, 3 published/)).toBeVisible();
+      // Each additional language opens its own page; the original has none.
+      await expect(page.getByRole("link", { name: "German" })).toHaveAttribute("href", "/app/languages/de");
+      await expect(page.getByRole("link", { name: /^Arabic/ })).toHaveAttribute("href", "/app/languages/ar");
+      await expect(page.getByRole("link", { name: /^English/ })).toHaveCount(0);
     },
   },
   {

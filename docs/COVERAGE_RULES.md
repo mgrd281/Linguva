@@ -1,6 +1,6 @@
 # Translation coverage: how it is counted
 
-The coverage page (`/app/coverage`) and the Overview show how complete each language is. These are the rules; they live in `app/lib/coverage-rules.ts` and are tested in `tests/unit/coverage-rules.test.ts` (pure rules) and `tests/integration/coverage.test.ts` (scan and sync).
+The coverage page (`/app/coverage`), the Overview and each language's page (`/app/languages/<locale>`, §11) show how complete each language is. These are the rules; they live in `app/lib/coverage-rules.ts` and are tested in `tests/unit/coverage-rules.test.ts` (pure rules) and `tests/integration/coverage.test.ts` (scan and sync).
 
 ## 1. What is counted
 
@@ -110,3 +110,31 @@ Limits that stay visible in the figures:
 - **Image alt text and custom fields** are never part of automatic translation. "Translate missing" on their row starts the owner's job, which also translates the owner's other missing fields.
 - **Failed** shows on the item the job processed: images and custom fields translated with a failed owner keep their earlier state.
 - **Images of a deleted owner** stay until the next scan of their type.
+
+## 11. A language area by area (the language page)
+
+The language page (`/app/languages/<locale>`) and each area's list split one language's figure into **areas**, in the order customers meet them. The mapping lives in `app/lib/language-categories.ts` and is tested in `tests/unit/language-categories.test.ts`.
+
+| Tier | Area | Content types |
+|---|---|---|
+| What customers see first | Products | Products |
+| | Collections | Collections |
+| | Menus & filters | Menus, menu links, filters |
+| | Sizes & colors | Product options and option values |
+| Important before buying | Store & checkout | Store listing, policies, shipping methods, payment methods, subscription plans and groups |
+| | Extra details | Custom fields of products, collections, pages and blog posts |
+| | Size charts & more | Metaobjects |
+| Content and Google | Pages | Pages |
+| | Blog | Blogs and blog posts |
+| | Image descriptions | Product, collection and blog post images (alt text) |
+
+Rules:
+
+- **The areas add up to the language's figure.** An area counts exactly the fields the language's percentage counts (§1–§4: no URL handles, no theme or notification texts), so the areas' done and total fields sum to the language's. The unit test checks this on 300 random stores, state by state. Each area's percentage rounds down like every other (§3).
+- **Every content type is in exactly one area or extra** (tested), so nothing is counted twice or left out.
+- **Extras, not in the percentage** (§4), shown last under "Not part of the N %": texts of the theme (7 theme types), emails and the packing slip (notification templates), and web addresses (the URL handles of every type).
+- **An area's state** comes from the scan states of its types (§6): *no access* when any of them lacks its optional scope (no figure, "Allow access"); *being counted* while the current scan reads them; *not counted completely* when a scan didn't finish one, or one wasn't read while the others were; otherwise its figure. A language never counted shows "Not counted yet" and no areas.
+- **One state per item** in an area's list: an item's fields (URL handles left out) give it the most urgent of failed, outdated, missing, waiting for approval (draft or needs review), done. So the filters add up to "All". The figure above the list counts fields ("27 of 110 texts"); the list counts items ("Fully done: 7 of 55 products").
+- **Approving would bring**: (done + draft + needs review) ÷ counted, rounded down, shown only when something waits and it adds at least a point.
+- **Translating an area** starts one bulk job per content type of the area that bulk jobs translate and that has missing, outdated or failed fields (§10). Never for policies (one by one, with review); image descriptions and custom fields are translated with their products ("Also translate image descriptions and extra details" in the dialog), so those areas only link there.
+- Names, translated names and pictures on the page are read live from Shopify for what is on screen (at most 6 examples per area, 50 items per page), kept in memory for a minute; nothing of it is stored (§8).

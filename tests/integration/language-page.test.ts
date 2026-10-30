@@ -254,6 +254,9 @@ describe("the language page", () => {
     const primary = await rejection(loadLanguagePage(store.asAdmin(), shop, "en", app, available));
     expect(primary?.status).toBe(302);
     expect(primary?.headers.get("Location")).toBe("/app");
+    // Pages pass Shopify's redirect, which keeps the embedded app's parameters.
+    const embedded = await rejection(loadLanguagePage(store.asAdmin(), shop, "en", app, { ...available, toOverview: () => new Response(null, { status: 302, headers: { Location: "/app?shop=x" } }) }));
+    expect(embedded?.headers.get("Location")).toBe("/app?shop=x");
   });
 
   it("shows no figures for a language not counted yet, and offers to count it", async () => {
@@ -377,6 +380,9 @@ describe("a category's list", () => {
     expect(new Set(rows.map((r) => r.id)).size).toBe(60);
     const ranks = rows.map((r) => ITEM_STATES.indexOf(r.state));
     expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    // Within a state by resource, so the order is the same after every count.
+    const missingGids = rows.filter((r) => r.state === "missing").map((r) => `gid://shopify/Product/${r.reference}`);
+    expect(missingGids).toEqual([...missingGids].sort());
     expect(second.rows.slice(-4).map((r) => r.state)).toEqual(["complete", "complete", "complete", "complete"]);
 
     // One state: the same counts, its rows only.

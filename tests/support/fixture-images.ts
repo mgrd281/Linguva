@@ -46,11 +46,24 @@ export const FIXTURE_PICTURES = {
     "#E9F1E4",
     '<rect y="120" width="160" height="40" fill="#A7C79A"/><path d="M38 122l18-42 18 42zM68 122l22-56 22 56zM102 122l17-36 17 36z" fill="#2F6B45"/>',
   ),
+  trousers: svg(
+    "#ECE8F6",
+    '<rect x="50" y="26" width="60" height="12" rx="3" fill="#463A6B"/><path d="M50 38h60l-4 96H86l-6-64-6 64H54z" fill="#5E4F8F"/><path d="M62 38v14M98 38v14" stroke="#463A6B" stroke-width="3" stroke-linecap="round"/>',
+  ),
+  vest: svg(
+    "#FFF3DC",
+    '<path d="M60 30l8 8h24l8-8 20 16-6 18v66H46V64l-6-18z" fill="#E09B2D"/><path d="M80 38v92" stroke="#B87A1C" stroke-width="3"/><path d="M48 70h64M48 92h64M48 114h64" stroke="#C7861F" stroke-width="3"/>',
+  ),
+  socks: svg(
+    "#E5EFF7",
+    '<rect x="60" y="26" width="32" height="14" rx="3" fill="#2C5A80"/><path d="M60 40h32v46l24 20c9 8 5 24-8 24H84c-14 0-24-10-24-24z" fill="#3F7CAC"/><circle cx="104" cy="122" r="7" fill="#9CC2E0"/><path d="M60 92q14 6 32-6" fill="none" stroke="#9CC2E0" stroke-width="4"/>',
+  ),
 } as const;
 
 export type FixturePicture = keyof typeof FIXTURE_PICTURES;
 
-export const FIXTURE_PICTURE_NAMES = Object.keys(FIXTURE_PICTURES) as FixturePicture[];
+/** The pictures an image gets when none is chosen, in turn (a fixed list, so adding a picture changes no existing default). */
+export const FIXTURE_PICTURE_NAMES: readonly FixturePicture[] = ["jacket", "sweater", "shoes", "bottle", "beanie", "tent", "mountains", "forest"];
 
 /** The SVG of a picture file name ("jacket.svg"), or null for anything else. */
 export function fixturePicture(file: string): string | null {

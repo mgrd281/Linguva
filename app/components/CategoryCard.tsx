@@ -224,7 +224,7 @@ function Placeholder({ pictures, featured }: { pictures: boolean; featured: bool
 function Preview({ category, preview, featured, i18n, locale, primaryName }: { category: CategoryId; preview: CategoryPreview | null; featured: boolean; i18n: I18n; locale: string; primaryName: string }) {
   const pictures = PICTURES.has(category);
   if (!preview) return <Placeholder pictures={pictures} featured={featured} />;
-  if (!preview.items.length) return null;
+  if (!preview.items.length) return preview.error ? <s-text color="subdued">{i18n.t("language.card.previewError")}</s-text> : null;
   const props = { category, items: preview.items, i18n, locale, primaryName };
   return (
     <s-stack direction="block" gap="small-200">

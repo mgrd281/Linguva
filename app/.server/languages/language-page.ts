@@ -154,11 +154,11 @@ function scanningOf(report: { segments: readonly string[] } | null, measurement:
  * (404 otherwise). The primary language has no page of its own: its texts
  * are the originals, so it goes back to the Overview.
  */
-async function targetLanguage(admin: Admin, shopId: string, locale: string, client: PrismaClient) {
+async function targetLanguage(admin: Admin, shopId: string, locale: string, client: PrismaClient, toOverview?: () => Response) {
   const locales = await fetchAndSyncShopLocales(admin, shopId, client);
   const language = locales.locales.find((l) => l.locale === locale);
   if (!language) throw new Response("Unknown language", { status: 404 });
-  if (language.primary) throw redirect("/app");
+  if (language.primary) throw toOverview ? toOverview() : redirect("/app");
   return { language, locales, targets: locales.locales.filter((l) => !l.primary).map((l) => l.locale) };
 }
 
@@ -362,6 +362,12 @@ export interface LanguagePageOptions {
   markets?: () => Promise<MarketCountriesResult>;
   /** Tests only: the time the measurement state is judged at. */
   now?: number;
+  /**
+   * The redirect to the Overview for the primary language. Pages pass
+   * Shopify's, which keeps the embedded app's parameters when the page is
+   * opened directly (a plain redirect would leave the admin's session).
+   */
+  toOverview?: () => Response;
 }
 
 /**
@@ -396,7 +402,7 @@ function marketsFor(markets: MarketCountriesResult | null, locales: LocaleSummar
 export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: string, client: PrismaClient = defaultClient, options: LanguagePageOptions = {}) {
   const jobsAvailable = options.jobsAvailable ?? getQueues() !== null;
   const aiAvailable = options.aiAvailable ?? getTranslationProvider() !== null;
-  const { language, locales, targets } = await targetLanguage(admin, shop.id, locale, client);
+  const { language, locales, targets } = await targetLanguage(admin, shop.id, locale, client, options.toOverview);
   const [summary, settings, billing, jobs, used, markets] = await Promise.all([
     loadCoverageSummary(shop.id, client),
     getShopSettings(shop.id, client),
@@ -597,7 +603,8 @@ export async function loadLanguagePreviews(admin: Admin, shop: { id: string }, l
               WHERE "shopId" = ${shop.id}::uuid AND "locale" = ${locale} AND "resourceType" = ANY(${CATEGORIES[id].types as readonly string[]}::text[])
             ) i
             WHERE "rank" IS NOT NULL
-            ORDER BY "rank", "id"
+            -- By the resource, not the row: the same examples after every count.
+            ORDER BY "rank", "resourceGid"
             LIMIT ${previewLimit(id)}`,
         );
       }
@@ -723,7 +730,7 @@ function textCounts(fieldStates: readonly string[]): StateCounts {
 /**
  * A category's items in a language, 50 a page: how many there are in each
  * state (each item in exactly one, so the filters add up to "all"), the
- * page in state order (open work first) then by id, keyset-paged, with a
+ * page in state order (open work first) then by resource, keyset-paged, with a
  * title search for the types Shopify can search. Names, translations and
  * pictures of the shown rows are read live from Shopify (best effort: the
  * list works without them). Also the category's figure, texts waiting for
@@ -738,12 +745,12 @@ export async function loadCategoryItems(
   category: string,
   query: CategoryListQuery = {},
   client: PrismaClient = defaultClient,
-  options: Pick<LanguagePageOptions, "jobsAvailable" | "aiAvailable" | "markets" | "now"> = {},
+  options: Pick<LanguagePageOptions, "jobsAvailable" | "aiAvailable" | "markets" | "now" | "toOverview"> = {},
 ) {
   if (!isCategoryId(category)) throw new Response("Not found", { status: 404 });
   const jobsAvailable = options.jobsAvailable ?? getQueues() !== null;
   const aiAvailable = options.aiAvailable ?? getTranslationProvider() !== null;
-  const { language, locales, targets } = await targetLanguage(admin, shop.id, locale, client);
+  const { language, locales, targets } = await targetLanguage(admin, shop.id, locale, client, options.toOverview);
   const types = CATEGORIES[category].types as readonly string[];
   const searchable = types.filter(isSearchableType);
   const state: ListState = (ITEM_STATES as readonly string[]).includes(query.state ?? "") ? (query.state as ItemState) : "all";
@@ -765,6 +772,12 @@ export async function loadCategoryItems(
     gids ? Prisma.sql` AND "resourceGid" = ANY(${gids}::text[])` : Prisma.empty
   }`;
   const stateRank = state === "all" ? null : ITEM_STATES.indexOf(state);
+  // Rows go by state, then by resource (the same order after every count). The position is the
+  // last row's id: its resource is looked up here, never taken from the browser. A row gone since
+  // starts its state again.
+  const position = cursor
+    ? Prisma.sql`(${cursor.rank}::int, COALESCE((SELECT "resourceGid" FROM "CoverageItem" WHERE "id" = ${cursor.id}::uuid AND "shopId" = ${shop.id}::uuid), ''))`
+    : null;
   const { totals, rows, estimate } = await withTenant(
     shop.id,
     async (tx) => {
@@ -773,10 +786,10 @@ export async function loadCategoryItems(
       // rank) are left out afterwards: filtering them here would compute every rank twice.
       const groups = await tx.$queryRaw<Array<{ resourceType: string; rank: number | null; total: number; before: number; unsized: number }>>`
         SELECT "resourceType", "rank", count(*)::integer AS "total", ${
-          cursor ? Prisma.sql`count(*) FILTER (WHERE ("rank", "id") <= (${cursor.rank}::int, ${cursor.id}::uuid))` : Prisma.sql`0`
+          position ? Prisma.sql`count(*) FILTER (WHERE ("rank", "resourceGid") <= ${position})` : Prisma.sql`0`
         }::integer AS "before", count(*) FILTER (WHERE "unsized")::integer AS "unsized"
         FROM (
-          SELECT "resourceType", "id", cardinality("sourceChars") < cardinality("sourceKeys") AS "unsized", ${RANK} AS "rank"
+          SELECT "resourceType", "resourceGid", cardinality("sourceChars") < cardinality("sourceKeys") AS "unsized", ${RANK} AS "rank"
           FROM "CoverageItem"
           WHERE ${scope}
         ) i
@@ -789,9 +802,9 @@ export async function loadCategoryItems(
           WHERE ${scope}
         ) i
         WHERE "rank" IS NOT NULL${stateRank === null ? Prisma.empty : Prisma.sql` AND "rank" = ${stateRank}::int`}${
-          cursor ? Prisma.sql` AND ("rank", "id") > (${cursor.rank}::int, ${cursor.id}::uuid)` : Prisma.empty
+          position ? Prisma.sql` AND ("rank", "resourceGid") > ${position}` : Prisma.empty
         }
-        ORDER BY "rank", "id"
+        ORDER BY "rank", "resourceGid"
         LIMIT ${CATEGORY_PAGE_SIZE + 1}`;
       // Open items per type from the pass above, unless a search left items out of it.
       const open = new Map<string, OpenItems>();

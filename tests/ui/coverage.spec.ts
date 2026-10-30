@@ -39,6 +39,8 @@ test("shows the whole store, each language and what to do next @responsive", asy
   // One card per target language, the unpublished one marked.
   const languages = page.locator('s-section[heading="Languages"]');
   for (const name of ["German", "French", "Arabic"]) await expect(languages.getByRole("heading", { name })).toBeVisible();
+  // Each card's name opens the language's own page.
+  await expect(languages.getByRole("link", { name: "German", exact: true })).toHaveAttribute("href", "/app/languages/de");
   await expect(languages.locator("s-badge", { hasText: "Not published" })).toHaveCount(1);
   await expect(languages.getByRole("img", { name: /^German: coverage: Complete \d+/ })).toBeVisible();
 

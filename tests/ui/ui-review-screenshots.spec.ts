@@ -29,6 +29,12 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "import-export", shop: "full", path: "/app/translations", phone: true },
   { name: "jobs", shop: "full", path: "/app/jobs" },
   { name: "empty-overview", shop: "empty", path: "/app" },
+  // The redesign (UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign): the Overview by country, a language, one of its areas.
+  { name: "overview-countries", shop: "demo", path: "/app", phone: true },
+  { name: "language", shop: "demo", path: "/app/languages/de", phone: true },
+  { name: "language-not-counted", shop: "measure", path: "/app/languages/de" },
+  { name: "category", shop: "demo", path: "/app/languages/de/products", phone: true },
+  { name: "category-list", shop: "catalog", path: "/app/languages/de/products", phone: true },
   // Smart Auto-Translate (UI_REVIEW_SCREENSHOTS=docs/ui-review/smart-auto).
   { name: "smart-settings", shop: "business", path: "/app/settings", phone: true },
   { name: "smart-page", shop: "business", path: "/app/settings/automatic", phone: true },

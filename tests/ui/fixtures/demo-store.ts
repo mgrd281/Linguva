@@ -2,11 +2,13 @@
  * A realistic demo catalog (a fictional outdoor store) for the App Store
  * screenshots (tests/ui/app-store-screenshots.spec.ts): real German
  * translations (one outdated, one partial), French drafts waiting in
- * Review (one flagged by the number check) and glossary terms. Not used by
- * the regular UI tests.
+ * Review (one flagged by the number check), glossary terms, and a picture
+ * for every product and collection. The UI tests that need realistic
+ * content (Overview, language page, editor states) read it; none changes it.
  */
 import { createHash } from "node:crypto";
 import { FakeShopifyStore } from "../../support/fake-store";
+import type { FixturePicture } from "../../support/fixture-images";
 
 const P = (n: number) => `gid://shopify/Product/${n}`;
 export const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -110,6 +112,23 @@ const GERMAN: Record<number, Partial<Record<"title" | "body_html" | "handle" | "
   },
 };
 
+/** Each product's picture and its alt text, in DEMO_PRODUCTS order. */
+const DEMO_PICTURES: Array<[FixturePicture, string]> = [
+  ["sweater", "Grey merino wool sweater, front view"],
+  ["jacket", "Red hiking jacket with hood"],
+  ["shoes", "Orange trail running shoes, side view"],
+  ["bottle", "Blue steel water bottle"],
+  ["beanie", "Green wool beanie"],
+  ["trousers", "Purple rain trousers"],
+  ["vest", "Yellow down vest"],
+  ["socks", "Blue hiking socks"],
+];
+
+const DEMO_COLLECTIONS: Array<{ title: string; body: string; handle: string; german?: string; picture: FixturePicture; alt: string }> = [
+  { title: "Hiking", body: "<p>Everything for a day in the mountains.</p>", handle: "hiking", german: "Wandern", picture: "mountains", alt: "Green mountains under a yellow sun" },
+  { title: "Camping", body: "<p>Sleep under the stars.</p>", handle: "camping", picture: "tent", alt: "Orange tent on a meadow" },
+];
+
 export function buildDemoStore(): FakeShopifyStore {
   const store = new FakeShopifyStore(0);
   DEMO_PRODUCTS.forEach((p, i) => {
@@ -131,7 +150,18 @@ export function buildDemoStore(): FakeShopifyStore {
     "body_html",
     "<p>A light, <strong>waterproof</strong> shell with taped seams and a hood that fits over a helmet.</p><ul><li>2 chest pockets</li><li>Packs into its own pocket</li><li>New: recycled fabric</li></ul>",
   );
-  store.addImage(P(1), "Grey merino wool sweater, front view", "sweater");
+  // A picture for every product, and two collections with theirs (the language page shows them).
+  DEMO_PICTURES.forEach(([picture, alt], i) => store.addImage(P(i + 1), alt, picture));
+  DEMO_COLLECTIONS.forEach((c, i) => {
+    const gid = `gid://shopify/Collection/${i + 1}`;
+    store.products.set(gid, [
+      { key: "title", value: c.title, type: "SINGLE_LINE_TEXT_FIELD" },
+      { key: "body_html", value: c.body, type: "HTML" },
+      { key: "handle", value: c.handle, type: "URI" },
+    ]);
+    if (c.german) store.translate(gid, "de", "title", c.german);
+    store.addImage(gid, c.alt, c.picture);
+  });
   store.addMetafield(P(1), { namespace: "custom", key: "care", type: "multi_line_text_field", value: "Wash at 30 °C on a wool cycle. Dry flat." });
   return store;
 }

@@ -27,6 +27,9 @@ const GERMAN_PAGES = [
   { path: "/app/plan", heading: "Tarif" },
   { path: "/app/languages", heading: null },
   { path: "/app/content", heading: "Inhalte" },
+  // A language and one of its areas, with the store's own names and pictures in them.
+  { path: "/app/languages/fr", heading: "Französisch" },
+  { path: "/app/languages/fr/products", heading: "Produkte auf Französisch" },
 ];
 
 for (const { path, heading, merchantText } of GERMAN_PAGES as Array<{ path: string; heading: string | null; merchantText?: boolean }>) {

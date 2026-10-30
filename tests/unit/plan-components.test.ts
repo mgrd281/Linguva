@@ -114,6 +114,12 @@ describe("prices on the cards", () => {
       }
   });
 
+  it("marks the current plan with a strong badge, distinct from the neutral ones", () => {
+    // Polaris renders tone="neutral" color="strong" like a plain neutral badge (measured): the spec's fallback is info + strong.
+    const page = cards("de", STATES[0]!);
+    expect(page.match(/<s-badge[^>]*>Dein Tarif<\/s-badge>/g)).toEqual(['<s-badge tone="info" color="strong" icon="check-circle">Dein Tarif</s-badge>']);
+  });
+
   it("shows the trial line on the three paid cards only for a store without a plan", () => {
     const line = translator("de").t("plan.price.trial", { count: TRIAL_DAYS, chars: translator("de").number(TRIAL_AI_CHARS) });
     expect(cards("de", STATES[1]!).split(line)).toHaveLength(4);

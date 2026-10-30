@@ -164,9 +164,11 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
   const current = hero.current === handle;
   const nameId = `plan-${handle}`;
   const badges: ReactNode[] = [];
+  // Polaris draws neutral + strong exactly like a plain neutral badge ("Versteckt"): the
+  // spec's fallback, info + strong, keeps the current plan's marker distinct.
   if (current)
     badges.push(
-      <s-badge key="current" tone="neutral" color="strong" icon="check-circle">
+      <s-badge key="current" tone="info" color="strong" icon="check-circle">
         {t("plan.hero.label")}
       </s-badge>,
     );

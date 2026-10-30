@@ -27,7 +27,7 @@ import { cardDone, type ClientOutcome, type ReviewActionResult } from "../lib/re
 import { SEO_KEYS } from "../lib/seo";
 import { textBoxBlockSize } from "../lib/text-box-height";
 import { MARK_COLOUR, STATE_COLOURS, TRACK_COLOUR } from "./Coverage";
-import type { IconName } from "./DialogPoint";
+import type { IconName } from "../lib/icons";
 import { Flag } from "./Flag";
 import { HtmlPreview } from "./HtmlPreview";
 import { PLAIN_LIST } from "./LanguageLayout";

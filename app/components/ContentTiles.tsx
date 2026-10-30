@@ -6,8 +6,9 @@
  * can't be translated now.
  *
  * Polaris web components; inline styles only where Polaris has nothing (list
- * resets, the picture pile, the summary reset, single-line names), colours
- * from Coverage.tsx only. Every state is an icon and words.
+ * resets, the picture pile, the summary reset, single-line and semibold names,
+ * even line breaks), colours from Coverage.tsx only. Every state is an icon
+ * and words.
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Form, type useFetcher } from "react-router";

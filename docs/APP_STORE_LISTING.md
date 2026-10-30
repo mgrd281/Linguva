@@ -87,7 +87,7 @@ Read again on shopify.dev ("App Store requirements" §4.5, "Pass app review", "B
 | Introduction ≤ 100, details ≤ 500, features ≤ 80 characters; no statistics, superlatives or pricing outside pricing details | Met (checked by `tests/unit/app-store-listing.test.ts`) |
 | Screenshots 1600 × 900, 3–6 desktop, alt text, no browser chrome or personal data; mobile if responsive | Met with the demo catalog; regenerate inside the real admin after the dev-store check; add one of the coverage dashboard |
 | Feature media: video 2–3 min (≤ 25 % screencast) or a 1600 × 900 image, one focal point, contrast 4.5:1, no Shopify logos, not repeating the subtitle | Brief ready (BRAND_ASSETS.md §2); not designed |
-| App icon 1200 × 1200, no text | Brief ready (BRAND_ASSETS.md §1); not designed |
+| App icon 1200 × 1200 | Done: `docs/brand/linguva-icon-1200.png` (BRAND_ASSETS.md §1); the owner uploads it in the Partner Dashboard |
 | 4.5.3 Demo screencast of onboarding and listed features, English | Script ready (SUBMISSION_DEMO.md §1); needs the dev store |
 | 4.5.4 / 4.5.5 Testing instructions and working access | Draft ready (SUBMISSION_DEMO.md §2) |
 | 4.5.6 Emergency developer contact | Owner, Partner Dashboard |
@@ -98,4 +98,4 @@ Read again on shopify.dev ("App Store requirements" §4.5, "Pass app review", "B
 
 ## Still needed from the owner
 
-App icon (1200 × 1200, no text), privacy policy URL, support email and FAQ URL, demo store URL (dev store), pricing details as configured in the Partner Dashboard. See OWNER_DECISIONS.md.
+App icon upload (`docs/brand/linguva-icon-1200.png`), privacy policy URL, support email and FAQ URL, demo store URL (dev store), pricing details as configured in the Partner Dashboard. See OWNER_DECISIONS.md.

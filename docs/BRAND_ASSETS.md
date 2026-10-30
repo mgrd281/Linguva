@@ -1,24 +1,31 @@
 # App icon and feature image: design specification
 
-Requirements read on shopify.dev on 2026-10-28 ("App Store requirements", "Best practices for apps in the Shopify App Store"). Nothing is designed yet; this is the brief for a designer (or the owner).
+Requirements read on shopify.dev on 2026-10-28 ("App Store requirements", "Best practices for apps in the Shopify App Store"). The app icon is done (§1); the feature image is still a brief.
 
 ## 1. App icon
 
-| Requirement | Value |
+**Done (chosen by the owner on 2026-10-30).** Files in `docs/brand/`:
+
+| File | Use |
 |---|---|
-| Size and format | 1200 × 1200 px, PNG or JPEG, square, no rounded corners baked in (Shopify applies its own mask) |
-| Content | A simple mark, **no text**, no Shopify logo or Shopify-like bag, no screenshots |
-| Legibility | Must read at 64 × 64 px in the App Store and in the admin's app list |
+| `linguva-icon.svg` | Source (vector, 1200 × 1200 view box) |
+| `linguva-icon-1200.png` | App icon for the Partner Dashboard and the App Store listing |
+| `linguva-icon-512.png` | Smaller copy for documents and slides |
+| `public/favicon.ico` | Browser tab icon (16, 32, 48, 64 px), served by the app |
 
-**Brief:** two overlapping speech bubbles (two languages) whose overlap forms a check mark (review before it goes live). Two colours on a solid background:
+**The mark:** a letter L drawn as a folded ribbon (green to turquoise above, violet to blue below) beside two cards: a light card with "A" (the original) and a green card with "文" (the translation). The full square background runs from green (top left) to dark navy (bottom right).
 
-| Role | Colour | Note |
-|---|---|---|
-| Background | #1F2A44 (deep navy) | Contrast with the admin's light surfaces |
-| Bubble A | #FFFFFF | |
-| Bubble B / check | #29845A (Polaris success green, used for "Complete" in the app) | Ties the icon to the coverage colours |
+| Role | Colour |
+|---|---|
+| Background | #0C8A62 → #0A3D4C → #151C4D |
+| L, upright | #5BF5BE → #1CC2DC |
+| L, foot | #5A4CF0 → #2E8EF0 → #2BE0C8 |
+| Original card / letter | #EEF1FF / #1B2350 |
+| Translation card / letter | #2FDDA0 → #11946C / #FFFFFF |
 
-Deliver the source (SVG/Figma) plus the 1200 × 1200 PNG; test at 64, 32 and 16 px.
+Rules met: 1200 × 1200 PNG, square, no rounded corners baked in (Shopify applies its own mask), no Shopify logo. It contains the letters A and 文: Shopify recommends no text in icons, but it is not a rejection reason (Shopify Translate & Adapt and other translation apps use the same symbol), and the owner chose this version. Checked at 64, 32 and 16 px: the L and the green card stay recognisable; the letters become dots at 16 px.
+
+**Owner step:** upload `linguva-icon-1200.png` in the Partner Dashboard, where the app icon is set. The admin's app list shows it from there; the app code cannot set it.
 
 ## 2. Feature image (static, instead of a video at launch)
 

@@ -328,6 +328,21 @@ export function visible(selector: string): HTMLElement | null {
   return Array.from(document.querySelectorAll<HTMLElement>(selector)).find(shown) ?? null;
 }
 
+/**
+ * Results already shown. A keyed fetcher keeps its last result while the
+ * page is drawn afresh for new data (a filter, the next page, "Reload"), so
+ * a card or page drawn again would show it once more: a stale outcome on a
+ * newer text, a toast or banner for something done on another page.
+ */
+const shownResults = new WeakSet<object>();
+
+/** True the first time a request's result is seen (it is shown then), false ever after. */
+export function firstSight(result: object): boolean {
+  if (shownResults.has(result)) return false;
+  shownResults.add(result);
+  return true;
+}
+
 interface RowProps {
   card: ReviewCard;
   draft: ReviewDraft;
@@ -688,11 +703,9 @@ export function ReviewCardView({ card, ctx }: { card: ReviewCard; ctx: CardConte
   const { t } = i18n;
   const fetcher = useFetcher<ReviewActionResult>({ key: `review-card-${card.key}` });
   const sent = useRef<string[]>([]);
-  const handled = useRef<unknown>(null);
   const onResult = ctx.onResult;
   useEffect(() => {
-    if (fetcher.state !== "idle" || !fetcher.data || fetcher.data === handled.current) return;
-    handled.current = fetcher.data;
+    if (fetcher.state !== "idle" || !fetcher.data || !firstSight(fetcher.data)) return;
     onResult(fetcher.data, sent.current, card.key);
   }, [fetcher.state, fetcher.data, onResult, card.key]);
 

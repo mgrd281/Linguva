@@ -5,12 +5,23 @@
  * its own per project (fixtures/review-store.ts: review on desktop,
  * reviewPhone on the phone), and each test decides its own texts.
  */
+import { PrismaClient, type Prisma } from "@prisma/client";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { testEnv } from "../support/env";
 import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
-import type { UiShopKey } from "./fixtures/shops";
+import { UI_SHOPS, type UiShopKey } from "./fixtures/shops";
 
 const shop = (): UiShopKey => (test.info().project.name === "mobile" ? "reviewPhone" : "review");
 const open = (page: Page, path = "/app/review") => openApp(page, shop(), path);
+
+// What happens in the store while the page is open (another tab, a running job), as the store's tenant.
+const owner = new PrismaClient({ datasources: { db: { url: testEnv.MIGRATION_DATABASE_URL } } });
+test.afterAll(() => owner.$disconnect());
+async function inStore<T>(write: (shopId: string) => Prisma.PrismaPromise<T>): Promise<T> {
+  const { id } = await owner.shop.findUniqueOrThrow({ where: { shopDomain: UI_SHOPS[shop()].domain } });
+  const [, result] = await owner.$transaction([owner.$executeRaw`SELECT set_config('app.shop_id', ${id}, true)`, write(id)]);
+  return result;
+}
 
 /** The copy of a control that is shown (wide cards: the label row; phones: under the texts). */
 const button = (scope: Page | Locator, name: string | RegExp) =>
@@ -89,6 +100,17 @@ test.describe("Review", () => {
     await modal.getByRole("button", { name: "Approve 4", exact: true }).click();
     await expectToast(page, "4 translations approved");
     await expect(page.locator("#review-done-heading")).toBeVisible();
+
+    // The next page doesn't confirm this page's approval a second time.
+    const toasts = () => page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts.length);
+    const shown = await toasts();
+    await page.locator("s-button[href]", { hasText: "Continue" }).click();
+    await expect(page).not.toHaveURL(/area=/);
+    await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
+    // (A result shown again would come back within the first frames of the new page.)
+    await page.waitForTimeout(500);
+    await expect(page.locator('div[role="status"]')).not.toContainText("approved");
+    expect(await toasts()).toBe(shown);
   });
 
   test("rejecting one text asks in place, says it can't be undone, and Escape cancels @responsive", async ({ page }) => {
@@ -245,6 +267,14 @@ test.describe("Review", () => {
     await expect(page.getByText("The marked texts say why.")).toBeVisible();
     await expect(page.getByText("Outdated: the original changed in the meantime. Not published.")).toBeVisible();
     await expect(page.getByText("Approved – customers see it now.")).toBeVisible();
+
+    // Another selection is drawn afresh: this page's banner and outcomes stay behind.
+    await languages(page).getByRole("link", { name: /^German \d+$/ }).click();
+    await expect(page).toHaveURL(/lang=de/);
+    await expect(languages(page).locator('[aria-current="true"]')).toContainText("German");
+    await page.waitForTimeout(500);
+    await expect(page.locator('s-banner[heading="1 approved · 1 not published"]')).toHaveCount(0);
+    await expect(page.getByText("The marked texts say why.")).toHaveCount(0);
   });
 
   test("a job's texts: the scope chip, and Show all @responsive", async ({ page }) => {
@@ -311,5 +341,41 @@ test.describe("Review", () => {
       await page.setViewportSize({ width: 390, height: 844 });
       await expectNoHorizontalScroll(page);
     }
+  });
+
+  // The tests below change the store while the page is open (another tab, a job), so they come last.
+
+  test("a text replaced meanwhile: Reload shows the newer one, and asks first while another text is edited @responsive", async ({ page }) => {
+    await open(page, "/app/review?lang=de");
+    await button(page, "Edit: Name – Product 1 jacket").click();
+    const name = page.getByRole("textbox", { name: "Name in German" });
+    await name.fill("Meine Jacke");
+    // A newer translation of the description is saved while the page is open.
+    await inStore((shopId) =>
+      owner.translationDraft.updateMany({
+        where: { shopId, resourceGid: "gid://shopify/Product/1", locale: "de", key: "body_html" },
+        data: { value: "<p>Neuere Jacke 1.</p>" },
+      }),
+    );
+    await button(page, "Approve: Description – Product 1 jacket").click();
+    const changed = page.getByText("Changed in the meantime: there is a newer version. Reload to see it.", { exact: true });
+    await expect(changed).toBeVisible();
+
+    // Reloading would lose the edited name: it asks first, and staying keeps it.
+    await page.getByRole("button", { name: "Reload", exact: true }).click();
+    const leave = page.locator('s-banner[heading="Discard your edits?"]');
+    await expect(leave).toBeVisible();
+    await leave.getByRole("button", { name: "Stay on this page" }).click();
+    await expect(leave).toHaveCount(0);
+    await expect(name).toHaveValue("Meine Jacke");
+
+    await page.getByRole("button", { name: "Reload", exact: true }).click();
+    await leave.getByRole("button", { name: "Leave and discard" }).click();
+    // The newer text, waiting to be decided (not the earlier answer again).
+    const preview = page.frameLocator('iframe[title="Product 1 jacket, Description, translation preview"]');
+    await expect(preview.locator("body")).toHaveText("Neuere Jacke 1.");
+    await expect(button(page, "Approve: Description – Product 1 jacket")).toBeVisible();
+    await expect(changed).toHaveCount(0);
+    await expect(name).toHaveCount(0);
   });
 });

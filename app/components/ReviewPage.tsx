@@ -8,7 +8,7 @@
  * "Reload") starts it afresh.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useFetcher, useFetchers, useRevalidator } from "react-router";
+import { useBlocker, useFetcher, useFetchers, useLocation, useNavigate, useRevalidator } from "react-router";
 import type { ReviewDraft, ReviewPageData } from "../.server/review/page";
 import type { ReviewPreviews } from "../.server/review/previews";
 import type { clientLoader as previewsLoader } from "../routes/app.review_.previews";
@@ -25,7 +25,7 @@ import { STATE_COLOURS } from "./Coverage";
 import { Flag } from "./Flag";
 import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "./LanguageLayout";
 import { ReviewApproveConfirm, type ApproveSummary } from "./ReviewApproveConfirm";
-import { focusSoon, languageLabel, outcomeText, ReviewCardView, textLabel, visible, type CardContext } from "./ReviewCard";
+import { firstSight, focusSoon, languageLabel, outcomeText, ReviewCardView, textLabel, visible, type CardContext } from "./ReviewCard";
 import { ReviewControls, type PageActions } from "./ReviewControls";
 
 const PANEL_HEADING = { margin: 0, fontSize: 15, lineHeight: "22px", fontWeight: 600 } as const;
@@ -192,11 +192,9 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     [t, i18n, drafts, data.names, data.published, labelOf],
   );
 
-  const handledPage = useRef<unknown>(null);
   const sentPage = useRef<string[]>([]);
   useEffect(() => {
-    if (pageFetcher.state !== "idle" || !pageFetcher.data || pageFetcher.data === handledPage.current) return;
-    handledPage.current = pageFetcher.data;
+    if (pageFetcher.state !== "idle" || !pageFetcher.data || !firstSight(pageFetcher.data)) return;
     onResult(pageFetcher.data, sentPage.current, "page");
   }, [pageFetcher.state, pageFetcher.data, onResult]);
 
@@ -219,11 +217,11 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     });
   }, [outcomes, drafts]);
 
-  // Leaving with edited texts that weren't approved: ask first.
+  // Leaving with edited texts that weren't approved, or drawing the page afresh ("Reload"), loses them: ask first.
   const unsaved = drafts.filter((x) => isEdited(x.draft) && !leftWaiting(outcomes[x.draft.id])).length;
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) => unsaved > 0 && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search),
-  );
+  const blocker = useBlocker(unsaved > 0);
+  const navigate = useNavigate();
+  const location = useLocation();
   useEffect(() => {
     if (blocker.state !== "blocked") return;
     window.scrollTo({ top: 0 });
@@ -304,7 +302,9 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     cancelAsk: () => setAsking(null),
     form,
     onResult: (result, ids) => onResult(result, ids, "card"),
-    reload: () => revalidator.revalidate(),
+    // The page drawn afresh with the newer texts. Edits not yet approved would be lost: then it's a
+    // navigation to this same address, which the leave guard asks about first.
+    reload: () => void (unsaved > 0 ? navigate(`${location.pathname}${location.search}`, { replace: true }) : revalidator.revalidate()),
   };
 
   // What is left once nothing on the page is undecided.

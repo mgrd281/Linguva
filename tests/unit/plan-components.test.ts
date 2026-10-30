@@ -136,6 +136,21 @@ describe("prices on the cards", () => {
   });
 });
 
+describe("type that stands out", () => {
+  // Polaris draws <s-text type="strong"> at the body weight (450, measured): these are set in semibold (600).
+  it("sets the fitting plan, the meters' names, the table's title and the questions in semibold", () => {
+    const fits = cards("de", STATES[0]!);
+    expect(fits).toMatch(/<strong style="font-weight:600">Passt zu deinem Shop: Pro\.<\/strong> Der kleinste Tarif für deine 4 Sprachen\./);
+    const meters = hero("de", { aiAvailable: true, limits: { limit: 1_200_000, dailyLimit: 1_000_000 } });
+    const de = translator("de");
+    for (const name of [de.t("plan.usage.label"), de.t("plan.languages.label")]) expect(meters).toContain(`font-weight:600">${name}</h3>`);
+    const table = renderToStaticMarkup(createElement(PlanFeatureTable, { i18n: translator("de"), current: "pro" }));
+    expect(table).toContain('<span style="font-weight:600">Alle Funktionen vergleichen</span>');
+    const faq = renderToStaticMarkup(createElement(PlanFaq, { i18n: translator("de"), canChange: true }));
+    expect(faq.match(/<summary style="[^"]*font-weight:600[^"]*">/g)).toHaveLength(4);
+  });
+});
+
 describe("states the browser tests can't show", () => {
   it("billing off (KARINEX today): list prices, no plan buttons, no recommendation, the short footnote", () => {
     const off = STATES.find((s) => s.name === "billing off")!;

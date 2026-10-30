@@ -7,13 +7,13 @@ import type { ReactNode } from "react";
 import { INTL_LOCALE, type I18n } from "../../i18n/i18n";
 import { yearlyHandles } from "../../lib/plan-prices";
 import { planName } from "../../lib/plan-view";
+import { EMPHASIS } from "./styles";
 
 function Question({ question, children }: { question: string; children: ReactNode }) {
   return (
     <details>
-      <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box" }}>
-        <s-text type="strong">{question}</s-text>
-      </summary>
+      {/* Semibold like the language page's summaries (Polaris draws type="strong" at the body weight). */}
+      <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", ...EMPHASIS }}>{question}</summary>
       <div style={{ padding: "0 0 16px 18px" }}>
         <s-stack direction="block" gap="small-200">
           {children}

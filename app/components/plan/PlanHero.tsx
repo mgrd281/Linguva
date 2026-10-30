@@ -19,7 +19,7 @@ import { STATE_COLOURS, TRACK_COLOUR } from "../Coverage";
 import { Flag } from "../Flag";
 import { PLAIN_LIST } from "../LanguageLayout";
 import { ProgressBar } from "../ProgressBar";
-import { FIGURE, PLAN_NAME } from "./styles";
+import { FIGURE, METER_LABEL, PLAN_NAME } from "./styles";
 
 /** A message with its dates and plan names filled in. */
 export function wordsText(i18n: I18n, words: Words, now: string): string {
@@ -115,13 +115,13 @@ export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limit
   );
 }
 
-/** A meter's head: its icon in a tile, its name, and a short figure on the right. */
+/** A meter's head: its icon in a tile, its name (a heading under "Your plan: …"), and a short figure on the right. */
 function MeterHead({ icon, label, aside }: { icon: "gauge" | "language"; label: string; aside: string | null }) {
   return (
     <s-stack direction="inline" justifyContent="space-between" alignItems="center" gap="small-200">
       <s-stack direction="inline" gap="small-200" alignItems="center">
         <IconTile icon={icon} size={28} color="base" />
-        <s-text type="strong">{label}</s-text>
+        <h3 style={METER_LABEL}>{label}</h3>
       </s-stack>
       {aside ? <s-text color="subdued">{aside}</s-text> : null}
     </s-stack>

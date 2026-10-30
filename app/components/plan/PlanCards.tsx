@@ -19,7 +19,7 @@ import { PLAN_ORDER, planName, type FitReason, type HeroView, type ShopUse } fro
 import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type PlanHandle } from "../../lib/plans";
 import { IconTile } from "../CategoryCard";
 import { PLAIN_LIST } from "../LanguageLayout";
-import { CARD_NAME, PRICE, SECTION_HEADING, STAT, SUB_HEADING } from "./styles";
+import { CARD_NAME, EMPHASIS, PRICE, SECTION_HEADING, STAT, SUB_HEADING } from "./styles";
 
 const AUDIENCE: Record<PlanHandle, MessageKey> = {
   free: "plan.audience.free",
@@ -79,7 +79,8 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
             <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
               <s-icon type="target" tone="info" />
               <s-text>
-                <s-text type="strong">{t("plan.recommend.line", { plan: planName(recommendation.plan) })}</s-text> {recommendationReason(i18n, recommendation.reasons, use)}
+                {/* Polaris draws type="strong" at the body weight: the plan is set in semibold here. */}
+                <strong style={EMPHASIS}>{t("plan.recommend.line", { plan: planName(recommendation.plan) })}</strong> {recommendationReason(i18n, recommendation.reasons, use)}
               </s-text>
             </s-grid>
           ) : (

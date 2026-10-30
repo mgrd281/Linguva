@@ -11,6 +11,7 @@ import { monthsFree, priceLabel, yearlyHandles } from "../../lib/plan-prices";
 import { PLAN_ORDER, planName } from "../../lib/plan-view";
 import { PLANS, type PlanHandle } from "../../lib/plans";
 import { TRACK_COLOUR } from "../Coverage";
+import { EMPHASIS } from "./styles";
 
 const LINE = `1px solid ${TRACK_COLOUR}`;
 /** The current plan's column and the group rows. */
@@ -70,7 +71,7 @@ export function PlanFeatureTable({ i18n, current }: { i18n: I18n; current: PlanH
     <s-section padding="none">
       <details>
         <summary style={{ padding: "14px 20px", cursor: "pointer", minHeight: 44, boxSizing: "border-box" }}>
-          <s-text type="strong">{t("plan.table.summary")}</s-text>
+          <span style={EMPHASIS}>{t("plan.table.summary")}</span>
           <span style={{ marginInlineStart: 8 }}>
             <s-text color="subdued">{t("plan.table.summaryDetail", { count: counts.rows, groups: counts.groups })}</s-text>
           </span>

@@ -46,6 +46,7 @@ Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `
 - Cost safety (implemented): a daily cap per shop, a platform-wide daily cap on our provider cost, a per-request size cap and request rate limits per staff member and shop (SECURITY_MODEL §5a). Plans will set the per-shop values.
 - Overage: not at launch. Managed Pricing has no usage caps, so a merchant couldn't set a spending cap; $40 per extra million would earn 13.3% (PRICING_DECISION.md §6.3). If ever, at least $69 per extra million and only with an in-app cap.
 - Yearly: Starter and Pro cost 10 × the monthly price (2 months free); Business is billed monthly only.
+- **Changing a price** (both places, the same day): the plan in the Partner Dashboard, `PLAN_PRICES` in `app/lib/plans.ts` with its pinned values in `tests/unit/plan-prices.test.ts`, and the pricing details in both listing languages (APP_STORE_LISTING.md). Read Shopify's rules for existing subscribers first (PRICING_DECISION.md §9 step 8).
 - Up to 8 public plans are allowed (VERIFIED). We use 4 public plans plus private plans.
 
 ## 3. Entitlement resolution (server-side only)

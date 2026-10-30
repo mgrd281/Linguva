@@ -27,8 +27,13 @@ export interface PageActions {
   approvable: number;
   /** The page holds every matching text. */
   allOnPage: boolean;
+  /** The page's own request runs. */
   busy: boolean;
-  /** Why the page's buttons wait: an emptied or invalid text being edited, or an open question. */
+  /** That request approves (the strip says it can take a moment; rejecting is quick). */
+  approving: boolean;
+  /** Some request runs (a text's, a card's or the page's): the page's buttons wait, so no text is sent twice at once. */
+  waiting: boolean;
+  /** Why "Approve all" waits: an emptied or invalid text being edited, or an open question ("Reject all" waits for a question only). */
   blocked: "empty" | "question" | null;
 }
 
@@ -236,7 +241,9 @@ export function ReviewControls({
   const { t } = i18n;
   const quoted = query.search ? t("language.preview.quoted", { text: query.search }) : "";
   const payoffLanguage = data.payoff ? i18n.language(data.payoff.locale, data.names[data.payoff.locale]) : "";
-  const disabled = actions.busy || actions.blocked !== null;
+  const disabled = actions.busy || actions.waiting || actions.blocked !== null;
+  // Rejecting sends no edited text: an emptied one doesn't hold it, an open question does.
+  const rejectDisabled = actions.busy || actions.waiting || actions.blocked === "question";
   const summary =
     actions.undecided > 0
       ? `${t("review.page.summary", { count: actions.undecided })}${data.page.nextCursor || !data.page.isFirstPage ? ` · ${t("review.page.position", { from: data.page.from, to: data.page.to, total: data.page.matching })}` : ""}`
@@ -292,11 +299,11 @@ export function ReviewControls({
             <s-text>{summary}</s-text>
             {actions.undecided > 0 ? (
               <s-stack direction="inline" gap="small-200 base" alignItems="center" justifyContent="end">
-                {actions.busy ? <s-text color="subdued">{t("review.page.busy")}</s-text> : null}
+                {actions.approving ? <s-text color="subdued">{t("review.page.busy")}</s-text> : null}
                 {!actions.busy && actions.blocked ? (
                   <s-text color="subdued">{t(actions.blocked === "empty" ? "review.page.blocked.empty" : "review.page.blocked.question")}</s-text>
                 ) : null}
-                <s-button variant="tertiary" tone="critical" commandFor="review-reject" command="--show" {...(disabled ? { disabled: true } : {})}>
+                <s-button variant="tertiary" tone="critical" commandFor="review-reject" command="--show" {...(rejectDisabled ? { disabled: true } : {})}>
                   {t("review.page.rejectAll")}
                 </s-button>
                 {actions.approvable > 0 ? (
@@ -306,7 +313,7 @@ export function ReviewControls({
                     commandFor="review-approve"
                     command="--show"
                     {...(disabled ? { disabled: true } : {})}
-                    {...(actions.busy ? { loading: true } : {})}
+                    {...(actions.approving ? { loading: true } : {})}
                   >
                     {t(actions.allOnPage ? "review.page.approveAll" : "review.page.approveAllOnPage", { count: actions.approvable })}
                   </s-button>

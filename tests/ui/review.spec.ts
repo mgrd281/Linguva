@@ -154,6 +154,8 @@ test.describe("Review", () => {
     await expect(button(card(page, "Product 4 jacket, German"), /^Approve all \d+: Product 4 jacket/)).toBeDisabled();
     await expect(primary(page)).toBeDisabled();
     await expect(page.getByText("Fill in or reject the empty text first.")).toBeVisible();
+    // Rejecting sends no edited text: it doesn't wait for the empty one.
+    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeEnabled();
 
     await button(page, "Cancel: Name – Product 4 jacket").click();
     await expect(button(page, "Approve: Name – Product 4 jacket")).toBeEnabled();
@@ -379,6 +381,26 @@ test.describe("Review", () => {
     await expect(name).toHaveCount(0);
   });
 
+  test("while a card's request runs, the page's buttons wait for it @responsive", async ({ page }) => {
+    await open(page, "/app/review?lang=de");
+    // Shopify answers slowly.
+    let first = true;
+    await page.route("**/app/review.data**", async (route) => {
+      if (route.request().method() !== "POST" || !first) return route.continue();
+      first = false;
+      const response = await route.fetch();
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      await route.fulfill({ response });
+    });
+    await button(page, "Approve: Name – Product 1 jacket").click();
+    // The page's request would send the same text a second time (and report it as not published).
+    await expect(primary(page)).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeDisabled();
+    await expect(card(page, "Product 1 jacket, German").getByText("Approved – customers see it now.")).toBeVisible();
+    await expect(primary(page)).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeEnabled();
+  });
+
   test("more than one page: Next page without deciding this one, and Back to the start @responsive", async ({ page }) => {
     // 60 more French texts: two pages of French.
     await inStore((shopId) =>
@@ -427,5 +449,27 @@ test.describe("Review", () => {
     await page.getByRole("link", { name: "Back to the start" }).click();
     await expect(page).not.toHaveURL(/after=/);
     await expect(summary(page)).toHaveText(`50 translations on this page · 1–50 of ${total}`);
+  });
+
+  test("rejecting the page doesn't say it is approving @responsive", async ({ page }) => {
+    await inStore((shopId) =>
+      owner.translationDraft.create({
+        data: { shopId, resourceGid: "gid://shopify/Product/88", resourceTitle: "Product 88 gloves", locale: "fr", key: "title", sourceDigest: "gloves-88", sourceValue: "Product 88 gloves", value: "Gants produit 88", provider: "deepl" },
+      }),
+    );
+    await open(page, "/app/review?lang=fr&q=Product%2088%20gloves");
+    await expect(summary(page)).toHaveText(/^1 translation on this page/);
+    // The answer comes slowly.
+    await page.route("**/app/review.data**", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const response = await route.fetch();
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      await route.fulfill({ response });
+    });
+    await page.locator("s-button", { hasText: "Reject all" }).click();
+    await page.locator("s-modal#review-reject").getByRole("button", { name: "Reject 1", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeDisabled();
+    await expect(page.getByText("Approving – this can take a moment.")).toHaveCount(0);
+    await expectToast(page, "1 translation rejected. It won't be published.");
   });
 });

@@ -118,6 +118,8 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
   // Texts of requests in flight: the page's own, and each card's.
   const pageFetcher = useFetcher<ReviewActionResult>({ key: "review-page" });
   const pageBusy = pageFetcher.state !== "idle";
+  // "Approve all" runs (not "Reject all"): the strip says approving can take a moment.
+  const approving = pageBusy && pageFetcher.formData?.get("intent") === "approve";
   const fetchers = useFetchers();
   const busy = useMemo(
     () => new Set(fetchers.filter((f) => f.key.startsWith("review-") && f.formData).flatMap((f) => f.formData!.getAll("draft").map(String))),
@@ -249,6 +251,9 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     approvable: approvable.length,
     allOnPage: data.page.matching <= data.page.size,
     busy: pageBusy,
+    approving,
+    // A text's or card's request runs: the page's buttons wait, so they never send its texts a second time.
+    waiting: busy.size > 0,
     blocked,
   };
 

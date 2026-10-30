@@ -39,7 +39,7 @@ test("image alt text is translated and published separately", async ({ page }) =
 test.describe("plan page", () => {
   test("a subscribed store sees its plan and can change it on Shopify's page", async ({ page }) => {
     await openApp(page, "full", "/app/plan");
-    await expect(page.getByText("Current plan: Pro")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your plan: Pro" })).toBeVisible();
     const change = page.locator("s-button", { hasText: "Change plan" });
     await expect(change).toHaveAttribute("href", "https://admin.shopify.com/store/ui-full/charges/linguva-ui-test/pricing_plans");
     await expect(change).toHaveAttribute("target", "_top");
@@ -47,17 +47,18 @@ test.describe("plan page", () => {
 
   test("a store without a subscription is offered Shopify's plan selection (no charge is created by the app)", async ({ page }) => {
     await openApp(page, "empty", "/app/plan");
-    await expect(page.getByText("Current plan: none")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your plan: No plan chosen" })).toBeVisible();
     await expect(page.locator("s-button", { hasText: "Choose a plan" })).toHaveAttribute("href", /\/charges\/linguva-ui-test\/pricing_plans$/);
     await expectAccessible(page);
   });
 
   test("the owner's store has complimentary access with an internal cost estimate", async ({ page }) => {
     await openApp(page, "owner", "/app/plan");
-    await expect(page.getByText("Current plan: Complimentary access")).toBeVisible();
-    await expect(page.getByText(/Estimated AI cost this month \(internal\): \$0\.00/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your plan: Owner access" })).toBeVisible();
+    await expect(page.getByText(/Estimated AI cost this month \(internal\): \$0 at \$25 per million characters/)).toBeVisible();
     await expect(page.getByText(/of 2,000,000/)).toBeVisible();
-    await expect(page.locator("s-button", { hasText: /Choose a plan|Change plan/ })).toHaveCount(0);
+    // No plan to choose: no plan button anywhere, not on the cards either.
+    await expect(page.locator("s-button", { hasText: /Choose|Change plan/ })).toHaveCount(0);
     await expectAccessible(page);
   });
 });

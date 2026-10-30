@@ -39,6 +39,10 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "smart-settings", shop: "business", path: "/app/settings", phone: true },
   { name: "smart-page", shop: "business", path: "/app/settings/automatic", phone: true },
   { name: "smart-upsell", shop: "full", path: "/app/settings", phone: true },
+  // The Plan page with prices (UI_REVIEW_SCREENSHOTS=docs/ui-review/plan): a plan, no plan (trial offer), a running trial.
+  { name: "plan", shop: "full", path: "/app/plan", phone: true },
+  { name: "plan-none", shop: "empty", path: "/app/plan", phone: true },
+  { name: "plan-trial", shop: "planTrial", path: "/app/plan" },
 ];
 
 /** The smart schedule's screens also on a tablet and an iPhone (Chromium with their viewports). */

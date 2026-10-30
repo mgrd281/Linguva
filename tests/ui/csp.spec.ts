@@ -47,7 +47,7 @@ test("the app works under the policy and nothing is blocked", async ({ page }) =
   await openApp(page, "full", "/app/review");
   await page.locator("s-button", { hasText: "Reject selected" }).first().click();
   await expect(page.getByRole("dialog", { name: "Reject the selected translations?" })).toBeVisible();
-  for (const path of ["/app/settings", "/app/glossary", "/app/coverage", "/app/jobs"]) await openApp(page, "full", path);
+  for (const path of ["/app/settings", "/app/glossary", "/app/coverage", "/app/jobs", "/app/plan"]) await openApp(page, "full", path);
 
   // A language's page loads its examples and the store's pictures after the page; flags come from the app.
   await openApp(page, "demo", "/app/languages/de");

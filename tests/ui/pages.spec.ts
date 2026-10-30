@@ -74,9 +74,10 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Plan",
     path: "/app/plan",
     check: async (page) => {
-      await expect(page.getByText("Current plan: Pro")).toBeVisible();
-      await expect(page.getByText(/AI characters this month: [\d,]+ of 1,200,000/)).toBeVisible();
-      await expect(page.getByText("Change plan")).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Your plan: Pro" })).toBeVisible();
+      await expect(page.getByText("AI characters this month", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("of 1,200,000", { exact: true })).toBeVisible();
+      await expect(page.locator("s-button", { hasText: "Change plan" })).toBeVisible();
     },
   },
 ];

@@ -5,11 +5,13 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { HubStatus } from "../../app/.server/translation/content-hub";
 import { requestableScopes } from "../../app/.server/translation/content-hub";
 import { percentLabel } from "../../app/components/Coverage";
-import { tileLabel, tileLines } from "../../app/components/ContentTiles";
+import { MoreTexts, tileLabel, tileLines } from "../../app/components/ContentTiles";
 import { translator } from "../../app/i18n/i18n";
 import { ATTACHED, GROUP_PARTS, HUB_TYPES, PART_ICON, placeOf, TILE_AREAS, tileState, type TileStateInput } from "../../app/lib/content-areas";
 import { emptyCounts, type StateCounts } from "../../app/lib/coverage-rules";
@@ -169,5 +171,38 @@ describe("a tile's words", () => {
     expect(tileLabel(de, { id: "options", state: "notCounted", tally: null, locked: [], unavailable: [], translating: true })).toBe(
       "Größen & Farben. Noch nicht gezählt. Wird gerade übersetzt.",
     );
+  });
+});
+
+describe("More texts", () => {
+  const de = translator("de");
+  const render = (extras: Parameters<typeof MoreTexts>[0]["extras"]) => renderToStaticMarkup(createElement(MoreTexts, { extras, open: null, i18n: de }));
+
+  it("still opens the parts Linguva may read of a group refused in part, and names the refused part", () => {
+    const html = render({
+      theme: null,
+      notifications: {
+        tally: null,
+        state: "refused",
+        locked: [],
+        unavailable: ["PACKING_SLIP_TEMPLATE"],
+        parts: [{ type: "EMAIL_TEMPLATE", href: "/app/content/email-templates?lang=de", tally: null }],
+      },
+      urls: null,
+    });
+    expect(html).toContain('<details id="notifications"');
+    expect(html).toContain('href="/app/content/email-templates?lang=de"');
+    expect(html).toContain("Für Apps nicht verfügbar: Lieferschein");
+  });
+
+  it("shows a group Linguva may read nothing of as a row without parts to open", () => {
+    const html = render({
+      theme: { tally: null, state: "refused", locked: ["ONLINE_STORE_THEME_JSON_TEMPLATE"], unavailable: [], parts: [] },
+      notifications: null,
+      urls: null,
+    });
+    expect(html).not.toContain("<details");
+    expect(html).toContain('<div id="theme">');
+    expect(html).toContain("Kein Zugriff: Texte in Vorlagen");
   });
 });

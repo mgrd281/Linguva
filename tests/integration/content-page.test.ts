@@ -15,6 +15,7 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { clearContentHubCache } from "../../app/.server/translation/content-hub";
 import { HUB_TYPES } from "../../app/lib/content-areas";
+import { categoryOf } from "../../app/lib/language-categories";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
 
@@ -229,6 +230,32 @@ describe("the Content page", () => {
     // A fully locked area has no tile (navigation: menus refused, filters not in the store); the theme's group shows refused, with no parts.
     expect(area(page, "navigation")).toBeUndefined();
     expect(page.extras.theme).toMatchObject({ state: "refused", tally: null, parts: [], locked: page.access[2]!.types });
+  });
+
+  it("lists the parts of the theme and the notifications Linguva may read, also while another part is refused", async () => {
+    const store = outdoorStore();
+    store.addResource("ONLINE_STORE_THEME_LOCALE_CONTENT", "1", [{ key: "products.product.add_to_cart", value: "Add to cart", type: "STRING" }]);
+    // Shopify refuses one part of each group although nothing can be granted (read_themes is).
+    store.deniedTypes.add("ONLINE_STORE_THEME_APP_EMBED");
+    store.deniedTypes.add("PACKING_SLIP_TEMPLATE");
+    const shop = await shopFor(store);
+    const page = await load(store, shop, { lang: "de" });
+    // No figure while a part is refused, the refused part named, and the readable parts still listed, each a link.
+    expect(page.extras.theme).toMatchObject({ state: "refused", tally: null, locked: [], unavailable: ["ONLINE_STORE_THEME_APP_EMBED"] });
+    expect(page.extras.theme!.parts).toEqual([
+      { type: "ONLINE_STORE_THEME_LOCALE_CONTENT", href: "/app/content/theme-locale?lang=de", tally: null },
+      { type: "ONLINE_STORE_THEME_JSON_TEMPLATE", href: "/app/content/theme-templates?lang=de", tally: null },
+    ]);
+    expect(page.extras.notifications).toMatchObject({ state: "refused", unavailable: ["PACKING_SLIP_TEMPLATE"] });
+    expect(page.extras.notifications!.parts).toEqual([{ type: "EMAIL_TEMPLATE", href: "/app/content/email-templates?lang=de", tally: null }]);
+    // Every type has its place: the card, a fold or the banner, else (in the store) its area's tile or its group's part.
+    const listed = new Set([...page.access.flatMap((row) => row.types), ...page.empty, ...page.unavailable, ...page.unknown]);
+    const shown = new Set([
+      ...page.areas.flatMap((a) => HUB_TYPES.filter((type) => categoryOf(type) === a.id)),
+      ...[page.extras.theme, page.extras.notifications].flatMap((g) => g?.parts.map((p) => p.type) ?? []),
+    ]);
+    expect(HUB_TYPES.filter((type) => !listed.has(type) && !shown.has(type))).toEqual([]);
+    expect(page.unavailable).toEqual(["ONLINE_STORE_THEME_APP_EMBED", "PACKING_SLIP_TEMPLATE"]);
   });
 
   it("lists types Shopify didn't answer for, and the rest of the page as usual", async () => {

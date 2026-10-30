@@ -100,7 +100,10 @@ export interface ContentGroup {
   state: TileState;
   locked: HubType[];
   unavailable: HubType[];
-  /** Its types in the store (none while it is refused), each with its list and figure. */
+  /**
+   * Its types in the store, each with its list and figure (a group refused
+   * in part still lists the parts Linguva may read: they have no other place).
+   */
   parts: Array<{ type: GroupPart; href: string | null; tally: Tally | null }>;
 }
 
@@ -230,16 +233,14 @@ export async function loadContentPage(admin: Admin, shop: ShopRef, input: Conten
       state: kind,
       locked,
       unavailable,
-      parts:
-        kind === "refused"
-          ? []
-          : (GROUP_PARTS[id] as readonly GroupPart[])
-              .filter((type) => statusOf(type) === "has-content")
-              .map((type) => ({
-                type,
-                href: locale === null ? null : `${kindMeta(type).path}?lang=${encodeURIComponent(locale)}`,
-                tally: figure ? (perType?.get(type) ?? null) : null,
-              })),
+      // Every part in the store, also while another part is refused (the parts' one place is here).
+      parts: (GROUP_PARTS[id] as readonly GroupPart[])
+        .filter((type) => statusOf(type) === "has-content")
+        .map((type) => ({
+          type,
+          href: locale === null ? null : `${kindMeta(type).path}?lang=${encodeURIComponent(locale)}`,
+          tally: figure ? (perType?.get(type) ?? null) : null,
+        })),
     };
   };
 

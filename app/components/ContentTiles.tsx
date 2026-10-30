@@ -709,7 +709,11 @@ function PartRow({ part, i18n }: { part: ContentGroup["parts"][number]; i18n: I1
   );
 }
 
-/** The theme's or the notifications' texts: one row that opens their parts, each a link to its list. */
+/**
+ * The theme's or the notifications' texts: one row that opens their parts,
+ * each a link to its list. Refused in part: the refused types are named
+ * instead of a percentage, and the parts Linguva may read still open below.
+ */
 function GroupRow({ id, group, requested, i18n }: { id: GroupId; group: ContentGroup; requested: boolean; i18n: I18n }) {
   const { t } = i18n;
   const [open, setOpen] = useState(requested);
@@ -717,6 +721,7 @@ function GroupRow({ id, group, requested, i18n }: { id: GroupId; group: ContentG
   const detail = t(`language.extra.${id}.detail`);
   const parts = t("content.more.parts", { count: group.parts.length });
   const lines = group.state === "recount" || group.state === "new" || group.state === "incomplete" ? tileLines(i18n, group) : [];
+  const refused = group.state === "refused" ? refusedLines(i18n, group) : [];
   return (
     <details id={id} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary style={SUMMARY}>
@@ -733,6 +738,7 @@ function GroupRow({ id, group, requested, i18n }: { id: GroupId; group: ContentG
                   {line.text}
                 </s-text>
               ))}
+              {refused.length ? <Lines lines={refused} boxed /> : null}
             </s-stack>
             <RowFigure tally={group.tally} name={name} i18n={i18n} />
             <s-icon type={open ? "chevron-up" : "chevron-down"} color="subdued" />
@@ -755,7 +761,7 @@ function GroupRow({ id, group, requested, i18n }: { id: GroupId; group: ContentG
   );
 }
 
-/** A group Linguva may not read: the refused types instead of its percentage, and no parts to open. */
+/** A group Linguva may read nothing of: the refused types instead of its percentage, and no parts to open. */
 function RefusedRow({ id, group, i18n }: { id: GroupId; group: ContentGroup; i18n: I18n }) {
   const { t } = i18n;
   return (
@@ -806,7 +812,11 @@ export function MoreTexts({ extras, open, i18n }: { extras: ContentPage["extras"
           {groups.map(({ id, group }) => (
             <li key={id}>
               <s-divider />
-              {group.state === "refused" ? <RefusedRow id={id} group={group} i18n={i18n} /> : <GroupRow id={id} group={group} requested={open === id} i18n={i18n} />}
+              {group.state === "refused" && !group.parts.length ? (
+                <RefusedRow id={id} group={group} i18n={i18n} />
+              ) : (
+                <GroupRow id={id} group={group} requested={open === id} i18n={i18n} />
+              )}
             </li>
           ))}
           {extras.urls ? (

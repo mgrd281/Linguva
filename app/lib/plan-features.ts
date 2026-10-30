@@ -95,7 +95,8 @@ const all = () => true;
 
 const ROWS = {
   chars: { key: "chars", label: "plan.compare.chars", detail: "plan.row.chars.detail", value: (p) => p.monthlyChars },
-  languages: { key: "languages", label: "plan.languages.label", detail: "plan.languages.manualAlways", value: (p) => p.maxTargetLocales },
+  // The table's details are phrases without a full stop; the hero says the same as a sentence (plan.languages.manualAlways).
+  languages: { key: "languages", label: "plan.languages.label", detail: "plan.row.languages.detail", value: (p) => p.maxTargetLocales },
   manual: { key: "manual", label: "plan.row.manual", detail: "plan.row.manual.detail", value: all, everyPlanLabel: "plan.everyPlan.manual" },
   aiOne: { key: "aiOne", label: "plan.row.aiOne", detail: "plan.row.aiOne.detail", value: all },
   bulk: { key: "bulk", label: "plan.feature.bulk", detail: "plan.row.bulk.detail", value: (p) => p.bulk },

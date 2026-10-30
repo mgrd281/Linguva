@@ -72,7 +72,9 @@ export function PlanFeatureTable({ i18n, current }: { i18n: I18n; current: PlanH
       <details>
         <summary style={{ padding: "14px 20px", cursor: "pointer", minHeight: 44, boxSizing: "border-box" }}>
           <span style={EMPHASIS}>{t("plan.table.summary")}</span>
-          <span style={{ marginInlineStart: 8 }}>
+          {/* One unit: on a phone it moves to the next line whole ("18 features in 5 groups"), never split, and then
+              starts under the title (the marker and its space are 14 px wide). */}
+          <span style={{ display: "inline-block", marginInlineStart: 14 }}>
             <s-text color="subdued">{t("plan.table.summaryDetail", { count: counts.rows, groups: counts.groups })}</s-text>
           </span>
         </summary>

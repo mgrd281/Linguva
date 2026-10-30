@@ -56,9 +56,10 @@ export interface JobDependencies {
   /**
    * The shop's billing status (Shopify App Pricing). When billing is on, the
    * plan's monthly allowance replaces `monthlyLimit`, and bulk jobs and
-   * automatic publishing need a plan that includes them.
+   * automatic publishing need a plan that includes them. `trialEndsAt`: a
+   * Shopify trial runs until then, with its lower allowance (subscription.ts).
    */
-  billingFor?(shopId: string): Promise<{ configured: boolean; entitlements: Entitlements }>;
+  billingFor?(shopId: string): Promise<{ configured: boolean; entitlements: Entitlements; trialEndsAt?: Date }>;
   keyPrefix: string;
   shopifyLimiter?: Limiter;
   /** Resources per discovery page (default DISCOVERY_PAGE_SIZE). */

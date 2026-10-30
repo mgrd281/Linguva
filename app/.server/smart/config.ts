@@ -263,9 +263,11 @@ const PAUSE_FOR_STOP: Record<string, SmartPauseReason> = {
 /**
  * Pauses after a smart job stopped at a budget, a limit, the provider, the
  * plan or consent, until the cause lifts (pauseLiftsAt). Other stops don't
- * pause. Returns the reason, or null.
+ * pause. Returns the reason, or null. `allowanceRisesAt`: a Shopify trial's
+ * lower allowance ends then (the plan's applies), so a pause for the used-up
+ * allowance lifts then too when that is sooner than the next month.
  */
-export async function smartPauseAfterStop(shopId: string, code: string, now = new Date(), client: PrismaClient = defaultClient) {
+export async function smartPauseAfterStop(shopId: string, code: string, now = new Date(), client: PrismaClient = defaultClient, allowanceRisesAt: Date | null = null) {
   const reason = PAUSE_FOR_STOP[code];
   if (!reason) return null;
   const paused = await withTenant(
@@ -274,7 +276,11 @@ export async function smartPauseAfterStop(shopId: string, code: string, now = ne
       await lockSmart(tx, shopId);
       const config = await tx.smartAutoConfig.findUnique({ where: { shopId } });
       if (!config?.enabled) return false;
-      const until = pauseLiftsAt(reason, now.getTime(), config.timeZone);
+      const scheduled = pauseLiftsAt(reason, now.getTime(), config.timeZone);
+      const until =
+        reason === "PLAN_ALLOWANCE" && scheduled !== null && allowanceRisesAt && allowanceRisesAt.getTime() > now.getTime()
+          ? Math.min(scheduled, allowanceRisesAt.getTime())
+          : scheduled;
       // A pause already in place that lasts at least as long stays (the merchant's own pause
       // never turns into one that lifts by itself at midnight).
       if (smartPaused(config, now) && (!config.pausedUntil || (until !== null && config.pausedUntil.getTime() >= until))) return false;

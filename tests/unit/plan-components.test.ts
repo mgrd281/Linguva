@@ -24,14 +24,15 @@ const NOW = "2026-10-30T09:12:00.000Z";
 const URL = "https://admin.shopify.com/store/shop/charges/linguva/pricing_plans";
 const USE: ShopUse = { languages: 4, monthChars: 120_000, bulk: true, auto: false, autoPublish: false, smart: false };
 
-/** Markup as text: tags dropped, entities and no-break spaces normalised. */
+/** Markup as text: tags dropped, entities, no-break spaces and German no-break hyphens ("KI\u2011Zeichen") normalised. */
 const text = (html: string) =>
   html
     .replace(/<[^>]+>/g, " ")
     .replace(/&#x27;|&#39;/g, "'")
     .replace(/&amp;/g, "&")
+    .replace(/\u2011/g, "-")
     .replace(/[\u00A0\u202F\s]+/g, " ");
-const flat = (s: string) => s.replace(/[\u00A0\u202F\s]+/g, " ").replace(/\u00AD/g, "");
+const flat = (s: string) => s.replace(/[\u00A0\u202F\s]+/g, " ").replace(/\u00AD/g, "").replace(/\u2011/g, "-");
 
 type State = { name: string; input: PlanViewInput; trial: boolean; use: ShopUse | null };
 const sub = { planHandle: "pro", pendingPlanHandle: null, trialEndsAt: null, cancelAtEndOfCycle: false, currentPeriodEnd: null, checkedAt: NOW };

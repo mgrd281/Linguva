@@ -14,6 +14,7 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - French: "vous", sentence case, a space before `: ; ? !` and inside « » (a plain space, the linter rejects non-breaking spaces).
 - Spanish: "tú", as Shopify's Spanish admin; neutral Latin American vocabulary (agregar, costo, configuración).
 - Language names: lower case in French and Spanish ("allemand", "alemán"), capitalised in German (`languageName()`).
+- German on the Plan page: "KI-" compounds ("KI-Zeichen", "KI-Übersetzung") are written with a non-breaking hyphen (`\u2011`, drawn like "-"), so a narrow card or a phone never ends a line in "KI-". Keep it when editing those texts (`app/i18n/messages/plan.ts`).
 - Shared terms: Révision / Revisión (Review), Tâches / Tareas (Jobs), Mémoire de traduction / Memoria de traducción, Forfait / Plan, quota d'IA / cuota de IA, champ personnalisé / campo personalizado, texte alternatif / texto alternativo, référencement / listado en buscadores.
 
 ## Points to check first

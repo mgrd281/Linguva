@@ -108,7 +108,7 @@ The shop GID is shown in Shopify admin URLs only indirectly; the easiest way to 
 
 | Event | Handling |
 |---|---|
-| Trial | Shopify-managed; we read `trialEndsAt`. While it is ahead, the AI allowance is at most 100,000 characters (`TRIAL_AI_CHARS`); the Plan page shows the end date and both allowances, and the smart budgets say why they can't be higher. Trial days are tracked by Shopify across reinstalls (VERIFIED) |
+| Trial | Shopify-managed; we read `trialEndsAt`. While it is ahead, the AI allowance is at most 100,000 characters (`TRIAL_AI_CHARS`); the Plan page shows the end date and both allowances (its meter names the trial's end as when more characters come, if that is before the 1st), and the smart budgets say why they can't be higher. Automatic translation and the smart schedule that stopped at the trial's allowance pause until the trial ends, not until the next month (`app/.server/jobs/queues.ts`). Trial days are tracked by Shopify across reinstalls (VERIFIED) |
 | Upgrade / downgrade | Shopify prorates. On downgrade, extra languages stay but go read-only; nothing is deleted |
 | Cancel / uninstall | Stop jobs and release reservations. Data is retained per DATABASE_SCHEMA §4 |
 | Frozen (failed payment) | Read-only mode with a banner |

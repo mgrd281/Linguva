@@ -164,7 +164,23 @@ export async function loadContentPage(admin: Admin, shop: ShopRef, input: Conten
   ]);
 
   const status = new Map<string, HubStatus>(entries.map((e) => [e.type, e.status]));
-  const statusOf = (type: string): HubStatus => status.get(type) ?? "unknown";
+  const scopeOf = new Map(entries.map((e) => [e.type, e.scope]));
+  /** Types the last count was refused in this language (DENIED segments). */
+  const denied = new Set(locale === null ? [] : state.segments.filter((s) => s.locale === locale && s.status === "DENIED").map((s) => s.resourceType));
+  /**
+   * A type's state from its live probe. Where Shopify didn't answer it this
+   * time but refused it at the last count, that refusal still holds while its
+   * permission is missing (or there is none to grant): the page never says
+   * access was allowed when it wasn't. With its permission granted since, it
+   * stays unknown (and counting again adds it).
+   */
+  const statusOf = (type: string): HubStatus => {
+    const live = status.get(type) ?? "unknown";
+    if (live !== "unknown" || !denied.has(type)) return live;
+    const scope = scopeOf.get(type as HubType) ?? null;
+    if (scope === null) return "unavailable";
+    return granted.includes(scope) ? "unknown" : "needs-permission";
+  };
   const tallies = locale === null ? null : categoryTallies(state.counts, locale);
   const perType = locale === null ? null : byType(state.counts, locale);
   const segmentOf = (area: CategoryId | GroupId) => (locale === null ? ({ kind: "ok" } as const) : categoryState(state.segments, locale, area, { scanning }));
@@ -257,8 +273,6 @@ export async function loadContentPage(admin: Admin, shop: ShopRef, input: Conten
           : null;
 
   const needs = HUB_TYPES.filter((type) => statusOf(type) === "needs-permission");
-  const scopeOf = new Map(entries.map((e) => [e.type, e.scope]));
-  const denied = new Set(locale === null ? [] : state.segments.filter((s) => s.locale === locale && s.status === "DENIED").map((s) => s.resourceType));
   const marketCountries = marketCountriesOf(markets);
   const openParam = input.open === "theme" || input.open === "notifications" ? input.open : null;
 
@@ -280,8 +294,8 @@ export async function loadContentPage(admin: Admin, shop: ShopRef, input: Conten
     language: chosen ? { locale: chosen.locale, name: chosen.name, published: chosen.published } : null,
     /** The plan includes the language: the AI translates into it (editor, bulk, automatic, smart schedule). */
     planIncludes: locale !== null && allowed.includes(locale),
-    /** Types refused at the last count that Linguva may read now: counting again adds them. */
-    recount: HUB_TYPES.filter((type) => denied.has(type) && (statusOf(type) === "has-content" || statusOf(type) === "empty")),
+    /** Types refused at the last count that nothing refuses now: counting again adds them (the tiles' "recount" state). */
+    recount: HUB_TYPES.filter((type) => denied.has(type) && statusOf(type) !== "needs-permission" && statusOf(type) !== "unavailable"),
     measuredAt: state.lastCompleted?.finishedAt ?? null,
     measured,
     scanning,

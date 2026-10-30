@@ -258,6 +258,46 @@ describe("the Content page", () => {
     expect(page.unavailable).toEqual(["ONLINE_STORE_THEME_APP_EMBED", "PACKING_SLIP_TEMPLATE"]);
   });
 
+  it("keeps a refusal of the last count while Shopify doesn't answer for it, unless its permission was granted since", async () => {
+    const store = outdoorStore();
+    store.addResource("PAYMENT_GATEWAY", "1", [{ key: "name", value: "Invoice", type: "SINGLE_LINE_TEXT_FIELD" }]);
+    store.deniedTypes.add("SHOP_POLICY");
+    store.deniedTypes.add("PAYMENT_GATEWAY");
+    const shop = await shopFor(store);
+    // Shopify doesn't answer for either of them now.
+    store.deniedTypes.clear();
+    store.brokenTypes.add("SHOP_POLICY");
+    store.brokenTypes.add("PAYMENT_GATEWAY");
+
+    // Legal texts: still no permission, so still no access (never "access allowed"), and the card asks for it.
+    const still = await load(store, shop, { lang: "de" });
+    expect(area(still, "checkout")).toMatchObject({ state: "refused", locked: ["SHOP_POLICY"], unavailable: ["PAYMENT_GATEWAY"], tally: null });
+    expect(still.access).toEqual([{ scope: "read_legal_policies", types: ["SHOP_POLICY"] }]);
+    // Payment methods, with nothing to grant, stay where the last count put them.
+    expect(still.unavailable).toEqual(["PAYMENT_GATEWAY"]);
+    expect(still.unknown).toEqual([]);
+    expect(still.recount).toEqual([]);
+
+    // Granted since: counting again adds them, though Shopify didn't answer this time.
+    const granted = await load(store, shop, { lang: "de", granted: [...GRANTED, "read_legal_policies"] });
+    expect(granted.access).toEqual([]);
+    expect(granted.unknown).toEqual(["SHOP_POLICY"]);
+    expect(granted.recount).toEqual(["SHOP_POLICY"]);
+    expect(area(granted, "checkout")).toMatchObject({ state: "refused", locked: [], unavailable: ["PAYMENT_GATEWAY"] });
+    // Payment methods readable again: the area waits for the next count, as the notice says.
+    store.brokenTypes.delete("PAYMENT_GATEWAY");
+    const readable = await load(store, shop, { lang: "de", granted: [...GRANTED, "read_legal_policies"] });
+    expect(area(readable, "checkout")).toMatchObject({ state: "recount", locked: [], unavailable: [] });
+    expect(readable.recount).toEqual(["SHOP_POLICY", "PAYMENT_GATEWAY"]);
+
+    // A type Shopify didn't refuse at the last count is simply not checked.
+    store.brokenTypes.clear();
+    store.brokenTypes.add("PAGE");
+    const unchecked = await load(store, shop, { lang: "de" });
+    expect(unchecked.unknown).toEqual(["PAGE"]);
+    expect(area(unchecked, "pages")).toBeUndefined();
+  });
+
   it("lists types Shopify didn't answer for, and the rest of the page as usual", async () => {
     const store = outdoorStore();
     const shop = await shopFor(store);

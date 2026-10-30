@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { requestableScopes } from "../../app/.server/translation/content-hub";
+import { requestableScopes, scopesToRequest } from "../../app/.server/translation/content-hub";
 import {
   CONTENT_TYPES,
   contentGid,
@@ -59,6 +59,24 @@ describe("content types", () => {
     const toml = readFileSync(join(__dirname, "..", "..", "shopify.app.toml"), "utf8");
     const optional = JSON.parse(/^optional_scopes = (.*)$/m.exec(toml)![1]!) as string[];
     for (const scope of requestableScopes()) expect(optional).toContain(scope);
+    // All of them only read: "Linguva only reads them and never changes your originals" stays true.
+    expect(requestableScopes().every((scope) => scope.startsWith("read_"))).toBe(true);
+    // Markets are asked for on the Markets page, never here.
+    expect(requestableScopes()).not.toContain("read_markets");
+  });
+
+  it("ask for a form's scopes only when every value is allow-listed (all or nothing)", () => {
+    // Another optional scope, a write scope, a required scope, an empty or no value: nothing is requested.
+    expect(scopesToRequest(["read_markets"])).toBeNull();
+    expect(scopesToRequest(["write_products"])).toBeNull();
+    expect(scopesToRequest(["read_products"])).toBeNull();
+    expect(scopesToRequest([""])).toBeNull();
+    expect(scopesToRequest([])).toBeNull();
+    expect(scopesToRequest(["read_themes", "read_markets"])).toBeNull();
+    expect(scopesToRequest([new File(["read_themes"], "read_themes")])).toBeNull();
+    // Duplicates are dropped; the allow-list's order.
+    expect(scopesToRequest(["read_themes", "read_themes", "read_legal_policies"])).toEqual(["read_legal_policies", "read_themes"]);
+    expect(scopesToRequest(requestableScopes())).toEqual(requestableScopes());
   });
 });
 

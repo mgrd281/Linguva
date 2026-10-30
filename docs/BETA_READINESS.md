@@ -12,7 +12,7 @@ Review date: 2026-10-27, branch `claude/gallant-pasteur-8opy75` (draft PR, not m
 |---|---|---|---|
 | B1 | Development store connected (linguva-test-lab, 2026-10-28), but nothing verified on it yet | Every Shopify behaviour is an assumption encoded in fakes until a check is logged | Owner: DEV_STORE_VERIFICATION.md (commands and checklist), results in DEV_STORE_TEST_PLAN.md §3 |
 | B2 | App not linked (`client_id` empty) | `shopify app dev` can't run | Owner: `pnpm config:link` (creates the development app) |
-| B3 | Plans not created in the Partner Dashboard; no Partner API client | Billing can't be verified (L1–L10); prices and limits are proposals | Owner: decide prices (BILLING_DESIGN §2), create plans `free/starter/pro/business`, Partner API client |
+| B3 | Plans not created in the Partner Dashboard; no Partner API client | Billing can't be verified (L1–L14); prices decided 2026-10-30 (PRICING_DECISION.md) | Owner: create exactly the decided plans `free/starter/pro/business` (PRICING_DECISION.md §9), Partner API client |
 | B4 | AI provider not verified (no DeepL key) | Translation quality, real character counts and costs unknown | Owner: approve a DeepL API Free key first (no cost), then a budget |
 | B5 | No production hosting, backups, monitoring, error tracking | A beta needs a reachable, monitored service | Owner: choose and approve hosting (separate from KARINEX/SOFTWAREFACH systems) |
 | B6 | Legal: privacy policy, data processing terms, sub-processor list (DeepL), App Store listing | Required by the App Store and GDPR | Owner, with legal review |
@@ -33,7 +33,7 @@ None open. The defects found in this round are fixed (§3). The remaining engine
 | Translation memory, glossary | Unit, integration, security, 100k performance | F1–F3, G1–G3 |
 | Review and restore | Integration; Review page in the browser | H1–H5 |
 | Images, metafields, Markets | Integration and security; live tests prepared | I1–I6, J1–J4 (nested image ids, `Metafield.translatable`) |
-| Billing | Simulated Partner API; Plan page in the browser; complimentary access | L1–L10 (no charges on dev stores) |
+| Billing | Simulated Partner API; Plan page with prices and the trial allowance in the browser; complimentary access | L1–L14 (no charges on dev stores) |
 | Uninstall, compliance | Webhook routes, HMAC, data deletion | N1–N3 with `shopify app webhook trigger` |
 | UX and accessibility | Error, empty and loading states; axe WCAG 2.1 AA; phone layout | Visual check inside the real admin (App Bridge title bar and navigation) |
 

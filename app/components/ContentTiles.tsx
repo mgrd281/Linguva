@@ -319,11 +319,15 @@ export function AccessCard({ rows, fetcher, i18n, primary }: { rows: ContentPage
   );
 }
 
-/** The count notice the page shows, in this order: not counted, counting, the last count stalled or failed, newly unlocked. */
+/**
+ * The count notice the page shows, in this order: not counted, counting, the
+ * last count stalled or failed, newly unlocked. None while the store has
+ * nothing to translate: a count would find nothing.
+ */
 export type CountNoticeKind = "notCounted" | "counting" | "stalled" | "failed" | "recount";
 
-export function countNotice(data: Pick<ContentPage, "language" | "measured" | "scanning" | "measurement" | "recount">): CountNoticeKind | null {
-  if (!data.language) return null;
+export function countNotice(data: Pick<ContentPage, "language" | "measured" | "scanning" | "measurement" | "recount" | "nothing">): CountNoticeKind | null {
+  if (!data.language || data.nothing) return null;
   if (!data.measured && !data.scanning) return "notCounted";
   if (data.scanning) return "counting";
   if (data.measurement.state === "stalled" || data.measurement.state === "failed") return data.measurement.state;
@@ -412,6 +416,20 @@ export function NoLanguagesCard({ i18n }: { i18n: I18n }) {
     >
       <s-paragraph color="subdued">{t("content.noLanguages.body")}</s-paragraph>
     </NoticeCard>
+  );
+}
+
+/** Nothing in the store to translate yet (every type checked): where it comes from. The folds below list what could be there. */
+export function NothingCard({ i18n }: { i18n: I18n }) {
+  return (
+    <s-box {...CARD} padding="base">
+      <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr, 1fr" gap="base" alignItems="center">
+        <s-box display="@container (inline-size > 640px) auto, none">
+          <IconTile icon="product-add" />
+        </s-box>
+        <s-paragraph>{i18n.t("content.ready.none")}</s-paragraph>
+      </s-grid>
+    </s-box>
   );
 }
 

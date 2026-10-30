@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import type { HubStatus } from "../../app/.server/translation/content-hub";
 import { requestableScopes } from "../../app/.server/translation/content-hub";
 import { percentLabel } from "../../app/components/Coverage";
-import { MoreTexts, tileLabel, tileLines } from "../../app/components/ContentTiles";
+import { countNotice, MoreTexts, tileLabel, tileLines } from "../../app/components/ContentTiles";
 import { translator } from "../../app/i18n/i18n";
 import { ATTACHED, GROUP_PARTS, HUB_TYPES, PART_ICON, placeOf, TILE_AREAS, tileState, type TileStateInput } from "../../app/lib/content-areas";
 import { emptyCounts, type StateCounts } from "../../app/lib/coverage-rules";
@@ -171,6 +171,27 @@ describe("a tile's words", () => {
     expect(tileLabel(de, { id: "options", state: "notCounted", tally: null, locked: [], unavailable: [], translating: true })).toBe(
       "Größen & Farben. Noch nicht gezählt. Wird gerade übersetzt.",
     );
+  });
+});
+
+describe("the count notice", () => {
+  const page: Parameters<typeof countNotice>[0] = {
+    language: { locale: "de", name: "German", published: true },
+    measured: false,
+    scanning: false,
+    measurement: { state: "never", done: 0, total: 0 },
+    recount: [],
+    nothing: false,
+  };
+
+  it("offers counting a language not counted yet, and counting again what was unlocked", () => {
+    expect(countNotice(page)).toBe("notCounted");
+    expect(countNotice({ ...page, measured: true, measurement: { state: "done", done: 5, total: 5 }, recount: ["SHOP_POLICY"] })).toBe("recount");
+  });
+
+  it("offers no count in a store with nothing to translate: it would find nothing", () => {
+    expect(countNotice({ ...page, nothing: true })).toBeNull();
+    expect(countNotice({ ...page, measured: true, measurement: { state: "done", done: 5, total: 5 }, recount: ["SHOP_POLICY"], nothing: true })).toBeNull();
   });
 });
 

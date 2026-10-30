@@ -20,7 +20,7 @@ import { loadContentPage, type ContentArea } from "../.server/content/content-pa
 import { clearContentHubCache, scopesToRequest } from "../.server/translation/content-hub";
 import { startMeasurement } from "../.server/coverage/dashboard";
 import type { clientLoader as previewsLoader } from "./app.languages_.$locale_.previews";
-import { AccessCard, Areas, CountCard, Folds, LanguageChips, LanguageMeta, MoreTexts, NoLanguagesCard, partName, countNotice, type TilePictures } from "../components/ContentTiles";
+import { AccessCard, Areas, CountCard, Folds, LanguageChips, LanguageMeta, MoreTexts, NoLanguagesCard, NothingCard, partName, countNotice, type TilePictures } from "../components/ContentTiles";
 import { BIG_HEADING, languageErrorText } from "../components/LanguageLayout";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
@@ -132,9 +132,7 @@ export default function ContentPage() {
           ) : null}
 
           {data.nothing ? (
-            <s-box background="base" border="base" borderRadius="large-100" padding="base">
-              <s-paragraph>{t("content.ready.none")}</s-paragraph>
-            </s-box>
+            <NothingCard i18n={i18n} />
           ) : (
             <Areas areas={data.areas} i18n={i18n} picturesOf={picturesOf} withKey={data.language !== null} />
           )}

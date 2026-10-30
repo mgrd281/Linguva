@@ -128,6 +128,15 @@ test("without an additional language the page says where to add one", async ({ p
   await expectAccessible(page);
 });
 
+test("a store with nothing to translate says so and offers no count", async ({ page }) => {
+  // Every type checked and empty: counting would find nothing.
+  await openApp(page, "emptyCatalog", "/app/content");
+  await expect(page.getByText("Nothing to translate yet.", { exact: false })).toBeVisible();
+  await expect(page.locator("s-button", { hasText: /Count/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /isn't counted yet/ })).toHaveCount(0);
+  await expectAccessible(page);
+});
+
 test("a menu: list, AI draft, publish, read back", async ({ page }) => {
   await openApp(page, "full", "/app/content/menus?lang=de");
   await page.getByRole("link", { name: "Main menu" }).click();

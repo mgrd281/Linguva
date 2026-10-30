@@ -77,6 +77,28 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
     await expect(choose).toHaveAttribute("href", "https://admin.shopify.com/store/ui-full/charges/linguva-ui-test/pricing_plans");
     await expect(choose).toHaveAttribute("target", "_top");
   }
+
+  // Four cards side by side share their rows: the prices and the buttons line up. The current plan's badge
+  // keeps its place beside the plan's sign; only "Fits your store", too wide for a narrow card in German,
+  // moves below it.
+  const layout = await page.locator('[role="group"]').evaluateAll((cards) => {
+    // Polaris hosts draw nothing themselves (display: contents): measure what their shadow roots draw.
+    const top = (el: Element | null) => {
+      if (!el) return null;
+      const drawn = [el, ...Array.from(el.shadowRoot?.querySelectorAll("*") ?? [])].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0);
+      return Math.round(Math.min(...drawn.map((r) => r.top)));
+    };
+    return cards.map((c) => ({
+      price: top(Array.from(c.querySelectorAll("span")).find((s) => getComputedStyle(s).fontSize === "32px") ?? null),
+      button: top(c.querySelector("s-button")),
+      sign: top(c.querySelector('s-stack[background="subdued"]')),
+      current: top(c.querySelector('s-badge[color="strong"]')),
+    }));
+  });
+  expect(new Set(layout.map((l) => l.price)).size, JSON.stringify(layout)).toBe(1);
+  expect(new Set(layout.filter((l) => l.button !== null).map((l) => l.button)).size, JSON.stringify(layout)).toBe(1);
+  const pro = layout[HANDLES.indexOf("pro")]!;
+  expect(pro.current, JSON.stringify(pro)).toBe(pro.sign);
 });
 
 test("English: prices like $29, Free as a word, and the price row in the full comparison", async ({ page }) => {

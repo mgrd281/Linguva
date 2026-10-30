@@ -197,18 +197,19 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
       aria-labelledby={nameId}
       style={{ position: "relative", isolation: "isolate", display: "grid", gridTemplateRows: "subgrid", gridRow: `span ${rows}`, rowGap: 16, padding: 16, minWidth: 0 }}
     >
-      {/* The card's frame, behind its rows. The current plan's ring is drawn in the text's own colour (Polaris' dark ink, no colour of its own). */}
-      <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: -1, borderRadius: 12, ...(current ? { boxShadow: "0 0 0 2px currentColor" } : {}) }}>
+      {/* The card's frame, behind its rows. The current plan's ring lies inside the frame, so its edges line up with
+          the other cards', and is drawn in the text's own colour (Polaris' dark ink, no colour of its own). */}
+      <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: -1 }}>
         <s-box background="base" border={current ? "none" : "base"} borderRadius="large-100" blockSize="100%" />
+        {current ? <div style={{ position: "absolute", inset: 0, borderRadius: 12, boxShadow: "inset 0 0 0 2px currentColor" }} /> : null}
       </div>
-      {/* The badges sit beside the sign; on a narrow card they wrap below it, as a row. */}
-      <s-stack direction="inline" justifyContent="space-between" alignItems="start" gap="small-200">
+      {/* The sign, then each badge on its own: beside the sign at the right while it fits, else on the next line at
+          the left. So a state badge ("Your plan", "Applies now", "from …") keeps its place and only a badge too wide
+          for a narrow card moves below the sign. */}
+      <s-stack direction="inline" alignItems="start" gap="small-200">
         <IconTile icon={PLAN_ICON[handle]} size={40} color="base" />
-        {badges.length ? (
-          <s-stack direction="inline" gap="small-300" alignItems="center">
-            {badges}
-          </s-stack>
-        ) : null}
+        {badges.length ? <span aria-hidden="true" style={{ flex: "1 0 0" }} /> : null}
+        {badges}
       </s-stack>
       <s-stack direction="block" gap="small-500">
         <h3 id={nameId} style={CARD_NAME}>

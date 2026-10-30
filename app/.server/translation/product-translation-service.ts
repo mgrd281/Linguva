@@ -211,6 +211,12 @@ export async function saveResourceTranslations(
     resourceId: string;
     locale: string;
     edits: readonly TranslationEdit[];
+    /**
+     * Ids of the drafts these edits publish (Review's approval). They are
+     * left to the caller, which records them as published; every other
+     * waiting draft of a saved field is retired.
+     */
+    publishing?: readonly string[];
   },
   client: PrismaClient = defaultClient,
 ): Promise<SaveOutcome[]> {
@@ -319,7 +325,8 @@ export async function saveResourceTranslations(
     input.shopId,
     async (tx) => {
       await tx.translationRevision.createMany({ data: revisions });
-      // A field saved directly retires any pending draft for it.
+      // A field saved directly retires any pending draft for it; a draft
+      // being published here is the caller's to record (as published).
       await tx.translationDraft.updateMany({
         where: {
           shopId: input.shopId,
@@ -327,6 +334,7 @@ export async function saveResourceTranslations(
           locale: input.locale,
           key: { in: saved.map((e) => e.key) },
           status: "PENDING",
+          ...(input.publishing?.length ? { id: { notIn: [...input.publishing] } } : {}),
         },
         data: { status: "STALE" },
       });

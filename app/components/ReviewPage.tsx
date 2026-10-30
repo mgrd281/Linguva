@@ -317,8 +317,12 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
   const allDecided = drafts.length > 0 && undecided.length === 0;
   const problems = drafts.some((x) => isProblem(outcomes[x.draft.id]));
   const elsewhere = Math.max(0, data.facets.total - data.page.size);
-  const nothingWaits = data.facets.total === 0 || (allDecided && elsewhere === 0 && !problems);
-  const filteredToNothing = data.page.size === 0 && data.facets.total > 0;
+  // A job's texts or an old field group: every count is within it, so it says nothing about the rest of the store.
+  const scoped = Boolean(query.jobId || query.group);
+  const nothingWaits = !scoped && (data.facets.total === 0 || (allDecided && elsewhere === 0 && !problems));
+  const filteredToNothing = data.page.size === 0 && (data.facets.total > 0 || scoped);
+  // Every text waiting, in any scope.
+  const everything = reviewHref({ locale: null, area: null, flagged: false, search: null, jobId: null, group: null });
 
   if (nothingWaits) return <AllReviewed data={data} i18n={i18n} />;
 
@@ -327,6 +331,8 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     : data.page.matching > data.page.size
       ? reviewHref(query)
       : reviewHref({ locale: null, area: null, flagged: false, search: null, jobId: query.jobId, group: query.group });
+  // Nothing waits in the scope: the way out of it (its chip with "Show all" isn't shown then).
+  const scopeDone = scoped && data.facets.total === 0;
 
   return (
     <>
@@ -358,9 +364,19 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
       {filteredToNothing ? (
         <s-section>
           <s-stack direction="block" gap="base" alignItems="start">
-            <s-text>{query.search ? t("language.list.search.none", { query: t("language.preview.quoted", { text: query.search }) }) : t("review.filtered.none")}</s-text>
-            <s-button href={query.search ? reviewHref(query, { search: null }) : reviewHref({ locale: null, area: null, flagged: false, search: null, jobId: query.jobId, group: null })}>
-              {query.search ? t("language.list.search.clear") : t("review.filter.showAll")}
+            <s-text>
+              {query.search && !scopeDone ? t("language.list.search.none", { query: t("language.preview.quoted", { text: query.search }) }) : t("review.filtered.none")}
+            </s-text>
+            <s-button
+              href={
+                scopeDone
+                  ? everything
+                  : query.search
+                    ? reviewHref(query, { search: null })
+                    : reviewHref({ locale: null, area: null, flagged: false, search: null, jobId: query.jobId, group: null })
+              }
+            >
+              {query.search && !scopeDone ? t("language.list.search.clear") : t("review.filter.showAll")}
             </s-button>
           </s-stack>
         </s-section>
@@ -374,7 +390,7 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
         </s-stack>
       </div>
 
-      {allDecided ? <PageDone data={data} outcomes={outcomes} elsewhere={elsewhere} continueHref={continueHref} i18n={i18n} /> : null}
+      {allDecided ? <PageDone data={data} outcomes={outcomes} elsewhere={elsewhere} continueHref={continueHref} everything={scoped ? everything : null} i18n={i18n} /> : null}
 
       {/* More than one page: the way to the next one without deciding this one, and back to the first. */}
       {data.page.nextCursor || !data.page.isFirstPage ? (
@@ -435,8 +451,26 @@ function PartialBanner({ heading, body, onDismiss }: { heading: string; body: st
   );
 }
 
-/** Below the last card once every text has an outcome: what happened, and where to go on. */
-function PageDone({ data, outcomes, elsewhere, continueHref, i18n }: { data: ReviewPageData; outcomes: Record<string, ClientOutcome>; elsewhere: number; continueHref: string; i18n: I18n }) {
+/**
+ * Below the last card once every text has an outcome: what happened, and where to go on. `everything`: the page
+ * shows a job's texts or an old field group, whose counts say nothing about the rest of the store; with nothing
+ * left in it, the way to every text instead of "Nothing else is waiting".
+ */
+function PageDone({
+  data,
+  outcomes,
+  elsewhere,
+  continueHref,
+  everything,
+  i18n,
+}: {
+  data: ReviewPageData;
+  outcomes: Record<string, ClientOutcome>;
+  elsewhere: number;
+  continueHref: string;
+  everything: string | null;
+  i18n: I18n;
+}) {
   const { t } = i18n;
   const all = data.page.cards.flatMap((card) => card.drafts.map((d) => outcomes[d.id]));
   const approved = all.filter((o) => o?.status === "published").length;
@@ -447,7 +481,8 @@ function PageDone({ data, outcomes, elsewhere, continueHref, i18n }: { data: Rev
     rejected ? t("review.done.rejected", { count: rejected }) : null,
     notPublished ? t("review.done.notPublished", { count: notPublished }) : null,
   ].filter(Boolean);
-  const next = elsewhere > 0 ? t("review.done.remaining", { count: elsewhere }) : t("review.done.nothingLeft");
+  const next = elsewhere > 0 ? t("review.done.remaining", { count: elsewhere }) : everything ? null : t("review.done.nothingLeft");
+  const link = elsewhere > 0 ? { href: continueHref, label: t("review.done.next") } : everything ? { href: everything, label: t("review.filter.showAll") } : null;
   return (
     // Its own heading names it (an accessibilityLabel would repeat it as a second heading).
     <s-section padding="none">
@@ -459,12 +494,12 @@ function PageDone({ data, outcomes, elsewhere, continueHref, i18n }: { data: Rev
               <h2 id="review-done-heading" tabIndex={-1} style={PANEL_HEADING}>
                 {t("review.done.heading")}
               </h2>
-              <s-text color="subdued">{`${parts.join(" · ")}${parts.length ? ". " : ""}${next}`}</s-text>
+              <s-text color="subdued">{[parts.length ? `${parts.join(" · ")}.` : null, next].filter(Boolean).join(" ")}</s-text>
             </s-stack>
-            {elsewhere > 0 ? (
+            {link ? (
               <s-stack direction="inline" justifyContent="end">
-                <s-button variant="primary" href={continueHref}>
-                  {t("review.done.next")}
+                <s-button variant="primary" href={link.href}>
+                  {link.label}
                 </s-button>
               </s-stack>
             ) : null}

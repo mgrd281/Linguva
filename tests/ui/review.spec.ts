@@ -401,6 +401,47 @@ test.describe("Review", () => {
     await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeEnabled();
   });
 
+  test("a job's texts, all decided: no claim about the rest of the store, and the way to every text @responsive", async ({ page }) => {
+    const job = await inStore((shopId) =>
+      owner.translationJob.create({ data: { shopId, resourceType: "PRODUCT", targetLocale: "fr", idempotencyKey: `review-spec-job-${shop()}`, status: "COMPLETED" } }),
+    );
+    await inStore((shopId) =>
+      owner.translationDraft.create({
+        data: {
+          shopId,
+          jobId: job.id,
+          resourceGid: "gid://shopify/Product/77",
+          resourceTitle: "Job product 77",
+          locale: "fr",
+          key: "title",
+          sourceDigest: "job-product-77",
+          sourceValue: "Job product 77",
+          value: "Produit du travail 77",
+          provider: "deepl",
+        },
+      }),
+    );
+    await open(page, `/app/review?job=${job.id}`);
+    await expect(page.getByText(/^Only from the job of /)).toBeVisible();
+    await button(page, "Reject: Name – Job product 77").click();
+    await page.locator('s-banner[heading="Reject this translation?"]').getByRole("button", { name: "Reject: Name – Job product 77" }).click();
+    await expect(page.locator("#review-done-heading")).toBeVisible();
+    // Texts of other jobs and imports still wait: the job's page says nothing about them.
+    await expect(page.getByRole("heading", { name: "All reviewed" })).toHaveCount(0);
+    await expect(page.getByText(/Nothing else is waiting|No translation is waiting/)).toHaveCount(0);
+    await page.locator("s-button[href]", { hasText: "Show all" }).click();
+    await expect(page).not.toHaveURL(/job=/);
+    await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
+
+    // The job's page again, nothing left in it.
+    await open(page, `/app/review?job=${job.id}`);
+    await expect(page.getByText("No translations for this selection.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "All reviewed" })).toHaveCount(0);
+    await page.locator('s-button[href="/app/review"]', { hasText: "Show all" }).click();
+    await expect(page).not.toHaveURL(/job=/);
+    await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
+  });
+
   test("more than one page: Next page without deciding this one, and Back to the start @responsive", async ({ page }) => {
     // 60 more French texts: two pages of French.
     await inStore((shopId) =>

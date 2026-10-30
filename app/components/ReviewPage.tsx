@@ -29,6 +29,8 @@ import { firstSight, focusSoon, languageLabel, outcomeText, ReviewCardView, text
 import { ReviewControls, type PageActions } from "./ReviewControls";
 
 const PANEL_HEADING = { margin: 0, fontSize: 15, lineHeight: "22px", fontWeight: 600 } as const;
+// A label that heads what follows (Polaris "strong" text keeps the body weight).
+const LABEL = { fontWeight: 650 } as const;
 
 // New loader data (a filter, the next page, "Reload") starts the page's state afresh.
 const dataKeys = new WeakMap<object, number>();
@@ -423,14 +425,19 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
   );
 }
 
-/** The round tick of "This page is done" and "All reviewed" (decorative: the heading says it; Polaris boxes aren't round). */
+/**
+ * The round tick of "This page is done" and "All reviewed" (decorative: the heading says it; Polaris boxes aren't
+ * round, and its icons stop at 16 px, so the tick is scaled to the circle).
+ */
 function DoneMark({ size }: { size: number }) {
   return (
     <div
       aria-hidden="true"
       style={{ width: size, height: size, borderRadius: "50%", background: `${STATE_COLOURS.complete}14`, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}
     >
-      <s-icon type="check-circle-filled" tone="success" />
+      <div style={{ display: "flex", transform: `scale(${size >= 56 ? 1.5 : 1.25})` }}>
+        <s-icon type="check-circle-filled" tone="success" />
+      </div>
     </div>
   );
 }
@@ -488,21 +495,24 @@ function PageDone({
     <s-section padding="none">
       <s-query-container>
         <s-box padding="base">
-          <s-grid gridTemplateColumns="@container (inline-size > 560px) auto 1fr auto, auto 1fr" gap="base" alignItems="center">
+          {/* The tick beside the rest; on a phone the button goes under the words, at the end (thumb side). */}
+          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
             <DoneMark size={40} />
-            <s-stack direction="block" gap="small-500">
-              <h2 id="review-done-heading" tabIndex={-1} style={PANEL_HEADING}>
-                {t("review.done.heading")}
-              </h2>
-              <s-text color="subdued">{[parts.length ? `${parts.join(" · ")}.` : null, next].filter(Boolean).join(" ")}</s-text>
-            </s-stack>
-            {link ? (
-              <s-stack direction="inline" justifyContent="end">
-                <s-button variant="primary" href={link.href}>
-                  {link.label}
-                </s-button>
+            <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="small-200 base" alignItems="center">
+              <s-stack direction="block" gap="small-500">
+                <h2 id="review-done-heading" tabIndex={-1} style={PANEL_HEADING}>
+                  {t("review.done.heading")}
+                </h2>
+                <s-text color="subdued">{[parts.length ? `${parts.join(" · ")}.` : null, next].filter(Boolean).join(" ")}</s-text>
               </s-stack>
-            ) : null}
+              {link ? (
+                <s-stack direction="inline" justifyContent="end">
+                  <s-button variant="primary" href={link.href}>
+                    {link.label}
+                  </s-button>
+                </s-stack>
+              ) : null}
+            </s-grid>
           </s-grid>
         </s-box>
       </s-query-container>
@@ -533,7 +543,9 @@ function AllReviewed({ data, i18n }: { data: ReviewPageData; i18n: I18n }) {
         {languages.length ? (
           <s-box inlineSize="100%" maxInlineSize="520px">
             <s-stack direction="block" gap="small-200">
-              <s-text type="strong">{t("review.empty.languages")}</s-text>
+              <s-text type="strong">
+                <span style={LABEL}>{t("review.empty.languages")}</span>
+              </s-text>
               <ul style={PLAIN_LIST}>
                 {languages.map((language) => {
                   const hidden = data.published[language.locale] === false;

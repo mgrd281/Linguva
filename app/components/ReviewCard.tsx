@@ -41,7 +41,10 @@ export const NARROW = "@container (inline-size > 640px) none, auto";
 const COLUMNS = "@container (inline-size > 640px) 1fr 1fr, 1fr";
 
 const CARD_TITLE = { margin: 0, fontSize: 15, lineHeight: "22px", fontWeight: 600, overflowWrap: "anywhere" } as const;
-const TEXT = { whiteSpace: "pre-wrap", overflowWrap: "anywhere" } as const;
+// A block, so a right-to-left text starts at the right of its box.
+const TEXT = { display: "block", whiteSpace: "pre-wrap", overflowWrap: "anywhere" } as const;
+// A text's name (Name, Beschreibung, …) heads its row (Polaris "strong" text keeps the body weight).
+const LABEL = { fontWeight: 650 } as const;
 const ONE_LINE = { display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" } as const;
 const MARK = { background: MARK_COLOUR, color: "inherit", borderRadius: 3, padding: "0 1px" } as const;
 
@@ -600,10 +603,13 @@ function Texts({ card, draft, title, ctx }: RowProps) {
         )}
       </s-grid>
       {handle ? (
-        <s-stack direction="inline" gap="small-300" alignItems="center">
-          <s-icon type="alert-triangle" tone="caution" size="small" />
+        // The icon beside the words, also when they wrap (a phone): never alone on a line.
+        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-300" alignItems="start">
+          <s-stack blockSize="20px" justifyContent="center">
+            <s-icon type="alert-triangle" tone="caution" size="small" />
+          </s-stack>
           <s-text tone="caution">{t("review.field.handleNote", { language: i18n.language(card.locale, ctx.names[card.locale]) })}</s-text>
-        </s-stack>
+        </s-grid>
       ) : null}
     </s-stack>
   );
@@ -629,7 +635,9 @@ function ResultLine({ card, draft, title, ctx, outcome, label }: RowProps & { ou
       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
         {look.tone ? <s-icon type={look.icon} tone={look.tone} /> : <s-icon type={look.icon} color="subdued" />}
         <s-stack direction="inline" gap="small-100 small-200" alignItems="center">
-          <s-text type="strong">{label}</s-text>
+          <s-text type="strong">
+            <span style={LABEL}>{label}</span>
+          </s-text>
           {look.tone === "success" ? <s-text tone="success">{text}</s-text> : look.tone === "caution" ? <s-text tone="caution">{text}</s-text> : <s-text>{text}</s-text>}
           {quote ? (
             <span lang={card.locale} dir="auto" style={ONE_LINE}>
@@ -672,7 +680,9 @@ function TextRow(props: RowProps) {
             {draft.group === "alt" && (image || (ctx.previews === null && !ctx.previewsFailed)) ? (
               <Picture src={image?.url} icon="image" size="40px" loading={ctx.previews === null && !ctx.previewsFailed} />
             ) : null}
-            <s-text type="strong">{label}</s-text>
+            <s-text type="strong">
+              <span style={LABEL}>{label}</span>
+            </s-text>
             <HintBadges issues={issues} i18n={i18n} />
             {draft.fromImport ? <s-badge icon="import">{t("review.field.fromImport")}</s-badge> : null}
             {ctx.isEdited(draft) ? (
@@ -739,26 +749,29 @@ export function ReviewCardView({ card, ctx }: { card: ReviewCard; ctx: CardConte
       <s-section padding="none" accessibilityLabel={`${title}, ${language}`}>
         <s-query-container>
           <s-box padding="base">
-            <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr auto, auto 1fr" gap="base" alignItems="center">
+            {/* The picture beside the rest; on a phone the tally goes under the name and language (beside the picture too). */}
+            <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
               <Picture src={picture} icon={areaIcon(card.area)} size="40px" loading={loading} />
-              <s-stack direction="block" gap="small-300">
-                <h2 style={CARD_TITLE}>{title}</h2>
-                <MetaLine card={card} title={title} ctx={ctx} editorLink={false} />
-              </s-stack>
-              <s-stack direction="inline" gap="small-100 base" alignItems="center">
-                {approved ? (
-                  <s-stack direction="inline" gap="small-300" alignItems="center">
-                    <s-icon type="check-circle-filled" tone="success" size="small" />
-                    <s-text tone="success">{t("review.card.approved", { count: approved })}</s-text>
-                  </s-stack>
-                ) : null}
-                {rejected ? (
-                  <s-stack direction="inline" gap="small-300" alignItems="center">
-                    <s-icon type="x-circle" color="subdued" size="small" />
-                    <s-text color="subdued">{t("review.card.rejected", { count: rejected })}</s-text>
-                  </s-stack>
-                ) : null}
-              </s-stack>
+              <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="small-200 base" alignItems="center">
+                <s-stack direction="block" gap="small-300">
+                  <h2 style={CARD_TITLE}>{title}</h2>
+                  <MetaLine card={card} title={title} ctx={ctx} editorLink={false} />
+                </s-stack>
+                <s-stack direction="inline" gap="small-100 base" alignItems="center">
+                  {approved ? (
+                    <s-stack direction="inline" gap="small-300" alignItems="center">
+                      <s-icon type="check-circle-filled" tone="success" size="small" />
+                      <s-text tone="success">{t("review.card.approved", { count: approved })}</s-text>
+                    </s-stack>
+                  ) : null}
+                  {rejected ? (
+                    <s-stack direction="inline" gap="small-300" alignItems="center">
+                      <s-icon type="x-circle" color="subdued" size="small" />
+                      <s-text color="subdued">{t("review.card.rejected", { count: rejected })}</s-text>
+                    </s-stack>
+                  ) : null}
+                </s-stack>
+              </s-grid>
             </s-grid>
           </s-box>
         </s-query-container>
@@ -767,6 +780,8 @@ export function ReviewCardView({ card, ctx }: { card: ReviewCard; ctx: CardConte
   }
 
   const blocked = card.drafts.some((d) => ctx.problemOf(d)) || card.drafts.some((d) => ctx.asking?.id === d.id);
+  // A row shows its texts while it waits or failed (a failed text can be tried again); a decided row is one line.
+  const showsTexts = card.drafts.some((d) => !ctx.outcomes[d.id] || ctx.outcomes[d.id]!.status === "failed");
   const hintCount = (
     <s-badge tone="caution" icon="alert-triangle">
       {t("review.card.hints", { count: hints })}
@@ -799,25 +814,28 @@ export function ReviewCardView({ card, ctx }: { card: ReviewCard; ctx: CardConte
                 </s-stack>
               ) : null}
             </s-stack>
-            {hints ? <s-box display={WIDE}>{hintCount}</s-box> : <span />}
+            {/* (Nothing in its place on a phone: an empty item would add a row of space under the lines.) */}
+            {hints ? <s-box display={WIDE}>{hintCount}</s-box> : null}
           </s-grid>
         </s-box>
-        {/* Decorative: each box names its language itself. */}
-        <div aria-hidden="true">
-          <s-box display={WIDE} padding="none base small-200">
-            <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-              <s-text color="subdued">
-                {ctx.primaryLocale
-                  ? t("review.columns.original", { language: languageLabel(i18n, ctx.primaryLocale, ctx.names) })
-                  : t("review.draft.original")}
-              </s-text>
-              <s-stack direction="inline" gap="small-300" alignItems="center">
-                <Flag country={localeCountry(card.locale, ctx.marketCountries)} fallback={card.locale} size={20} />
-                <s-text color="subdued">{language}</s-text>
-              </s-stack>
-            </s-grid>
-          </s-box>
-        </div>
+        {/* Decorative: each box names its language itself. Only while a row shows its texts (a decided row is one line). */}
+        {showsTexts ? (
+          <div aria-hidden="true">
+            <s-box display={WIDE} padding="none base small-200">
+              <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+                <s-text color="subdued">
+                  {ctx.primaryLocale
+                    ? t("review.columns.original", { language: languageLabel(i18n, ctx.primaryLocale, ctx.names) })
+                    : t("review.draft.original")}
+                </s-text>
+                <s-stack direction="inline" gap="small-300" alignItems="center">
+                  <Flag country={localeCountry(card.locale, ctx.marketCountries)} fallback={card.locale} size={20} />
+                  <s-text color="subdued">{language}</s-text>
+                </s-stack>
+              </s-grid>
+            </s-box>
+          </div>
+        ) : null}
         <ul style={PLAIN_LIST}>
           {card.drafts.map((draft) => (
             <li key={draft.id}>

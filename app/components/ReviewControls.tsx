@@ -1,10 +1,10 @@
 /**
  * Review's control card: the languages as tabs with flags and counts, a
- * search that runs while typing, the areas and "With notes" as chips in
- * one row (it swipes sideways on a phone), the job's or the old field
- * filter's scope, the payoff for a page of one language, and the strip with
- * the page's two actions. Filters are links (instant, no "Apply"); every
- * change starts on the first page.
+ * search that runs while typing, the areas and "With notes" as chips (all
+ * in view on a wide card, one row that swipes sideways on a phone), the
+ * job's or the old field filter's scope, the payoff for a page of one
+ * language, and the strip with the page's two actions. Filters are links
+ * (instant, no "Apply"); every change starts on the first page.
  */
 import { useEffect, useRef } from "react";
 import { Form, useSubmit } from "react-router";
@@ -13,13 +13,15 @@ import type { I18n } from "../i18n/i18n";
 import { localeCountry } from "../lib/flags";
 import { languagePath } from "../lib/language-categories";
 import { reviewHref, type Facets, type ReviewQuery } from "../lib/review-view";
-import { areaIcon, areaName, focusSoon, languageLabel } from "./ReviewCard";
+import { areaIcon, areaName, focusSoon, languageLabel, NARROW, WIDE } from "./ReviewCard";
 import { Flag } from "./Flag";
 import { PLAIN_LIST } from "./LanguageLayout";
 
 /** Typing pauses this long before the search runs. */
 const SEARCH_DELAY_MS = 350;
 const COUNT = { fontVariantNumeric: "tabular-nums" } as const;
+/** A tab's padding: roomy on a wide card, tighter on a phone, where four languages then fit in two lines. */
+const TAB_PADDING = "@container (inline-size > 640px) small-200 small-100, small-200";
 
 export interface PageActions {
   /** Undecided texts on the page (web addresses included) and those "Approve all" approves (without them). */
@@ -70,12 +72,12 @@ function LanguageTabs({ data, facets, query, i18n }: { data: ReviewPageData; fac
             <li key={tab.locale ?? "all"}>
               {query.locale === tab.locale ? (
                 <span aria-current="true">
-                  <s-box padding="small-200 base" borderRadius="base" background="strong">
+                  <s-box padding={TAB_PADDING} borderRadius="base" background="strong">
                     {content}
                   </s-box>
                 </span>
               ) : (
-                <s-clickable href={reviewHref(query, { locale: tab.locale })} padding="small-200 base" borderRadius="base">
+                <s-clickable href={reviewHref(query, { locale: tab.locale })} padding={TAB_PADDING} borderRadius="base">
                   {content}
                 </s-clickable>
               )}
@@ -144,19 +146,35 @@ function Search({ query, i18n }: { query: ReviewQuery; i18n: I18n }) {
   );
 }
 
-/** The areas (each text in its own area: they add up to "All areas") and "With notes", one row. */
+/**
+ * The areas (each text in its own area: they add up to "All areas") and "With notes". A wide card shows every chip
+ * (the areas wrap, "With notes" stays at the end of the first line); a phone has one row that swipes sideways. The
+ * copy for the other width is display:none, so it is neither focusable nor read.
+ */
 function Chips({ data, facets, query, i18n }: { data: ReviewPageData; facets: Facets; query: ReviewQuery; i18n: I18n }) {
   const { t } = i18n;
   const showAreas = data.facets.areas.length > 1;
   const showHints = facets.flagged > 0 || query.flagged;
+  // A phone's row starts at its chosen chip, so the filter in use is in view (no page scroll; nothing on a wide card).
+  const swiped = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = swiped.current;
+    const chosen = row?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!row || !chosen) return;
+    const from = row.getBoundingClientRect();
+    const box = chosen.getBoundingClientRect().width ? chosen.getBoundingClientRect() : (chosen.firstElementChild?.getBoundingClientRect() ?? null);
+    if (!box || !from.width) return;
+    if (box.left < from.left || box.right > from.right) row.scrollLeft += box.left - from.left - 16;
+  }, [query.area, query.flagged]);
   if (!showAreas && !showHints) return null;
   const all = facets.areas.reduce((n, a) => n + a.count, 0);
   const hints = `${t("review.filter.hints")} ${i18n.number(facets.flagged)}`;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, overflowX: "auto", paddingBlock: 2 }}>
+  const row = (wrap: boolean) => (
+    <div ref={wrap ? undefined : swiped} style={{ display: "flex", alignItems: wrap ? "flex-start" : "center", gap: 8, paddingBlock: 2, ...(wrap ? {} : { overflowX: "auto" as const }) }}>
       {showAreas ? (
-        <nav aria-label={t("review.filter.areaLabel")}>
-          <ul style={{ ...PLAIN_LIST, display: "flex", gap: 8 }}>
+        // A wide card: it takes the room left beside "With notes" and wraps in it. A phone: its natural width, swiped.
+        <nav aria-label={t("review.filter.areaLabel")} style={wrap ? { flex: "0 1 auto", minWidth: 0 } : { flex: "none" }}>
+          <ul style={{ ...PLAIN_LIST, display: "flex", flexWrap: wrap ? "wrap" : "nowrap", gap: 8 }}>
             {[{ area: null, count: all }, ...facets.areas].map((option) => {
               const text = `${option.area ? areaName(i18n, option.area) : t("review.filter.allAreas")} ${i18n.number(option.count)}`;
               const icon = option.area ? <s-icon slot="graphic" type={areaIcon(option.area)} /> : null;
@@ -204,6 +222,12 @@ function Chips({ data, facets, query, i18n }: { data: ReviewPageData; facets: Fa
         </div>
       ) : null}
     </div>
+  );
+  return (
+    <>
+      <s-box display={WIDE}>{row(true)}</s-box>
+      <s-box display={NARROW}>{row(false)}</s-box>
+    </>
   );
 }
 
@@ -254,7 +278,8 @@ export function ReviewControls({
         <s-box padding="base">
           <s-stack direction="block" gap="base">
             {data.facets.languages.length > 1 ? (
-              <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 280px, 1fr" gap="base" alignItems="center">
+              // The search beside the first line of tabs (they may wrap).
+              <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 280px, 1fr" gap="base" alignItems="start">
                 <LanguageTabs data={data} facets={facets} query={query} i18n={i18n} />
                 <Search query={query} i18n={i18n} />
               </s-grid>

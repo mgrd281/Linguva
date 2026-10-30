@@ -32,7 +32,8 @@ const row = (page: Page, text: string) => page.locator("s-section[accessibilityl
 /** The last number in an element's own text ("German 25", "Approve all 12"): Polaris hosts, whose text is theirs (a role finds the control inside). */
 const numberIn = async (locator: Locator) => Number(((await locator.textContent()) ?? "").match(/\d+/g)!.at(-1));
 const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Languages" }).locator("s-clickable", { hasText: name });
-const chip = (page: Page, name: string) => page.locator("s-clickable-chip", { hasText: name });
+/** A chip as shown (a wide card wraps its chips; a phone swipes through one row: the other copy is hidden). */
+const chip = (page: Page, name: string) => page.locator("s-clickable-chip", { hasText: name }).filter({ visible: true });
 const primaryHost = (page: Page) => page.locator('s-button[commandfor="review-approve"][command="--show"]');
 const languages = (page: Page) => page.getByRole("navigation", { name: "Languages" });
 const areas = (page: Page) => page.getByRole("navigation", { name: "Areas" });
@@ -319,6 +320,17 @@ test.describe("Review", () => {
     await expect(heading).toBeVisible();
     await expect(heading).toBeFocused();
     await expect(page.getByText(/^2 approved\. \d+ more (is|are) waiting\.$/)).toBeVisible();
+    // The folded card's tally sits beside its picture, and Continue beside or under the words (not under the tick).
+    const folded = card(page, "About us 1, German");
+    const picture = (await folded.locator('div[style*="border-radius"]').first().boundingBox())!;
+    // (A Polaris text draws no box of its own: where its words are.)
+    const tally = await folded.getByText("2 approved").evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().x;
+    });
+    expect(tally).toBeGreaterThan(picture.x + picture.width);
+    expect((await page.getByRole("link", { name: "Continue" }).boundingBox())!.x).toBeGreaterThan((await heading.boundingBox())!.x);
     await page.locator("s-button[href]", { hasText: "Continue" }).click();
     await expect(page).not.toHaveURL(/area=/);
     await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
@@ -332,11 +344,30 @@ test.describe("Review", () => {
     const arabic = card(page, "Product 5 jacket, Arabic");
     await expect(arabic.getByText("hidden", { exact: true }).first()).toBeVisible();
     await expect(arabic.locator('[dir="rtl"]', { hasText: "سترة المنتج 5" })).toBeVisible();
+    // It starts at the right of its box (the row's right edge, less the paddings), not at the left.
+    const gap = await arabic.locator("li").first().evaluate((li) => {
+      const text = li.querySelector('[dir="rtl"]')!;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      return li.getBoundingClientRect().right - range.getBoundingClientRect().right;
+    });
+    expect(gap).toBeLessThan(48);
     await button(page, "Approve: Name – Product 5 jacket").click();
     // Its only text: the card folds to one line, its meta line still saying "hidden"; the result is read out.
     await expect(arabic.getByText("1 approved")).toBeVisible();
     await expect(arabic.getByText("hidden", { exact: true }).first()).toBeVisible();
     await expect(page.locator('div[role="status"]')).toContainText("Name – Product 5 jacket: Approved – Arabic is still hidden from customers.");
+  });
+
+  test("every filter is in view: a wide card wraps its chips, a phone's row starts at the chosen one @responsive", async ({ page }) => {
+    await open(page);
+    if (test.info().project.name !== "mobile") {
+      for (const link of await areas(page).getByRole("link").all()) await expect(link).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole("link", { name: /^With notes \d+$/ })).toBeInViewport({ ratio: 1 });
+    }
+    // The last area chosen: its chip is in view on every width.
+    await open(page, "/app/review?area=urls");
+    await expect(areas(page).locator('[aria-current="true"]')).toBeInViewport({ ratio: 0.95 });
   });
 
   test("is accessible and never scrolls sideways, also at 390 px @responsive", async ({ page }) => {

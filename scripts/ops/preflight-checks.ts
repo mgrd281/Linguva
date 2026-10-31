@@ -86,8 +86,10 @@ export function checkStoreTargets(env: NodeJS.ProcessEnv): CheckResult[] {
 export function checkProviderCost(env: NodeJS.ProcessEnv): CheckResult {
   const provider = env.TRANSLATION_PROVIDER ?? "deepl";
   if (provider === "mock") return { level: "ok", name: "Translation provider", detail: "mock (no costs, marked pseudo-translations)" };
-  const key = env.DEEPL_API_KEY ?? "";
-  if (!key) return { level: "warn", name: "Translation provider", detail: "No DeepL key: AI translation is off (manual translation works)" };
+  const keys = [...new Set([env.DEEPL_API_KEY ?? "", ...(env.DEEPL_API_KEYS ?? "").split(/[\s,;]+/)].map((k) => k.trim()).filter(Boolean))];
+  if (keys.length === 0) return { level: "warn", name: "Translation provider", detail: "No DeepL key: AI translation is off (manual translation works)" };
+  if (keys.length > 1) return { level: "warn", name: "Translation provider", detail: `${keys.length} DeepL keys (the next is used when one runs out): ${keys.filter((k) => !k.endsWith(":fx")).length} Pro key(s) are billed. Use them only with the owner's approval` };
+  const key = keys[0]!;
   return key.endsWith(":fx")
     ? { level: "ok", name: "Translation provider", detail: "DeepL API Free key (free monthly allowance)" }
     : { level: "warn", name: "Translation provider", detail: "DeepL API Pro key: usage is billed. Use it only with the owner's approval" };

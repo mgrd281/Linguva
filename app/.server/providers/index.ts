@@ -1,5 +1,6 @@
-import { getConfig } from "../lib/config";
+import { deeplApiKeys, getConfig } from "../lib/config";
 import { DeepLProvider } from "./deepl";
+import { DeepLKeyPool } from "./deepl-pool";
 import { MockTranslationProvider } from "./mock";
 import type { TranslationProvider } from "./types";
 
@@ -7,6 +8,8 @@ import type { TranslationProvider } from "./types";
 export function getTranslationProvider(): TranslationProvider | null {
   const config = getConfig();
   if (config.TRANSLATION_PROVIDER === "mock") return new MockTranslationProvider();
-  if (!config.DEEPL_API_KEY) return null;
-  return new DeepLProvider({ apiKey: config.DEEPL_API_KEY, baseUrl: config.DEEPL_API_URL });
+  const keys = deeplApiKeys(config);
+  if (keys.length === 0) return null;
+  if (keys.length === 1) return new DeepLProvider({ apiKey: keys[0]!, baseUrl: config.DEEPL_API_URL });
+  return new DeepLKeyPool(keys, { baseUrl: config.DEEPL_API_URL });
 }

@@ -83,6 +83,7 @@ describe("environment checks", () => {
     expect(checkProviderCost({ DEEPL_API_KEY: "abc:fx" }).level).toBe("ok");
     expect(checkProviderCost({ DEEPL_API_KEY: "abc" })).toMatchObject({ level: "warn", detail: expect.stringContaining("billed") });
     expect(checkProviderCost({}).level).toBe("warn");
+    expect(checkProviderCost({ DEEPL_API_KEYS: "a:fx, b:fx" })).toMatchObject({ level: "warn", detail: expect.stringContaining("2 DeepL keys") });
   });
 
   it("rejects the test and example encryption keys and never prints the value", () => {

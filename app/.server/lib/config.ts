@@ -50,6 +50,12 @@ function isHttps(value: string): boolean {
   }
 }
 
+/** Every configured DeepL key, in order and without repeats: DEEPL_API_KEY first, then DEEPL_API_KEYS. */
+export function deeplApiKeys(env: { DEEPL_API_KEY?: string | undefined; DEEPL_API_KEYS?: string | undefined }): string[] {
+  const listed = (env.DEEPL_API_KEYS ?? "").split(/[\s,;]+/).map((k) => k.replace(/^["']|["']$/g, "").trim());
+  return [...new Set([env.DEEPL_API_KEY ?? "", ...listed].filter(Boolean))];
+}
+
 const schema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -69,6 +75,8 @@ const schema = z.object({
     ),
   // AI translation is disabled when no provider key is configured (an empty value counts as none).
   DEEPL_API_KEY: z.preprocess(pasted, z.string().min(1).optional()),
+  // More DeepL keys, separated by commas, spaces or line breaks: the next one is used when a key's quota is used up.
+  DEEPL_API_KEYS: z.preprocess(pasted, z.string().min(1).optional()),
   DEEPL_API_URL: z.preprocess(deeplBaseUrl, z.string().url().refine(isHttps, "must be an https:// address").optional()),
   // Monthly AI character allowance per shop until plans are wired to billing.
   AI_MONTHLY_CHAR_LIMIT: z.preprocess(charCount, z.coerce.number().int().positive().default(20_000)),
@@ -151,6 +159,9 @@ const schema = z.object({
 }).refine((c) => c.LINGUVA_STAGE !== "staging" || !c.DEEPL_API_KEY, {
   message: "must not be set in staging",
   path: ["DEEPL_API_KEY"],
+}).refine((c) => c.LINGUVA_STAGE !== "staging" || !c.DEEPL_API_KEYS, {
+  message: "must not be set in staging",
+  path: ["DEEPL_API_KEYS"],
 }).refine((c) => c.LINGUVA_STAGE !== "staging" || shopList(c.ALLOWED_SHOPS).length > 0, {
   message: "is required in staging (the test stores it may serve)",
   path: ["ALLOWED_SHOPS"],

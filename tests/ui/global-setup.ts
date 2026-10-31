@@ -43,7 +43,7 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "smartDowngraded", "review", "reviewPhone", "coverageItems"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "businessSwitch", "smartDowngraded", "review", "reviewPhone", "coverageItems"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
     }
 
@@ -173,31 +173,34 @@ export default async function globalSetup() {
       );
     }
 
-    // The smart schedule of the store whose pause and Check now are tested: on, daily into German.
-    await saveSmartSettings(
-      {
-        shopId: ids.businessPause!,
-        actorId: null,
-        version: 0,
-        primaryLocale: "en",
-        value: {
-          mode: "daily",
-          timeZone: "Europe/Berlin",
-          times: [3 * 60],
-          weekdays: [1, 2, 3, 4, 5, 6, 7],
-          locales: ["de"],
-          resourceTypes: ["PRODUCT"],
-          fieldGroups: [],
-          includeAttached: false,
-          publishMode: "DRAFT",
-          replaceOutdatedMachine: true,
-          dailyBudget: null,
-          monthlyBudget: null,
+    // The smart schedules of the stores whose pause and Check now, and switching between the ways changes are
+    // translated, are tested: on, daily into German.
+    for (const key of ["businessPause", "businessSwitch"] as const) {
+      await saveSmartSettings(
+        {
+          shopId: ids[key]!,
+          actorId: null,
+          version: 0,
+          primaryLocale: "en",
+          value: {
+            mode: "daily",
+            timeZone: "Europe/Berlin",
+            times: [3 * 60],
+            weekdays: [1, 2, 3, 4, 5, 6, 7],
+            locales: ["de"],
+            resourceTypes: ["PRODUCT"],
+            fieldGroups: [],
+            includeAttached: false,
+            publishMode: "DRAFT",
+            replaceOutdatedMachine: true,
+            dailyBudget: null,
+            monthlyBudget: null,
+          },
         },
-      },
-      app,
-    );
-    await setSmartEnabled({ shopId: ids.businessPause!, actorId: null, enabled: true }, app);
+        app,
+      );
+      await setSmartEnabled({ shopId: ids[key]!, actorId: null, enabled: true }, app);
+    }
 
     // The same schedule, turned on before the store moved from Business to Pro.
     await saveSmartSettings(

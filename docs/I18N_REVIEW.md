@@ -80,8 +80,8 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - `automatic.budget.trial`: the trial note next to the smart budgets ("Essai jusqu'au {date} : …" / "Prueba hasta el {date}: …").
 
 **Overview, lists, Review, Settings, coverage**
-- Consent and publishing texts (translated literally, please confirm): `settings.publish.confirm` ("traductions automatiques" is also the name of the automatic translation feature; alternative "traductions générées par machine"), `settings.auto.consent.body`, `settings.publish.autoBody` / `autoBodySince`, `settings.ai.withdraw`.
+- Consent and publishing texts (translated literally, please confirm): `settings.publish.confirm.body` (French and Spanish say "traductions par IA" / "traducciones de IA", the same term as everywhere else), `settings.auto.consent.body`, `settings.publish.auto.body`, `settings.ai.revoke.body`, `settings.ai.withdraw`.
 - Gender guessed from context: `overview.languages.unknown`, `resources.status.partial`.
-- `settings.style.body`: the examples (Sie/du, vous/tu) aren't extended with usted/tú.
+- `settings.style.formalWith` / `informalWith`: the pronoun in brackets comes from `app/lib/formality.ts` and is the store language's own (vous/tu, usted/tú, Lei/tu, u/jij, Pan/Pani/ty, você/tu), not the interface language's.
 - `resources.caution.legalBody` (Spanish "calificada", Spain: "cualificada").
 - Counts are written as "label: number" ("Étapes terminées : {done} sur {total}") so singular and plural both read correctly.

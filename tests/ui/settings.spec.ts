@@ -165,12 +165,15 @@ test("publishing: choosing automatic asks first in a dialog; Cancel changes noth
   await isCurrent(page, card, "Review first");
 });
 
-test("automatic publishing switched on under a bigger plan shows what really happens: everything waits in Review", async ({ page }) => {
+test("automatic publishing left on from a bigger plan: shows what really happens, and \"Review first\" can still be chosen", async ({ page }) => {
   await openApp(page, "planAutoPublish", "/app/settings");
   const card = page.locator("#settings-publish");
   await expect(card.locator("s-badge").first()).toHaveText("With review");
   await expect(card.getByText("Automatic publishing isn't in your plan. New translations therefore wait in Review.")).toBeVisible();
-  await isCurrent(page, "#settings-publish", "Review first");
+  await expect(card.getByText("publishing becomes automatic again unless you choose", { exact: false })).toBeVisible();
+  // The saved setting stays marked; leaving it is one tap on "Review first" (not clicked here: the store is shared).
+  await isCurrent(page, "#settings-publish", "Publish automatically");
+  await expect(option(page, "#settings-publish", "Review first").getByRole("button").first()).toBeVisible();
   // The one lock: the plan's name, one line, the way to the plans; nothing to choose.
   const auto = option(page, "#settings-publish", "Publish automatically");
   await expect(auto.getByText("Pro", { exact: true })).toBeVisible();

@@ -846,7 +846,7 @@ function PublishingCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetch
       lead={t("settings.publish.scope")}
     >
       {downgraded ? <StateLine icon="lock">{t("settings.publish.notInPlan")}</StateLine> : null}
-      <PublishingChoice id="settings-publish" mode={mode} inPlan={data.autoPublishInPlan} onChoose={choose} busy={fetcher.state !== "idle"} lockLink={data.style.languages.length > 0} />
+      <PublishingChoice id="settings-publish" mode={mode} stored={downgraded} inPlan={data.autoPublishInPlan} onChoose={choose} busy={fetcher.state !== "idle"} lockLink={data.style.languages.length > 0} />
       {error === "PLAN_AUTO_PUBLISH" ? (
         <s-banner tone="info" heading={t("settings.publish.auto.plan")}>
           <s-paragraph>

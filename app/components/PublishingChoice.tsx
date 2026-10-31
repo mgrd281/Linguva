@@ -14,6 +14,7 @@ export function PublishingChoice({
   id,
   mode,
   inPlan,
+  stored = false,
   onChoose,
   busy = false,
   lockLink = true,
@@ -22,6 +23,8 @@ export function PublishingChoice({
   /** What really happens now (automatic only while the plan includes it). */
   mode: PublishMode;
   inPlan: boolean;
+  /** Automatic is the saved setting although the plan no longer has it: it stays marked, and "Review first" can still be chosen. */
+  stored?: boolean;
   /** Automatic only after the confirmation: `confirmed` is then true. */
   onChoose: (mode: PublishMode, confirmed: boolean) => void;
   busy?: boolean;
@@ -37,7 +40,7 @@ export function PublishingChoice({
           id={`${id}-review`}
           title={t("settings.publish.review.title")}
           body={t("settings.publish.review.body")}
-          current={mode === "DRAFT"}
+          current={mode === "DRAFT" && !stored}
           currentLabel={t("settings.option.current")}
           badges={<s-badge icon="target">{t("settings.publish.recommended")}</s-badge>}
           select={{ onClick: () => onChoose("DRAFT", false), disabled: busy }}
@@ -46,7 +49,7 @@ export function PublishingChoice({
           id={`${id}-auto`}
           title={t("settings.publish.auto.title")}
           body={t("settings.publish.auto.body")}
-          current={mode === "AUTO_PUBLISH"}
+          current={mode === "AUTO_PUBLISH" || stored}
           currentLabel={t("settings.option.current")}
           select={inPlan ? { commandFor: modal, disabled: busy } : undefined}
         >

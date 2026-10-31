@@ -1,4 +1,5 @@
 # Linguva PRODUCTION app configuration for KARINEX (docs/RAILWAY_STAGING.md §8).
+# The public App Store app is a separate app with its own template: shopify.app.public.toml (§10).
 # Template only: NOT linked, NOT deployed, NOT installed. Using it needs the
 # owner's explicit approval (OWNER_DECISIONS.md). Then: create the
 # production app (custom distribution to the KARINEX store first), copy this

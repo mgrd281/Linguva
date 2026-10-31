@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - **Scopes:** `write_locales` is no longer requested (Linguva never adds or publishes a language). The new scope list takes effect only after `shopify app deploy` for each app (owner); stores then approve the narrower list. SECURITY_MODEL.md §1a explains every scope.
+- **No shop-domain form outside development** (App Store requirement 2.3.1): `/auth/login` without a shop, or with one Shopify's login rejects, now goes to the start page, which says to install from the App Store or open Linguva from the admin. `?shop=` requests still go through Shopify's login; development keeps the form.
+- The fallback `frame-ancestors` is `https://admin.shopify.com` only, no `*.myshopify.com` wildcard (Shopify's `STATIC_FRAME_ANCESTORS` check).
 
 ### Added
 - Prices on the Plan page (decided 2026-10-30, docs/PRICING_DECISION.md): Free; Starter $29 a month or $290 a year; Pro $99 a month or $990 a year; Business $299 a month, monthly only. The page shows them in the merchant's language from `PLAN_PRICES` (`app/lib/plans.ts`). They are display only: Shopify's plan page charges.

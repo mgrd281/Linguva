@@ -90,8 +90,25 @@ test("pages and data responses carry the security headers, and the admin may sti
   expect(data.headers()["x-content-type-options"]).toBe("nosniff");
 
   // A page opened without a shop can't be framed by other sites.
-  const login = await page.request.get(new URL("/auth/login", UI_ENV.appUrl).toString());
-  expect(login.headers()["content-security-policy"]).toContain("frame-ancestors https://admin.shopify.com;");
+  const unknown = await page.request.get(new URL("/no-such-page", UI_ENV.appUrl).toString());
+  expect(unknown.headers()["content-security-policy"]).toContain("frame-ancestors https://admin.shopify.com;");
+});
+
+test("the production build's /auth/login asks no one to type a shop domain (requirement 2.3.1)", async ({ page }) => {
+  // Opened directly: the start page, which says to install from the App Store.
+  const response = await page.goto(new URL("/auth/login", UI_ENV.appUrl).toString());
+  expect(response?.status()).toBe(200);
+  expect(new URL(page.url()).pathname).toBe("/");
+  await expect(page.locator('s-text-field[name="shop"]')).toHaveCount(0);
+  await expect(page.locator('input[name="shop"]')).toHaveCount(0);
+
+  // A form post without a shop, and one with an invalid shop, end there too.
+  const empty = await page.request.post(new URL("/auth/login", UI_ENV.appUrl).toString(), { form: { shop: "" }, maxRedirects: 0 });
+  expect(empty.status()).toBe(302);
+  expect(empty.headers()["location"]).toBe("/");
+  const invalid = await page.request.get(new URL("/auth/login?shop=not%20a%20shop", UI_ENV.appUrl).toString(), { maxRedirects: 0 });
+  expect([302, 403]).toContain(invalid.status());
+  expect(await invalid.text()).not.toContain('name="shop"');
 });
 
 test("the public address shows the website and asks no one to type a shop domain", async ({ page }) => {

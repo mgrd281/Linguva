@@ -1,26 +1,35 @@
 import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData } from "react-router";
+import { Form, redirect, useActionData, useLoaderData } from "react-router";
 
 import { login } from "../../shopify.server";
 import { refuseShop, refuseShopInput } from "../../.server/shopify/require-shop";
 import { loginErrorMessage } from "./error.server";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // A store this deployment doesn't serve never reaches Shopify's install.
-  refuseShop(new URL(request.url).searchParams.get("shop"));
-  const errors = loginErrorMessage(await login(request));
+// Merchants install and open Linguva from Shopify (App Store requirement
+// 2.3.1): typing a shop domain is only offered in development. Elsewhere a
+// request without a valid shop goes to the start page, which says where to
+// start; one with a shop still goes through Shopify's login().
+const shopForm = () => process.env.NODE_ENV === "development";
 
+function formOrStart(errors: ReturnType<typeof loginErrorMessage>) {
+  if (!shopForm()) throw redirect("/");
   return { errors };
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const shop = new URL(request.url).searchParams.get("shop");
+  if (!shop && !shopForm()) throw redirect("/");
+  // A store this deployment doesn't serve never reaches Shopify's install.
+  refuseShop(shop);
+  return formOrStart(loginErrorMessage(await login(request)));
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  refuseShopInput((await request.clone().formData()).get("shop"));
-  const errors = loginErrorMessage(await login(request));
-
-  return {
-    errors,
-  };
+  const shop = (await request.clone().formData()).get("shop");
+  if (!shop && !shopForm()) throw redirect("/");
+  refuseShopInput(shop);
+  return formOrStart(loginErrorMessage(await login(request)));
 };
 
 export default function Auth() {

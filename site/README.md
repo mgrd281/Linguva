@@ -36,10 +36,19 @@ violations.
   banner").
 - **Hero variant B (night)** exists only as a design board (`Web-Hero-Nacht.dc.html` on the canvas),
   not as a second real page. Build it once the owner picks A or B.
-- **Runs on Railway's free `*.up.railway.app` address** until the owner names a real domain (see
-  "Deploy on Railway" below). `noindex` stays on, and the site is not linked from anywhere public.
+- **Runs on the app's Railway address** (see "Where it runs now") until the owner names a real domain.
+  `noindex` stays on, and the site is not linked from anywhere public.
 
-## Deploy on Railway (separate service)
+## Where it runs now
+
+The app serves this website on its own public address: `/` is the home page and `/preise` the
+pricing page (`app/.server/site/pages.ts`, used by `app/routes/_index/route.tsx` and
+`app/routes/preise.tsx`). `/` with a `shop` parameter still opens the app, as Shopify expects.
+The images and the stylesheet are bundled by Vite, and the inline menu script's CSP hash is computed
+when the server starts, so editing these files needs no other change. The pages carry their own strict
+CSP, `frame-ancestors 'none'` and `X-Robots-Tag: noindex`.
+
+## Deploy on Railway (separate service, optional, later)
 
 `site/Dockerfile` serves this folder with Caddy, with no build step. `site/Caddyfile` listens on
 Railway's `$PORT`, maps `/preise` to `preise.html`, and sends security headers: a strict

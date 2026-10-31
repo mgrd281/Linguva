@@ -23,6 +23,7 @@ describe("staging configuration", () => {
   it("refuses DeepL (paid) and requires the mock provider", () => {
     expect(() => config({ ...staging, TRANSLATION_PROVIDER: "deepl" })).toThrow(/TRANSLATION_PROVIDER: must be mock in staging/);
     expect(() => config({ ...staging, DEEPL_API_KEY: "secret-value:fx" })).toThrow(/DEEPL_API_KEY: must not be set in staging/);
+    expect(() => config({ ...staging, DEEPL_API_KEYS: "secret-value:fx,other:fx" })).toThrow(/DEEPL_API_KEYS: must not be set in staging/);
   });
 
   it("names the variable but never echoes a key's value", () => {

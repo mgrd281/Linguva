@@ -23,17 +23,12 @@ violations.
 
 - **`meta name="robots" content="noindex, nofollow"`** is set on both pages on purpose: this build
   is for the owner's review, not for search engines or for linking from anywhere public yet.
-- **No real domain.** Links use `mailto:support@[Domain]` and the footer reads
-  `© 2026 [Anbieter laut Impressum]` — placeholders until the owner names a domain and provider.
-- **No legal pages yet.** The footer's Impressum/Datenschutz/AGB/AVV/Unterauftragsverarbeiter links
-  point to `#` anchors with no page behind them. Building them needs the owner's legal data and a
-  lawyer's review (see `docs/OWNER_DECISIONS.md` §5); that work was started separately
-  (in-app legal pages, not part of this site) and is not finished.
+- **No real domain yet.** Contact is `shop@softwarekey.de`; provider Karina Khrystych (Softwarekey),
+  from https://www.softwarekey.de/policies/legal-notice.
+- **Impressum and website privacy page exist** (`impressum.html`, `datenschutz.html`), from the owner's Softwarekey legal notice; a lawyer has not reviewed them. AGB, AVV and the app's own privacy policy are not written yet, so the footer does not link them.
 - **German only.** The design has an English/French/Spanish rollout planned
   (`docs/research/website.md` §2.2); only German is built.
-- **Fonts load from Google Fonts**, not self-hosted yet (the design's plan is to self-host Inter so
-  the site makes zero third-party requests; see `docs/research/website.md` §7, "no cookies, no
-  banner").
+- **Inter is self-hosted** (`public/site-fonts/`, SIL OFL): the pages make no third-party requests. The separate Caddy image does not include these fonts.
 - **Hero variant B (night)** exists only as a design board (`Web-Hero-Nacht.dc.html` on the canvas),
   not as a second real page. Build it once the owner picks A or B.
 - **Runs on the app's Railway address** (see "Where it runs now") until the owner names a real domain.

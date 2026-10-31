@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
 import homeHtml from "../../../site/index.html?raw";
+import privacyHtml from "../../../site/datenschutz.html?raw";
+import imprintHtml from "../../../site/impressum.html?raw";
 import pricingHtml from "../../../site/preise.html?raw";
 
 // The marketing website (site/) served by the app on its public address.
@@ -14,22 +16,22 @@ function render(html: string): string {
       if (!url) throw new Error(`site asset missing: ${file}`);
       return `${attr}="${url}"`;
     })
-    .replace(/href="index\.html"/g, 'href="/"')
-    .replace(/href="preise\.html"/g, 'href="/preise"');
+    .replace(/href="index\.html(#[^"]*)?"/g, (_match, hash?: string) => `href="/${hash ?? ""}"`)
+    .replace(/href="(preise|impressum|datenschutz)\.html(#[^"]*)?"/g, (_match, page: string, hash?: string) => `href="/${page}${hash ?? ""}"`);
 }
 
 function scriptHashes(html: string): string[] {
   return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(([, body]) => `'sha256-${createHash("sha256").update(body).digest("base64")}'`);
 }
 
-const PAGES = { home: render(homeHtml), pricing: render(pricingHtml) };
-const SCRIPTS = [...new Set([...scriptHashes(PAGES.home), ...scriptHashes(PAGES.pricing)])].join(" ");
+const PAGES = { home: render(homeHtml), pricing: render(pricingHtml), imprint: render(imprintHtml), privacy: render(privacyHtml) };
+const SCRIPTS = [...new Set(Object.values(PAGES).flatMap(scriptHashes))].join(" ");
 
 const CSP = [
   "default-src 'none'",
   "img-src 'self'",
-  "style-src 'self' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "style-src 'self'",
+  "font-src 'self'",
   `script-src ${SCRIPTS}`,
   "base-uri 'none'",
   "form-action 'none'",

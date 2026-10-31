@@ -98,6 +98,8 @@ test("the public address shows the website and asks no one to type a shop domain
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   page.on("pageerror", (e) => errors.push(e.message));
+  const thirdParty: string[] = [];
+  page.on("request", (r) => new URL(r.url()).origin !== new URL(UI_ENV.appUrl).origin && thirdParty.push(r.url()));
   const response = await page.goto(new URL("/", UI_ENV.appUrl).toString());
   expect(response?.status()).toBe(200);
   expect(response?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
@@ -110,11 +112,21 @@ test("the public address shows the website and asks no one to type a shop domain
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await expect.poll(() => page.evaluate(() => [...document.images].filter((i) => i.complete && i.naturalWidth === 0).length)).toBe(0);
   expect(await page.evaluate(() => getComputedStyle(document.querySelector(".pg")!).fontFamily)).toContain("Inter");
+  // Fonts come from the app itself, not from Google (no third-party requests).
+  expect(await page.evaluate(async () => (await document.fonts.load("600 16px Inter")).length)).toBeGreaterThan(0);
 
   await page.getByRole("link", { name: "Alle Preise" }).click();
   await expect(page).toHaveURL(/\/preise$/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await page.getByRole("contentinfo").getByRole("link", { name: "Impressum" }).click();
+  await expect(page).toHaveURL(/\/impressum$/);
+  await expect(page.getByText("DE452578048")).toBeVisible();
+  await page.getByRole("contentinfo").getByRole("link", { name: "Datenschutz" }).click();
+  await expect(page).toHaveURL(/\/datenschutz$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(errors).toEqual([]);
+  expect(thirdParty).toEqual([]);
 });
 
 test("the content webhook routes of the production build refuse a delivery without a valid signature", async ({ request }) => {

@@ -42,7 +42,7 @@ Every loader and action of an app or webhook route authenticates itself, through
 - AI output for HTML fields is never trusted. The pipeline (TRANSLATION_ENGINE.md §3) translates **text nodes only** and rebuilds the HTML from the source DOM structure, so the provider can't introduce tags or attributes.
 - A final pass runs a sanitizer allow-list (no `<script>`, no `on*` attributes, no `javascript:` URLs). The output tag/attribute set must be a subset of the source's.
 - The admin UI renders translations as text or inside a sandboxed preview. It never uses `dangerouslySetInnerHTML` with unsanitized content.
-- CSP and security headers are set (`frame-ancestors https://*.myshopify.com https://admin.shopify.com` as required for embedded apps).
+- CSP and security headers are set (`frame-ancestors` names the requesting store and the admin, as required for embedded apps; without a shop only `https://admin.shopify.com`, never a wildcard, which Shopify's security check rates High as `STATIC_FRAME_ANCESTORS`).
 
 ## 5. Webhooks
 
@@ -138,7 +138,7 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 | Header | Value | Why |
 |---|---|---|
 | Content-Security-Policy | Shopify's `frame-ancestors` for the store's admin, plus `base-uri 'self'; object-src 'none'` | Clickjacking, base-tag and plugin injection |
-| (no shop in the request) | `frame-ancestors https://admin.shopify.com https://*.myshopify.com` | Before, such pages had no framing protection at all |
+| (no shop in the request) | `frame-ancestors https://admin.shopify.com` | Before, such pages had no framing protection at all; no `*.myshopify.com` wildcard (Shopify's `STATIC_FRAME_ANCESTORS` check) |
 | Content-Security-Policy `script-src` (phase G) | `'self' 'nonce-…' https://cdn.shopify.com`, a new nonce per page; React Router's inline scripts carry it. Not on the Vite dev server (its refresh script is inline) | An injected inline script or event handler doesn't run (tested); scripts only from the app and Shopify's CDN (App Bridge, Polaris) |
 | X-Content-Type-Options | `nosniff` | MIME sniffing |
 | Referrer-Policy | `strict-origin-when-cross-origin` | No full app URLs (with `shop`, `host`) sent to other sites |

@@ -1,3 +1,5 @@
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { addSecurityHeaders } from "../../app/.server/lib/security-headers";
 
@@ -21,7 +23,7 @@ describe("security headers", () => {
     const headers = new Headers();
     addSecurityHeaders(req("https://app.example/auth/login"), headers, { document: true, production: true });
     expect(headers.get("Content-Security-Policy")).toBe(
-      "frame-ancestors https://admin.shopify.com https://*.myshopify.com; base-uri 'self'; object-src 'none';",
+      "frame-ancestors https://admin.shopify.com; base-uri 'self'; object-src 'none';",
     );
   });
 
@@ -29,7 +31,7 @@ describe("security headers", () => {
     const headers = new Headers();
     addSecurityHeaders(req("https://app.example/app?shop=a.myshopify.com"), headers, { document: true, production: true, scriptNonce: "bm9uY2U=" });
     expect(headers.get("Content-Security-Policy")).toBe(
-      "frame-ancestors https://admin.shopify.com https://*.myshopify.com; base-uri 'self'; object-src 'none'; script-src 'self' 'nonce-bm9uY2U=' https://cdn.shopify.com;",
+      "frame-ancestors https://admin.shopify.com; base-uri 'self'; object-src 'none'; script-src 'self' 'nonce-bm9uY2U=' https://cdn.shopify.com;",
     );
     // No nonce (the Vite dev server): no script policy.
     const dev = new Headers();
@@ -56,5 +58,13 @@ describe("security headers", () => {
     addSecurityHeaders(req("https://app.example/app/products.data"), headers, { document: false, production: true });
     expect(headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(headers.get("Content-Security-Policy")).toBeNull();
+  });
+});
+
+describe("frame-ancestors in the app's code", () => {
+  it("never allows a wildcard host (Shopify's STATIC_FRAME_ANCESTORS check)", () => {
+    const files = execSync("git ls-files app", { encoding: "utf8" }).split("\n").filter((f) => /\.(ts|tsx)$/.test(f));
+    const offenders = files.filter((f) => /["'`]frame-ancestors[^"'`\n]*\*/.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
   });
 });

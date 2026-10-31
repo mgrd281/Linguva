@@ -91,7 +91,7 @@ test("pages and data responses carry the security headers, and the admin may sti
 
   // A page opened without a shop can't be framed by other sites.
   const login = await page.request.get(new URL("/auth/login", UI_ENV.appUrl).toString());
-  expect(login.headers()["content-security-policy"]).toContain("frame-ancestors https://admin.shopify.com https://*.myshopify.com;");
+  expect(login.headers()["content-security-policy"]).toContain("frame-ancestors https://admin.shopify.com;");
 });
 
 test("the public address shows the website and asks no one to type a shop domain", async ({ page }) => {

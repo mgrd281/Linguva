@@ -20,7 +20,7 @@ import type { FakeShopifyStore } from "../../support/fake-store";
 import { FIXTURE_IMAGE_PATH, fixturePicture } from "../../support/fixture-images";
 
 const realFetch = globalThis.fetch.bind(globalThis);
-const REQUIRED_SCOPES = ["read_products", "read_content", "read_online_store_pages", "read_translations", "write_translations", "read_locales", "write_locales"];
+const REQUIRED_SCOPES = ["read_products", "read_content", "read_online_store_pages", "read_translations", "write_translations", "read_locales"];
 const OPTIONAL_SCOPES = ["read_markets", "read_online_store_navigation", "read_metaobjects", "read_themes", "read_legal_policies", "read_shipping"];
 const stores = new Map<string, FakeShopifyStore>();
 const storeFor = (shop: UiShop) => {
@@ -156,7 +156,7 @@ globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => 
   if (shop && url.pathname === "/admin/oauth/access_token") {
     return json({
       access_token: `ui-test-token-${shop.domain}`,
-      scope: "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales",
+      scope: "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales",
       expires_in: 86_400,
       refresh_token: `ui-test-refresh-${shop.domain}`,
       refresh_token_expires_in: 2_592_000,

@@ -142,7 +142,7 @@ Legend:
 
 ## 6. Access scopes
 
-In use (`shopify.app.toml`): `read_products, read_content, read_online_store_pages, read_translations, write_translations, read_locales, write_locales`.
+In use (`shopify.app.toml`): `read_products, read_content, read_online_store_pages, read_translations, write_translations, read_locales`.
 
 Optional (`optional_scopes`, requested at runtime with `scopes.request` and revocable by the merchant, VERIFIED shopify.dev "Manage access scopes"): `read_markets`, asked for only on the Markets page. Optional scopes must be deployed with `shopify app deploy` before they can be requested.
 

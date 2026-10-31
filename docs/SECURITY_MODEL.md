@@ -15,6 +15,27 @@ Status: the controls below are implemented and tested where a test is named (`te
 
 Every loader and action of an app or webhook route authenticates itself, through `requireShop`, `webhookAction` (the HMAC check) or a reviewed delegate that calls `requireShop`: React Router runs a child route's action without its parent's loader, so the layout's check never covers an action. `tests/security/structure.test.ts` parses each route module with the TypeScript compiler and requires the call in each exported loader and action itself (not elsewhere in the file, not in a nested function, imported from where it is defined); only the reviewed public routes (landing page, login form, health checks) are exempt.
 
+## 1a. Access scopes, and why each one is needed
+
+Every scope in `shopify.app.toml` has a row here (`tests/unit/scopes-documented.test.ts` checks it). No customer or order scopes (ADR-007). `write_locales` was removed: Linguva never adds, enables or publishes a language (it calls no `shopLocaleEnable`, `shopLocaleUpdate` or `shopLocaleDisable`), so requesting it would be over-requesting (requirement 3.2, Shopify's `SCOPE_OVER_REQUEST` check).
+
+| Scope | Required or optional | Feature | API objects and mutations |
+|---|---|---|---|
+| `read_products` | Required | Products, collections, variants and option values, product images (alt text) | `products`, `collections`, `translatableResources(PRODUCT, COLLECTION, PRODUCT_OPTION, PRODUCT_OPTION_VALUE, MEDIA_IMAGE, COLLECTION_IMAGE)` |
+| `read_content` | Required | Blogs and blog posts, their image alt texts | `translatableResources(BLOG, ARTICLE, ARTICLE_IMAGE)` |
+| `read_online_store_pages` | Required | Pages | `translatableResources(PAGE)` |
+| `read_translations` | Required | Reading existing translations, coverage counts, outdated detection | `translatableResources`, `translatableResource` (`translations`, `translatableContent` digests) |
+| `write_translations` | Required | Publishing approved translations, removing a translation | `translationsRegister`, `translationsRemove` |
+| `read_locales` | Required | Which languages the store has, which is primary, which are published | `shopLocales` |
+| `read_markets` | Optional | Countries and markets on the Overview and language pages | `markets`, `backupRegion` (country → language) |
+| `read_online_store_navigation` | Optional | Menus and menu links | `translatableResources(MENU, LINK)` |
+| `read_metaobjects` | Optional | Metaobjects and their fields | `translatableResources(METAOBJECT)` |
+| `read_themes` | Optional | Theme texts and sections | `translatableResources(ONLINE_STORE_THEME and its JSON templates)` |
+| `read_legal_policies` | Optional | Store policies (refund, privacy, terms, shipping) | `translatableResources(SHOP_POLICY)` |
+| `read_shipping` | Optional | Delivery method names | `translatableResources(DELIVERY_METHOD_DEFINITION)` |
+
+`read_content` and `read_online_store_pages`: Shopify accepts either one for pages, blogs and articles in `translatableResources`. Both are kept until a check on the dev store (`docs/DEV_STORE_VERIFICATION.md`) shows that pages, blogs and articles all load with `read_content` alone; then `read_online_store_pages` can be dropped in a separate change that is deployed with `shopify app deploy`.
+
 ## 2. Multi-tenant controls
 
 1. **Shop resolution:** `shopId` comes only from `session.shop` (verified token) → `Shop.shopDomain` lookup. Request params never select a tenant.

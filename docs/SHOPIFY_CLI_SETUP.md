@@ -105,7 +105,7 @@ Check: Overview loads, Languages lists German and Arabic, Products lists the tes
 | `read_products` | Products, collections, product images and metafields as translation sources |
 | `read_content`, `read_online_store_pages` | Pages, blogs and blog posts |
 | `read_translations`, `write_translations` | Read and publish translations |
-| `read_locales`, `write_locales` | Languages page (Linguva doesn't add or publish languages yet) |
+| `read_locales` | Languages page: which languages the store has and which are published (Linguva doesn't add or publish languages) |
 | `read_markets` (optional) | Markets page, requested only when it is opened |
 
 No customer or order scopes. Changing scopes needs merchant re-approval; the unit test `tests/unit/preflight-checks.test.ts` fails on any change, so a change is always deliberate.

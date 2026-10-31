@@ -16,7 +16,7 @@ const serverEnv: Record<string, string> = {
   SHOPIFY_API_KEY: UI_ENV.apiKey,
   SHOPIFY_API_SECRET: UI_ENV.apiSecret,
   SHOPIFY_APP_URL: UI_ENV.appUrl,
-  SCOPES: "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales",
+  SCOPES: "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales",
   TRANSLATION_PROVIDER: "mock",
   // Billing on (simulated Partner API), but no forced plan selection.
   SHOPIFY_PARTNER_ORG_ID: "1",

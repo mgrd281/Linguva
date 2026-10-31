@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **Scopes:** `write_locales` is no longer requested (Linguva never adds or publishes a language). The new scope list takes effect only after `shopify app deploy` for each app (owner); stores then approve the narrower list. SECURITY_MODEL.md §1a explains every scope.
+
 ### Added
 - Prices on the Plan page (decided 2026-10-30, docs/PRICING_DECISION.md): Free; Starter $29 a month or $290 a year; Pro $99 a month or $990 a year; Business $299 a month, monthly only. The page shows them in the merchant's language from `PLAN_PRICES` (`app/lib/plans.ts`). They are display only: Shopify's plan page charges.
 - Trial allowance: while Shopify's free trial runs (7 days on Starter, Pro and Business, `TRIAL_DAYS`), AI translation is limited to 100,000 characters a month (`TRIAL_AI_CHARS`). The plan's allowance applies the moment the trial ends, by the clock, without a new check. Automatic translation and the smart schedule that stopped at the trial's allowance resume when the trial ends, not on the 1st. The Plan page and the smart schedule's budgets say so.

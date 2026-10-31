@@ -117,7 +117,7 @@ Generate the encryption key in your terminal: `echo "k1:$(openssl rand -base64 3
 | `ALLOWED_SHOPS` | `linguva-test-lab.myshopify.com` |
 | `SHOPIFY_API_KEY` | Client ID of the "Linguva Staging" app (§5.5) |
 | `SHOPIFY_API_SECRET` | Its client secret (secret) |
-| `SCOPES` | `read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales` |
+| `SCOPES` | `read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales` |
 | `TOKEN_ENCRYPTION_KEYS` | The generated `k1:…` value (secret; staging only, never reused in production) |
 | `LINGUVA_APP_PASSWORD` | From §5.2 (secret) |
 | `LOG_LEVEL` | `info` |

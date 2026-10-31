@@ -44,7 +44,7 @@ const INLINE_ICON = { display: "inline-flex", verticalAlign: "middle", marginInl
 /** A native disclosure's summary as a plain block (no triangle; the browser's focus ring stays). */
 const SUMMARY = { display: "block", cursor: "pointer", listStyle: "none" } as const;
 /** A card: on a phone too (Polaris draws sections flat there). */
-const CARD = { background: "base", border: "base", borderRadius: "large-100" } as const;
+export const CARD = { background: "base", border: "base", borderRadius: "large-100" } as const;
 /** Semibold at the body size: s-text type="strong" keeps the body weight (450) in Polaris, so names wouldn't stand out. */
 const STRONG = { fontWeight: 600, lineHeight: "20px" } as const;
 

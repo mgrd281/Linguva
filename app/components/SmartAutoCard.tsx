@@ -4,6 +4,7 @@
  * turn it on when it's off, check now when it's on.
  */
 import type { I18n } from "../i18n/i18n";
+import type { IconName } from "../lib/icons";
 import { useI18n } from "../i18n/react";
 import { languageList, upperFirst } from "../lib/name-lists";
 import { formatTime } from "../lib/schedule";
@@ -71,10 +72,10 @@ const WAITING_TEXT = {
 
 export function SmartStateBadge({ status }: { status: SmartStatus }) {
   const { t } = useI18n();
-  if (status.state === "on") return <s-badge tone="success">{t("automatic.state.on")}</s-badge>;
-  if (status.state === "paused") return <s-badge tone="warning">{t("automatic.state.paused")}</s-badge>;
-  if (status.state === "waiting") return <s-badge tone="warning">{t("automatic.state.waiting")}</s-badge>;
-  return <s-badge>{t("automatic.state.off")}</s-badge>;
+  if (status.state === "on") return <s-badge tone="success" icon="check-circle">{t("automatic.state.on")}</s-badge>;
+  if (status.state === "paused") return <s-badge tone="warning" icon="pause-circle">{t("automatic.state.paused")}</s-badge>;
+  if (status.state === "waiting") return <s-badge tone="warning" icon="clock">{t("automatic.state.waiting")}</s-badge>;
+  return <s-badge icon="minus-circle">{t("automatic.state.off")}</s-badge>;
 }
 
 /** Why it is paused or waiting, and what happens next; nothing while on or off. */
@@ -105,47 +106,71 @@ export function SmartStateBanner({ status, zone }: { status: SmartStatus; zone: 
   return null;
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+/** One fact of the preview: its icon, its name (subdued) and its value (semibold, like the Content page's names). */
+function Fact({ icon, label, children }: { icon: IconName; label: string; children: React.ReactNode }) {
   return (
-    <s-stack direction="block" gap="small-200">
-      <s-text color="subdued">{label}</s-text>
-      <s-text>{children}</s-text>
-    </s-stack>
+    <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
+      <s-icon type={icon} color="subdued" />
+      <s-stack direction="block" gap="small-500">
+        <s-text color="subdued">{label}</s-text>
+        <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{children}</span>
+      </s-stack>
+    </s-grid>
   );
 }
 
-/** The preview: what it does, from real values (no promises the data can't back). */
-export function SmartPreview({ data, languageNames }: { data: SmartCardData; languageNames: ReadonlyMap<string, string> }) {
+type PreviewFact = "languages" | "schedule" | "nextCheck";
+
+/**
+ * The preview: what it does, from real values (no promises the data can't
+ * back). The smart page's summary card names the schedule, the next check
+ * and the languages itself (`omit`).
+ */
+export function SmartPreview({ data, languageNames, omit = [] }: { data: SmartCardData; languageNames: ReadonlyMap<string, string>; omit?: readonly PreviewFact[] }) {
   const i18n = useI18n();
   const { t, number } = i18n;
   const config = data.config;
   const languages = config ? config.locales.map((l) => languageNames.get(l) ?? l) : [];
+  const shown = (fact: PreviewFact) => !omit.includes(fact);
   return (
-    <s-box padding="base" background="subdued" borderRadius="base">
+    <s-box padding="base" background="subdued" borderRadius="large-100">
       <s-query-container>
-        <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, 1fr" gap="base">
-          <Fact label={t("automatic.preview.languages")}>{languages.length ? languageList(i18n, languages, Infinity) : t("automatic.preview.none")}</Fact>
-          <Fact label={t("automatic.preview.schedule")}>{config ? scheduleSummary(i18n, config) : t("automatic.preview.none")}</Fact>
-          <Fact label={t("automatic.preview.nextCheck")}>
-            {data.nextChecks[0] !== undefined
-              ? t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.nextChecks[0], data.zone), zone: data.zone })
-              : t("automatic.preview.noCheck")}
-          </Fact>
-          <Fact label={t("automatic.preview.lastSuccess")}>
+        {/* Polaris writes each condition as its own rule: the wider one comes last so it wins. */}
+        <s-grid gridTemplateColumns="@container (inline-size > 520px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr" gap="base">
+          {shown("languages") ? (
+            <Fact icon="language" label={t("automatic.preview.languages")}>
+              {languages.length ? languageList(i18n, languages, Infinity) : t("automatic.preview.none")}
+            </Fact>
+          ) : null}
+          {shown("schedule") ? (
+            <Fact icon="calendar" label={t("automatic.preview.schedule")}>
+              {config ? scheduleSummary(i18n, config) : t("automatic.preview.none")}
+            </Fact>
+          ) : null}
+          {shown("nextCheck") ? (
+            <Fact icon="calendar-time" label={t("automatic.preview.nextCheck")}>
+              {data.nextChecks[0] !== undefined
+                ? t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.nextChecks[0], data.zone), zone: data.zone })
+                : t("automatic.preview.noCheck")}
+            </Fact>
+          ) : null}
+          <Fact icon="calendar-check" label={t("automatic.preview.lastSuccess")}>
             {data.lastSuccessAt ? t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.lastSuccessAt, data.zone), zone: data.zone }) : t("automatic.preview.none")}
           </Fact>
-          <Fact label={t("automatic.preview.lastRun")}>
+          <Fact icon="search" label={t("automatic.preview.lastRun")}>
             {data.lastRun
               ? t("automatic.preview.found", { count: data.lastRun.resourcesChanged, fields: number(data.lastRun.fieldsDetected) })
               : t("automatic.preview.none")}
           </Fact>
           {data.publishing ? (
-            <Fact label={t("automatic.preview.publishing")}>
+            <Fact icon={data.publishing === "AUTO_PUBLISH" ? "bolt" : "eye-check-mark"} label={t("automatic.preview.publishing")}>
               {data.publishing === "AUTO_PUBLISH" ? <s-text tone="caution">{t("automatic.preview.publishAuto")}</s-text> : t("automatic.preview.publishDraft")}
             </Fact>
           ) : null}
-          <Fact label={t("automatic.preview.translating")}>{t("automatic.preview.items", { count: data.translating })}</Fact>
-          <Fact label={t("automatic.preview.waiting")}>
+          <Fact icon="in-progress" label={t("automatic.preview.translating")}>
+            {t("automatic.preview.items", { count: data.translating })}
+          </Fact>
+          <Fact icon="clock" label={t("automatic.preview.waiting")}>
             {data.estimate !== null
               ? t("automatic.preview.chars", { chars: number(data.estimate) })
               : t(data.remeasure ? "automatic.preview.measureAgain" : "automatic.preview.measureFirst")}

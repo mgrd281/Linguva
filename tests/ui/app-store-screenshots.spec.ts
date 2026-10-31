@@ -29,7 +29,7 @@ const DESKTOP = [
   { file: "3-outdated.png", path: "/app/products/2?lang=de" },
   { file: "4-review.png", path: "/app/review" },
   { file: "5-glossary.png", path: "/app/glossary" },
-  { file: "6-settings.png", path: "/app/settings", scrollTo: "Automatic translation" },
+  { file: "6-settings.png", path: "/app/settings", scrollTo: "Translating changes" },
   { file: "7-overview.png", path: "/app" },
   { file: "9-language.png", path: "/app/languages/de", scrollTo: "Area by area" },
 ];

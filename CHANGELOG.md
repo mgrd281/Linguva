@@ -4,6 +4,7 @@
 
 - **Scopes:** `write_locales` is no longer requested (Linguva never adds or publishes a language). The new scope list takes effect only after `shopify app deploy` for each app (owner); stores then approve the narrower list. SECURITY_MODEL.md §1a explains every scope.
 - **No shop-domain form outside development** (App Store requirement 2.3.1): `/auth/login` without a shop, or with one Shopify's login rejects, now goes to the start page, which says to install from the App Store or open Linguva from the admin. `?shop=` requests still go through Shopify's login; development keeps the form.
+- **The app's privacy policy and support page, as drafts, off by default:** `/privacy` (English and German) and `/support` with an FAQ of 8 questions at `#faq`, styled like the website and written only from the facts in the new docs/LEGAL_FACTS.md; open points for the lawyer and the owner are marked. `PUBLIC_PAGES=on` serves them and adds footer links on every website page (404 and no links otherwise); the draft notice stays until `LEGAL_TEXTS_REVIEWED=yes` and no open point is left; production refuses `PUBLIC_PAGES=on` without `LEGAL_TEXTS_REVIEWED=yes`. The Impressum and the website's privacy page are unchanged and stay online.
 - The fallback `frame-ancestors` is `https://admin.shopify.com` only, no `*.myshopify.com` wildcard (Shopify's `STATIC_FRAME_ANCESTORS` check).
 
 ### Added

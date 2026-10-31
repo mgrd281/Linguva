@@ -139,7 +139,7 @@ test("the public address shows the website and asks no one to type a shop domain
   await page.getByRole("contentinfo").getByRole("link", { name: "Impressum" }).click();
   await expect(page).toHaveURL(/\/impressum$/);
   await expect(page.getByText("DE452578048")).toBeVisible();
-  await page.getByRole("contentinfo").getByRole("link", { name: "Datenschutz" }).click();
+  await page.getByRole("contentinfo").getByRole("link", { name: "Datenschutz", exact: true }).click();
   await expect(page).toHaveURL(/\/datenschutz$/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(errors).toEqual([]);

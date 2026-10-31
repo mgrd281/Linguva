@@ -139,6 +139,11 @@ const schema = z.object({
   RAILWAY_ENVIRONMENT_NAME: z.string().optional(),
   // "yes" only when the owner has approved a production release.
   LINGUVA_PRODUCTION_APPROVED: z.enum(["yes"]).optional(),
+  // The app's own privacy policy (/privacy) and support page (/support):
+  // "off" (default) answers 404 there and links neither from the website.
+  PUBLIC_PAGES: z.enum(["on", "off"]).default("off"),
+  // "yes" once a lawyer has reviewed those texts: hides their draft notice.
+  LEGAL_TEXTS_REVIEWED: z.enum(["yes"]).optional(),
 }).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock" && c.LINGUVA_STAGE !== "staging"), {
   message: "the mock translation provider can't be used in production",
   path: ["TRANSLATION_PROVIDER"],
@@ -183,6 +188,10 @@ const schema = z.object({
   // No accidental production release: the owner sets this when approving one.
   message: "production needs LINGUVA_PRODUCTION_APPROVED=yes (set by the owner for an approved release)",
   path: ["LINGUVA_STAGE"],
+}).refine((c) => c.LINGUVA_STAGE !== "production" || c.PUBLIC_PAGES === "off" || c.LEGAL_TEXTS_REVIEWED === "yes", {
+  // Production never shows a draft privacy policy.
+  message: "PUBLIC_PAGES=on in production needs LEGAL_TEXTS_REVIEWED=yes (after the lawyer's review)",
+  path: ["PUBLIC_PAGES"],
 });
 
 /**

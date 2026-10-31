@@ -89,6 +89,9 @@ Everything else is an assumption encoded in the fakes, checked against the Admin
 | AI | Check for the chosen form of address (de, fr, es, it, nl) | Yes | Unit + pipeline | No (no DeepL key) | C7 |
 | Safety | A translation written in the meantime is never overwritten (draft approval, automatic publishing, two people in the editor) | Yes | Security suite (mutation-checked) | No | E2–E4 |
 | Safety | Structural guards for write paths and database changes | Yes | Unit + security suites | — | — |
+| App Store | The app's privacy policy (`/privacy`, English and German) and support page with FAQ (`/support#faq`): drafts from docs/LEGAL_FACTS.md with open points marked for the lawyer; 404 unless `PUBLIC_PAGES=on`; never a draft in production (`LEGAL_TEXTS_REVIEWED=yes`); no cookies, nothing from another host | Yes (drafts; lawyer review open) | Unit (gates, 404, links, same sections in both languages) + UI (`tests/ui/public-pages.spec.ts`, desktop and phone, axe, no sideways scroll, own origin only) | No (no public address yet) | — |
+| App Store | No shop-domain form outside development: `/auth/login` without a valid shop goes to the start page (requirement 2.3.1) | Yes | UI (`tests/ui/install.spec.ts`, production build) | No | — |
+| App Store | Only the scopes a feature uses (`write_locales` dropped); every scope explained in SECURITY_MODEL.md §1a | Yes | Unit (`scopes-documented.test.ts`) | No (takes effect with `shopify app deploy`) | — |
 
 ## Not implemented
 

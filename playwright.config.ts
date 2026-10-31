@@ -35,6 +35,8 @@ const serverEnv: Record<string, string> = {
   AI_SHOP_REQUESTS_PER_MINUTE: "1000",
   // Short, so the timeout test doesn't wait 15 s.
   SHOPIFY_TIMEOUT_MS: "3000",
+  // The app's privacy policy and support page, as drafts (no LEGAL_TEXTS_REVIEWED).
+  PUBLIC_PAGES: "on",
 };
 // The global setup seeds the same database with the app's own modules.
 Object.assign(process.env, serverEnv);

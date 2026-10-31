@@ -36,10 +36,24 @@ violations.
   banner").
 - **Hero variant B (night)** exists only as a design board (`Web-Hero-Nacht.dc.html` on the canvas),
   not as a second real page. Build it once the owner picks A or B.
-- **Not deployed anywhere.** This folder is not yet wired into Railway as its own service (the
-  design's recommendation: a separate static service and domain, so pushes to it never redeploy
-  the embedded app). It is not referenced by the app server, so adding it here does not change
-  what Railway builds or runs for the app.
+- **Runs on Railway's free `*.up.railway.app` address** until the owner names a real domain (see
+  "Deploy on Railway" below). `noindex` stays on, and the site is not linked from anywhere public.
+
+## Deploy on Railway (separate service)
+
+`site/Dockerfile` serves this folder with Caddy, with no build step. `site/Caddyfile` listens on
+Railway's `$PORT`, maps `/preise` to `preise.html`, and sends security headers: a strict
+Content-Security-Policy (only the menu script's hash, Google Fonts, own images), `nosniff`,
+`frame-ancestors 'none'`, HSTS and `X-Robots-Tag: noindex`. If the menu script changes, its
+`sha256-…` hash in the Caddyfile must be recomputed, or the menu stops working.
+
+In the Railway project: **New → GitHub Repo → this repo**, then in the new service's Settings:
+1. **Root Directory:** `site`
+2. **Branch:** the same branch the app deploys from.
+3. **Watch Paths:** `/site/**`, so app pushes do not redeploy the site.
+4. **Networking → Generate Domain** for a free `*.up.railway.app` address.
+
+No variables, database or volume are needed.
 
 ## Next steps, in order
 
@@ -49,5 +63,5 @@ violations.
 3. Self-host Inter; drop the Google Fonts request.
 4. Build the English/French/Spanish versions once native speakers have reviewed the app's own
    French and Spanish texts (the site should not be ahead of the app on translation quality).
-5. Create a separate Railway service for this folder (Caddy, no build step), point the domain at
-   it, then remove `noindex` and link to it from the App Store listing.
+5. Point a real domain at the Railway service, then remove `noindex` (in both pages and the
+   Caddyfile) and link to it from the App Store listing.

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { clearDeepLKeyPauses, DeepLKeyPool } from "../../app/.server/providers/deepl-pool";
-import { deeplApiKeys } from "../../app/.server/lib/config";
+import { deeplApiKeys, getConfig } from "../../app/.server/lib/config";
 import { TranslationProviderError } from "../../app/.server/providers/types";
 
 const request = { segments: ["Hello"], sourceLocale: "en", targetLocale: "de" };
@@ -79,6 +79,23 @@ describe("DeepL key pool", () => {
 
   it("needs at least one key", () => {
     expect(() => new DeepLKeyPool([])).toThrow();
+  });
+});
+
+describe("numbered DeepL keys", () => {
+  const env = {
+    DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+    TOKEN_ENCRYPTION_KEYS: `k1:${Buffer.alloc(32, 1).toString("base64")}`,
+    NODE_ENV: "test",
+  };
+  const keys = (extra: Record<string, string>) => deeplApiKeys(getConfig({ ...env, ...extra } as NodeJS.ProcessEnv));
+
+  it("reads DEEPL_API_KEY_2, _3, ... in numeric order, after DEEPL_API_KEY and before the list", () => {
+    expect(keys({ DEEPL_API_KEY: "a:fx", DEEPL_API_KEY_10: "j:fx", DEEPL_API_KEY_2: "b:fx", DEEPL_API_KEY_3: "c:fx", DEEPL_API_KEYS: "x:fx" })).toEqual(["a:fx", "b:fx", "c:fx", "j:fx", "x:fx"]);
+  });
+
+  it("ignores empty and non-numbered names", () => {
+    expect(keys({ DEEPL_API_KEY: "a:fx", DEEPL_API_KEY_2: "  ", DEEPL_API_KEY_OLD: "z:fx", DEEPL_API_KEY_: "y:fx" })).toEqual(["a:fx"]);
   });
 });
 

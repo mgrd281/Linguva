@@ -214,13 +214,25 @@ export function resetConfigCache() {
   cached = undefined;
 }
 
+/** DEEPL_API_KEY_2, DEEPL_API_KEY_3, ... join DEEPL_API_KEYS in numeric order (the list, if any, comes after them). */
+function withNumberedDeeplKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const numbered = Object.keys(env)
+    .map((name) => /^DEEPL_API_KEY_(\d+)$/.exec(name))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .sort((a, b) => Number(a[1]) - Number(b[1]))
+    .map((m) => (env[m[0]] ?? "").trim())
+    .filter(Boolean);
+  if (numbered.length === 0) return env;
+  return { ...env, DEEPL_API_KEYS: [...numbered, env.DEEPL_API_KEYS ?? ""].filter(Boolean).join(",") };
+}
+
 /**
  * Validates environment configuration on first use and fails fast with a
  * message that names the invalid variables but never their values.
  */
 export function getConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && env === process.env) return cached;
-  const result = schema.safeParse(env);
+  const result = schema.safeParse(withNumberedDeeplKeys(env));
   if (!result.success) {
     const fields = result.error.issues
       .map((issue) => `${issue.path.join(".")}: ${issue.message}`)

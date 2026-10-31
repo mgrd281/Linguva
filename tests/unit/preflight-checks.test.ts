@@ -83,6 +83,7 @@ describe("environment checks", () => {
     expect(checkProviderCost({ DEEPL_API_KEY: "abc:fx" }).level).toBe("ok");
     expect(checkProviderCost({ DEEPL_API_KEY: "abc" })).toMatchObject({ level: "warn", detail: expect.stringContaining("billed") });
     expect(checkProviderCost({}).level).toBe("warn");
+    expect(checkProviderCost({ DEEPL_API_KEY: "a:fx", DEEPL_API_KEY_2: "b:fx", DEEPL_API_KEY_10: "c:fx" })).toMatchObject({ detail: expect.stringContaining("3 DeepL keys") });
     expect(checkProviderCost({ DEEPL_API_KEYS: "a:fx, b:fx" })).toMatchObject({ level: "warn", detail: expect.stringContaining("2 DeepL keys") });
   });
 

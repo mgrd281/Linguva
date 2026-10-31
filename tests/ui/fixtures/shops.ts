@@ -318,6 +318,16 @@ export const UI_SHOPS = {
     plan: "business",
     build: () => new FakeShopifyStore(2),
   },
+  businessSwitch: {
+    // Business plan with the smart schedule on (daily into German): the tests switch between the three ways
+    // changes are translated, and leave it as it was.
+    domain: "ui-business-switch.myshopify.com",
+    gid: "gid://shopify/Shop/91034",
+    name: "Business Switch Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }],
+    plan: "business",
+    build: () => new FakeShopifyStore(2),
+  },
   smartDowngraded: {
     // The smart schedule was turned on under Business; the store is now on Pro (no smart schedule).
     domain: "ui-smart-downgraded.myshopify.com",

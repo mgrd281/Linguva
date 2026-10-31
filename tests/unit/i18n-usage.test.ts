@@ -65,6 +65,8 @@ const DYNAMIC = [
   "markets.countries.reason.",
   "overview.countries.status.",
   "settings.auto.paused.",
+  "settings.changes.pause.",
+  "settings.changes.waiting.",
   "review.hint.",
   "review.result.failed.",
   "review.result.stale.",

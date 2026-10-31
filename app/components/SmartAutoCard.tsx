@@ -3,6 +3,7 @@
  * state, a preview from real values, and its actions. One primary action:
  * turn it on when it's off, check now when it's on.
  */
+import type { ReactNode } from "react";
 import type { I18n } from "../i18n/i18n";
 import type { IconName } from "../lib/icons";
 import { useI18n } from "../i18n/react";
@@ -78,12 +79,16 @@ export function SmartStateBadge({ status }: { status: SmartStatus }) {
   return <s-badge icon="minus-circle">{t("automatic.state.off")}</s-badge>;
 }
 
-/** Why it is paused or waiting, and what happens next; nothing while on or off. */
-export function SmartStateBanner({ status, zone }: { status: SmartStatus; zone: string }) {
+/**
+ * Why it is paused or waiting, and what happens next; nothing while on or
+ * off. Waiting for the permission: `consentAction` grants it in place
+ * (Settings); without it the banner links to Settings (the smart page).
+ */
+export function SmartStateBanner({ status, zone, consentAction }: { status: SmartStatus; zone: string; consentAction?: ReactNode }) {
   const i18n = useI18n();
   const { t } = i18n;
   if (status.state === "paused") {
-    const date = status.until ? `${i18n.dateTimeIn(status.until, zone)} (${zone})` : "";
+    const date = status.until ? t("automatic.schedule.zone", { time: i18n.dateTimeIn(status.until, zone), zone }) : "";
     return (
       <s-banner tone="warning" heading={t("automatic.paused.heading")}>
         <s-paragraph>
@@ -98,8 +103,9 @@ export function SmartStateBanner({ status, zone }: { status: SmartStatus; zone: 
         <s-paragraph>
           {t(WAITING_TEXT[status.reason])}{" "}
           {status.reason === "PLAN" ? <s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link> : null}
-          {status.reason === "CONSENT" ? <s-link href="/app/settings">{t("automatic.page.back")}</s-link> : null}
+          {status.reason === "CONSENT" && !consentAction ? <s-link href="/app/settings">{t("automatic.page.back")}</s-link> : null}
         </s-paragraph>
+        {status.reason === "CONSENT" && consentAction ? consentAction : null}
       </s-banner>
     );
   }
@@ -119,7 +125,7 @@ function Fact({ icon, label, children }: { icon: IconName; label: string; childr
   );
 }
 
-type PreviewFact = "languages" | "schedule" | "nextCheck";
+type PreviewFact = "languages" | "schedule" | "nextCheck" | "lastSuccess" | "lastRun" | "publishing" | "waiting";
 
 /**
  * The preview: what it does, from real values (no promises the data can't
@@ -154,27 +160,46 @@ export function SmartPreview({ data, languageNames, omit = [] }: { data: SmartCa
                 : t("automatic.preview.noCheck")}
             </Fact>
           ) : null}
-          <Fact icon="calendar-check" label={t("automatic.preview.lastSuccess")}>
-            {data.lastSuccessAt ? t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.lastSuccessAt, data.zone), zone: data.zone }) : t("automatic.preview.none")}
-          </Fact>
-          <Fact icon="search" label={t("automatic.preview.lastRun")}>
-            {data.lastRun
-              ? t("automatic.preview.found", { count: data.lastRun.resourcesChanged, fields: number(data.lastRun.fieldsDetected) })
-              : t("automatic.preview.none")}
-          </Fact>
-          {data.publishing ? (
+          {shown("lastSuccess") ? (
+            <Fact icon="calendar-check" label={t("automatic.preview.lastSuccess")}>
+              {data.lastSuccessAt ? t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.lastSuccessAt, data.zone), zone: data.zone }) : t("automatic.preview.none")}
+            </Fact>
+          ) : null}
+          {shown("lastRun") ? (
+            <Fact icon="search" label={t("automatic.preview.lastRun")}>
+              {data.lastRun
+                ? t("automatic.preview.found", {
+                    count: data.lastRun.resourcesChanged,
+                    fields: t("automatic.preview.fields", { count: data.lastRun.fieldsDetected }),
+                  })
+                : t("automatic.preview.none")}
+            </Fact>
+          ) : null}
+          {data.publishing && shown("publishing") ? (
             <Fact icon={data.publishing === "AUTO_PUBLISH" ? "bolt" : "eye-check-mark"} label={t("automatic.preview.publishing")}>
               {data.publishing === "AUTO_PUBLISH" ? <s-text tone="caution">{t("automatic.preview.publishAuto")}</s-text> : t("automatic.preview.publishDraft")}
             </Fact>
           ) : null}
-          <Fact icon="in-progress" label={t("automatic.preview.translating")}>
-            {t("automatic.preview.items", { count: data.translating })}
-          </Fact>
-          <Fact icon="clock" label={t("automatic.preview.waiting")}>
-            {data.estimate !== null
-              ? t("automatic.preview.chars", { chars: number(data.estimate) })
-              : t(data.remeasure ? "automatic.preview.measureAgain" : "automatic.preview.measureFirst")}
-          </Fact>
+          {data.translating > 0 ? (
+            <Fact icon="in-progress" label={t("automatic.preview.translating")}>
+              {t("automatic.preview.items", { count: data.translating })}
+            </Fact>
+          ) : null}
+          {shown("waiting") ? (
+            <Fact icon="clock" label={t("automatic.preview.waiting")}>
+              {data.estimate !== null ? (
+                t("automatic.preview.chars", { chars: number(data.estimate) })
+              ) : (
+                <>
+                  {t(data.remeasure ? "automatic.preview.measureAgain" : "automatic.preview.notMeasured")}{" "}
+                  {/* The link stays in one piece. */}
+                  <span style={{ fontWeight: 400, whiteSpace: "nowrap" }}>
+                    <s-link href="/app/coverage">{t("automatic.preview.measure")}</s-link>
+                  </span>
+                </>
+              )}
+            </Fact>
+          ) : null}
         </s-grid>
       </s-query-container>
     </s-box>
@@ -198,6 +223,8 @@ export function smartToast(t: I18n["t"], result: { ok: boolean; done?: string; c
   switch (result.done) {
     case "saved":
       return t("automatic.toast.saved");
+    case "savedOn":
+      return t("automatic.toast.savedOn");
     case "on":
       return t("automatic.toast.on");
     case "off":

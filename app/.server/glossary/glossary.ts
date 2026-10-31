@@ -164,6 +164,11 @@ export async function upsertTerms(
   );
 }
 
+/** How many fixed terms the store has (Settings names it beside the form of address). */
+export async function countTerms(shopId: string, client: PrismaClient = defaultClient): Promise<number> {
+  return withTenant(shopId, (tx) => tx.glossaryTerm.count({ where: { shopId } }), client);
+}
+
 export async function deleteTerm(shopId: string, termId: string, client: PrismaClient = defaultClient) {
   if (!/^[0-9a-f-]{36}$/i.test(termId)) return false;
   const result = await withTenant(

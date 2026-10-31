@@ -16,10 +16,10 @@ const SAME_IN_BOTH = new Set(["Original", "{language}:", "{type} {reference}", "
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
-  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "{time} ({zone})", "—"],
+  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—"],
 ]);
 const SAME_IN_SPANISH = new Set([
-  ...["Blogs", "Blog", "blogs", "blog", "Plan", "Manual", "Original", "Formal", "Informal", "No", "no", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
+  ...["Blogs", "Blog", "blogs", "blog", "Plan", "Manual", "Original", "Formal", "Informal", "Formal ({pronoun})", "Informal ({pronoun})", "No", "no", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
   ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Business", "{time} ({zone})", "—"],
 ]);
 

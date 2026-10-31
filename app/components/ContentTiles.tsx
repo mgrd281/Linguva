@@ -401,7 +401,8 @@ export function CountCard({ data, i18n, counter, primary }: { data: ContentPage;
 }
 
 /** No additional language yet: where to add one (the areas still show what the store has). */
-export function NoLanguagesCard({ i18n }: { i18n: I18n }) {
+/** `body`: what adding a language leads to on the page showing the card (Content: the figures; Settings: the choices). */
+export function NoLanguagesCard({ i18n, body }: { i18n: I18n; body?: string }) {
   const { t } = i18n;
   return (
     <NoticeCard
@@ -415,7 +416,7 @@ export function NoLanguagesCard({ i18n }: { i18n: I18n }) {
         </s-button>
       }
     >
-      <s-paragraph color="subdued">{t("content.noLanguages.body")}</s-paragraph>
+      <s-paragraph color="subdued">{body ?? t("content.noLanguages.body")}</s-paragraph>
     </NoticeCard>
   );
 }

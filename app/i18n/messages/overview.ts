@@ -2,6 +2,18 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "overview.deepl.heading": "DeepL quota",
+  "overview.deepl.onlyYou": "Only you see this",
+  "overview.deepl.key": "Key {position}",
+  "overview.deepl.left": "left",
+  "overview.deepl.ringLabel": "{name}: {figure} left",
+  "overview.deepl.remaining": "{left} of {limit} characters left",
+  "overview.deepl.unlimited": "No limit · {used} characters used",
+  "overview.deepl.total": "Together: {left} of {limit} characters left",
+  "overview.deepl.none": "No DeepL key is set up.",
+  "overview.deepl.state.resting": "Used up · the next key is in use",
+  "overview.deepl.state.refused": "Refused by DeepL",
+  "overview.deepl.state.unreachable": "DeepL not reachable",
   "overview.banner.exhausted.heading": "This month's AI allowance is used up",
   "overview.banner.exhausted.body": "AI translation pauses until next month. Manual translation and translation memory keep working.",
   "overview.banner.exhausted.headingTrial": "Your trial's AI allowance is used up",
@@ -152,6 +164,18 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "overview.deepl.heading": "DeepL-Kontingent",
+  "overview.deepl.onlyYou": "Nur für dich sichtbar",
+  "overview.deepl.key": "Schlüssel {position}",
+  "overview.deepl.left": "übrig",
+  "overview.deepl.ringLabel": "{name}: {figure} übrig",
+  "overview.deepl.remaining": "{left} von {limit} Zeichen übrig",
+  "overview.deepl.unlimited": "Ohne Grenze · {used} Zeichen genutzt",
+  "overview.deepl.total": "Zusammen: {left} von {limit} Zeichen übrig",
+  "overview.deepl.none": "Kein DeepL-Schlüssel eingerichtet.",
+  "overview.deepl.state.resting": "Aufgebraucht · der nächste Schlüssel ist aktiv",
+  "overview.deepl.state.refused": "Von DeepL abgelehnt",
+  "overview.deepl.state.unreachable": "DeepL nicht erreichbar",
   "overview.banner.exhausted.heading": "Das KI-Kontingent dieses Monats ist aufgebraucht",
   "overview.banner.exhausted.body": "Die KI-Übersetzung pausiert bis zum nächsten Monat. Manuelle Übersetzung und Übersetzungsspeicher funktionieren weiterhin.",
   "overview.banner.exhausted.headingTrial": "Das KI-Kontingent deiner Testphase ist aufgebraucht",
@@ -302,6 +326,18 @@ export const de: Translation<typeof en> = {
 };
 
 export const fr: Translation<typeof en> = {
+  "overview.deepl.heading": "Quota DeepL",
+  "overview.deepl.onlyYou": "Visible uniquement par vous",
+  "overview.deepl.key": "Clé {position}",
+  "overview.deepl.left": "restant",
+  "overview.deepl.ringLabel": "{name} : {figure} restant",
+  "overview.deepl.remaining": "{left} caractères restants sur {limit}",
+  "overview.deepl.unlimited": "Sans limite · {used} caractères utilisés",
+  "overview.deepl.total": "Au total : {left} caractères restants sur {limit}",
+  "overview.deepl.none": "Aucune clé DeepL n'est configurée.",
+  "overview.deepl.state.resting": "Épuisée · la clé suivante est utilisée",
+  "overview.deepl.state.refused": "Refusée par DeepL",
+  "overview.deepl.state.unreachable": "DeepL injoignable",
   "overview.banner.exhausted.heading": "Le quota d'IA de ce mois-ci est épuisé",
   "overview.banner.exhausted.body": "La traduction par IA est suspendue jusqu'au mois prochain. La traduction manuelle et la mémoire de traduction continuent de fonctionner.",
   "overview.banner.exhausted.headingTrial": "Le quota d'IA de votre essai est épuisé",
@@ -453,6 +489,18 @@ export const fr: Translation<typeof en> = {
 };
 
 export const es: Translation<typeof en> = {
+  "overview.deepl.heading": "Cuota de DeepL",
+  "overview.deepl.onlyYou": "Solo lo ves tú",
+  "overview.deepl.key": "Clave {position}",
+  "overview.deepl.left": "restante",
+  "overview.deepl.ringLabel": "{name}: {figure} restante",
+  "overview.deepl.remaining": "Quedan {left} de {limit} caracteres",
+  "overview.deepl.unlimited": "Sin límite · {used} caracteres usados",
+  "overview.deepl.total": "En total: quedan {left} de {limit} caracteres",
+  "overview.deepl.none": "No hay ninguna clave de DeepL configurada.",
+  "overview.deepl.state.resting": "Agotada · se usa la siguiente clave",
+  "overview.deepl.state.refused": "Rechazada por DeepL",
+  "overview.deepl.state.unreachable": "DeepL no disponible",
   "overview.banner.exhausted.heading": "La cuota de IA de este mes está agotada",
   "overview.banner.exhausted.body": "La traducción con IA queda en pausa hasta el próximo mes. La traducción manual y la memoria de traducción siguen funcionando.",
   "overview.banner.exhausted.headingTrial": "La cuota de IA de tu prueba está agotada",

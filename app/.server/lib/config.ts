@@ -100,6 +100,8 @@ const schema = z.object({
   SHOPIFY_PARTNER_API_VERSION: z.string().regex(/^\d{4}-\d{2}$|^unstable$/).default("2026-10"),
   // "true": shops without a subscription are sent to the plan selection page.
   BILLING_REQUIRED: z.enum(["true", "false"]).default("false"),
+  // The operator's own stores (*.myshopify.com, comma-separated): only they see operator details such as the DeepL keys' quota.
+  OPERATOR_SHOPS: z.string().optional(),
   // Owner complimentary access (BILLING_DESIGN §4): Shopify shop GIDs
   // (gid://shopify/Shop/<id>) of the operator's own stores. A store gets
   // free access only if it is listed here AND the operator tool granted it.
@@ -277,6 +279,12 @@ export function logConfigWarnings(log: (message: string) => void, env: NodeJS.Pr
   } catch {
     // Not this function's concern (getConfig reports it on first use).
   }
+}
+
+/** Whether a store is one of the operator's own (OPERATOR_SHOPS). No list: none is. */
+export function isOperatorShop(shop: string | null | undefined, config: AppConfig = getConfig()): boolean {
+  const domain = (shop ?? "").trim().toLowerCase();
+  return domain !== "" && shopList(config.OPERATOR_SHOPS).includes(domain);
 }
 
 /** The Shopify shop GIDs eligible for owner complimentary access. */

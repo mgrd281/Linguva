@@ -23,23 +23,27 @@ violations.
 
 - **`meta name="robots" content="noindex, nofollow"`** is set on both pages on purpose: this build
   is for the owner's review, not for search engines or for linking from anywhere public yet.
-- **No real domain.** Links use `mailto:support@[Domain]` and the footer reads
-  `© 2026 [Anbieter laut Impressum]` — placeholders until the owner names a domain and provider.
-- **No legal pages yet.** The footer's Impressum/Datenschutz/AGB/AVV/Unterauftragsverarbeiter links
-  point to `#` anchors with no page behind them. Building them needs the owner's legal data and a
-  lawyer's review (see `docs/OWNER_DECISIONS.md` §5); that work was started separately
-  (in-app legal pages, not part of this site) and is not finished.
+- **No real domain yet.** Contact is `shop@softwarekey.de`; provider Karina Khrystych (Softwarekey),
+  from https://www.softwarekey.de/policies/legal-notice.
+- **Impressum and website privacy page exist** (`impressum.html`, `datenschutz.html`), from the owner's Softwarekey legal notice; a lawyer has not reviewed them. AGB, AVV and the app's own privacy policy are not written yet, so the footer does not link them.
 - **German only.** The design has an English/French/Spanish rollout planned
   (`docs/research/website.md` §2.2); only German is built.
-- **Fonts load from Google Fonts**, not self-hosted yet (the design's plan is to self-host Inter so
-  the site makes zero third-party requests; see `docs/research/website.md` §7, "no cookies, no
-  banner").
+- **Inter is self-hosted** (`public/site-fonts/`, SIL OFL): the pages make no third-party requests. The separate Caddy image does not include these fonts.
 - **Hero variant B (night)** exists only as a design board (`Web-Hero-Nacht.dc.html` on the canvas),
   not as a second real page. Build it once the owner picks A or B.
-- **Runs on Railway's free `*.up.railway.app` address** until the owner names a real domain (see
-  "Deploy on Railway" below). `noindex` stays on, and the site is not linked from anywhere public.
+- **Runs on the app's Railway address** (see "Where it runs now") until the owner names a real domain.
+  `noindex` stays on, and the site is not linked from anywhere public.
 
-## Deploy on Railway (separate service)
+## Where it runs now
+
+The app serves this website on its own public address: `/` is the home page and `/preise` the
+pricing page (`app/.server/site/pages.ts`, used by `app/routes/_index/route.tsx` and
+`app/routes/preise.tsx`). `/` with a `shop` parameter still opens the app, as Shopify expects.
+The images and the stylesheet are bundled by Vite, and the inline menu script's CSP hash is computed
+when the server starts, so editing these files needs no other change. The pages carry their own strict
+CSP, `frame-ancestors 'none'` and `X-Robots-Tag: noindex`.
+
+## Deploy on Railway (separate service, optional, later)
 
 `site/Dockerfile` serves this folder with Caddy, with no build step. `site/Caddyfile` listens on
 Railway's `$PORT`, maps `/preise` to `preise.html`, and sends security headers: a strict

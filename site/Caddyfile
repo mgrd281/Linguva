@@ -15,7 +15,7 @@
 		X-Frame-Options DENY
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		Strict-Transport-Security "max-age=31536000"
-		Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-eT+fuEfkdzgvJLqNUEUyHpzXVkGNZkjC8Gc5XYQ/o44='; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; script-src 'sha256-eT+fuEfkdzgvJLqNUEUyHpzXVkGNZkjC8Gc5XYQ/o44='; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 		X-Robots-Tag "noindex, nofollow"
 		-Server
 	}

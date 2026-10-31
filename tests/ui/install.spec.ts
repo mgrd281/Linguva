@@ -94,14 +94,39 @@ test("pages and data responses carry the security headers, and the admin may sti
   expect(login.headers()["content-security-policy"]).toContain("frame-ancestors https://admin.shopify.com https://*.myshopify.com;");
 });
 
-test("the public start page describes Linguva and asks no one to type a shop domain", async ({ page }) => {
+test("the public address shows the website and asks no one to type a shop domain", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("pageerror", (e) => errors.push(e.message));
+  const thirdParty: string[] = [];
+  page.on("request", (r) => new URL(r.url()).origin !== new URL(UI_ENV.appUrl).origin && thirdParty.push(r.url()));
   const response = await page.goto(new URL("/", UI_ENV.appUrl).toString());
   expect(response?.status()).toBe(200);
-  await expect(page.getByText("Translate your Shopify store, carefully")).toBeVisible();
-  await expect(page.locator('s-section[heading="Every part of your store"]')).toHaveCount(1);
-  // No template placeholders, and installs go through Shopify (App Store requirement).
-  expect(await page.content()).not.toMatch(/\[your app\]|Product feature/);
-  await expect(page.locator('s-text-field[name="shop"]')).toHaveCount(0);
+  expect(response?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(response?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  // Installs go through Shopify (App Store requirement).
+  await expect(page.locator('input[name="shop"]')).toHaveCount(0);
+  // Every image and the stylesheet load under the page's CSP.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect.poll(() => page.evaluate(() => [...document.images].filter((i) => i.complete && i.naturalWidth === 0).length)).toBe(0);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector(".pg")!).fontFamily)).toContain("Inter");
+  // Fonts come from the app itself, not from Google (no third-party requests).
+  expect(await page.evaluate(async () => (await document.fonts.load("600 16px Inter")).length)).toBeGreaterThan(0);
+
+  await page.getByRole("link", { name: "Alle Preise" }).click();
+  await expect(page).toHaveURL(/\/preise$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await page.getByRole("contentinfo").getByRole("link", { name: "Impressum" }).click();
+  await expect(page).toHaveURL(/\/impressum$/);
+  await expect(page.getByText("DE452578048")).toBeVisible();
+  await page.getByRole("contentinfo").getByRole("link", { name: "Datenschutz" }).click();
+  await expect(page).toHaveURL(/\/datenschutz$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  expect(errors).toEqual([]);
+  expect(thirdParty).toEqual([]);
 });
 
 test("the content webhook routes of the production build refuse a delivery without a valid signature", async ({ request }) => {

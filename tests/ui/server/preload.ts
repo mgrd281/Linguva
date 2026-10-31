@@ -134,10 +134,24 @@ function partnerApi(body: { variables?: { shopId?: string } }) {
   });
 }
 
+/** Fictional usage per test key (playwright.config.ts sets the keys). */
+const DEEPL_USAGE: Record<string, { character_count: number; character_limit: number }> = {
+  "ui-key-one-0001:fx": { character_count: 250_000, character_limit: 1_000_000 },
+  "ui-key-two-0002:fx": { character_count: 950_000, character_limit: 1_000_000 },
+  "ui-key-pro-0003": { character_count: 7, character_limit: 1_000_000_000_000 },
+};
+
 globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
   const read = async () => JSON.parse(String(init?.body ?? (input instanceof Request ? await input.text() : "{}")));
   if (url.hostname === "partners.shopify.com") return partnerApi(await read());
+  if (/^api(-free)?\.deepl\.com$/.test(url.hostname)) {
+    // The DeepL keys' usage on the operator's Overview; the UI tests translate with the mock provider.
+    if (url.pathname !== "/v2/usage") throw new Error(`[ui-fake-deepl] refused ${url.pathname}: UI tests never translate with DeepL`);
+    const headers = new Headers(init?.headers);
+    const key = (headers.get("authorization") ?? "").replace("DeepL-Auth-Key ", "");
+    return json(DEEPL_USAGE[key] ?? { character_count: 0, character_limit: 500_000 });
+  }
   const shop = shopByDomain(url.hostname);
   if (shop && url.pathname === "/admin/oauth/access_token") {
     return json({

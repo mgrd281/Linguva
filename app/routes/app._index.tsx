@@ -17,10 +17,13 @@ import type { MeasurementState } from "../.server/overview/measurement";
 import { loadMarketCountries } from "../.server/markets/countries";
 import { MARKETS_SCOPE } from "../.server/markets/markets";
 import { getTranslationProvider } from "../.server/providers";
+import { deeplKeysUsage } from "../.server/providers/deepl-usage";
+import { deeplApiKeys, getConfig, isOperatorShop } from "../.server/lib/config";
 import { getQueues, getWorkerStatus } from "../.server/queue/client";
 import { ProgressBar } from "../components/ProgressBar";
 import { durationText, percentLabel, SURFACE_COLOUR, TRACK_COLOUR } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
+import { DeepLQuota } from "../components/DeepLQuota";
 import { CountryCards, LanguageCards } from "../components/CountryCards";
 import { categoryName } from "../components/CategoryCard";
 import { Flag } from "../components/Flag";
@@ -38,6 +41,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
   const provider = getTranslationProvider();
   const jobsAvailable = getQueues() !== null;
+  const config = getConfig();
+  // The DeepL keys' quota: the operator's own stores only, never a merchant's.
+  const deeplQuota = isOperatorShop(shop.shopDomain, config) ? deeplKeysUsage(deeplApiKeys(config), { baseUrl: config.DEEPL_API_URL }) : null;
   const overview = await loadOverview(admin, shop, undefined, {
     aiAvailable: provider !== null,
     jobsAvailable,
@@ -46,7 +52,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // A count that waits or is stuck: no worker processing jobs (its heartbeat is gone) explains it.
   const waiting = overview.measurement.state === "waiting" || overview.measurement.state === "stalled";
   const workerStopped = waiting && (await getWorkerStatus()).state === "stopped";
-  return { ...overview, aiProvider: provider?.id ?? null, idempotencyKey: randomUUID(), jobsAvailable, workerStopped };
+  return { ...overview, aiProvider: provider?.id ?? null, idempotencyKey: randomUUID(), jobsAvailable, workerStopped, deeplQuota: deeplQuota ? await deeplQuota : null };
 };
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
@@ -706,6 +712,8 @@ export default function Overview() {
             <NextSteps data={data} i18n={i18n} />
           </s-grid>
         </s-query-container>
+
+        {data.deeplQuota ? <DeepLQuota keys={data.deeplQuota} i18n={i18n} /> : null}
 
         <RunningJobs data={data} i18n={i18n} marketCountries={marketCountries} />
         <Places data={data} i18n={i18n} marketCountries={marketCountries} />

@@ -93,7 +93,10 @@ export function localeCountry(locale: string, markets?: readonly string[] | null
   const preferred = MANY_COUNTRIES[language]!.find((country) => sold.includes(country));
   if (preferred) return preferred;
   const key = localeKey(locale);
-  return sold.find((country) => countryLanguageGroups(country).some((group) => group.some((l) => localeKey(l) === key))) ?? null;
+  const seller = sold.find((country) => countryLanguageGroups(country).some((group) => group.some((l) => localeKey(l) === key)));
+  if (seller) return seller;
+  // Plain "es" is Spain's Spanish ("es-419" is Latin America's): Spain's flag when the markets don't say otherwise.
+  return locale.toLowerCase() === "es" ? "ES" : null;
 }
 
 function regionFlag(region: string): string {

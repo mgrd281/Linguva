@@ -25,6 +25,11 @@ const serverEnv: Record<string, string> = {
   SHOPIFY_APP_HANDLE: "linguva-ui-test",
   BILLING_REQUIRED: "false",
   COMPLIMENTARY_SHOP_GIDS: "gid://shopify/Shop/91005",
+  // The operator's own store sees the DeepL keys' quota (fictional keys, answered by the fake in preload.ts).
+  OPERATOR_SHOPS: "ui-owner.myshopify.com",
+  DEEPL_API_KEY: "ui-key-one-0001:fx",
+  DEEPL_API_KEY_2: "ui-key-two-0002:fx",
+  DEEPL_API_KEY_3: "ui-key-pro-0003",
   AI_MONTHLY_CHAR_LIMIT: "1000000",
   AI_USER_REQUESTS_PER_MINUTE: "1000",
   AI_SHOP_REQUESTS_PER_MINUTE: "1000",

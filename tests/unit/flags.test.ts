@@ -36,7 +36,10 @@ describe("the country of a language's flag", () => {
     expect(localeCountry("en", ["DE", "US"])).toBe("US");
     expect(localeCountry("en", ["DE", "IE", "CA"])).toBe("IE");
     expect(localeCountry("ar", ["DE", "AE", "SA"])).toBe("AE");
-    expect(localeCountry("es")).toBeNull();
+    // Plain Spanish is Spain's unless the markets name another Spanish-speaking country; Latin American Spanish never guesses.
+    expect(localeCountry("es")).toBe("ES");
+    expect(localeCountry("es", null)).toBe("ES");
+    expect(localeCountry("es-419")).toBeNull();
     expect(localeCountry("es", ["MX", "ES"])).toBe("ES");
     expect(localeCountry("es", ["de", "mx"])).toBe("MX");
     // A region that isn't a country ("es-419", Latin America) counts as none.

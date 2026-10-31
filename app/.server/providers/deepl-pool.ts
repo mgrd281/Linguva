@@ -14,6 +14,11 @@ export function clearDeepLKeyPauses(): void {
   pausedUntil.clear();
 }
 
+/** Whether the pool is skipping this key for now (its quota was used up or it was refused). */
+export function isDeepLKeyResting(key: string, now = Date.now()): boolean {
+  return (pausedUntil.get(slot(key)) ?? 0) > now;
+}
+
 function slot(key: string): string {
   return createHash("sha256").update(key).digest("hex").slice(0, 16);
 }

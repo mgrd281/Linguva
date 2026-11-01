@@ -35,8 +35,10 @@ import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { allowedTargetLocales } from "../billing/subscription";
 import { getMonthlyUsage } from "../usage/usage-ledger";
 import { getQueues } from "../queue/client";
-import { consentGap, getTranslationProvider } from "../providers";
+import { consentGap } from "../providers";
+import { openShopTranslation, type OwnKeyOptions, type ShopTranslation } from "../providers/shop-translation";
 import type { EngineId } from "../../lib/engines";
+import { usableOwnKey, type OwnKeySummary } from "../../lib/own-keys";
 import { BackgroundJobsUnavailableError, startBulkJob } from "../jobs/start-job";
 import { ATTACHED_BULK_TYPES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
 import { activeJobs, categoryJob } from "../jobs/active-jobs";
@@ -182,13 +184,25 @@ function inSmartScope(note: SmartCoverageNote | null, locale: string, category: 
  * Why translating in bulk can't start now: the app's setup first (nothing
  * the merchant can change), then the plan, the plan's languages and the AI
  * consent, the gates of the Coverage page and its action. Null: it can.
+ * Own key plan: no usable key (none saved, or only unreadable ones or ones to
+ * check again) or every saved key refused, before the operator's
+ * AI_NOT_CONFIGURED (which then stays the operator's).
  */
-export type BulkGate = "JOBS_UNAVAILABLE" | "AI_NOT_CONFIGURED" | "PLAN_BULK" | "PLAN_LANGUAGE" | "CONSENT_REQUIRED" | "ENGINE_CONSENT";
+export type BulkGate =
+  | "JOBS_UNAVAILABLE"
+  | "OWN_KEY_MISSING"
+  | "OWN_KEY_REFUSED"
+  | "AI_NOT_CONFIGURED"
+  | "PLAN_BULK"
+  | "PLAN_LANGUAGE"
+  | "CONSENT_REQUIRED"
+  | "ENGINE_CONSENT";
 
-/** `engineConsent`: only an engine the shop hasn't allowed serves the language (consentGap). */
+/** `engineConsent`: only an engine the shop hasn't allowed serves the language (consentGap). `ownKeys`: the shop's saved keys on the Own key plan, else null. */
 function bulkGate(input: {
   jobsAvailable: boolean;
   aiAvailable: boolean;
+  ownKeys?: readonly OwnKeySummary[] | null;
   entitlements: Entitlements;
   targets: readonly string[];
   locale: string;
@@ -196,7 +210,10 @@ function bulkGate(input: {
   engineConsent?: EngineId | null;
 }): BulkGate | null {
   if (!input.jobsAvailable) return "JOBS_UNAVAILABLE";
-  if (!input.aiAvailable) return "AI_NOT_CONFIGURED";
+  if (input.ownKeys && !input.ownKeys.some(usableOwnKey)) {
+    return input.ownKeys.length > 0 && input.ownKeys.every((k) => k.status === "REFUSED") ? "OWN_KEY_REFUSED" : "OWN_KEY_MISSING";
+  }
+  if (!input.ownKeys && !input.aiAvailable) return "AI_NOT_CONFIGURED";
   if (!input.entitlements.bulk) return "PLAN_BULK";
   if (!allowedTargetLocales(input.entitlements, input.targets).includes(input.locale)) return "PLAN_LANGUAGE";
   if (!input.consent) return "CONSENT_REQUIRED";
@@ -204,10 +221,18 @@ function bulkGate(input: {
   return null;
 }
 
-/** The engine the shop would have to allow before this language can be translated (several engines only). */
-function engineConsentGap(settings: Awaited<ReturnType<typeof getShopSettings>>, locale: string): Promise<EngineId | null> {
-  if (!hasCurrentAiConsent(settings)) return Promise.resolve(null);
-  return consentGap(getTranslationProvider(), locale, consentedEngines(settings));
+/**
+ * The engine the shop would have to allow before this language can be translated (several
+ * engines only): among the operator's engines, or the shop's own keys on the Own key plan.
+ */
+function engineConsentGap(t: ShopTranslation, settings: Awaited<ReturnType<typeof getShopSettings>>, locale: string): Promise<EngineId | null> {
+  if (!hasCurrentAiConsent(settings, t.configured, t.payer)) return Promise.resolve(null);
+  return consentGap(t.provider, locale, consentedEngines(settings, t.configured, t.payer));
+}
+
+/** Whether AI translation can run for the shop: the operator's provider, or (Own key plan) a usable key. */
+function aiAvailableFor(t: ShopTranslation): boolean {
+  return t.payer === "merchant" ? t.keys.some(usableOwnKey) : t.available;
 }
 
 /** Texts to translate of the given types in a language, by state: counted texts only (URL handles are never machine translated). */
@@ -312,20 +337,23 @@ function publishModeOf(settings: { bulkPublishMode: string }, entitlements: Enti
   return settings.bulkPublishMode === "AUTO_PUBLISH" && entitlements.autoPublish ? ("AUTO_PUBLISH" as const) : ("DRAFT" as const);
 }
 
-/** AI characters left this month under the plan's allowance. */
-function aiRemaining(billing: Parameters<typeof aiLimitsFor>[1], used: number) {
+/** AI characters left this month under the plan's allowance; null on the Own key plan (no Linguva allowance). */
+function aiRemaining(billing: Parameters<typeof aiLimitsFor>[1], used: number, t: ShopTranslation): number | null {
+  if (t.payer === "merchant") return null;
   return Math.max(0, aiLimitsFor(getConfig(), billing).limit - used);
 }
 
 export interface LanguagePageOptions {
   /** Background jobs can run here (Redis configured): counting and translating in bulk can be offered. */
   jobsAvailable?: boolean;
-  /** An AI provider is configured. */
+  /** An AI provider is configured (the operator's; the Own key plan's own keys are always read from the shop). */
   aiAvailable?: boolean;
   /** The shop's markets and their countries (needs read_markets): where customers read the language. */
   markets?: () => Promise<MarketCountriesResult>;
   /** Tests only: the time the measurement state is judged at. */
   now?: number;
+  /** Tests only: live own-key members with a fake fetch (never through env; shop-translation.ts). */
+  ownKeyOptions?: Pick<OwnKeyOptions, "mode" | "fetch">;
   /**
    * The redirect to the Overview for the primary language. Pages pass
    * Shopify's, which keeps the embedded app's parameters when the page is
@@ -365,7 +393,6 @@ function marketsFor(markets: MarketCountriesResult | null, locales: LocaleSummar
  */
 export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: string, client: PrismaClient = defaultClient, options: LanguagePageOptions = {}) {
   const jobsAvailable = options.jobsAvailable ?? getQueues() !== null;
-  const aiAvailable = options.aiAvailable ?? getTranslationProvider() !== null;
   const { language, locales, targets } = await targetLanguage(admin, shop.id, locale, client, options.toOverview);
   const [summary, settings, billing, jobs, used, markets] = await Promise.all([
     loadCoverageSummary(shop.id, client),
@@ -375,6 +402,9 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
     getMonthlyUsage(shop.id, undefined, client),
     options.markets ? options.markets() : Promise.resolve(null),
   ]);
+  // Who translates for the shop: the operator's engines, or its own keys (their language lists for the consent gap).
+  const translation = await openShopTranslation(shop.id, billing, { settings, client, ...options.ownKeyOptions });
+  const aiAvailable = options.aiAvailable ?? aiAvailableFor(translation);
   const measured = measuredLocales(summary.lastCompleted, summary.segments, COVERAGE_TYPES).has(locale);
   const [estimates, note] = await Promise.all([
     measured ? withTenant(shop.id, (tx) => bulkEstimates(tx, shop.id, locale, summary.counts, CATEGORY_IDS), client) : new Map<CategoryId, BulkEstimate | null>(),
@@ -384,7 +414,16 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
   const measurement = measurementState(summary.report, { jobsAvailable, now: options.now ?? Date.now() });
   const scanning = scanningOf(summary.report, measurement, locale);
   const canCount = jobsAvailable && !UNDER_WAY.has(measurement.state);
-  const gate = bulkGate({ jobsAvailable, aiAvailable, entitlements: billing.entitlements, targets, locale, consent: hasCurrentAiConsent(settings), engineConsent: await engineConsentGap(settings, locale) });
+  const gate = bulkGate({
+    jobsAvailable,
+    aiAvailable,
+    ownKeys: translation.keys,
+    entitlements: billing.entitlements,
+    targets,
+    locale,
+    consent: hasCurrentAiConsent(settings, translation.configured, translation.payer),
+    engineConsent: await engineConsentGap(translation, settings, locale),
+  });
   const tallies = categoryTallies(summary.counts, locale);
   const headline = headlineByLocale(summary.counts).get(locale) ?? tally(emptyCounts());
   const itemCount = (id: CategoryId) => {
@@ -438,7 +477,7 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
       categories: categories.map((c) => ({ id: c.id, tally: c.tally, state: c.state, bulk: gate === null && c.bulk !== null })),
       scanning,
     }),
-    bulk: { gate, publishMode: publishModeOf(settings, billing.entitlements), aiRemaining: aiRemaining(billing, used) },
+    bulk: { gate, publishMode: publishModeOf(settings, billing.entitlements), aiRemaining: aiRemaining(billing, used, translation) },
     smart: note ? { status: note.status, mode: note.mode, zone: note.zone, nextCheck: note.nextCheck, inSchedule: note.scope.locales.includes(locale) } : null,
     /** One key per page view: a repeated confirm starts nothing twice. */
     idempotencyKey: randomUUID(),
@@ -686,11 +725,10 @@ export async function loadCategoryItems(
   category: string,
   query: CategoryListQuery = {},
   client: PrismaClient = defaultClient,
-  options: Pick<LanguagePageOptions, "jobsAvailable" | "aiAvailable" | "markets" | "now" | "toOverview"> = {},
+  options: Pick<LanguagePageOptions, "jobsAvailable" | "aiAvailable" | "markets" | "now" | "toOverview" | "ownKeyOptions"> = {},
 ) {
   if (!isCategoryId(category)) throw new Response("Not found", { status: 404 });
   const jobsAvailable = options.jobsAvailable ?? getQueues() !== null;
-  const aiAvailable = options.aiAvailable ?? getTranslationProvider() !== null;
   const { language, locales, targets } = await targetLanguage(admin, shop.id, locale, client, options.toOverview);
   const types = CATEGORIES[category].types as readonly string[];
   const searchable = types.filter(isSearchableType);
@@ -708,6 +746,9 @@ export async function loadCategoryItems(
     getMonthlyUsage(shop.id, undefined, client),
     options.markets ? options.markets() : Promise.resolve(null),
   ]);
+  // Who translates for the shop: the operator's engines, or its own keys (their language lists for the consent gap).
+  const translation = await openShopTranslation(shop.id, billing, { settings, client, ...options.ownKeyOptions });
+  const aiAvailable = options.aiAvailable ?? aiAvailableFor(translation);
 
   const scope = Prisma.sql`"shopId" = ${shop.id}::uuid AND "locale" = ${locale} AND "resourceType" = ANY(${types}::text[])${
     gids ? Prisma.sql` AND "resourceGid" = ANY(${gids}::text[])` : Prisma.empty
@@ -841,9 +882,18 @@ export async function loadCategoryItems(
     titlesUnavailable: nodes === null || content === null,
     bulk: {
       estimate,
-      gate: bulkGate({ jobsAvailable, aiAvailable, entitlements: billing.entitlements, targets, locale, consent: hasCurrentAiConsent(settings), engineConsent: await engineConsentGap(settings, locale) }),
+      gate: bulkGate({
+        jobsAvailable,
+        aiAvailable,
+        ownKeys: translation.keys,
+        entitlements: billing.entitlements,
+        targets,
+        locale,
+        consent: hasCurrentAiConsent(settings, translation.configured, translation.payer),
+        engineConsent: await engineConsentGap(translation, settings, locale),
+      }),
       publishMode: publishModeOf(settings, billing.entitlements),
-      aiRemaining: aiRemaining(billing, used),
+      aiRemaining: aiRemaining(billing, used, translation),
     },
     smart: note ? { nextCheck: note.nextCheck, zone: note.zone } : null,
     /** One key per page view: a repeated confirm starts nothing twice. */
@@ -881,14 +931,16 @@ export async function translateCategoryAction(
   if (!targets.includes(locale)) return { error: "INVALID_REQUEST" };
   const billing = await shopBilling(admin, shop);
   const settings = await getShopSettings(shop.id, client);
+  const translation = await openShopTranslation(shop.id, billing, { settings, client });
   const gate = bulkGate({
     jobsAvailable: getQueues() !== null,
-    aiAvailable: getTranslationProvider() !== null,
+    aiAvailable: aiAvailableFor(translation),
+    ownKeys: translation.keys,
     entitlements: billing.entitlements,
     targets,
     locale,
-    consent: hasCurrentAiConsent(settings),
-    engineConsent: await engineConsentGap(settings, locale),
+    consent: hasCurrentAiConsent(settings, translation.configured, translation.payer),
+    engineConsent: await engineConsentGap(translation, settings, locale),
   });
   if (gate) return { error: gate };
   const types = typesToTranslate(await loadCounts(shop.id, client), locale, category);

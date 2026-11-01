@@ -14,15 +14,15 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 import { countTerms } from "../.server/glossary/glossary";
-import { engineConsentTokens, getConfig } from "../.server/lib/config";
+import { getConfig } from "../.server/lib/config";
 import { prisma } from "../.server/lib/db";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
-import { getTranslationProvider } from "../.server/providers";
+import { openShopTranslation, shopTranslationFacts } from "../.server/providers/shop-translation";
 import { formalityEngines } from "../.server/providers/language-support";
 import { getQueues } from "../.server/queue/client";
 import {
   AI_STORE_CONTEXT_MAX,
-  autoTranslatePaused,
+  autoPauseApplies,
   ConfirmationRequiredError,
   formalityFor,
   getShopSettings,
@@ -101,16 +101,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Which translation services the texts name: what a current consent covers, else every one in use
   // (DeepL only: today's texts). With several engines, the engine that serves each language first
   // (only among those the texts name), for the form of address.
-  const configured = engineConsentTokens(getConfig());
-  const consented = hasCurrentAiConsent(settings, configured);
-  const text = textConsentTokens(settings, configured);
-  // Azure or Google alone serve every language without a form of address, too.
-  const { servedBy, noFormality } = await formalityEngines(getTranslationProvider(), targets, text.map(engineOfToken));
+  // Own key plan: the tokens of the shop's usable keys, under the own-key notice (no decryption here).
+  const facts = await shopTranslationFacts(shop.id, billing);
+  const configured = facts.configured;
+  const consented = hasCurrentAiConsent(settings, configured, facts.payer);
+  const text = textConsentTokens(settings, configured, facts.payer);
+  // Azure or Google alone serve every language without a form of address, too. The provider is
+  // opened only for the engines' language lists and dropped right after (never in the page's data).
+  const { servedBy, noFormality } = await formalityEngines((await openShopTranslation(shop.id, billing, { settings })).provider, targets, text.map(engineOfToken));
   return {
     engines: {
       configured,
       text,
-      missing: consented ? missingConsent(settings, configured) : ([] as ConsentToken[]),
+      missing: consented ? missingConsent(settings, configured, facts.payer) : ([] as ConsentToken[]),
       servedBy,
       noFormality,
     },
@@ -133,7 +136,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       maxContext: AI_STORE_CONTEXT_MAX,
     },
     glossaryTerms,
-    consent: hasCurrentAiConsent(settings),
+    consent: consented,
     consentAt: settings.aiDataProcessingConsentAt?.toISOString() ?? null,
     publishMode: settings.bulkPublishMode,
     // Shown before a click; the action checks the plan again, and jobs publish automatically only while it is included.
@@ -143,13 +146,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       enabled: settings.autoTranslateNew,
       locales: settings.autoTranslateLocales,
       // Needs AI, background jobs and a plan that includes translating whole areas.
-      available: getTranslationProvider() !== null && getQueues() !== null,
+      available: facts.available && getQueues() !== null,
       planIncludes: billing.entitlements.bulk,
       // The plan's languages: the first ones in the order listed here, as for bulk jobs and the editor.
       allowedLocales: allowedTargetLocales(billing.entitlements, targets),
-      paused: autoTranslatePaused(settings) ? { until: settings.autoPausedUntil!.toISOString(), reason: settings.autoPauseReason ?? "PROVIDER" } : null,
+      // Only a pause about this plan's payer: a pause for Linguva's limits doesn't hold an own-key shop, nor the other way round.
+      paused: autoPauseApplies(settings, facts.payer === "merchant") ? { until: settings.autoPausedUntil!.toISOString(), reason: settings.autoPauseReason ?? "PROVIDER" } : null,
     },
-    aiAvailable: getTranslationProvider() !== null,
+    aiAvailable: facts.available,
     now: now.toISOString(),
     resetsOn: (trialRise ?? nextMonth).toISOString(),
     used: await getMonthlyUsage(shop.id, period),
@@ -189,7 +193,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // The smart schedule and this would follow the same changes: turning this on replaces it, and only when the form says so.
     const replaceSmart = enabled && Boolean(smart?.enabled);
     if (enabled) {
-      if (!hasCurrentAiConsent(await getShopSettings(shop.id))) return { ok: false, error: "CONSENT_REQUIRED" };
+      const facts = await shopTranslationFacts(shop.id, billing);
+      if (!hasCurrentAiConsent(await getShopSettings(shop.id), facts.configured, facts.payer)) return { ok: false, error: "CONSENT_REQUIRED" };
       if (!billing.entitlements.bulk) return { ok: false, error: "PLAN_BULK" };
       if (replaceSmart && form.get("replaceSmart") !== "true") return { ok: false, error: "SMART_ON" };
     }
@@ -217,7 +222,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   // The services the page showed: a page from before an engine was added stores nothing and shows the new list.
   const shown = form.get("consentTokens");
-  const saved = await setAiConsent({ shopId: shop.id, granted: intent === "grant-consent", actorId, shown: typeof shown === "string" ? shown.split(",").filter(Boolean) : null });
+  // The services in use and who they are used under: the operator's engines, or the shop's own keys.
+  const facts = await shopTranslationFacts(shop.id, await shopBilling(admin, shop));
+  const saved = await setAiConsent({
+    shopId: shop.id,
+    granted: intent === "grant-consent",
+    actorId,
+    shown: typeof shown === "string" ? shown.split(",").filter(Boolean) : null,
+    consent: { configured: facts.configured, payer: facts.payer },
+  });
   if (saved === "changed") return { ok: false, error: "CONSENT_CHANGED" };
   // The smart schedule waits for consent no longer than needed.
   if (intent === "grant-consent") await settleAfterConsent({ prisma, adminFor: async () => admin, billingFor: async () => shopBilling(admin, shop) }, shop);

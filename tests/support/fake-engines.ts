@@ -15,6 +15,8 @@ export interface FakeEngineSpec {
   google?: Record<string, FakeKeyBehaviour | "rate-limited" | "service-disabled">;
   /** How texts translate (default: "[<to>] <text>"). */
   translate?: (texts: string[], to: string) => string[];
+  /** The engines' language lists (default: DE, FR, ES, IT, NL, EN-GB, EN-US for DeepL; de, en, fr, es, it, nl for Azure and Google). */
+  languages?: { deepl?: string[]; azure?: string[]; google?: string[] };
 }
 
 export interface FakeEngineCall {
@@ -63,7 +65,7 @@ export function fakeEngineFetch(spec: FakeEngineSpec): { fetch: typeof fetch; ca
         const usage = typeof entry === "object" && entry.usage ? entry.usage : { count: behaviour === "quota" ? 500_000 : 1_234, limit: 500_000 };
         return json(200, { character_count: usage.count, character_limit: usage.limit });
       }
-      if (url.pathname === "/v2/languages") return json(200, ["DE", "FR", "ES", "IT", "NL", "EN-GB", "EN-US"].map((language) => ({ language, name: language })));
+      if (url.pathname === "/v2/languages") return json(200, (spec.languages?.deepl ?? ["DE", "FR", "ES", "IT", "NL", "EN-GB", "EN-US"]).map((language) => ({ language, name: language })));
       if (url.pathname === "/v2/translate") {
         if (behaviour === "quota") return json(456, { message: "Quota exceeded" });
         const parsed = JSON.parse(body ?? "{}") as { text: string[]; target_lang: string };
@@ -75,7 +77,7 @@ export function fakeEngineFetch(spec: FakeEngineSpec): { fetch: typeof fetch; ca
     if (AZURE_HOSTS.has(url.hostname)) {
       const key = headerOf(init, "Ocp-Apim-Subscription-Key");
       calls.push({ host: url.hostname, path: url.pathname, method, authHeader: key, region: headerOf(init, "Ocp-Apim-Subscription-Region"), body });
-      if (url.pathname === "/languages") return json(200, { translation: Object.fromEntries(["de", "fr", "es", "it", "nl"].map((code) => [code, { name: code }])) });
+      if (url.pathname === "/languages") return json(200, { translation: Object.fromEntries((spec.languages?.azure ?? ["de", "en", "fr", "es", "it", "nl"]).map((code) => [code, { name: code }])) });
       const behaviour = (key && spec.azure?.[key]) || "refused";
       if (behaviour === "refused") return json(401, { error: { code: 401000, message: "Access denied" } });
       if (behaviour === "quota") return json(403, { error: { code: 403001, message: "Free quota exceeded" } });
@@ -98,7 +100,7 @@ export function fakeEngineFetch(spec: FakeEngineSpec): { fetch: typeof fetch; ca
       if (behaviour === "service-disabled") return json(403, { error: { status: "PERMISSION_DENIED", details: [errorInfo("SERVICE_DISABLED")] } });
       if (behaviour === "down") return json(503, { error: { status: "UNAVAILABLE" } });
       if (url.pathname === "/language/translate/v2/languages") {
-        return json(200, { data: { languages: ["de", "fr", "es", "it", "nl"].map((language) => ({ language })) } });
+        return json(200, { data: { languages: (spec.languages?.google ?? ["de", "en", "fr", "es", "it", "nl"]).map((language) => ({ language })) } });
       }
       if (url.pathname === "/language/translate/v2") {
         const parsed = JSON.parse(body ?? "{}") as { q: string[]; target: string };

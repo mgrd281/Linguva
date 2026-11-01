@@ -91,8 +91,10 @@ export function ResourceTranslationEditor() {
   // Errors of the action that ran last (AI translation or memory suggestions).
   const lastData = filledFrom === "memory" ? memoryFetcher.data : aiFetcher.data;
   const actionError = lastData?.kind === "error" ? lastData : null;
-  // A language only an engine the shop hasn't allowed serves: that engine, by name.
-  const consentEngine = actionError && "engine" in actionError && typeof actionError.engine === "string" && isEngineId(actionError.engine) ? actionError.engine : null;
+  // A language only an engine the shop hasn't allowed serves: that engine, by name (only for that
+  // code: an own key's quota or refusal names its engine too).
+  const consentEngine =
+    actionError && actionError.code === "ENGINE_CONSENT" && "engine" in actionError && typeof actionError.engine === "string" && isEngineId(actionError.engine) ? actionError.engine : null;
   const saved = saveFetcher.data?.kind === "saved" ? saveFetcher.data.outcomes : null;
   const saveStatus = new Map(saved?.map((o) => [o.key, o]) ?? []);
   const translating = aiFetcher.state !== "idle";
@@ -173,7 +175,9 @@ export function ResourceTranslationEditor() {
     if (data.paging?.query) params.set("q", data.paging.query);
     return `?${params.toString()}`;
   };
-  const remaining = Math.max(0, Math.min(data.ai.limit - data.ai.used, data.ai.dailyLimit - data.ai.usedToday));
+  // Own key plan: no Linguva allowance (limit null), so no "left" figure.
+  const limit = data.ai.limit;
+  const remaining = limit === null || data.ai.dailyLimit === null ? null : Math.max(0, Math.min(limit - data.ai.used, data.ai.dailyLimit - data.ai.usedToday));
   // Smart Auto-Translate (Business): left out of automatic translation, as just chosen or as stored.
   const smartResult = smartFetcher.data?.kind === "smart" ? smartFetcher.data : null;
   const smartError = smartFetcher.data?.kind === "error" ? smartFetcher.data : null;
@@ -327,13 +331,15 @@ export function ResourceTranslationEditor() {
           </memoryFetcher.Form>
           <s-text color="subdued">
             {data.ai.available
-              ? remaining === Math.max(0, data.ai.limit - data.ai.used)
-                ? t("editor.toolbar.leftThisMonth", { remaining, limit: data.ai.limit })
-                : t("editor.toolbar.leftToday", {
-                    remaining,
-                    monthRemaining: Math.max(0, data.ai.limit - data.ai.used),
-                    limit: data.ai.limit,
-                  })
+              ? limit === null || remaining === null
+                ? null
+                : remaining === Math.max(0, limit - data.ai.used)
+                  ? t("editor.toolbar.leftThisMonth", { remaining, limit })
+                  : t("editor.toolbar.leftToday", {
+                      remaining,
+                      monthRemaining: Math.max(0, limit - data.ai.used),
+                      limit,
+                    })
               : t("editor.toolbar.notConfigured")}
           </s-text>
         </s-stack>

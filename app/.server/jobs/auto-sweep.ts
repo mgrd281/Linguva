@@ -19,7 +19,8 @@
 import type { PrismaClient } from "@prisma/client";
 import { logger } from "../lib/logger";
 import { shopKey } from "../queue/redis";
-import { autoTranslatePaused, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { autoPauseApplies, autoTranslatePaused, clearAutoPause, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { consentForShop } from "../providers/shop-translation";
 import { queueSweptCoverageRefresh, type CoverageRefreshQueue } from "../coverage/refresh";
 import { changedSince, SWEPT_TYPES, type SweptType } from "../shopify/recent-changes";
 import { AccessDeniedError } from "../shopify/translations-api";
@@ -89,10 +90,17 @@ export async function sweepChangedContent(
         const fromCheck = lastCheck?.startedAt ? new Date(lastCheck.startedAt.getTime() - OVERLAP_MS) : null;
         position = [settings.autoSweptAt, fromCheck].filter((d): d is Date => d !== null).sort((a, b) => b.getTime() - a.getTime())[0] ?? new Date(now.getTime() - OVERLAP_MS);
       } else {
-        if (!settings.autoTranslateNew || !settings.autoTranslateLocales.length || !hasCurrentAiConsent(settings)) continue;
-        // Waiting for a limit or the provider: the position stays, so the changes follow afterwards.
-        if (autoTranslatePaused(settings, now)) continue;
+        if (!settings.autoTranslateNew || !settings.autoTranslateLocales.length) continue;
+        // The plan first: on the Own key plan the consent and pauses are about the shop's own keys.
         const billing = deps.billingFor ? await deps.billingFor(shop.id) : null;
+        const consent = await consentForShop(shop.id, billing, deps.prisma);
+        if (!hasCurrentAiConsent(settings, consent.configured, consent.payer)) continue;
+        if (autoTranslatePaused(settings, now)) {
+          // A pause about the other payer (the plan changed since): cleared, the changes follow now.
+          if (!autoPauseApplies(settings, consent.payer === "merchant", now)) await clearAutoPause(shop.id, deps.prisma);
+          // Waiting for a limit or the provider: the position stays, so the changes follow afterwards.
+          else continue;
+        }
         if (billing?.configured && !billing.entitlements.bulk) continue;
         // Turned on before this check existed: start from now.
         position = settings.autoSweptAt ?? new Date(now.getTime() - OVERLAP_MS);

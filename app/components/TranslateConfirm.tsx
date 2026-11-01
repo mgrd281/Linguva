@@ -25,8 +25,8 @@ export interface TranslateConfirmProps {
   target: { category: CategoryId; estimate: BulkEstimate } | null;
   languageName: string;
   publishMode: "DRAFT" | "AUTO_PUBLISH";
-  /** AI characters left this month. */
-  aiRemaining: number;
+  /** AI characters left this month; null on the Own key plan (no Linguva allowance). */
+  aiRemaining: number | null;
   i18n: I18n;
   onConfirm: (input: { category: CategoryId; includeAttached: boolean }) => void;
 }
@@ -68,12 +68,14 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
             <s-text color="subdued">{t("language.confirm.keepDetail")}</s-text>
           </Point>
           {/* AI characters have one icon in the whole app (gauge, as on the Plan page); wand means "translate with AI". */}
-          <Point icon="gauge" title={t("language.confirm.chars")}>
-            <s-text color="subdued">
-              {estimate.chars !== null ? t("language.confirm.charsDetail", { chars: estimate.chars, remaining: aiRemaining }) : t("language.confirm.charsUnknown", { remaining: aiRemaining })}
-            </s-text>
-            {estimate.chars !== null && estimate.chars > aiRemaining ? <s-text tone="caution">{t("language.confirm.charsOver")}</s-text> : null}
-          </Point>
+          {aiRemaining !== null ? (
+            <Point icon="gauge" title={t("language.confirm.chars")}>
+              <s-text color="subdued">
+                {estimate.chars !== null ? t("language.confirm.charsDetail", { chars: estimate.chars, remaining: aiRemaining }) : t("language.confirm.charsUnknown", { remaining: aiRemaining })}
+              </s-text>
+              {estimate.chars !== null && estimate.chars > aiRemaining ? <s-text tone="caution">{t("language.confirm.charsOver")}</s-text> : null}
+            </Point>
+          ) : null}
           {estimate.attached ? <s-checkbox ref={attached} label={t("language.confirm.attached")} details={t("language.confirm.attachedDetails")} /> : null}
         </s-stack>
       ) : null}

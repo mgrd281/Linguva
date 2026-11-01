@@ -16,7 +16,7 @@ const FILES = readdirSync(DIR)
 
 describe("credentials module structure", () => {
   it("has the reviewed files", () => {
-    expect(FILES.map((f) => f.name).sort()).toEqual(["checker.ts", "cipher.ts", "deepl-quota.ts", "formats.ts", "maintenance.ts", "service.ts", "store.ts"]);
+    expect(FILES.map((f) => f.name).sort()).toEqual(["checker.ts", "cipher.ts", "deepl-quota.ts", "errors.ts", "formats.ts", "maintenance.ts", "service.ts", "store.ts"]);
   });
 
   it("never touches the operator's engine keys or settings", () => {

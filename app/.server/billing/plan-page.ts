@@ -11,7 +11,7 @@ import { AUTO_REQUESTED_BY } from "../jobs/bulk-jobs";
 import { costRates, getConfig, type AppConfig } from "../lib/config";
 import { prisma as defaultClient } from "../lib/db";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
-import { getTranslationProvider } from "../providers";
+import { shopTranslationFacts } from "../providers/shop-translation";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage, getMonthlyUsageByProvider, nextPeriodStart, periodKey } from "../usage/usage-ledger";
 import { effectiveRatePerMillion, planSelectionUrl } from "../../lib/plans";
@@ -94,7 +94,8 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
   const locales = fetched.summary;
   const config = getConfig();
   const appHandle = config.SHOPIFY_APP_HANDLE;
-  const aiAvailable = getTranslationProvider() !== null;
+  // The operator's engines, or the shop's own keys on the Own key plan (no decryption).
+  const aiAvailable = (await shopTranslationFacts(input.shop.id, billing, { client, config })).available;
   const sub = billing.subscription;
   const targets = locales ? locales.locales.filter((l) => !l.primary) : null;
   // The same function enforcement uses: the page can't disagree with what the editor and jobs allow.

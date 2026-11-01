@@ -16,7 +16,8 @@ import { loadOverview } from "../.server/overview/overview";
 import type { MeasurementState } from "../.server/overview/measurement";
 import { loadMarketCountries } from "../.server/markets/countries";
 import { MARKETS_SCOPE } from "../.server/markets/markets";
-import { getTranslationProvider } from "../.server/providers";
+import { shopBilling } from "../.server/billing/billing";
+import { ownKeysForOverview, shopTranslationFacts } from "../.server/providers/shop-translation";
 import { deeplKeysUsage } from "../.server/providers/deepl-usage";
 import { operatorEngines } from "../.server/providers/engine-status";
 import { deeplApiKeys, getConfig, isOperatorShop, translationEngineOrder } from "../.server/lib/config";
@@ -42,7 +43,9 @@ import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
-  const provider = getTranslationProvider();
+  // Who translates for the shop (the operator's engines, or its own keys on the Own key plan), without decrypting.
+  const billing = await shopBilling(admin, shop);
+  const facts = await shopTranslationFacts(shop.id, billing);
   const jobsAvailable = getQueues() !== null;
   const config = getConfig();
   // The DeepL keys' quota: the operator's own stores only, never a merchant's. With an engine
@@ -51,7 +54,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const multi = translationEngineOrder(config).some((e) => e !== "deepl");
   const deeplQuota = operator && !multi ? deeplKeysUsage(deeplApiKeys(config), { baseUrl: config.DEEPL_API_URL }) : null;
   const overview = await loadOverview(admin, shop, undefined, {
-    aiAvailable: provider !== null,
+    aiAvailable: facts.available,
+    billing,
+    consent: { configured: facts.configured, payer: facts.payer },
+    ownKeys: await ownKeysForOverview(shop.id, facts, billing),
     jobsAvailable,
     markets: () => loadMarketCountries(shop.id, admin, () => scopes.query().then((s) => s.granted.includes(MARKETS_SCOPE))),
   });
@@ -60,7 +66,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const workerStopped = waiting && (await getWorkerStatus()).state === "stopped";
   // Counted among the engines this store allowed: one it hasn't translates nothing for it yet.
   const engines = operator && multi ? await operatorEngines(config, overview.targetLocales, { allowed: consentedEngines(await getShopSettings(shop.id)) }) : null;
-  return { ...overview, aiProvider: provider?.id ?? null, idempotencyKey: randomUUID(), jobsAvailable, workerStopped, deeplQuota: deeplQuota ? await deeplQuota : null, engines };
+  return { ...overview, idempotencyKey: randomUUID(), jobsAvailable, workerStopped, deeplQuota: deeplQuota ? await deeplQuota : null, engines };
 };
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;

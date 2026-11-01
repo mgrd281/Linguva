@@ -10,7 +10,7 @@ import { prisma as defaultClient } from "../lib/db";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { requireShop } from "../shopify/require-shop";
 import { AccessDeniedError, isAccessDenied, listTranslatableResources } from "../shopify/translations-api";
-import { getTranslationProvider } from "../providers";
+import { shopTranslationFacts } from "../providers/shop-translation";
 import { getQueues } from "../queue/client";
 import { BackgroundJobsUnavailableError, startBulkJob } from "../jobs/start-job";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
@@ -96,6 +96,8 @@ export async function resourceListPage(
   const { resources, pageInfo } = page;
   const settings = await getShopSettings(shop.id, client);
   const billing = await shopBilling(admin, shop);
+  // Who translates for the shop (the operator's engines or its own keys), without decrypting.
+  const facts = await shopTranslationFacts(shop.id, billing, { client });
   const allowed = allowedTargetLocales(billing.entitlements, targets.map((l) => l.locale));
 
   return {
@@ -114,8 +116,8 @@ export async function resourceListPage(
       publishMode: settings.bulkPublishMode,
       // One key per page view: a double submit creates only one job.
       idempotencyKey: randomUUID(),
-      available: getTranslationProvider() !== null && getQueues() !== null,
-      consent: hasCurrentAiConsent(settings),
+      available: facts.available && getQueues() !== null,
+      consent: hasCurrentAiConsent(settings, facts.configured, facts.payer),
       planAllowsBulk: billing.entitlements.bulk,
       planAllowsLocale: allowed.includes(target.locale),
       // Image alt text and custom fields can be included for these types.

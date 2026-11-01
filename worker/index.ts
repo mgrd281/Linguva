@@ -12,6 +12,7 @@ import { billingDeps } from "../app/.server/billing/billing";
 import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider, providerLabel } from "../app/.server/providers";
+import { ownKeyTranslation } from "../app/.server/providers/shop-translation";
 import { createQueues, createWorkers, enqueueCoveragePage, requeueStalledDiscovery, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
 import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
@@ -53,6 +54,8 @@ async function main() {
     adminFor: async (shopDomain) =>
       withShopifyTimeout((await unauthenticated.admin(shopDomain)).admin, config.SHOPIFY_TIMEOUT_MS, "worker"),
     provider: getTranslationProvider(),
+    // Own key plan: the shop's own keys, built per item (never the provider above for such a shop).
+    ownKeyTranslation: (shopId, settings) => ownKeyTranslation(shopId, { settings, client: prisma }),
     monthlyLimit: limits.limit,
     // Per shop the daily cap is never above its plan's monthly allowance (processItem), as on every page.
     dailyLimit: config.AI_DAILY_CHAR_LIMIT,

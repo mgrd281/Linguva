@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import { type TranslationProvider } from "../providers/types";
+import { TranslationProviderError, type TranslationProvider } from "../providers/types";
 import { isEngineRouter, JOB_DEADLINE_MS } from "../providers/engine-router";
 import { consentGap, plannedEngine, routerSignal } from "../providers/index";
+import { operatorTranslation, type OwnKeyTranslation } from "../providers/shop-translation";
+import { noteOwnKeyResult } from "../credentials/service";
+import type { OwnCredential } from "../credentials/store";
+import { ownKeyFailure, toOwnKeyError } from "../credentials/errors";
 import { chargedChars, chargeForFailure, chargeForResult, type EngineCharge } from "../usage/engine-charge";
 import { logger } from "../lib/logger";
 import { shopKey } from "../queue/redis";
@@ -25,7 +29,7 @@ import { loadTranslationContext } from "../translation/translation-context";
 import { latestRevisions } from "../translation/revisions";
 import { recordMemoryUse } from "../memory/translation-memory";
 import { pendingDraftDigests, recordRejectedAttempts, saveDrafts } from "../review/drafts";
-import { consentedEngines, formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
+import { consentedEngines, formalityFor, getShopSettings, hasCurrentAiConsent, translationContext, type ConsentState } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage, type UsageBudget } from "../usage/usage-ledger";
 import { smartPaused } from "../smart/config";
 import { budgetWindows, SMART_REQUESTED_BY, smartCoverageTypes } from "../../lib/smart-auto";
@@ -37,7 +41,7 @@ import { planResourceWork, scopeKeys } from "./needs-work";
 import { listAttachedResources } from "../shopify/attached-resources";
 import { isEditableAttachedField } from "../translation/attached-editor";
 import { noteCoverageRead, noteResourceGone } from "../coverage/items";
-import type { Entitlements } from "../../lib/plans";
+import { usesOwnKeys, type Entitlements } from "../../lib/plans";
 
 export type Admin = Pick<AdminApiContext, "graphql">;
 
@@ -65,6 +69,12 @@ export interface JobDependencies {
    * Shopify trial runs until then, with its lower allowance (subscription.ts).
    */
   billingFor?(shopId: string): Promise<{ configured: boolean; entitlements: Entitlements; trialEndsAt?: Date }>;
+  /**
+   * Own key plan: the shop's own keys behind one router (shop-translation.ts ownKeyTranslation).
+   * Used only for a shop whose plan has `ownKeys`; `provider` above is never used for such a shop.
+   * Absent: such a shop has no provider (OWN_KEY_MISSING), never the operator's.
+   */
+  ownKeyTranslation?(shopId: string, settings: ConsentState): Promise<OwnKeyTranslation>;
   keyPrefix: string;
   shopifyLimiter?: Limiter;
   /** Aborted when the worker shuts down: a router stops before its next engine. */
@@ -84,6 +94,12 @@ async function throttle(deps: JobDependencies, shopId: string, cost: number) {
   if (!deps.shopifyLimiter) return;
   const wait = await deps.shopifyLimiter.take(shopKey(deps.keyPrefix, shopId, "rl", "shopify"), cost);
   if (wait > 0) throw new RateLimitedError(wait);
+}
+
+/** The shop's own keys (Own key plan); fail closed without the dependency: never the operator's provider. */
+async function jobOwnTranslation(deps: JobDependencies, shopId: string, settings: ConsentState): Promise<OwnKeyTranslation> {
+  if (deps.ownKeyTranslation) return deps.ownKeyTranslation(shopId, settings);
+  return { payer: "merchant", provider: null, available: false, configured: [], unavailable: "OWN_KEY_MISSING", keys: [], used: [] };
 }
 
 /** Started by the app itself (automatic translation), not by the merchant. */
@@ -157,15 +173,24 @@ export async function runDiscoveryPage(
     first: deps.discoveryPageSize ?? DISCOVERY_PAGE_SIZE,
   });
   const pageGids = page.resources.map((r) => r.resourceId);
-  // A refusal for markup an engine couldn't keep is tried again once another engine serves the language.
-  const engine = isAutomaticJob(job) && isEngineRouter(deps.provider)
-    ? await plannedEngine(
-        deps.provider,
+  // A refusal for markup an engine couldn't keep is tried again once another engine serves the language
+  // (the shop's own keys on the Own key plan, else the operator's engines).
+  let engine: string | undefined;
+  if (isAutomaticJob(job)) {
+    const billing = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
+    const own = usesOwnKeys(billing?.entitlements);
+    const ownSettings = own ? await getShopSettings(payload.shopId, deps.prisma) : null;
+    const t = ownSettings ? await jobOwnTranslation(deps, payload.shopId, ownSettings) : operatorTranslation(deps.provider);
+    if (isEngineRouter(t.provider)) {
+      const settings = ownSettings ?? (await getShopSettings(payload.shopId, deps.prisma));
+      engine = await plannedEngine(
+        t.provider,
         job.targetLocale,
-        consentedEngines(await getShopSettings(payload.shopId, deps.prisma)),
+        consentedEngines(settings, t.configured, t.payer),
         page.resources[0] ? sourceLocaleOf(page.resources[0]) : undefined,
-      )
-    : undefined;
+      );
+    }
+  }
   const [latest, pendingDrafts] = await Promise.all([
     latestRevisions(payload.shopId, pageGids, job.targetLocale, deps.prisma),
     // As for each item: a translation the merchant starts tries refused fields again.
@@ -281,7 +306,14 @@ export async function processItem(
     await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: "SHOP_INACTIVE" }, deps.prisma);
     return { status: "CANCELLED", errorCode: "SHOP_INACTIVE" };
   }
-  if (!deps.provider) throw new JobStopError("AI_NOT_CONFIGURED");
+  // No operator engine on this deployment: only a shop on the Own key plan can still translate (its
+  // own keys). The billing read happens only then: with an operator engine (production always has
+  // one) the throttle and the claim still come before every billing read.
+  let early: Awaited<ReturnType<NonNullable<JobDependencies["billingFor"]>>> | null | undefined;
+  if (!deps.provider) {
+    early = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
+    if (!usesOwnKeys(early?.entitlements)) throw new JobStopError("AI_NOT_CONFIGURED");
+  }
 
   // Rate limit before claiming, so a delayed item isn't counted as running.
   // Images and custom fields need about three times the Admin API calls.
@@ -319,15 +351,37 @@ export async function processItem(
   }
 
   const settings = await getShopSettings(payload.shopId, deps.prisma);
-  if (!hasCurrentAiConsent(settings)) throw new JobStopError("CONSENT_REQUIRED");
-  // Only the engines the shop's consent covers (the engine planned for the language is read once
-  // the resource's own language is known, below).
-  const engines = consentedEngines(settings);
-  // Plans can change while a job runs: check before every item (the smart schedule's own entitlement
-  // first, so its jobs stop with the reason that pauses it).
-  const billing = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
-  if (billing && job.requestedBy === SMART_REQUESTED_BY && !billing.entitlements.smartAuto) throw new JobStopError("PLAN_SMART");
-  if (billing && !billing.entitlements.bulk) throw new JobStopError("PLAN_REQUIRED");
+  // Plans can change while a job runs: read before every item (after the claim).
+  const billing = early !== undefined ? early : deps.billingFor ? await deps.billingFor(payload.shopId) : null;
+  // Who translates: the shop's own keys on the Own key plan, else the operator's engines.
+  let translation: { provider: TranslationProvider; payer: "linguva" | "merchant"; used: readonly OwnCredential[] | null };
+  let engines: readonly string[];
+  if (!usesOwnKeys(billing?.entitlements)) {
+    const t = operatorTranslation(deps.provider);
+    if (!t.provider) throw new JobStopError("AI_NOT_CONFIGURED");
+    if (!hasCurrentAiConsent(settings)) throw new JobStopError("CONSENT_REQUIRED");
+    // Only the engines the shop's consent covers (the engine planned for the language is read once
+    // the resource's own language is known, below).
+    engines = consentedEngines(settings);
+    // The smart schedule's own entitlement first, so its jobs stop with the reason that pauses it.
+    if (billing && job.requestedBy === SMART_REQUESTED_BY && !billing.entitlements.smartAuto) throw new JobStopError("PLAN_SMART");
+    if (billing && !billing.entitlements.bulk) throw new JobStopError("PLAN_REQUIRED");
+    translation = { provider: t.provider, payer: "linguva", used: null };
+  } else {
+    // Own key plan: the plan first (a smart job left over from Business stops with PLAN_SMART, which
+    // pauses the schedule), then the shop's keys, then the own-key consent for exactly those keys.
+    if (job.requestedBy === SMART_REQUESTED_BY && !billing!.entitlements.smartAuto) throw new JobStopError("PLAN_SMART");
+    if (!billing!.entitlements.bulk) throw new JobStopError("PLAN_REQUIRED");
+    const t = await jobOwnTranslation(deps, payload.shopId, settings);
+    if (!t.provider) {
+      // A key under a key id this process doesn't have: not the key's fault, the item tries again later.
+      if (t.unavailable === "OWN_KEY_UNAVAILABLE") throw new TranslationProviderError("router", "retryable", "own key not readable here");
+      throw new JobStopError(t.unavailable ?? "OWN_KEY_MISSING");
+    }
+    if (!hasCurrentAiConsent(settings, t.configured, "merchant")) throw new JobStopError("CONSENT_REQUIRED");
+    engines = consentedEngines(settings, t.configured, "merchant");
+    translation = { provider: t.provider, payer: "merchant", used: t.used };
+  }
   // An item queued by automatic translation runs only while it is on for this language.
   if (job.requestedBy === AUTO_REQUESTED_BY && (!settings.autoTranslateNew || !settings.autoTranslateLocales.includes(job.targetLocale))) {
     await finishItem(payload.shopId, item.id, { status: "CANCELLED", errorCode: "AUTO_OFF" }, deps.prisma);
@@ -383,7 +437,7 @@ export async function processItem(
   }
   // Only an engine the shop hasn't allowed serves this language: the job waits for the merchant
   // to allow it in Settings, and no text goes to the engines it did allow (they'd refuse it).
-  const gap = await consentGap(deps.provider, job.targetLocale, engines);
+  const gap = await consentGap(translation.provider, job.targetLocale, engines);
   if (gap) throw new EngineConsentRequiredError(gap);
   const monthlyLimit = billing?.configured ? billing.entitlements.monthlyChars : deps.monthlyLimit;
   const dailyLimit = deps.dailyLimit === undefined ? undefined : Math.min(deps.dailyLimit, monthlyLimit);
@@ -425,7 +479,7 @@ export async function processItem(
   await noteCoverageRead(payload.shopId, job.targetLocale, [resource], readAt, deps.prisma);
   // The first engine planned for this pair is what the reservation names and what refused fields
   // are compared with (no I/O unless several engines may be used).
-  const firstEngine = await plannedEngine(deps.provider, job.targetLocale, engines, sourceLocaleOf(resource));
+  const firstEngine = await plannedEngine(translation.provider, job.targetLocale, engines, sourceLocaleOf(resource));
   // Publishing needs automatic publishing on the job AND still on in the
   // shop's settings: switching back to review stops running jobs publishing.
   // Even then only results without quality warnings go live; flagged ones
@@ -456,6 +510,9 @@ export async function processItem(
     itemId: item.id,
     engines,
     planned: firstEngine,
+    provider: translation.provider,
+    payer: translation.payer,
+    used: translation.used,
   };
 
   const parentTitle = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : null;
@@ -556,9 +613,9 @@ const CANCEL_POLL_MS = 10_000;
  */
 function stopSignal(run: RunContext): { signal: AbortSignal; dispose(): void } | null {
   const { deps, payload } = run;
-  if (!isEngineRouter(deps.provider)) return null;
+  if (!isEngineRouter(run.provider)) return null;
   const controller = new AbortController();
-  const signal = routerSignal(deps.provider, deps.shutdown ? AbortSignal.any([controller.signal, deps.shutdown]) : controller.signal, JOB_DEADLINE_MS)!;
+  const signal = routerSignal(run.provider, deps.shutdown ? AbortSignal.any([controller.signal, deps.shutdown]) : controller.signal, JOB_DEADLINE_MS)!;
   const timer = setInterval(() => {
     withTenant(
       payload.shopId,
@@ -600,6 +657,12 @@ interface RunContext {
   engines: readonly string[];
   /** The engine the run's requests go to first (the reservations' provider). */
   planned: string;
+  /** Who translates this run: the operator's provider, or the shop's own keys (Own key plan). Never serialised. */
+  provider: TranslationProvider;
+  /** "merchant": the shop's own keys (no Linguva limit; results noted per key). */
+  payer: "linguva" | "merchant";
+  /** Own key plan: the credentials the provider was built from (keyVersion guard), else null. */
+  used: readonly OwnCredential[] | null;
 }
 
 interface ResourceRunResult {
@@ -644,7 +707,7 @@ async function translateOneResource(
     // couldn't keep is tried again once another engine is planned for the language.
     pendingDraftDigests(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma, {
       includeRefused: run.automatic,
-      ...(isEngineRouter(deps.provider) ? { engine: run.planned } : {}),
+      ...(isEngineRouter(run.provider) ? { engine: run.planned } : {}),
     }),
   ]);
   const { fields, protectedKeys } = planResourceWork(resource, {
@@ -686,6 +749,8 @@ async function translateOneResource(
           platformDailyLimit: deps.platformDailyLimit,
           provider: run.planned,
           ...(run.budget ? { budget: run.budget } : {}),
+          // The shop's own keys: no Linguva limit, no Linguva cost (usage-ledger.ts).
+          ...(run.payer === "merchant" ? { payer: "merchant" as const } : {}),
         },
         deps.prisma,
       )
@@ -695,7 +760,7 @@ async function translateOneResource(
   const stop = stopSignal(run);
   try {
     result = await completeTranslation(prepared, {
-      provider: deps.provider!,
+      provider: run.provider,
       engines: run.engines,
       sourceLocale,
       targetLocale: run.targetLocale,
@@ -716,9 +781,22 @@ async function translateOneResource(
         await releaseUsage(reservation, deps.prisma);
       }
     }
+    if (run.payer === "merchant") {
+      // Every key the request found used up or refused is marked (guarded by its keyVersion). A key
+      // replaced or removed while the item ran: never a stop or a pause, the item tries again with
+      // the current key (or stops with OWN_KEY_MISSING, no pause, when it was removed).
+      const { stale } = await noteOwnKeyResult(payload.shopId, run.used ?? [], { failed: ownKeyFailure(error) }, deps.prisma);
+      if (stale) throw new TranslationProviderError(run.planned, "retryable", "own key changed");
+      throw toOwnKeyError(error, run.planned);
+    }
     throw error;
   } finally {
     stop?.dispose();
+  }
+  // A key that answered after its quota had been used up is usable again; keys the router passed
+  // over for quota or auth are marked. Only when texts were really sent (memory alone calls nothing).
+  if (run.payer === "merchant") {
+    await noteOwnKeyResult(payload.shopId, run.used ?? [], { ...(reservation ? { answeredBy: result.provider } : {}), failed: result.failovers ?? [] }, deps.prisma);
   }
   const charge = chargeForResult(result);
   logLost(charge);

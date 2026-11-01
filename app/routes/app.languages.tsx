@@ -5,7 +5,8 @@ import { requireShop } from "../.server/shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { MAX_ENABLED_LOCALES } from "../lib/locale-limits";
 import { languagePath } from "../lib/language-categories";
-import { getTranslationProvider } from "../.server/providers";
+import { shopBilling } from "../.server/billing/billing";
+import { openShopTranslation } from "../.server/providers/shop-translation";
 import { isEngineRouter } from "../.server/providers/engine-router";
 import { aiLanguageCoverage } from "../.server/providers/language-support";
 import { getShopSettings, textConsentTokens } from "../.server/settings/shop-settings";
@@ -15,11 +16,15 @@ import { useI18n } from "../i18n/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
   const summary = await fetchAndSyncShopLocales(admin, shop.id);
-  const provider = getTranslationProvider();
+  // The operator's engines, or the shop's own keys on the Own key plan (each key's own language
+  // list). Only the coverage below goes into the page's data, never the provider.
+  const billing = await shopBilling(admin, shop);
+  const t = await openShopTranslation(shop.id, billing);
+  const provider = t.provider;
   const router = isEngineRouter(provider);
   // With several engines: what the shop's consent covers (before any consent, every engine in
   // use), so a language only an engine it hasn't allowed serves says so.
-  const allowed = router ? textConsentTokens(await getShopSettings(shop.id)).map(engineOfToken) : [];
+  const allowed = router ? textConsentTokens(await getShopSettings(shop.id), t.configured, t.payer).map(engineOfToken) : [];
   // Read from each engine's own list, never assumed.
   const coverage = await aiLanguageCoverage(provider, summary.locales.filter((l) => !l.primary).map((l) => l.locale), allowed);
   const ai = Object.fromEntries(Object.entries(coverage).map(([locale, c]) => [locale, c.state]));

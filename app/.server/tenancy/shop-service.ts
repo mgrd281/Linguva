@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { deleteShopEngineKeys } from "../credentials/store";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "./with-tenant";
 
@@ -83,6 +84,8 @@ export async function upsertInstalledShop(
       // The uninstall reset the plan already; this also covers one recorded before that reset existed.
       if (event === "REINSTALLED") {
         await tx.shopSubscription.updateMany({ where: { shopId: shop.id }, data: CANCELLED_SUBSCRIPTION });
+        // The uninstall deleted the store's engine keys; a reinstall starts without any, also if one outlived it.
+        await tx.shopEngineCredential.deleteMany({ where: { shopId: shop.id } });
       }
     },
     client,
@@ -105,7 +108,12 @@ export async function markShopUninstalled(
   const shop = await client.shop.findUnique({ where: { shopDomain } });
   // Tokens are useless after uninstall; delete them immediately.
   await client.session.deleteMany({ where: { shop: shopDomain } });
-  if (!shop || shop.status === "UNINSTALLED") return shop;
+  if (!shop) return shop;
+  // A repeated (or replayed) uninstall changes nothing else, but the keys still go.
+  if (shop.status === "UNINSTALLED") {
+    await deleteEngineKeysOf(shop.id, client);
+    return shop;
+  }
 
   const updated = await client.shop.update({
     where: { id: shop.id },
@@ -146,7 +154,23 @@ export async function markShopUninstalled(
     },
     client,
   );
+  await deleteEngineKeysOf(shop.id, client);
   return updated;
+}
+
+/**
+ * The store's own translation keys (Own key plan) go with its access. Always after the status
+ * change: a key save that is still in its live check reads the Shop row FOR SHARE in its own
+ * transaction and refuses unless ACTIVE, and a save that locked the row first commits before the
+ * status change (and so before this delete) runs.
+ */
+async function deleteEngineKeysOf(shopId: string, client: PrismaClient) {
+  const engines = await deleteShopEngineKeys(shopId, client);
+  if (engines.length === 0) return;
+  // createMany: no RETURNING, so the runtime role needs no SELECT on AuditLog.
+  await client.auditLog.createMany({
+    data: [{ shopId, actorType: "SYSTEM", actorId: null, action: "engine_key.removed", targetType: "shop", targetId: null, metadata: { engines, reason: "SHOP_UNINSTALLED" } }],
+  });
 }
 
 export async function recordScopesUpdate(

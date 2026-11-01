@@ -7,6 +7,7 @@ import pino from "pino";
 import { describe, expect, it } from "vitest";
 import { JobStopError } from "../../app/.server/jobs/errors";
 import { loggerOptions, logRequestError } from "../../app/.server/lib/logger";
+import { SecretValue } from "../../app/.server/lib/secret";
 import { QuotaExceededError } from "../../app/.server/usage/usage-ledger";
 
 /** The app's logger configuration writing into memory (tests run with LOG_LEVEL=silent). */
@@ -122,5 +123,49 @@ describe("log redaction of translation engine credentials", () => {
     log.info({ credentials: values.json }, "config");
     const output = lines.join("");
     for (const [name, value] of Object.entries(values)) expect(output, name).not.toContain(value);
+  });
+});
+
+describe("log redaction of merchant engine keys (Own key plan)", () => {
+  // Fictional, assembled at runtime.
+  const merchant = {
+    secret: `v1.k1.${"i".repeat(16)}.${"t".repeat(22)}.${"c".repeat(30)}`,
+    apiKey: `${"m".repeat(8)}-0001-${"n".repeat(12)}:fx`,
+    plaintext: `{"v":1,"apiKey":"${"p".repeat(20)}"}`,
+    nested: `${"r".repeat(20)}-nested`,
+    list: `${"s".repeat(20)}-list`,
+    azure: `${"z".repeat(24)}0001`,
+    azureTwo: `${"z".repeat(24)}0002`,
+    azureThree: `${"z".repeat(24)}0003`,
+  };
+
+  it("censors a credential row logged by mistake, at the top and nested", () => {
+    const { log, lines } = capture();
+    log.warn({ secret: merchant.secret, apiKey: merchant.apiKey, plaintext: merchant.plaintext, nested: { apiKey: merchant.nested }, apiKeys: [merchant.list] }, "row");
+    log.warn({ row: { secret: merchant.secret, plaintext: merchant.plaintext } }, "nested row");
+    const output = lines.join("");
+    for (const [name, value] of Object.entries(merchant)) expect(output, name).not.toContain(value);
+  });
+
+  it("censors Azure's adapter option `key` up to two levels down, and keeps a bare `key` readable", () => {
+    const { log, lines } = capture();
+    log.info({ options: { key: merchant.azure } }, "adapter");
+    log.info({ x: { options: { key: merchant.azureTwo } } }, "adapter nested");
+    log.info({ x: { y: { options: { key: merchant.azureThree } } } }, "adapter deeper");
+    log.info({ key: "title" }, "field");
+    const output = lines.join("");
+    for (const value of [merchant.azure, merchant.azureTwo, merchant.azureThree]) expect(output).not.toContain(value);
+    expect(JSON.parse(lines[3]!)).toMatchObject({ key: "title" });
+  });
+
+  it("never writes a SecretValue, however deeply it is nested", () => {
+    const { log, lines } = capture();
+    const credential = { id: "row-1", engine: "deepl", apiKey: new SecretValue(merchant.apiKey), stateKey: "own:deepl:abc", keyVersion: 1 };
+    log.info({ a: { b: { c: { d: { e: credential } } } } }, "deep context");
+    log.info({ credentials: [credential], value: new SecretValue(merchant.nested) }, "list");
+    const output = lines.join("");
+    expect(output).not.toContain(merchant.apiKey);
+    expect(output).not.toContain(merchant.nested);
+    expect(output).toContain("[REDACTED]");
   });
 });

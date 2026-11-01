@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { getConfig, isShopAllowed } from "../../app/.server/lib/config";
+import { ownKeyMode } from "../../app/.server/credentials/formats";
 
 const base = {
   DATABASE_URL: "postgresql://u:p@localhost:5432/db",
@@ -157,5 +158,32 @@ describe("the Own key plan in production", () => {
   it("applies the guard to the production stage only (staging and development show the plan without billing)", () => {
     expect(config({ ...staging, OWN_KEY_PLAN_VISIBLE: "on" }).OWN_KEY_PLAN_VISIBLE).toBe("on");
     expect(config({ ...base, OWN_KEY_PLAN_VISIBLE: "on" }).OWN_KEY_PLAN_VISIBLE).toBe("on");
+  });
+});
+
+describe("ownKeyMode (Own key plan): live key checks only in a production build outside staging", () => {
+  const dev = { DATABASE_URL: base.DATABASE_URL, TOKEN_ENCRYPTION_KEYS: base.TOKEN_ENCRYPTION_KEYS };
+
+  it("is mock in development (also with TRANSLATION_PROVIDER=deepl, the default), in tests and with the mock provider", () => {
+    expect(ownKeyMode(config(dev))).toBe("mock");
+    expect(ownKeyMode(config({ ...dev, NODE_ENV: "development", TRANSLATION_PROVIDER: "deepl" }))).toBe("mock");
+    expect(ownKeyMode(config({ ...dev, NODE_ENV: "test" }))).toBe("mock");
+    expect(ownKeyMode(config({ ...dev, NODE_ENV: "test", TRANSLATION_PROVIDER: "mock" }))).toBe("mock");
+  });
+
+  it("is mock in staging (a production build)", () => {
+    expect(ownKeyMode(config(staging))).toBe("mock");
+  });
+
+  it("is live in a production build without a stage and with LINGUVA_STAGE=production", () => {
+    expect(ownKeyMode(config(base))).toBe("live");
+    expect(ownKeyMode(config({ ...base, LINGUVA_STAGE: "production", LINGUVA_PRODUCTION_APPROVED: "yes" }))).toBe("live");
+  });
+
+  it("reads exactly the three settings", () => {
+    expect(ownKeyMode({ NODE_ENV: "production", TRANSLATION_PROVIDER: "deepl", LINGUVA_STAGE: undefined })).toBe("live");
+    expect(ownKeyMode({ NODE_ENV: "production", TRANSLATION_PROVIDER: "deepl", LINGUVA_STAGE: "staging" })).toBe("mock");
+    expect(ownKeyMode({ NODE_ENV: "production", TRANSLATION_PROVIDER: "mock", LINGUVA_STAGE: "production" })).toBe("mock");
+    expect(ownKeyMode({ NODE_ENV: "test", TRANSLATION_PROVIDER: "deepl", LINGUVA_STAGE: "production" })).toBe("mock");
   });
 });

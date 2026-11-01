@@ -34,10 +34,23 @@ const SECRET_KEYS = [
   "assertion",
   "access_token",
   "credentials",
+  // A merchant's engine key before encryption, and a list of keys (Own key plan).
+  "plaintext",
+  "apiKeys",
 ];
 
+/**
+ * Azure's adapter option for its key is `key` (azure.ts AzureOptions), so an adapter's options
+ * logged by mistake would carry it. A bare `key` stays readable: field keys like "title" are
+ * logged everywhere.
+ */
+const OPTION_PATHS = ["options.key", "*.options.key", "*.*.options.key"];
+
 /** Each key at the top level and up to two levels down: { headers: { Authorization } }, { ctx: { session: { accessToken } } }. */
-const redactPaths = SECRET_KEYS.flatMap((key) => (key.startsWith("[") ? [key, `*${key}`, `*.*${key}`] : [key, `*.${key}`, `*.*.${key}`]));
+const redactPaths = [
+  ...SECRET_KEYS.flatMap((key) => (key.startsWith("[") ? [key, `*${key}`, `*.*${key}`] : [key, `*.${key}`, `*.*.${key}`])),
+  ...OPTION_PATHS,
+];
 
 export const loggerOptions: pino.LoggerOptions = {
   level: process.env.LOG_LEVEL ?? "info",

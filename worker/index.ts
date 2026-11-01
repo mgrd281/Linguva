@@ -22,6 +22,7 @@ import { withShopifyTimeout } from "../app/.server/shopify/admin-timeout";
 import { purgeWebhookLog } from "../app/.server/webhooks/process-webhook";
 import { repairAllSmartRuns } from "../app/.server/smart/plan";
 import { smartTick } from "../app/.server/smart/runs";
+import { maintainEngineKeys } from "../app/.server/credentials/maintenance";
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 /** Smart Auto-Translate: schedules are checked every minute (times are in whole minutes). */
@@ -88,6 +89,13 @@ async function main() {
         if (reports) logger.warn({ reports }, "continued stalled coverage reports");
         const runs = await repairAllSmartRuns(prisma);
         if (runs) logger.warn({ runs }, "finished smart runs whose measurement had ended");
+        // Own key plan: merchant keys move to the active key id, and are counted per key id.
+        try {
+          const keys = await maintainEngineKeys({ prisma, redis: connection, prefix });
+          if (keys.reencrypted || keys.healed) logger.info({ reencrypted: keys.reencrypted, healed: keys.healed }, "engine keys maintained");
+        } catch (error) {
+          logger.error({ err: (error as Error).name }, "engine key maintenance failed");
+        }
       }
       const purged = await purgeWebhookLog(prisma);
       if (purged) logger.info({ purged }, "old webhook log entries deleted");

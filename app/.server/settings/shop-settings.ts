@@ -333,3 +333,19 @@ export async function autoPauseAfterStop(
   );
   return until;
 }
+
+/**
+ * Own key plan: a saved key, or a "Check again" that accepted the key, ends a pause for one of the
+ * merchant's keys (OWN_KEY_*). Other pauses (Linguva's limits, the merchant's own) stay.
+ */
+export async function liftOwnKeyPause(shopId: string, client: PrismaClient = defaultClient): Promise<void> {
+  await withTenant(
+    shopId,
+    (tx) =>
+      tx.shopSettings.updateMany({
+        where: { shopId, autoPauseReason: { startsWith: "OWN_KEY_" } },
+        data: { autoPausedUntil: null, autoPauseReason: null },
+      }),
+    client,
+  );
+}

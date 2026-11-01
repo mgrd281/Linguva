@@ -13,6 +13,7 @@ import { DecryptionError, TokenCipher } from "../../app/.server/lib/crypto";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { countAsOwner, ownerDb, resetDatabase } from "../support/db";
+import { listEngineKeys, loadEngineKeys } from "../../app/.server/credentials/store";
 
 const app = new PrismaClient();
 const cipher = TokenCipher.fromKeyring(process.env.TOKEN_ENCRYPTION_KEYS!);
@@ -301,5 +302,36 @@ describe("UsageLedger.payer", () => {
       SELECT has_table_privilege(current_user, 'public."UsageLedger"', 'UPDATE') AS "update",
              has_table_privilege(current_user, 'public."UsageLedger"', 'DELETE') AS "delete"`;
     expect(row).toEqual({ update: false, delete: false });
+  });
+});
+
+describe("ShopEngineCredential as the credentials module reads it", () => {
+  it("a ciphertext copied into another shop's or another engine's row is marked UNREADABLE and never used", async () => {
+    const { a, b } = await twoShops();
+    const original = await insert(a.id, deeplRow(a.id));
+    // Copied by someone with the owner role: well-formed, under a key id the app knows.
+    await insert(b.id, { ...deeplRow(b.id, `${"q".repeat(20)}:fx`), secret: original.secret }, ownerDb);
+    await insert(a.id, { ...deeplRow(a.id), engine: "google", dataLocation: "global", deeplPlan: null, secret: original.secret }, ownerDb);
+
+    const inB = await loadEngineKeys(b.id, app);
+    expect(inB.credentials).toEqual([]);
+    expect(inB.transient).toEqual([]);
+    expect(inB.summaries.map((k) => [k.engine, k.status, k.lastErrorCode])).toEqual([["deepl", "UNREADABLE", "OWN_KEY_UNREADABLE"]]);
+
+    const inA = await loadEngineKeys(a.id, app);
+    expect(inA.credentials.map((c) => [c.engine, c.apiKey.reveal()])).toEqual([["deepl", PLAINTEXT_KEY]]);
+    expect(inA.summaries.map((k) => [k.engine, k.status])).toEqual([
+      ["deepl", "OK"],
+      ["google", "UNREADABLE"],
+    ]);
+    // Neither summary nor log-able result carries the key.
+    expect(JSON.stringify([inA, inB, await listEngineKeys(a.id, app)])).not.toContain(PLAINTEXT_KEY.replace(/:fx$/, ""));
+  });
+
+  it("another shop's tenant reads none of a shop's keys through the module", async () => {
+    const { a, b } = await twoShops();
+    await insert(a.id, deeplRow(a.id));
+    expect(await listEngineKeys(b.id, app)).toEqual([]);
+    expect(await loadEngineKeys(b.id, app)).toEqual({ summaries: [], credentials: [], transient: [] });
   });
 });

@@ -9,6 +9,7 @@ import { normaliseSmartSettings, type SmartSettingsInput } from "../../app/.serv
 import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
 import * as plans from "../../app/lib/plans";
 import { complimentaryEntitlements, DEFAULT_COMPLIMENTARY_CHARS } from "../../app/.server/billing/complimentary";
+import { ownKeyAccess } from "../../app/.server/credentials/service";
 
 const SHOP = "gid://shopify/Shop/5678";
 
@@ -287,5 +288,39 @@ describe("the Own key plan (outside the ladder of four)", () => {
     const sub = await fetchActiveSubscription(PARTNER_SETTINGS, SHOP, fakePartnerApi({ handle: "own-key" }).fetchImpl);
     expect(sub).toMatchObject({ planHandle: "own-key", pendingPlanHandle: null });
     expect(entitlementsFor(sub!.planHandle)).toMatchObject({ plan: "own-key", ownKeys: true, known: true });
+  });
+});
+
+describe("ownKeyAccess: who may manage own keys", () => {
+  const NOW = new Date("2026-10-30T09:00:00Z");
+  const subscription = (planHandle: string | null, pendingPlanHandle: string | null): ShopSubscription => ({
+    shopId: "00000000-0000-4000-8000-000000000003",
+    state: "ACTIVE",
+    planHandle,
+    pendingPlanHandle,
+    billingPeriod: "EVERY_30_DAYS",
+    trialEndsAt: null,
+    cancelAtEndOfCycle: false,
+    currentPeriodEnd: new Date("2026-11-29T00:00:00Z"),
+    checkedAt: NOW,
+    updatedAt: NOW,
+  });
+
+  it("is plan on Own key (every handle), pending with a change to it, otherwise null", () => {
+    for (const handle of plans.OWN_KEY_HANDLES) {
+      expect(ownKeyAccess({ state: "ACTIVE", entitlements: entitlementsFor(handle), subscription: subscription(handle, null) }), handle).toBe("plan");
+      expect(ownKeyAccess({ state: "ACTIVE", entitlements: PLANS.pro, subscription: subscription("pro", handle) }), handle).toBe("pending");
+    }
+    expect(ownKeyAccess({ state: "ACTIVE", entitlements: PLANS.pro, subscription: subscription("pro", null) })).toBeNull();
+    expect(ownKeyAccess({ state: "ACTIVE", entitlements: PLANS.pro, subscription: subscription("pro", "business") })).toBeNull();
+    expect(ownKeyAccess({ state: "ACTIVE", entitlements: PLANS.pro, subscription: subscription("pro", "Own-Key") })).toBeNull();
+    // Only an active subscription has a pending change that Shopify will apply.
+    expect(ownKeyAccess({ state: "UNKNOWN", entitlements: PLANS.free, subscription: subscription("pro", "own-key") })).toBeNull();
+    expect(ownKeyAccess({ state: "NONE", entitlements: PLANS.free, subscription: subscription(null, "own-key") })).toBeNull();
+    // Complimentary access and billing off have no own keys.
+    expect(ownKeyAccess({ state: "COMPLIMENTARY", entitlements: complimentaryEntitlements({ monthlyCharLimit: DEFAULT_COMPLIMENTARY_CHARS }), subscription: null })).toBeNull();
+    expect(ownKeyAccess({ state: "ACTIVE", entitlements: UNMETERED, subscription: null })).toBeNull();
+    expect(ownKeyAccess(null)).toBeNull();
+    expect(ownKeyAccess(undefined)).toBeNull();
   });
 });

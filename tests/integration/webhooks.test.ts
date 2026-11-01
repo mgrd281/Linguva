@@ -19,6 +19,8 @@ import { FakeShopifyStore } from "../support/fake-store";
 import { signedWebhookRequest } from "../support/webhooks";
 import { resetConfigCache } from "../../app/.server/lib/config";
 import { logger } from "../../app/.server/lib/logger";
+import { ownDeepLKey } from "../support/engine-fixtures";
+import { seedOwnKey } from "../support/own-keys";
 
 const app = new PrismaClient();
 const SHOP = "webhooks.myshopify.com";
@@ -369,5 +371,40 @@ describe("staging: stores the deployment doesn't serve", () => {
     expect(response.status).toBe(200);
     expect(await app.webhookEvent.count()).toBe(1);
     expect((await ownerDb.shop.findUnique({ where: { shopDomain: SHOP } }))?.status).toBe("UNINSTALLED");
+  });
+});
+
+describe("the store's own engine keys (Own key plan) and the lifecycle webhooks", () => {
+  const keys = (shopId: string) => countAsOwner("ShopEngineCredential", shopId);
+  const uninstall = () => call(uninstalled as Action, signedWebhookRequest({ path: "/webhooks/app/uninstalled", topic: "app/uninstalled", shop: SHOP, body: { domain: SHOP } }));
+
+  it("app/uninstalled deletes the keys, also when the same delivery is replayed", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: SHOP }, app);
+    await seedOwnKey(shop.id, { engine: "deepl", apiKey: ownDeepLKey(1) }, { client: app });
+    expect((await uninstall()).status).toBe(200);
+    expect(await keys(shop.id)).toBe(0);
+    expect((await uninstall()).status).toBe(200);
+    expect(await keys(shop.id)).toBe(0);
+  });
+
+  it("shop/redact deletes a key left behind (cascade from the Shop row); a replay after a reinstall keeps the new keys", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: SHOP }, app);
+    await markShopUninstalled(SHOP, app);
+    await withTenant(
+      shop.id,
+      (tx) => tx.shopEngineCredential.create({ data: { shopId: shop.id, engine: "deepl", secret: "v1.test.aaaa.bbbb.cccc", hint: "abcd", dataLocation: "eu", deeplPlan: "free", verifiedAt: new Date() } }),
+      ownerDb,
+    );
+    const body = { shop_id: 1, shop_domain: SHOP };
+    const genuine = signedWebhookRequest({ path: "/webhooks/shop/redact", topic: "shop/redact", shop: SHOP, body, webhookId: "redact-keys-1" });
+    const capturedHmac = genuine.headers.get("X-Shopify-Hmac-Sha256")!;
+    expect((await call(shopRedact as Action, genuine)).status).toBe(200);
+    expect(await keys(shop.id)).toBe(0);
+
+    const again = (await upsertInstalledShop({ shopDomain: SHOP }, app)).shop;
+    await seedOwnKey(again.id, { engine: "deepl", apiKey: ownDeepLKey(2) }, { client: app });
+    const replay = signedWebhookRequest({ path: "/webhooks/shop/redact", topic: "shop/redact", shop: SHOP, body, webhookId: "redact-keys-2", hmac: capturedHmac });
+    expect((await call(shopRedact as Action, replay)).status).toBe(200);
+    expect(await keys(again.id)).toBe(1);
   });
 });

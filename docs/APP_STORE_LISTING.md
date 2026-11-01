@@ -85,18 +85,26 @@ Generated from the real app on the production build with a fictional demo catalo
 | 3-outdated.png | An outdated translation after the original changed | Product whose German translation is marked outdated because the English description changed |
 | 4-review.png | Review: one card per product, an imported text with a note | Review page with French translations in one card per product, each text to approve or reject; an imported text has a note because a number changed |
 | 5-glossary.png | Brand terms and rules | Glossary with brand names that are never translated and preferred terms per language |
-| 6-settings.png | Automatic translation and safe publishing | Settings for automatic translation of new content, with results waiting for review |
+| 6-settings.png | Settings at a glance: AI permission, automatic translation, publishing with review | Settings page with cards for AI permission, translating changes and publishing with review, and the options for translating new content automatically |
 | 7-overview.png | How far the store is, by country | Overview with the share of texts translated, the next step, and a card for each country the store sells to |
 | 8-mobile-editor.png | The editor on a phone | Translation editor on a phone, with the original above the translation |
 | 9-language.png | One language, area by area, with the store's pictures | German language page with the products and collections as pictures, each marked done, outdated or missing |
+| 10-content.png | Everything translatable, by language and area | Content page with a language picker and, area by area, how much of the products and collections is translated, waiting for approval or missing |
 
-Recommended order in the listing: 4, 9, 2, 1, 5, 6 (six images; 3, 7 and 8 as spares).
+Recommended order in the listing: 4, 10, 2, 9, 6, 5 (six images; 1, 3, 7 and 8 as spares). No image shows the Plan page or a price.
 
-`4-review.png` and `1-products.png` in the folder still show the pages before Redesign 2 (2026-10-30): Review's cards with the import note and the list's breadcrumb back to Content are missing. Regenerate both before submission; row 4 already describes the redesigned Review.
+All ten were regenerated on 2026-11-01 from the current pages (Redesign 2, Settings v2, the Content page), with the fictional demo catalog in the simulated admin.
 
 ## Feature media
 
-A static feature image (1600 × 900, one focal point, no Shopify logo, no pricing) is still to be designed: suggestion "Review before it goes live" with the Review queue cropped large. A 2–3 minute video can follow after launch.
+Static feature image, 1600 × 900 PNG, one per listing language (BRAND_ASSETS.md §2), generated with the screenshots:
+
+| File | Line | Alt text |
+|---|---|---|
+| [feature-image-en.png](app-store/feature-image-en.png) | Approve every translation before it goes live | Linguva's Review queue with AI translations waiting for approval; one is flagged because a number changed |
+| [feature-image-de.png](app-store/feature-image-de.png) | Jede Übersetzung freigeben, bevor sie online geht | Linguvas Prüfen-Seite mit KI-Übersetzungen, die auf Freigabe warten; eine ist markiert, weil sich eine Zahl geändert hat |
+
+A 2–3 minute video can follow after launch.
 
 ## Audit against current requirements (phase I, 2026-10-28)
 
@@ -106,7 +114,7 @@ Read again on shopify.dev ("App Store requirements" §4.5, "Pass app review", "B
 |---|---|
 | Introduction ≤ 100, details ≤ 500, features ≤ 80 characters; no statistics, superlatives or pricing outside pricing details | Met (checked by `tests/unit/app-store-listing.test.ts`) |
 | Screenshots 1600 × 900, 3–6 desktop, alt text, no browser chrome or personal data; mobile if responsive | Met with the demo catalog; regenerate inside the real admin after the dev-store check; add one of the coverage dashboard |
-| Feature media: video 2–3 min (≤ 25 % screencast) or a 1600 × 900 image, one focal point, contrast 4.5:1, no Shopify logos, not repeating the subtitle | Brief ready (BRAND_ASSETS.md §2); not designed |
+| Feature media: video 2–3 min (≤ 25 % screencast) or a 1600 × 900 image, one focal point, contrast 4.5:1, no Shopify logos, not repeating the subtitle | Done: `docs/app-store/feature-image-{en,de}.png` (BRAND_ASSETS.md §2) |
 | App icon 1200 × 1200 | Done: `docs/brand/linguva-icon-1200.png` (BRAND_ASSETS.md §1); the owner uploads it in the Partner Dashboard |
 | 4.5.3 Demo screencast of onboarding and listed features, English | Script ready (SUBMISSION_DEMO.md §1); needs the dev store |
 | 4.5.4 / 4.5.5 Testing instructions and working access | Draft ready (SUBMISSION_DEMO.md §2) |

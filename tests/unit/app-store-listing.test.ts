@@ -55,11 +55,29 @@ describe("App Store listing draft", () => {
   });
 
   it("lists screenshots that exist and are 1600 × 900", () => {
-    const files = [...section("Screenshots").matchAll(/^\| (\d-[\w-]+\.png) \|/gm)].map((m) => m[1]!);
-    expect(files.length).toBeGreaterThanOrEqual(3);
+    const files = [...section("Screenshots").matchAll(/^\| (\d+-[\w-]+\.png) \|/gm)].map((m) => m[1]!);
+    expect(files).toContain("10-content.png");
+    expect(files.length).toBeGreaterThanOrEqual(10);
     for (const file of files) {
       const png = readFileSync(join(DOCS, "app-store", "screenshots", file));
       expect([png.readUInt32BE(16), png.readUInt32BE(20)], file).toEqual([1600, 900]);
     }
+  });
+
+  it("has a 1600 × 900 PNG feature image in English and German, with alt text", () => {
+    const media = section("Feature media");
+    for (const locale of ["en", "de"]) {
+      const file = `feature-image-${locale}.png`;
+      expect(media).toMatch(new RegExp(`\\| \\[${file}\\]\\(app-store/${file}\\) \\| [^|]+ \\| [^|]{40,} \\|`));
+      const png = readFileSync(join(DOCS, "app-store", file));
+      expect(png.subarray(1, 4).toString(), file).toBe("PNG");
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)], file).toEqual([1600, 900]);
+    }
+  });
+
+  it("never photographs the Plan page (no prices in images, requirements 4.2.2 and 4.2.3)", () => {
+    const spec = readFileSync(join(__dirname, "..", "ui", "app-store-screenshots.spec.ts"), "utf8");
+    expect(spec).not.toMatch(/path: "\/app\/plan/);
+    expect(spec).not.toMatch(/openApp\([^)]*"\/app\/plan/);
   });
 });

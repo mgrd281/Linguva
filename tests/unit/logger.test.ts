@@ -8,6 +8,10 @@ import { describe, expect, it } from "vitest";
 import { JobStopError } from "../../app/.server/jobs/errors";
 import { loggerOptions, logRequestError } from "../../app/.server/lib/logger";
 import { SecretValue } from "../../app/.server/lib/secret";
+import { AZURE_EU_ENDPOINT, AzureTranslatorProvider } from "../../app/.server/providers/azure";
+import { DeepLProvider } from "../../app/.server/providers/deepl";
+import { EngineRouter } from "../../app/.server/providers/engine-router";
+import { SealedProvider } from "../../app/.server/providers/shop-translation";
 import { QuotaExceededError } from "../../app/.server/usage/usage-ledger";
 
 /** The app's logger configuration writing into memory (tests run with LOG_LEVEL=silent). */
@@ -167,5 +171,33 @@ describe("log redaction of merchant engine keys (Own key plan)", () => {
     expect(output).not.toContain(merchant.apiKey);
     expect(output).not.toContain(merchant.nested);
     expect(output).toContain("[REDACTED]");
+  });
+});
+
+describe("log lines about a shop's own provider (Own key plan)", () => {
+  // Fictional, assembled at runtime.
+  const deeplKey = `${"w".repeat(8)}-0002-${"x".repeat(12)}:fx`;
+  const azureKey = `${"y".repeat(24)}0004`;
+
+  it("never writes a key through a router, its sealed members or a credential, also five levels deep", () => {
+    const { log, lines } = capture();
+    const deepl = new SealedProvider("deepl", new SecretValue(deeplKey), (key) => new DeepLProvider({ apiKey: key }));
+    const azure = new SealedProvider("azure", new SecretValue(azureKey), (key) => new AzureTranslatorProvider({ key, endpoint: AZURE_EU_ENDPOINT }));
+    const router = new EngineRouter(
+      [
+        { id: "deepl", provider: deepl, stateKey: "own:deepl:abc" },
+        { id: "azure", provider: azure, stateKey: "own:azure:def" },
+      ],
+      { ownKeys: { consented: ["deepl", "azure"] } },
+    );
+    const credential = { id: "row-1", engine: "azure", apiKey: new SecretValue(azureKey), dataLocation: "eu", region: null, stateKey: "own:azure:def", status: "OK", keyVersion: 1 };
+    log.info({ router }, "router");
+    log.info({ members: [deepl, azure], credential }, "members");
+    log.info({ a: { b: { c: { d: { e: { router, deepl, credential } } } } } }, "deep context");
+    const output = lines.join("");
+    expect(output).not.toContain(deeplKey);
+    expect(output).not.toContain(azureKey);
+    expect(output).toContain("[own-key provider deepl]");
+    expect(output).toContain("[own-key provider azure]");
   });
 });

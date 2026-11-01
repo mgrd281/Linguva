@@ -143,6 +143,17 @@ describe("the Overview on Own key", () => {
     expect(JSON.stringify(page)).not.toContain("plan-4711");
   });
 
+  it("a key set to RECHECK after a restore isn't used: the page gets its summary (the banner) and asks for the key again", async () => {
+    const shop = await newShop();
+    await seedOwnKey(shop.id, { engine: "deepl", apiKey: DEEPL_KEY }, { client: app, mode: "mock" });
+    const row = await withTenant(shop.id, (tx) => tx.shopEngineCredential.findFirstOrThrow({ select: { id: true, keyVersion: true } }), app);
+    await markEngineKey({ id: row.id, shopId: shop.id, keyVersion: row.keyVersion }, { status: "RECHECK", lastErrorCode: "OWN_KEY_RECHECK", lastErrorAt: new Date() }, app);
+    const page = await overview(shop, billing("own-key"));
+    expect(page.ownKeys?.keys).toEqual([expect.objectContaining({ engine: "deepl", status: "RECHECK", lastErrorCode: "OWN_KEY_RECHECK" })]);
+    expect(page.aiAvailable).toBe(false);
+    expect(page.next).toEqual({ id: "own-key" });
+  });
+
   it("a pending change without a key: the date it starts, and Pro's usage as before", async () => {
     const shop = await newShop();
     const page = await overview(shop, billing("pro", "own-key"));

@@ -209,4 +209,17 @@ describe("Settings › Your translation keys", () => {
     expect(await post({ intent: "reuse-memory", enabled: "true" })).toEqual({ ok: true, saved: "memory", reuse: true });
     expect(await post({ intent: "something-else" })).toEqual({ ok: false });
   });
+
+  it("a GET of Settings writes no key: it opens the keys for the language lists, and the rows stay exactly as they were", async () => {
+    const shop = await shopOn(OWN);
+    expect(await post({ intent: "save-key", engine: "deepl", apiKey: DEEPL_KEY })).toMatchObject({ ok: true, saved: "key" });
+    expect(await post({ intent: "save-key", engine: "azure", apiKey: AZURE_KEY, location: "eu" })).toMatchObject({ ok: true, saved: "key" });
+    const full = () => withTenant(shop.id, (tx) => tx.shopEngineCredential.findMany({ orderBy: { engine: "asc" } }), app);
+    const before = await full();
+    expect(before).toHaveLength(2);
+    await load();
+    await load();
+    // The same envelopes, versions, states and times: reading never re-encrypts or marks a key.
+    expect(await full()).toEqual(before);
+  });
 });

@@ -4,3 +4,5 @@
 7bd3b1ac7f7ff1f6783921f3610514a3e72efe1d:tests/unit/engine-router.test.ts:generic-api-key:163
 7bd3b1ac7f7ff1f6783921f3610514a3e72efe1d:tests/unit/engine-router.test.ts:generic-api-key:164
 7bd3b1ac7f7ff1f6783921f3610514a3e72efe1d:tests/unit/google-auth.test.ts:private-key:106
+# Fictional test value, not a secret: a placeholder Google access token in the shared token-refresh test
+9c40943432e6ac7206dcc0e2cd33ba805e6db8fb:tests/unit/google.test.ts:generic-api-key:403

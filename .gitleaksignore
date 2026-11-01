@@ -1,2 +1,6 @@
 # A test's fixed idempotency key (a UUID), not a secret: tests/integration/language-page.test.ts
 2b1aa6e07aaaf124dfc4bf8f2c0924558affed5b:tests/integration/language-page.test.ts:generic-api-key:489
+# Fictional test values, not secrets: placeholder DeepL keys in the router test, and a deliberately broken PEM header in the Google service-account parser test (real test keys are generated at runtime)
+7bd3b1ac7f7ff1f6783921f3610514a3e72efe1d:tests/unit/engine-router.test.ts:generic-api-key:163
+7bd3b1ac7f7ff1f6783921f3610514a3e72efe1d:tests/unit/engine-router.test.ts:generic-api-key:164
+7bd3b1ac7f7ff1f6783921f3610514a3e72efe1d:tests/unit/google-auth.test.ts:private-key:106

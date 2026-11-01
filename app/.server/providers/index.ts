@@ -3,6 +3,7 @@ import { EngineRouter, isEngineRouter } from "./engine-router";
 import { routedEngines } from "./engines";
 import { MockTranslationProvider } from "./mock";
 import type { TranslationProvider } from "./types";
+import type { EngineId } from "../../lib/engines";
 
 /**
  * The configured machine translation provider, or null if none is set up.
@@ -34,6 +35,22 @@ export async function plannedEngine(provider: TranslationProvider, targetLocale:
   if (allowed.length === 1) return allowed[0]!;
   const plan = (await provider.plan([targetLocale], allowed, sourceLocale)).get(targetLocale);
   return plan?.next ?? allowed[0]!;
+}
+
+/**
+ * The engine a shop would have to allow for this language, when no engine its consent covers
+ * serves it but another configured one does (the Languages page's "once you allow it"): the
+ * caller refuses before any text is sent, naming that engine. Null otherwise, without I/O for a
+ * single engine (DeepL alone is unchanged) or a consent that covers every configured engine. A
+ * list that can't be read counts as serving the language (the request goes ahead as before).
+ */
+export async function consentGap(provider: TranslationProvider | null, targetLocale: string, engines: readonly string[]): Promise<EngineId | null> {
+  if (!isEngineRouter(provider)) return null;
+  const allowed = provider.engines.filter((id) => engines.includes(id));
+  if (allowed.length === 0 || allowed.length === provider.engines.length) return null;
+  const plan = (await provider.plan([targetLocale], allowed)).get(targetLocale);
+  if (!plan || plan.servedBy !== null) return null;
+  return plan.blocked.find((id) => !plan.unknown.includes(id)) ?? null;
 }
 
 /**

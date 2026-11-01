@@ -110,9 +110,11 @@ const engineFields = {
 } as const;
 
 /**
- * What a region or endpoint that doesn't validate becomes: never a real
- * value, so the helpers below see the variable was set and keep Azure off
- * (a missing region would otherwise send requests that Azure refuses).
+ * What a region, endpoint or Google key file that doesn't validate becomes:
+ * never a real value, so the helpers below see the variable was set and keep
+ * the engine off (a missing region would otherwise send requests that Azure
+ * refuses, and a broken key file would switch Google to the API key's global
+ * processing).
  */
 const INVALID = "(invalid)";
 
@@ -124,6 +126,19 @@ export function deeplApiKeys(env: { DEEPL_API_KEY?: string | undefined; DEEPL_AP
   const listed = (env.DEEPL_API_KEYS ?? "").split(/[\s,;]+/).map((k) => k.replace(/^["']|["']$/g, "").trim());
   return [...new Set([env.DEEPL_API_KEY ?? "", ...listed].filter(Boolean))];
 }
+
+/**
+ * Internal cost estimate for AI usage reports (USD per million characters
+ * sent to the provider). Set it to the provider contract's price. Also read
+ * on their own (costRatesFromEnv) by the operator's report.
+ */
+const costRateFields = {
+  // DeepL's rate; also the rate of ledger rows without an engine.
+  AI_COST_USD_PER_MILLION_CHARS: z.coerce.number().nonnegative().default(25),
+  // Microsoft Azure Translator S1 and Google Cloud Translation NMT list prices.
+  AI_COST_USD_PER_MILLION_CHARS_AZURE: z.preprocess(pasted, z.coerce.number().nonnegative().default(10)),
+  AI_COST_USD_PER_MILLION_CHARS_GOOGLE: z.preprocess(pasted, z.coerce.number().nonnegative().default(20)),
+} as const;
 
 const schema = z.object({
   NODE_ENV: z
@@ -154,7 +169,14 @@ const schema = z.object({
   AZURE_TRANSLATOR_ENDPOINT: engineFields.AZURE_TRANSLATOR_ENDPOINT.catch(INVALID),
   // Google Cloud Translation: an API key (v2, global) or a service account's JSON key file (v3, EU), which wins.
   GOOGLE_TRANSLATE_API_KEY: engineFields.GOOGLE_TRANSLATE_API_KEY.catch(undefined),
-  GOOGLE_TRANSLATE_CREDENTIALS: engineFields.GOOGLE_TRANSLATE_CREDENTIALS.catch(undefined),
+  // A key file that doesn't validate keeps Google off: never a silent fall back to the API key (global processing).
+  GOOGLE_TRANSLATE_CREDENTIALS: z
+    .unknown()
+    .transform((value): ServiceAccountCredentials | typeof INVALID | undefined => {
+      const result = engineFields.GOOGLE_TRANSLATE_CREDENTIALS.safeParse(value);
+      return result.success ? result.data : INVALID;
+    })
+    .optional(),
   // Which engines and in which order (commas or spaces; default deepl,azure,google). DeepL, when used, is always first.
   TRANSLATION_ENGINES: z.preprocess(pasted, z.string().optional()),
   // Monthly AI character allowance per shop until plans are wired to billing.
@@ -191,13 +213,7 @@ const schema = z.object({
       (v) => !v || v.split(",").every((gid) => /^gid:\/\/shopify\/Shop\/\d+$/.test(gid.trim())),
       "must be comma-separated gid://shopify/Shop/<id> values",
     ),
-  // Internal cost estimate for AI usage reports (USD per million characters
-  // sent to the provider). Set it to the provider contract's price.
-  // DeepL's rate; also the rate of ledger rows without an engine.
-  AI_COST_USD_PER_MILLION_CHARS: z.coerce.number().nonnegative().default(25),
-  // Microsoft Azure Translator S1 and Google Cloud Translation NMT list prices.
-  AI_COST_USD_PER_MILLION_CHARS_AZURE: z.preprocess(pasted, z.coerce.number().nonnegative().default(10)),
-  AI_COST_USD_PER_MILLION_CHARS_GOOGLE: z.preprocess(pasted, z.coerce.number().nonnegative().default(20)),
+  ...costRateFields,
   // "engines" (default): the engines configured above; "deepl" is the older
   // spelling of the same and is what it is stored as, so every comparison
   // with "deepl" stays as it was. "mock" returns marked pseudo-translations
@@ -409,8 +425,12 @@ export type GoogleTranslateSettings =
   | { kind: "apiKey"; apiKey: string; dataLocation: "global" }
   | { kind: "serviceAccount"; credentials: ServiceAccountCredentials; dataLocation: "eu" };
 
-/** Google Cloud Translation: the service account (v3, EU endpoint) wins over an API key (v2, global). */
+/**
+ * Google Cloud Translation: the service account (v3, EU endpoint) wins over an API key (v2, global).
+ * A key file that is set but doesn't validate turns Google off: the operator chose EU processing.
+ */
 export function googleTranslateSettings(config: AppConfig): GoogleTranslateSettings | null {
+  if (config.GOOGLE_TRANSLATE_CREDENTIALS === INVALID) return null;
   if (config.GOOGLE_TRANSLATE_CREDENTIALS) return { kind: "serviceAccount", credentials: config.GOOGLE_TRANSLATE_CREDENTIALS, dataLocation: "eu" };
   if (config.GOOGLE_TRANSLATE_API_KEY) return { kind: "apiKey", apiKey: config.GOOGLE_TRANSLATE_API_KEY, dataLocation: "global" };
   return null;
@@ -487,6 +507,16 @@ export function costRates(config: AppConfig): Record<EngineId, number> {
   return { deepl: costRatePerMillion(config, "deepl"), azure: costRatePerMillion(config, "azure"), google: costRatePerMillion(config, "google") };
 }
 
+/**
+ * The same rates read from the three rate variables alone, validated as the
+ * app reads them: for the operator's report (scripts/ops/complimentary.ts),
+ * which runs with its own database URL and none of the app's other variables.
+ */
+export function costRatesFromEnv(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): Record<EngineId, number> {
+  const rates = z.object(costRateFields).parse(env);
+  return { deepl: rates.AI_COST_USD_PER_MILLION_CHARS, azure: rates.AI_COST_USD_PER_MILLION_CHARS_AZURE, google: rates.AI_COST_USD_PER_MILLION_CHARS_GOOGLE };
+}
+
 /** Advice about the engine variables (never fatal; names, never values). */
 function engineWarnings(config: AppConfig, env?: NodeJS.ProcessEnv | Record<string, string | undefined>): string[] {
   const warnings: string[] = [];
@@ -513,7 +543,7 @@ function engineWarnings(config: AppConfig, env?: NodeJS.ProcessEnv | Record<stri
     for (const id of list.repeated) warnings.push(`TRANSLATION_ENGINES lists ${id} twice: once is enough`);
     if (list.deeplMoved) warnings.push("TRANSLATION_ENGINES: DeepL always comes first (it is moved to the front)");
   }
-  if (config.GOOGLE_TRANSLATE_CREDENTIALS && config.GOOGLE_TRANSLATE_API_KEY) {
+  if (config.GOOGLE_TRANSLATE_CREDENTIALS && config.GOOGLE_TRANSLATE_CREDENTIALS !== INVALID && config.GOOGLE_TRANSLATE_API_KEY) {
     warnings.push("GOOGLE_TRANSLATE_API_KEY and GOOGLE_TRANSLATE_CREDENTIALS are both set: the service account is used");
   }
   const order = translationEngineOrder(config);

@@ -66,8 +66,24 @@ describe("encodeSegment", () => {
 
   it("records each code's shape", () => {
     const segment = encodeSegment('Buy <g id="1"> two</g>now <x id="2"/> and <g id="3">!</g>');
-    expect(segment.codes.get(1)).toEqual({ kind: "g", innerLead: true, innerTrail: false, outerLead: true, outerTrail: false, hasWords: true, hasCodes: false, empty: false });
-    expect(segment.codes.get(2)).toEqual({ kind: "x", outerLead: true, outerTrail: true });
+    expect(segment.codes.get(1)).toEqual({
+      kind: "g",
+      innerLead: true,
+      innerTrail: false,
+      outerLead: true,
+      outerTrail: false,
+      sepLead: true,
+      sepTrail: false,
+      hasWords: true,
+      hasCodes: false,
+      empty: false,
+    });
+    expect(segment.codes.get(2)).toEqual({ kind: "x", outerLead: true, outerTrail: true, sepLead: true, sepTrail: true });
+    // The glue check also counts a separator inside a group's tag, and line breaks.
+    expect(encodeSegment('Buy<g id="1"> two</g>').codes.get(1)).toMatchObject({ outerLead: false, innerLead: true, sepLead: true });
+    expect(encodeSegment('<g id="1">Buy </g>now').codes.get(1)).toMatchObject({ outerTrail: false, innerTrail: true, sepTrail: true });
+    expect(encodeSegment('Text\n<g id="1">link</g>\n<x id="2"/>').codes.get(1)).toMatchObject({ outerLead: false, sepLead: true, outerTrail: false, sepTrail: true });
+    expect(encodeSegment('Text\n<g id="1">link</g>\n<x id="2"/>').codes.get(2)).toMatchObject({ outerLead: false, sepLead: true, sepTrail: false });
     expect(segment.codes.get(3)).toMatchObject({ kind: "g", outerLead: true, outerTrail: false, hasWords: false, hasCodes: false, empty: false });
     expect(encodeSegment('<g id="1"></g> Free <g id="2"><x id="3"/></g>').codes.get(1)).toMatchObject({ empty: true, hasCodes: false });
     expect(encodeSegment('<g id="1"></g> Free <g id="2"><x id="3"/></g>').codes.get(2)).toMatchObject({ empty: false, hasCodes: true, hasWords: false });
@@ -143,6 +159,22 @@ describe("decodeSegment pre-tokeniser", () => {
     expect(decode('a &lt; b <x id="2"/>', 'a &lt; b <img id="lx2"></img>')).toEqual({ text: 'a &lt; b <x id="2"/>' });
     // Correctly closed groups are counted as closed.
     expect(decode('a &lt; b <g id="1"><g id="2">c</g> d</g>', 'a &lt; b <span id="lg1"><span id="lg2">c</span> d</SPAN >')).toEqual({ text: 'a &lt; b <g id="1"><g id="2">c</g> d</g>' });
+  });
+
+  it("accepts a multi-line source with literal '<br>' text when the engine keeps both as they were sent", () => {
+    const source = 'Line 1\nsee &lt;br&gt; <x id="1"/>';
+    const segment = encodeSegment(source);
+    expect(segment.wire).toBe('Line 1<br/>see &lt;br&gt; <img id="lx1"/>');
+    // The wire echoed back unchanged decodes to the source.
+    expect(decodeSegment(segment.wire, segment, "de")).toEqual({ text: source });
+    expect(decodeSegment('Zeile 1<br/>siehe &lt;br&gt; <img id="lx1"/>', segment, "de")).toEqual({ text: 'Zeile 1\nsiehe &lt;br&gt; <x id="1"/>' });
+    // A real break dropped is still fine (fewer breaks than the source's are kept).
+    expect(decodeSegment('Zeile 1 siehe &lt;br&gt; <img id="lx1"/>', segment, "de")).toEqual({ text: 'Zeile 1 siehe &lt;br&gt; <x id="1"/>' });
+    // The literal un-escaped: one break tag more than the source's breaks.
+    expect(decodeSegment('Zeile 1<br/>siehe <br> <img id="lx1"/>', segment, "de")).toEqual(refused);
+    // The literal un-escaped while a real break was dropped: as many tags, but the escaped text is gone.
+    expect(decodeSegment('Zeile 1 siehe <br> <img id="lx1"/>', segment, "de")).toEqual(refused);
+    expect(decodeSegment('Zeile 1<br/>siehe </br> <img id="lx1"/>', segment, "de")).toEqual(refused);
   });
 
   it("drops a stray end tag as today when the source has no '<' (no text is lost)", () => {
@@ -223,6 +255,26 @@ describe("decodeSegment whitespace next to codes", () => {
   });
 
   it.each([
+    // The separator was inside the group's tag in the source.
+    ['Buy<g id="1"> two</g> now', 'Kaufe<span id="lg1">zwei</span> jetzt', 'Kaufe<g id="1">zwei</g> jetzt', {}],
+    ['<g id="1">Buy </g>now', '<span id="lg1">Kaufe</span>jetzt', '<g id="1">Kaufe</g>jetzt', {}],
+    // A line break of an HTML field is a word separator too.
+    ['Text\n<g id="1">link</g> here', 'Text<span id="lg1">Link</span> hier', 'Text<g id="1">Link</g> hier', { softBreaks: true }],
+    // A real line break the engine dropped (sent as <br/>).
+    ['Text\n<g id="1">link</g> here', 'Text<span id="lg1">Link</span> hier', 'Text<g id="1">Link</g> hier', {}],
+    ['See\n<x id="1"/> today', 'Siehe<img id="lx1"/> heute', 'Siehe<x id="1"/> heute', {}],
+  ])("flags glued words where the source's separator was inside the tag or a line break: %j → %j", (source, output, text, options) => {
+    expect(decode(source, output, "de", options)).toEqual({ text, note: "SPACING_CHANGED" });
+  });
+
+  it("doesn't flag a line break or an inner space the output kept", () => {
+    expect(decode('Text\n<g id="1">link</g> here', 'Text<br/><span id="lg1">Link</span> hier')).toEqual({ text: 'Text\n<g id="1">Link</g> hier' });
+    expect(decode('Text\n<g id="1">link</g> here', 'Text\n<span id="lg1">Link</span> hier', "de", { softBreaks: true }).note).toBeUndefined();
+    expect(decode('Buy<g id="1"> two</g> now', 'Kaufe<span id="lg1"> zwei</span> jetzt')).toEqual({ text: 'Kaufe<g id="1"> zwei</g> jetzt' });
+    expect(decode('<g id="1">Buy </g>now', '<span id="lg1">Kaufe </span>jetzt')).toEqual({ text: '<g id="1">Kaufe </g>jetzt' });
+  });
+
+  it.each([
     // A protected term, URL or e-mail renders as a word: one lost side is enough to glue it.
     ['Buy <x id="1"/> today', 'Kaufen Sie <img id="lx1"/>heute', 'Kaufen Sie <x id="1"/>heute'],
     ['Buy <x id="1"/> today', 'Kaufen Sie<img id="lx1"/> heute', 'Kaufen Sie<x id="1"/> heute'],
@@ -264,6 +316,29 @@ describe("decodeSegment groups that would swallow the sentence", () => {
   it("accepts an empty source group (an icon) that comes back self-closed, with the text after it", () => {
     expect(decode('<g id="1"></g> Free shipping', '<span id="lg1"/> Kostenloser Versand')).toEqual({ text: '<g id="1"></g> Kostenloser Versand' });
     expect(accepted('<g id="1"></g> Free shipping', '<span id="lg1"></span> Kostenloser Versand')).toBe('<g id="1"></g> Kostenloser Versand');
+  });
+
+  it("accepts a self-closed icon or placeholder inside another group (an icon in a link or button)", () => {
+    const icon = '<g id="2"><g id="1"></g> Contact us</g> today';
+    expect(accepted(icon, '<span id="lg2"><span id="lg1"/> Kontakt</span> heute')).toBe('<g id="2"><g id="1"></g> Kontakt</g> heute');
+    expect(accepted(icon, '<g id="2"><g id="1"/> Kontakt</g> heute')).toBe('<g id="2"><g id="1"></g> Kontakt</g> heute');
+    expect(accepted(icon, "<SPAN ID='LG2'><span class=\"x\" id='lg1' /> Kontakt</SPAN> heute")).toBe('<g id="2"><g id="1"></g> Kontakt</g> heute');
+    const code = '<g id="2">Use <x id="1"/> now</g> today';
+    expect(accepted(code, '<span id="lg2">Nutze <span id="lx1"/> jetzt</span> heute')).toBe('<g id="2">Nutze <x id="1"/> jetzt</g> heute');
+    expect(accepted(code, '<span id="lg2">Nutze <x id="1"/> jetzt</span> heute')).toBe('<g id="2">Nutze <x id="1"/> jetzt</g> heute');
+    // The end tags added for them still count: the source's own "</span>" text, un-escaped, is refused.
+    expect(decode('a &lt;/span&gt; b <g id="1"></g>', 'a </span> b <span id="lg1"/>')).toEqual(refused);
+    // As HTML reads it: a "/" right after an unquoted value is part of the id, not a self-close.
+    expect(decode(icon, '<span id="lg2"><span id=lg1/> Kontakt</span> heute')).toEqual(refused);
+    expect(accepted(icon, '<span id="lg2"><span id=lg1 /> Kontakt</span> heute')).toBe('<g id="2"><g id="1"></g> Kontakt</g> heute');
+    // Only the empty group: one that had words, self-closed, still swallows what follows.
+    expect(decode('<g id="2"><g id="1">Hi</g> Contact us</g> today', '<span id="lg2"><span id="lg1"/> Kontakt</span> heute')).toEqual(refused);
+  });
+
+  it("refuses words or codes the engine moved into an empty source group (an icon)", () => {
+    expect(decode('<g id="1"></g> Free shipping', '<span id="lg1">Kostenloser</span> Versand')).toEqual(refused);
+    expect(decode('<g id="1"></g> Free <x id="2"/>', '<span id="lg1">Gratis <img id="lx2"/></span>')).toEqual(refused);
+    expect(decode('<g id="1"></g> Free <x id="2"/>', '<span id="lg1"><img id="lx2"/></span> Gratis')).toEqual(refused);
   });
 
   it("still accepts end tags in other spellings and closed nested groups", () => {

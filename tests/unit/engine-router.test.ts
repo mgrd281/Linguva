@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { classifyError } from "../../app/.server/jobs/errors";
+import { DeepLProvider } from "../../app/.server/providers/deepl";
 import { clearDeepLKeyPauses, DeepLKeyPool } from "../../app/.server/providers/deepl-pool";
 import { plannedEngine } from "../../app/.server/providers/index";
 import {
@@ -395,6 +396,27 @@ describe("invalid requests and languages", () => {
     expect(azure.calls).toHaveLength(3);
   });
 
+  it("fails over when DeepL refuses the shop's source language (its source list is shorter), and refuses that pair on DeepL", async () => {
+    // The real adapter: DeepL lists German as a target, then answers 400 for source_lang "HR".
+    const translateCalls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      if (url.endsWith("/v2/languages?type=target")) return Response.json([{ language: "DE" }, { language: "FR" }]);
+      translateCalls.push(url);
+      return Response.json({ message: "Value for 'source_lang' not supported." }, { status: 400 });
+    }) as unknown as typeof fetch;
+    const deepl = new DeepLProvider({ apiKey: "fictional:fx", baseUrl: "https://deepl-source.example", fetch: fetchImpl, retry: { sleep: async () => undefined } });
+    const azure = new FakeEngine("azure");
+    const r = new EngineRouter([{ id: "deepl", provider: deepl }, { id: "azure", provider: azure }], { now: () => 1_000_000 });
+    const result = await r.translate(request({ sourceLocale: "hr" }));
+    expect(result.provider).toBe("azure");
+    expect(translateCalls).toHaveLength(1);
+    // Not asked again for that pair; from English, DeepL is still first.
+    expect((await r.translate(request({ sourceLocale: "hr" }))).provider).toBe("azure");
+    expect(translateCalls).toHaveLength(1);
+    expect((await r.plan(["de"], ["deepl", "azure"], "hr")).get("de")?.next).toBe("azure");
+    expect((await r.plan(["de"], ["deepl", "azure"], "en")).get("de")?.next).toBe("deepl");
+  });
+
   it("switches without a refusal when the list couldn't be read (the adapter guessed the code)", async () => {
     const azure = new FakeEngine("azure", [{ kind: "invalid", reason: "UNSUPPORTED_LANGUAGE" }], "fail");
     const google = new FakeEngine("google");
@@ -461,6 +483,35 @@ describe("total failure", () => {
     expect(error.kind).toBe("retryable");
     expect(error.retryAfterMs).toBe(OUTAGE_REST_MS - 30_000);
     expect(classifyError(error)).toMatchObject({ kind: "rate-limited" });
+  });
+
+  it("spends an attempt when the engine it tried is down too, even while another one rests for an outage", async () => {
+    let now = 1_000_000;
+    const t0 = now;
+    // DeepL down first (rests until t0 + 2 min), then Azure a minute later (rests until t0 + 3 min).
+    await router([new FakeEngine("deepl", [{ kind: "retryable", status: 503 }]), new FakeEngine("azure")], () => now).translate(request());
+    now = t0 + 60_000;
+    await caught(router([new FakeEngine("deepl"), new FakeEngine("azure", [{ kind: "retryable", status: 503 }])], () => now).translate(request()));
+    expect(engineRest("deepl", now)?.until).toBe(t0 + OUTAGE_REST_MS);
+    expect(engineRest("azure", now)?.until).toBe(t0 + 60_000 + OUTAGE_REST_MS);
+
+    // DeepL's rest is over, Azure's isn't: DeepL is tried and is still down.
+    now = t0 + OUTAGE_REST_MS + 1_000;
+    const azure = new FakeEngine("azure");
+    const error = await caught(router([new FakeEngine("deepl", [{ kind: "retryable", status: 503 }]), azure], () => now).translate(request()));
+    expect(azure.calls).toHaveLength(0);
+    expect(error.provider).toBe("deepl");
+    expect(error.retryAfterMs).toBeUndefined();
+    // Not a wait without an attempt (rate-limited): the item runs out of attempts like with DeepL alone.
+    expect(classifyError(error)).toEqual({ kind: "retryable", code: "PROVIDER_UNAVAILABLE" });
+
+    // And the other way round: Azure's rest is over, DeepL rests again.
+    now = t0 + 60_000 + OUTAGE_REST_MS + 1_000;
+    const deepl = new FakeEngine("deepl");
+    const next = await caught(router([deepl, new FakeEngine("azure", [{ kind: "retryable", status: 503 }])], () => now).translate(request()));
+    expect(deepl.calls).toHaveLength(0);
+    expect(next.provider).toBe("azure");
+    expect(classifyError(next).kind).toBe("retryable");
   });
 
   it("tries engines resting for quota or auth once the others failed (a limit may have been lifted)", async () => {
@@ -535,6 +586,25 @@ describe("total failure", () => {
     // A DeepL-only consent (one allowed engine) never marks it.
     const single = await caught(router([new FakeEngine("deepl", [{ kind: "quota", status: 456 }]), new FakeEngine("azure")]).translate(request({ engines: ["deepl"] })));
     expect(single.scope).toBeUndefined();
+  });
+
+  it("attaches the bill and the scope to a copy, never to the engine's own error (it may be shared by other requests)", async () => {
+    const shared = new TranslationProviderError("azure", "quota", "fake", 403);
+    const azure: TranslationProvider = { id: "azure", translate: async () => Promise.reject(shared), targetSupport: async (l) => new Map(l.map((x) => [x, true])) };
+    const deepl = new FakeEngine("deepl", [{ kind: "auth", status: 403, billed: 4 }], ["de"]);
+    const r = new EngineRouter([{ id: "deepl", provider: deepl }, { id: "azure", provider: azure }], { now: () => 1_000_000 });
+    const error = await caught(r.translate(request()));
+    expect(error).not.toBe(shared);
+    expect(error).toMatchObject({ provider: "azure", kind: "quota", status: 403, billedCharacters: 4, billedByEngine: { deepl: 4 } });
+    expect(error.message).toBe(shared.message);
+    expect(shared.billedCharacters).toBeUndefined();
+    expect(shared.billedByEngine).toBeUndefined();
+    expect(shared.scope).toBeUndefined();
+    // A language-only stop, too, is marked on the copy.
+    clearEngineRests();
+    const sw = await caught(new EngineRouter([{ id: "deepl", provider: new FakeEngine("deepl", ["ok"], ["de"]) }, { id: "azure", provider: azure }], { now: () => 1_000_000 }).translate(request({ targetLocale: "sw" })));
+    expect(sw.scope).toBe("language");
+    expect(shared.scope).toBeUndefined();
   });
 
   it("never fails over on an error that isn't a provider error", async () => {

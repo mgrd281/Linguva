@@ -8,7 +8,8 @@ import { alignDocuments, type SegmentPair } from "../memory/alignment";
 import { recordMemoryUse, storeMemory } from "../memory/translation-memory";
 import type { TranslationProvider } from "../providers/types";
 import { INTERACTIVE_DEADLINE_MS } from "../providers/engine-router";
-import { plannedEngine, routerSignal } from "../providers/index";
+import { consentGap, plannedEngine, routerSignal } from "../providers/index";
+import type { EngineId } from "../../lib/engines";
 import { consentedEngines, formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { chargedChars, chargeForFailure, chargeForResult } from "../usage/engine-charge";
 import {
@@ -35,6 +36,17 @@ export class AiConsentRequiredError extends Error {
   constructor() {
     super("AI data processing consent is required");
     this.name = "AiConsentRequiredError";
+  }
+}
+
+/**
+ * Only an engine the shop's consent doesn't cover serves the language (several engines
+ * configured): nothing is sent; the merchant allows `engine` in Settings first.
+ */
+export class EngineConsentRequiredError extends Error {
+  constructor(readonly engine: EngineId) {
+    super(`Consent for ${engine} is required for this language`);
+    this.name = "EngineConsentRequiredError";
   }
 }
 
@@ -113,6 +125,11 @@ export async function aiTranslateResource(
   const prepared = await prepareTranslation({ fields, protect: context.glossary.protect, memory: context.memory });
   if (input.maxRequestChars !== undefined && prepared.providerChars > input.maxRequestChars) {
     throw new AiRequestTooLargeError(prepared.providerChars, input.maxRequestChars);
+  }
+  // A language only an engine the shop hasn't allowed serves: nothing is sent to the others.
+  if (prepared.providerChars) {
+    const gap = await consentGap(input.provider, input.targetLocale, engines);
+    if (gap) throw new EngineConsentRequiredError(gap);
   }
   const reservation = prepared.providerChars
     ? await reserveUsage(

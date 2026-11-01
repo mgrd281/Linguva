@@ -18,6 +18,10 @@ test("the operator's store sees the translation services: order, DeepL keys, an 
   await expect(card.getByText("Region westeurope · …0000")).toBeVisible();
   await expect(card.getByText("EU data centres")).toBeVisible();
   await expect(card.getByText("Refused by Google Cloud")).toBeVisible();
+  // This store's consent covers DeepL only: Azure and Google translate nothing for it yet.
+  await expect(card.getByText("Not allowed in this store yet:")).toHaveCount(2);
+  await expect(card.getByRole("link", { name: "Settings" })).toHaveCount(2);
+  await expect(card.getByText("First choice for 1 of 1 languages")).toHaveCount(1);
   // DeepL alone's card is replaced, never shown next to it.
   await expect(page.getByRole("heading", { name: "DeepL quota" })).toHaveCount(0);
   // Never a key beyond its last four characters.
@@ -59,6 +63,9 @@ test("a DeepL-only consent: the language only Azure serves waits for consent, Se
   await expect(page.getByText("Linguva sends only your store's texts (such as products, pages and menus) to DeepL SE in Germany, no customer or order data.")).toBeVisible();
   const extra = page.locator("s-box").filter({ has: page.getByRole("heading", { name: "More translation services" }) });
   await expect(extra.getByText(/Linguva is also set up to use Microsoft Ireland Operations Ltd\. .* and Google Cloud EMEA Ltd\. .*Until you allow it, Linguva uses only DeepL\./)).toBeVisible();
+  // Before the click: every service, their order and the failover (the notice the stored version stands for).
+  await expect(extra.getByText(/Texts go to DeepL first; only if it can't translate them are they sent to Microsoft Azure, then Google Cloud\./)).toBeVisible();
+  await expect(extra.getByText(/may contain personal data; they only go to these services/)).toBeVisible();
   await expect(extra.getByRole("button", { name: "Allow these too" })).toBeVisible();
   await expectAccessible(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -88,4 +95,11 @@ test("allowing the other services too keeps focus on the permission card", async
   await expectToast(page, "AI translation is allowed.");
   await expect(page.getByRole("heading", { name: "More translation services" })).toHaveCount(0);
   await expect(page.locator("#settings-ai-heading")).toBeFocused();
+});
+
+test("the editor's permission names the services and their order", async ({ page }) => {
+  await openApp(page, "enginesNoConsent", "/app/products/1?lang=de");
+  const banner = page.locator("s-banner").filter({ has: page.getByRole("button", { name: "Allow AI processing" }) });
+  await expect(banner.getByText(/our translation providers \(DeepL SE .*Google Cloud EMEA Ltd\. .*\)/)).toBeVisible();
+  await expect(banner.getByText(/Texts go to DeepL first; only if it can't translate them are they sent to Microsoft Azure, then Google Cloud\./)).toBeVisible();
 });

@@ -112,6 +112,36 @@ export class TranslationProviderError extends Error {
   }
 }
 
+/** A new error with the same provider, kind, message, status, retry delay and reason: no billing, no scope. */
+export function copyProviderError(error: TranslationProviderError): TranslationProviderError {
+  const copy = new TranslationProviderError(error.provider, error.kind, "", error.status, error.retryAfterMs);
+  copy.message = error.message;
+  if (error.stack) copy.stack = error.stack;
+  if (error.reason) copy.reason = error.reason;
+  return copy;
+}
+
+/**
+ * A copy of a provider error (its billing and scope too) with `fields` set on
+ * the copy. Callers attach their request's billing or scope to a copy, never
+ * to an error they didn't create: one error object can reach several requests
+ * at once (a shared token refresh), and one request's bill would otherwise be
+ * charged to another shop.
+ */
+export function withProviderFields(
+  error: TranslationProviderError,
+  fields: Partial<Pick<TranslationProviderError, "billedCharacters" | "billedByEngine" | "scope">>,
+): TranslationProviderError {
+  const copy = copyProviderError(error);
+  const billedCharacters = fields.billedCharacters ?? error.billedCharacters;
+  const billedByEngine = fields.billedByEngine ?? error.billedByEngine;
+  const scope = fields.scope ?? error.scope;
+  if (billedCharacters !== undefined) copy.billedCharacters = billedCharacters;
+  if (billedByEngine) copy.billedByEngine = { ...billedByEngine };
+  if (scope) copy.scope = scope;
+  return copy;
+}
+
 /** What a failed provider call still billed (earlier batches), or 0. */
 export function billedBeforeFailure(error: unknown): number {
   return error instanceof TranslationProviderError ? (error.billedCharacters ?? 0) : 0;

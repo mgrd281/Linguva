@@ -1,7 +1,8 @@
 /**
  * The translation services card for the operator's own stores (OPERATOR_SHOPS
  * only, with an engine beside DeepL): order, state, data location and how
- * many of the store's languages each engine serves. Free checks only: the
+ * many of the store's languages each engine serves for this store (only the
+ * engines its consent covers translate for it). Free checks only: the
  * DeepL keys' usage, Azure's key check (an empty translate call, 0
  * characters), Google's language list (and token): never a billed
  * translation, so the card costs nothing. Rests are this
@@ -30,16 +31,18 @@ export interface EngineTile {
   hint: string;
   access: { kind: "region"; region: string } | { kind: "globalResource" } | { kind: "apiKey" } | { kind: "serviceAccount" };
   dataLocation: "eu" | "global";
-  /** Shop target languages this engine serves first. */
+  /** Shop target languages this engine serves first (among the engines the store allowed). */
   firstChoice: number;
   /** Languages where it is a later candidate. */
   canStepIn: number;
+  /** The store's AI consent covers it: until then it translates nothing for this store. */
+  allowed: boolean;
 }
 
 export interface EnginesCard {
   order: EngineId[];
   totalLanguages: number;
-  deepl: { position: number; keys: DeepLKeyUsage[]; firstChoice: number; canStepIn: number } | null;
+  deepl: { position: number; keys: DeepLKeyUsage[]; firstChoice: number; canStepIn: number; allowed: boolean } | null;
   tiles: EngineTile[];
 }
 
@@ -64,15 +67,21 @@ async function checked(key: string, now: number, check: () => Promise<"ok" | "re
   return state;
 }
 
-/** For the operator's own stores. Plans use every configured engine as allowed. */
+/**
+ * For the operator's own stores. `allowed`: the engines the store's AI consent covers
+ * (consentedEngines); the counts are among those only, as the store's requests are. None (no
+ * consent yet): every configured engine, as the texts before a consent describe all of them.
+ */
 export async function operatorEngines(
   config: AppConfig,
   targetLocales: readonly string[],
-  options: { fetch?: typeof fetch; now?: () => number } = {},
+  options: { fetch?: typeof fetch; now?: () => number; allowed?: readonly EngineId[] } = {},
 ): Promise<EnginesCard> {
   const now = (options.now ?? Date.now)();
   const engines = routedEngines(config, options.fetch ? { fetch: options.fetch } : {});
   const order = engines.map((e) => e.id);
+  const consented = order.filter((id) => options.allowed?.includes(id));
+  const allowed = new Set(consented.length ? consented : order);
 
   // Which engines would translate each language, in order (an unreadable list: still a candidate).
   const supports = await Promise.all(
@@ -88,7 +97,7 @@ export async function operatorEngines(
   const firstChoice = new Map<EngineId, number>(order.map((id) => [id, 0]));
   const canStepIn = new Map<EngineId, number>(order.map((id) => [id, 0]));
   for (const locale of targetLocales) {
-    const candidates = order.filter((_, i) => supports[i]?.get(locale) !== false);
+    const candidates = order.filter((id, i) => allowed.has(id) && supports[i]?.get(locale) !== false);
     candidates.forEach((id, i) => (i === 0 ? firstChoice : canStepIn).set(id, (i === 0 ? firstChoice : canStepIn).get(id)! + 1));
   }
 
@@ -115,6 +124,7 @@ export async function operatorEngines(
           dataLocation: azure.dataLocation,
           firstChoice: firstChoice.get("azure") ?? 0,
           canStepIn: canStepIn.get("azure") ?? 0,
+          allowed: allowed.has("azure"),
         };
       })(),
     );
@@ -136,6 +146,7 @@ export async function operatorEngines(
           dataLocation: google.dataLocation,
           firstChoice: firstChoice.get("google") ?? 0,
           canStepIn: canStepIn.get("google") ?? 0,
+          allowed: allowed.has("google"),
         };
       })(),
     );
@@ -148,7 +159,9 @@ export async function operatorEngines(
   return {
     order,
     totalLanguages: targetLocales.length,
-    deepl: deepl ? { position: position("deepl"), keys: deepl, firstChoice: firstChoice.get("deepl") ?? 0, canStepIn: canStepIn.get("deepl") ?? 0 } : null,
+    deepl: deepl
+      ? { position: position("deepl"), keys: deepl, firstChoice: firstChoice.get("deepl") ?? 0, canStepIn: canStepIn.get("deepl") ?? 0, allowed: allowed.has("deepl") }
+      : null,
     tiles: resolved.sort((a, b) => a.position - b.position),
   };
 }

@@ -39,6 +39,13 @@ export interface CodeShape {
   /** The source has a space or tab directly before / after the code. */
   outerLead?: boolean;
   outerTrail?: boolean;
+  /**
+   * The glue check: the source separates words at the code's leading / trailing boundary, with
+   * any whitespace (line breaks too) outside the code or, for a group, just inside it
+   * ("Buy<g> two</g>", "<g>Free </g>shipping", "Text\n<g>link</g>").
+   */
+  sepLead?: boolean;
+  sepTrail?: boolean;
   /** g only: the source group holds letters or digits (an emptied link or bold is a broken result). */
   hasWords?: boolean;
   /** g only: the source group holds an inline code (a placeholder or a nested group). */
@@ -93,8 +100,10 @@ function collectShapes(nodes: MarkupNode[], shapes: Map<number, CodeShape>): voi
     const after = nodes[i + 1];
     const outerLead = before?.kind === "text" && /[ \t]$/.test(before.value);
     const outerTrail = after?.kind === "text" && /^[ \t]/.test(after.value);
+    const sepBefore = before?.kind === "text" && /\s$/.test(before.value);
+    const sepAfter = after?.kind === "text" && /^\s/.test(after.value);
     if (node.kind === "x") {
-      shapes.set(node.id, { kind: "x", outerLead, outerTrail });
+      shapes.set(node.id, { kind: "x", outerLead, outerTrail, sepLead: sepBefore, sepTrail: sepAfter });
       return;
     }
     const first = node.children[0];
@@ -105,6 +114,8 @@ function collectShapes(nodes: MarkupNode[], shapes: Map<number, CodeShape>): voi
       innerTrail: last?.kind === "text" && /[ \t]$/.test(last.value),
       outerLead,
       outerTrail,
+      sepLead: sepBefore || (first?.kind === "text" && /^\s/.test(first.value)),
+      sepTrail: sepAfter || (last?.kind === "text" && /\s$/.test(last.value)),
       hasWords: WORD.test(plainText(node.children)),
       hasCodes: node.children.some((c) => c.kind !== "text"),
       empty: node.children.length === 0,
@@ -179,8 +190,15 @@ function isNamedReference(reference: string): boolean {
  * (<html>, <col>, <tr> move or drop their content). `endTags`: the end tags
  * it kept (an `</img>` right after its `<img>` aside: parse5 records none for
  * it), so the decoder can tell when parse5 dropped one that closed nothing.
+ *
+ * HTML ignores "/>" on a <span>: the element would stay open and swallow what
+ * follows (inside another group, the outer group's end tag would close it
+ * instead). So a self-closed placeholder (`<span id="lxN"/>`, `<x id="N"/>`)
+ * and a self-closed group that was empty in the source (an icon) get their end
+ * tag here, the XML meaning; a self-closed group that had content keeps no end
+ * tag and is refused.
  */
-function pretokenise(raw: string): { html: string; endTags: number } | null {
+function pretokenise(raw: string, codes: ReadonlyMap<number, CodeShape>): { html: string; endTags: number } | null {
   // parse5 turns <br></br> into two breaks.
   const s = raw.replace(/<\/br\s*>/gi, "");
   let out = "";
@@ -215,7 +233,15 @@ function pretokenise(raw: string): { html: string; endTags: number } | null {
         if (name && before(end)) {
           if (!ALLOWED_TAGS.has(name.toLowerCase())) return null;
           if (s[i + 1] === "/" && !(name.toLowerCase() === "img" && /<img\b[^<>]*>$/i.test(out))) endTags++;
-          out += s.slice(i, end + 1);
+          const tag = s.slice(i, end + 1);
+          const closed = s[i + 1] !== "/" ? selfClosedCode(tag, name.toLowerCase(), codes) : null;
+          if (closed) {
+            // Counted like the engine's own end tags: each closes exactly the element it follows.
+            out += closed;
+            endTags++;
+          } else {
+            out += tag;
+          }
           i = end + 1;
           continue;
         }
@@ -236,14 +262,39 @@ function codeId(value: string | undefined, pattern: RegExp): number | null {
   return digits === undefined ? null : Number(digits);
 }
 
+/** The group id and the placeholder id an element stands for, as walk() reads them. */
+function codeIds(tag: string, idValue: string | undefined): { group: number | null; placeholder: number | null } {
+  const group =
+    tag === "span" || tag === "g" ? (codeId(idValue, /^lg(\d{1,9})$/i) ?? (tag === "g" ? codeId(idValue, /^(\d{1,9})$/) : null)) : null;
+  const placeholder =
+    tag === "img" || tag === "span" || tag === "x" ? (codeId(idValue, /^lx(\d{1,9})$/i) ?? (tag === "x" ? codeId(idValue, /^(\d{1,9})$/) : null)) : null;
+  return { group, placeholder };
+}
+
+/**
+ * A self-closed `<span …/>`, `<g …/>` or `<x …/>` written as start and end tag, when it is a
+ * placeholder or a group that was empty in the source; else null (the tag is kept as it is).
+ * Read as HTML reads it: a "/" right after an unquoted value belongs to the value (`id=lg1/` is
+ * no self-closed lg1), and the first id attribute counts.
+ */
+function selfClosedCode(tag: string, name: string, codes: ReadonlyMap<number, CodeShape>): string | null {
+  if (name !== "span" && name !== "g" && name !== "x") return null;
+  if (!/(?:["'\s]|^<[A-Za-z][A-Za-z0-9:-]*)\/\s*>$/.test(tag)) return null;
+  const open = tag.replace(/\s*\/\s*>$/, "");
+  const id = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(open);
+  const { group, placeholder } = codeIds(name, id ? (id[1] ?? id[2] ?? id[3]) : undefined);
+  const shape = group !== null ? codes.get(group) : undefined;
+  if (group !== null ? !(shape?.kind === "g" && shape.empty) : placeholder === null) return null;
+  return `${open}></${name}>`;
+}
+
 /**
  * parse5 nodes → tokens. False when the output holds anything but text, our
  * codes and line breaks. Ids are matched case-insensitively (parse5 keeps the
  * case of attribute values: ID='LG1' → "LG1"); every other attribute (style,
- * dir, class, translate) is ignored. `html` is the parsed text (for the
- * elements' source locations).
+ * dir, class, translate) is ignored.
  */
-function walk(nodes: T.ChildNode[], codes: ReadonlyMap<number, CodeShape>, out: Token[], html: string): boolean {
+function walk(nodes: T.ChildNode[], codes: ReadonlyMap<number, CodeShape>, out: Token[]): boolean {
   for (const node of nodes) {
     if (adapter.isTextNode(node)) {
       out.push({ t: "text", v: adapter.getTextNodeContent(node) });
@@ -256,33 +307,15 @@ function walk(nodes: T.ChildNode[], codes: ReadonlyMap<number, CodeShape>, out: 
       out.push({ t: "br" });
       continue;
     }
-    const idValue = adapter.getAttrList(node).find((a) => a.name === "id")?.value;
-    const group =
-      tag === "span" || tag === "g"
-        ? (codeId(idValue, /^lg(\d{1,9})$/i) ?? (tag === "g" ? codeId(idValue, /^(\d{1,9})$/) : null))
-        : null;
-    const placeholder =
-      tag === "img" || tag === "span" || tag === "x"
-        ? (codeId(idValue, /^lx(\d{1,9})$/i) ?? (tag === "x" ? codeId(idValue, /^(\d{1,9})$/) : null))
-        : null;
+    const { group, placeholder } = codeIds(tag, adapter.getAttrList(node).find((a) => a.name === "id")?.value);
     if (group !== null) {
       const shape = codes.get(group);
-      const location = node.sourceCodeLocation;
-      if (!location?.endTag) {
-        // HTML ignores "/>" on a <span>, and a missing </span> is closed at the end of the parent:
-        // either way the group would swallow the rest of the sentence. We always send </span>, so
-        // only an empty source group (an icon) may come back self-closed: the XML meaning, with
-        // what follows it placed after it.
-        const startTag = location?.startTag;
-        const selfClosed = startTag !== undefined && /\/\s*>$/.test(html.slice(startTag.startOffset, startTag.endOffset));
-        if (!selfClosed || shape?.kind !== "g" || !shape.empty) return false;
-        out.push({ t: "open", id: group }, { t: "close", id: group });
-        if (!walk(adapter.getChildNodes(node), codes, out, html)) return false;
-        continue;
-      }
+      // A missing </span> is closed at the end of the parent: the group would swallow the rest of
+      // the sentence. (A self-closed empty group got its end tag in pretokenise.)
+      if (!node.sourceCodeLocation?.endTag) return false;
       const start = out.length;
       out.push({ t: "open", id: group });
-      if (!walk(adapter.getChildNodes(node), codes, out, html)) return false;
+      if (!walk(adapter.getChildNodes(node), codes, out)) return false;
       out.push({ t: "close", id: group });
       const inner = out.slice(start + 1, -1);
       const words = inner.some((tok) => tok.t === "text" && WORD.test(tok.v));
@@ -290,10 +323,12 @@ function walk(nodes: T.ChildNode[], codes: ReadonlyMap<number, CodeShape>, out: 
       // An emptied link or bold: the engine lost its words, or moved its only placeholder out
       // (a linked URL or e-mail left as an empty link next to unlinked text).
       if (shape?.kind === "g" && ((shape.hasWords && !words) || (shape.hasCodes && !words && !codesInside))) return false;
+      // An icon that gained words or codes: they would render in the icon's font or styling.
+      if (shape?.kind === "g" && shape.empty && (words || codesInside)) return false;
     } else if (placeholder !== null) {
-      // A placeholder never holds text: "<x id="2"/>B" parses as x("B"), so B goes after it.
+      // A placeholder never holds text: "<x id="2">B</x>" parses as x("B"), so B goes after it.
       out.push({ t: "x", id: placeholder });
-      if (!walk(adapter.getChildNodes(node), codes, out, html)) return false;
+      if (!walk(adapter.getChildNodes(node), codes, out)) return false;
     } else {
       return false;
     }
@@ -426,8 +461,9 @@ function dropSpaceBetweenScripts(tokens: Token[]): Token[] {
 }
 
 /**
- * Targets written with spaces: where the source had a space at a code
- * boundary and the output has a letter or digit directly on both sides, the
+ * Targets written with spaces: where the source separated words at a code
+ * boundary (whitespace or a line break, outside the code or just inside a
+ * group) and the output has a letter or digit directly on both sides, the
  * words are glued ("Kaufe<g>zwei</g>jetzt"). Not fixed silently: German
  * compounds legitimately lose the space. A placeholder is a word itself, so
  * each of its sides is checked on its own ("Kaufen Sie <x/>heute": the
@@ -440,8 +476,9 @@ function gluedWords(tokens: Token[], codes: ReadonlyMap<number, CodeShape>): boo
     if (!shape) return false;
     const before = WORD_CHAR.test(charBefore(tokens, i));
     const after = WORD_CHAR.test(charAfter(tokens, i));
-    if (tok.t === "x") return shape.kind === "x" && ((Boolean(shape.outerLead) && before) || (Boolean(shape.outerTrail) && after));
-    const spaced = shape.kind === "g" && (tok.t === "open" ? shape.outerLead : shape.outerTrail);
+    if (tok.t === "x") return shape.kind === "x" && ((Boolean(shape.sepLead) && before) || (Boolean(shape.sepTrail) && after));
+    // A separator inside the group's tag counts too ("<b>Free </b>shipping" → "<b>Kostenloser</b>Versand").
+    const spaced = shape.kind === "g" && (tok.t === "open" ? shape.sepLead : shape.sepTrail);
     return Boolean(spaced) && before && after;
   });
 }
@@ -472,17 +509,21 @@ function serialise(tokens: Token[]): string {
 
 function decodeHtml(output: string, segment: WireSegment, targetLocale: string): { text: string; note?: SegmentNoteCode } {
   // The merchant's own "<br>" as text, un-escaped by the engine, can't be told from a break:
-  // refused rather than turned into a space or deleted.
-  if (segment.hasBrText && /<\/?br\b/i.test(output)) return REFUSED;
-  const pre = pretokenise(output);
+  // refused rather than turned into a space or deleted. Only then: more break tags than the
+  // source's real breaks (sent as <br/>), or fewer of the escaped ones than were sent.
+  if (segment.hasBrText) {
+    const breakTags = output.replace(/<\/br\s*>/gi, "").match(/<br\b/gi)?.length ?? 0;
+    const escaped = (text: string) => text.match(/&lt;\/?br\b/gi)?.length ?? 0;
+    if (breakTags > segment.breaks || escaped(output) < escaped(segment.wire)) return REFUSED;
+  }
+  const pre = pretokenise(output, segment.codes);
   if (pre === null) return REFUSED;
-  const { html } = pre;
-  const fragment = adapter.getChildNodes(parseFragment(html, { sourceCodeLocationInfo: true }));
+  const fragment = adapter.getChildNodes(parseFragment(pre.html, { sourceCodeLocationInfo: true }));
   // The source's own tag text ("&lt;/span&gt;"), un-escaped by the engine, is an end tag that
   // closes nothing: parse5 drops it silently, and the word with it.
   if (segment.hasLessThan && pre.endTags > closedElements(fragment)) return REFUSED;
   const raw: Token[] = [];
-  if (!walk(fragment, segment.codes, raw, html)) return REFUSED;
+  if (!walk(fragment, segment.codes, raw)) return REFUSED;
 
   // Line breaks: fewer than the source's are kept; invented ones in a one-line
   // source are spaces; more than a multi-line source had can't be placed.

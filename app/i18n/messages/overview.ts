@@ -177,6 +177,7 @@ export const en = {
   "overview.engines.state.outage": "Not answering · paused until {time}",
   "overview.engines.state.refused": "Refused by {engine}",
   "overview.engines.state.unreachable": "{engine} not reachable",
+  "overview.engines.notAllowed": "Not allowed in this store yet:",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -355,6 +356,7 @@ export const de: Translation<typeof en> = {
   "overview.engines.state.outage": "Antwortet nicht · Pause bis {time}",
   "overview.engines.state.refused": "Von {engine} abgelehnt",
   "overview.engines.state.unreachable": "{engine} nicht erreichbar",
+  "overview.engines.notAllowed": "In diesem Shop noch nicht erlaubt:",
 };
 
 export const fr: Translation<typeof en> = {
@@ -534,6 +536,7 @@ export const fr: Translation<typeof en> = {
   "overview.engines.state.outage": "Ne répond pas · en pause jusqu'à {time}",
   "overview.engines.state.refused": "Refusé par {engine}",
   "overview.engines.state.unreachable": "{engine} injoignable",
+  "overview.engines.notAllowed": "Pas encore autorisé dans cette boutique :",
 };
 
 export const es: Translation<typeof en> = {
@@ -712,4 +715,5 @@ export const es: Translation<typeof en> = {
   "overview.engines.state.outage": "No responde · en pausa hasta {time}",
   "overview.engines.state.refused": "Rechazado por {engine}",
   "overview.engines.state.unreachable": "{engine} no disponible",
+  "overview.engines.notAllowed": "Aún no permitido en esta tienda:",
 };

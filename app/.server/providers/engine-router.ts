@@ -21,7 +21,7 @@
  */
 import { logger } from "../lib/logger";
 import type { EngineId } from "../../lib/engines";
-import { TranslationProviderError, isRateLimit, type EngineCapabilities, type TranslationProvider, type TranslationRequest, type TranslationResult } from "./types";
+import { TranslationProviderError, isRateLimit, withProviderFields, type EngineCapabilities, type TranslationProvider, type TranslationRequest, type TranslationResult } from "./types";
 
 export interface RoutedEngine {
   id: EngineId;
@@ -209,11 +209,14 @@ export class EngineRouter implements TranslationProvider {
     const tried = new Set<EngineId>();
     let stopped = false;
 
-    const fail = (error: TranslationProviderError): never => {
+    // Billing and scope go on a copy: the engine's error may be shared with other requests.
+    const fail = (error: TranslationProviderError, scope?: "language"): never => {
       const sum = Object.values(billed).reduce((n, c) => n + c, 0);
-      if (sum > 0) error.billedCharacters = sum;
-      if (Object.keys(billed).length) error.billedByEngine = { ...billed };
-      throw error;
+      throw withProviderFields(error, {
+        ...(sum > 0 ? { billedCharacters: sum } : {}),
+        ...(Object.keys(billed).length ? { billedByEngine: { ...billed } } : {}),
+        ...(scope ? { scope } : {}),
+      });
     };
 
     /** One engine: its result, or null after recording why it failed (and resting it). */
@@ -318,8 +321,15 @@ export class EngineRouter implements TranslationProvider {
               : 4;
     recorded.sort((a, b) => rank(a) - rank(b) || order.get(a.id)! - order.get(b.id)!);
     const first = recorded[0]!;
-    const timed = recorded.filter((r) => r.error.kind === "retryable" && r.error.retryAfterMs !== undefined).sort((a, b) => a.error.retryAfterMs! - b.error.retryAfterMs!)[0];
-    const chosen = first.error.kind === "retryable" && timed ? timed.error : first.error;
+    // An engine this request tried was itself down (not a rate limit): its error is returned, so
+    // the item spends an attempt with the queue's backoff, as with DeepL alone. A synthetic rest's
+    // delay would retry without spending one: with two engines down whose rests end at different
+    // times, every retry would find one of them resting, and the item would never run out.
+    const outage = recorded.find((r) => failures.includes(r) && r.error.kind === "retryable" && !isRateLimit(r.error));
+    const timed = outage
+      ? undefined
+      : recorded.filter((r) => r.error.kind === "retryable" && r.error.retryAfterMs !== undefined).sort((a, b) => a.error.retryAfterMs! - b.error.retryAfterMs!)[0];
+    const chosen = first.error.kind === "retryable" ? (outage?.error ?? timed?.error ?? first.error) : first.error;
     if (chosen.kind === "quota" || chosen.kind === "auth") {
       // Used up or refused for this language only, while a consented engine still works (it
       // serves other languages): the job for this language stops, the shop's automatic and smart
@@ -329,7 +339,7 @@ export class EngineRouter implements TranslationProvider {
         const kind = engineRest(m.id, end)?.kind;
         return kind !== "quota" && kind !== "auth";
       });
-      if (working) chosen.scope = "language";
+      if (working) return fail(chosen, "language");
     }
     return fail(chosen);
   }

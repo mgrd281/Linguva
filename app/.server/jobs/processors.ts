@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { type TranslationProvider } from "../providers/types";
 import { isEngineRouter, JOB_DEADLINE_MS } from "../providers/engine-router";
-import { plannedEngine, routerSignal } from "../providers/index";
+import { consentGap, plannedEngine, routerSignal } from "../providers/index";
 import { chargedChars, chargeForFailure, chargeForResult, type EngineCharge } from "../usage/engine-charge";
 import { logger } from "../lib/logger";
 import { shopKey } from "../queue/redis";
@@ -15,6 +15,7 @@ import {
 import { providerContext, resourceTitle } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
 import {
+  EngineConsentRequiredError,
   saveResourceTranslations,
   translationDigest,
   sourceLocaleOf,
@@ -380,6 +381,10 @@ export async function processItem(
       primaryLocale: config!.primaryLocale,
     };
   }
+  // Only an engine the shop hasn't allowed serves this language: the job waits for the merchant
+  // to allow it in Settings, and no text goes to the engines it did allow (they'd refuse it).
+  const gap = await consentGap(deps.provider, job.targetLocale, engines);
+  if (gap) throw new EngineConsentRequiredError(gap);
   const monthlyLimit = billing?.configured ? billing.entitlements.monthlyChars : deps.monthlyLimit;
   const dailyLimit = deps.dailyLimit === undefined ? undefined : Math.min(deps.dailyLimit, monthlyLimit);
 

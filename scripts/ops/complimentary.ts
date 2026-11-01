@@ -18,7 +18,7 @@ import {
   grantComplimentaryAccess,
   revokeComplimentaryAccess,
 } from "../../app/.server/billing/complimentary";
-import { costRates, getConfig } from "../../app/.server/lib/config";
+import { costRatesFromEnv } from "../../app/.server/lib/config";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -64,8 +64,9 @@ async function main() {
     });
     console.log("Revoked. Also remove the GID from COMPLIMENTARY_SHOP_GIDS.");
   } else if (command === "report") {
-    // The rates as the app reads them (validated, with the same defaults).
-    const rates = costRates(getConfig());
+    // The rates as the app reads them (validated, with the same defaults), from the three rate
+    // variables only: the report runs with MIGRATION_DATABASE_URL and no other app variable.
+    const rates = costRatesFromEnv();
     const usd = rates.deepl;
     const rows = await complimentaryUsageReport(owner, { allowlist, usdPerMillionChars: usd, period: values.period, ratesByProvider: rates });
     console.table(

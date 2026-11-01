@@ -101,7 +101,9 @@ export function missingConsent(settings: ConsentState, configured: readonly Cons
  * cover every engine in use: a page rendered before an engine was added
  * returns "changed" and stores nothing (the page shows the new list). A post
  * without the list is accepted only while DeepL is the only engine (forms
- * rendered before this version).
+ * rendered before this version). What a current consent already covers is
+ * kept: an engine that is off for a moment doesn't lose its consent when the
+ * merchant allows another one. Withdrawing clears everything.
  */
 export async function setAiConsent(
   input: { shopId: string; granted: boolean; actorId: string | null; shown?: readonly string[] | null },
@@ -112,12 +114,27 @@ export async function setAiConsent(
     const covered = input.shown ? configured.every((t) => input.shown!.includes(t)) : configured.length === 1 && configured[0] === "deepl";
     if (!covered) return "changed";
   }
-  const version = consentVersionFor(configured);
-  await updateSettings(
+  const version = await withTenant(
     input.shopId,
-    {
-      aiDataProcessingConsentAt: input.granted ? new Date() : null,
-      consentVersion: input.granted ? version : null,
+    async (tx) => {
+      await ensureSettingsRow(tx, input.shopId);
+      // Allowing adds to what the shop already allowed: an engine that is off for a moment (a typo
+      // in its variables) keeps its consent. consentTokens reduces an outdated notice to DeepL's.
+      let tokens: ConsentToken[] = [...configured];
+      if (input.granted) {
+        const current = await tx.shopSettings.findUnique({ where: { shopId: input.shopId }, select: { aiDataProcessingConsentAt: true, consentVersion: true } });
+        const earlier = current?.aiDataProcessingConsentAt ? (consentTokens(current.consentVersion) ?? []) : [];
+        tokens = [...new Set([...configured, ...earlier])];
+      }
+      const stored = consentVersionFor(tokens);
+      await tx.shopSettings.update({
+        where: { shopId: input.shopId },
+        data: {
+          aiDataProcessingConsentAt: input.granted ? new Date() : null,
+          consentVersion: input.granted ? stored : null,
+        },
+      });
+      return stored;
     },
     client,
   );

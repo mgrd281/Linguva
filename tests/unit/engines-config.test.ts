@@ -11,6 +11,7 @@ import {
   configWarnings,
   costRatePerMillion,
   costRates,
+  costRatesFromEnv,
   engineConfigProblems,
   engineConsentTokens,
   getConfig,
@@ -76,6 +77,22 @@ describe("Google Cloud variables", () => {
     expect(googleTranslateSettings(config(invalid))).toBeNull();
     expect(engineConfigProblems(invalid)).toEqual([{ variable: "GOOGLE_TRANSLATE_CREDENTIALS", message: "must be the service account's JSON key file, or that file in base64" }]);
     expect(googleTranslateSettings(config({ GOOGLE_TRANSLATE_API_KEY: "short" }))).toBeNull();
+  });
+
+  it("keeps Google off when the key file doesn't validate, even with an API key set (no switch to global processing)", () => {
+    // A truncated paste during key rotation.
+    const env = { DEEPL_API_KEY: "fictional:fx", GOOGLE_TRANSLATE_API_KEY: FAKE_GOOGLE_KEY, GOOGLE_TRANSLATE_CREDENTIALS: SERVICE_ACCOUNT.slice(0, 200) };
+    const c = config(env);
+    expect(googleTranslateSettings(c)).toBeNull();
+    expect(translationEngineOrder(c)).toEqual(["deepl"]);
+    expect(engineConsentTokens(c)).toEqual(["deepl"]);
+    const warnings = configWarnings(c, { ...BASE_ENV, ...env });
+    // "that engine is off" is true now.
+    expect(warnings).toContain("GOOGLE_TRANSLATE_CREDENTIALS must be the service account's JSON key file, or that file in base64: it is ignored, that engine is off");
+    expect(warnings.some((w) => w.startsWith("Google Cloud uses the API key (v2)"))).toBe(false);
+    expect(warnings.some((w) => w.includes("are both set"))).toBe(false);
+    // An empty key file is "not set": the API key works as before.
+    expect(googleTranslateSettings(config({ GOOGLE_TRANSLATE_API_KEY: FAKE_GOOGLE_KEY, GOOGLE_TRANSLATE_CREDENTIALS: "  " }))?.kind).toBe("apiKey");
   });
 });
 
@@ -157,5 +174,17 @@ describe("cost rates", () => {
     expect(costRatePerMillion(c, null)).toBe(27.5);
     expect(costRatePerMillion(c, "mock")).toBe(27.5);
     expect(costRatePerMillion(config({ AI_COST_USD_PER_MILLION_CHARS_AZURE: " 9.5 " }), "azure")).toBe(9.5);
+  });
+
+  it("reads the rates on their own, without the app's other variables (the operator's report)", () => {
+    // ops:complimentary report runs with MIGRATION_DATABASE_URL only: no DATABASE_URL or encryption keys.
+    const only = { MIGRATION_DATABASE_URL: "postgresql://owner:pw@localhost:5432/db" };
+    expect(() => getConfig(only as NodeJS.ProcessEnv)).toThrow(/DATABASE_URL/);
+    expect(costRatesFromEnv(only)).toEqual({ deepl: 25, azure: 10, google: 20 });
+    // The same values and validation as the app's.
+    const set = { ...only, AI_COST_USD_PER_MILLION_CHARS: "27.5", AI_COST_USD_PER_MILLION_CHARS_AZURE: " 9.5 ", AI_COST_USD_PER_MILLION_CHARS_GOOGLE: "" };
+    expect(costRatesFromEnv(set)).toEqual(costRates(config(set)));
+    expect(costRatesFromEnv(set)).toEqual({ deepl: 27.5, azure: 9.5, google: 20 });
+    expect(() => costRatesFromEnv({ AI_COST_USD_PER_MILLION_CHARS: "-1" })).toThrow();
   });
 });

@@ -194,6 +194,33 @@ describe("engine blocks", () => {
     expect(two).toContain("in der oben beschriebenen Reihenfolge");
   });
 
+  it("name the translation services on the support page, in English and German, once more than DeepL is set up", () => {
+    const cases = [
+      { order: ["azure-eu"], names: ["Microsoft Ireland Operations Ltd."] },
+      { order: ["deepl", "azure-eu", "google-global"], names: ["DeepL SE", "Microsoft Ireland Operations Ltd.", "Google Cloud EMEA Ltd."] },
+    ] as const;
+    for (const { order, names } of cases) {
+      const html = pageHtml(site("support.html"), { publicPages: true, reviewed: false, engines: tokens([...order]) });
+      expect(html, order.join(",")).not.toMatch(/<!--\/?engines?:/);
+      const page = visible(html);
+      const en = page.slice(0, page.indexOf("Was wird an"));
+      const de = page.slice(page.indexOf("Was wird an"));
+      expect(en, order.join(",")).toContain("Linguva uses ");
+      expect(de, order.join(",")).toContain("Linguva nutzt ");
+      for (const name of names) {
+        expect(en, `${order.join(",")}: ${name}`).toContain(name);
+        expect(de, `${order.join(",")}: ${name}`).toContain(name);
+      }
+      expect(page).toContain("Then Linguva sends only the texts to translate");
+      expect(page).toContain("Never customer or order data");
+    }
+    // DeepL alone: unchanged.
+    const single = visible(pageHtml(site("support.html"), { publicPages: true, reviewed: false, engines: tokens(["deepl"]) }));
+    expect(single).toContain("What is sent to DeepL, and when?");
+    expect(single).not.toContain("Linguva uses ");
+    expect(single).not.toContain("Linguva nutzt ");
+  });
+
   it("send no context and name no DeepL on the support page without DeepL", () => {
     for (const order of [["azure-eu"], ["azure-eu", "google-global"]] as const) {
       const support = visible(pageHtml(site("support.html"), { publicPages: true, reviewed: false, engines: tokens([...order]) }));

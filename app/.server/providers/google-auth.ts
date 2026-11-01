@@ -11,6 +11,7 @@
  */
 import { createHash, createPrivateKey, createSign } from "node:crypto";
 import { engineFetch, errorJson, providerError, safeToken } from "./engine-http";
+import { copyProviderError, TranslationProviderError } from "./types";
 
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"; // fixed: never the JSON's token_uri
 export const TRANSLATION_SCOPE = "https://www.googleapis.com/auth/cloud-translation";
@@ -122,7 +123,13 @@ export class GoogleTokenSource {
     if (entry?.token && this.now() < entry.expiresAt - REFRESH_BEFORE_MS) return entry.token;
     // The shared request isn't tied to one caller's signal (its own timeout bounds it).
     const pending = entry?.pending ?? this.refresh(entry);
-    const token = await pending;
+    let token: string;
+    try {
+      token = await pending;
+    } catch (error) {
+      // Every waiting request gets an error of its own: callers attach their own bill and scope to it.
+      throw error instanceof TranslationProviderError ? copyProviderError(error) : error;
+    }
     signal?.throwIfAborted();
     return token;
   }

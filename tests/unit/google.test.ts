@@ -382,6 +382,42 @@ describe("Google errors", () => {
     expect(translateCalls()).toHaveLength(0);
   });
 
+  it("v3: gives each request waiting on one failed token refresh an error of its own (no other shop's bill on it)", async () => {
+    // Shop A's request has two batches, shop B's one. A's first batch is billed, then A's second
+    // batch and B's batch both get a 401 and wait for the same new token, which Google refuses.
+    const first = "a".repeat(3_000);
+    const second = "c".repeat(3_000);
+    let waiting = 0;
+    let release!: () => void;
+    const both = new Promise<void>((resolve) => (release = resolve));
+    let minted = 0;
+    const { impl, tokenCalls } = fakeFetch(
+      async (call) => {
+        if ((call.body!.contents as string[])[0] === first) return echo(call);
+        if (++waiting === 2) release();
+        await both;
+        return googleError(401, { status: "UNAUTHENTICATED", details: [errorInfo("ACCESS_TOKEN_EXPIRED")] })();
+      },
+      {
+        token: async () => {
+          if (minted++ === 0) return Response.json({ access_token: "ya29.fictional-1", expires_in: 3600 });
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return Response.json({ error: "invalid_grant" }, { status: 400 });
+        },
+      },
+    );
+    const failure = (promise: Promise<unknown>) => promise.then(() => { throw new Error("expected a failure"); }, (error: TranslationProviderError) => error);
+    const [a, b] = await Promise.all([failure(provider(V3, impl).translate(request([first, second]))), failure(provider(V3, impl).translate(request(["b"])))]);
+    // One refresh for both.
+    expect(tokenCalls()).toHaveLength(2);
+    expect(a).not.toBe(b);
+    expect(a).toMatchObject({ provider: "google", kind: "auth", reason: "TOKEN_GRANT", billedCharacters: 3_000 });
+    expect(b).toMatchObject({ provider: "google", kind: "auth", reason: "TOKEN_GRANT" });
+    // Google billed B nothing.
+    expect(b.billedCharacters).toBeUndefined();
+    expect(b.message).toBe(a.message);
+  });
+
   it("rethrows the caller's abort without a request", async () => {
     const { impl, calls } = fakeFetch();
     const controller = new AbortController();

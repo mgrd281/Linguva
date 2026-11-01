@@ -12,6 +12,7 @@ import { decodeSegment, encodeSegment, UNMAPPABLE_SEGMENT, type WireMode, type W
 import { withRetry, type RetryOptions } from "./retry";
 import {
   TranslationProviderError,
+  withProviderFields,
   type SegmentNoteCode,
   type TranslationRequest,
   type TranslationResult,
@@ -201,8 +202,9 @@ export async function runBatches(run: BatchRun): Promise<Omit<TranslationResult,
   try {
     for (const batch of batches) await sendBatch(batch);
   } catch (error) {
-    // Earlier batches were billed: the caller meters them rather than releasing everything.
-    if (billedCharacters > 0 && error instanceof TranslationProviderError) error.billedCharacters = billedCharacters;
+    // Earlier batches were billed: the caller meters them rather than releasing everything. On a
+    // copy: the error may be shared with other requests (a token refresh they all waited for).
+    if (billedCharacters > 0 && error instanceof TranslationProviderError) throw withProviderFields(error, { billedCharacters });
     throw error;
   }
 

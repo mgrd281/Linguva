@@ -38,7 +38,15 @@ function accessText(i18n: I18n, tile: EngineTile): string {
   return tile.access.kind === "serviceAccount" ? `${access} · ${tile.hint}` : `${access} · …${tile.hint}`;
 }
 
-function Counts({ i18n, firstChoice, canStepIn, total }: { i18n: I18n; firstChoice: number; canStepIn: number; total: number }) {
+function Counts({ i18n, firstChoice, canStepIn, total, allowed }: { i18n: I18n; firstChoice: number; canStepIn: number; total: number; allowed: boolean }) {
+  // Not covered by this store's consent: it translates nothing here until it is allowed in Settings.
+  if (!allowed) {
+    return (
+      <s-text>
+        {i18n.t("overview.engines.notAllowed")} <s-link href="/app/settings">{i18n.t("common.nav.settings")}</s-link>
+      </s-text>
+    );
+  }
   return (
     <s-stack direction="block" gap="small-500">
       <s-text>{i18n.t("overview.engines.firstChoice", { count: firstChoice, total })}</s-text>
@@ -80,7 +88,7 @@ export function TranslationEngines({ card, i18n }: { card: EnginesCard; i18n: I1
                 </s-grid>
               </s-query-container>
             )}
-            <Counts i18n={i18n} firstChoice={card.deepl.firstChoice} canStepIn={card.deepl.canStepIn} total={card.totalLanguages} />
+            <Counts i18n={i18n} firstChoice={card.deepl.firstChoice} canStepIn={card.deepl.canStepIn} total={card.totalLanguages} allowed={card.deepl.allowed} />
           </s-stack>
         ) : null}
         {card.tiles.length ? (
@@ -98,7 +106,7 @@ export function TranslationEngines({ card, i18n }: { card: EnginesCard; i18n: I1
                       </s-stack>
                       <s-text color="subdued">{accessText(i18n, tile)}</s-text>
                       <s-text color="subdued">{t(`overview.engines.dataLocation.${tile.dataLocation}`)}</s-text>
-                      <Counts i18n={i18n} firstChoice={tile.firstChoice} canStepIn={tile.canStepIn} total={card.totalLanguages} />
+                      <Counts i18n={i18n} firstChoice={tile.firstChoice} canStepIn={tile.canStepIn} total={card.totalLanguages} allowed={tile.allowed} />
                       <s-stack direction="inline">
                         <s-badge tone={badge.tone} icon={badge.icon}>
                           {stateText(i18n, tile)}

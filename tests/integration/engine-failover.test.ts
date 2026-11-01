@@ -17,9 +17,10 @@ import { clearEngineRests, EngineRouter } from "../../app/.server/providers/engi
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { TranslationProviderError, type TranslationProvider, type TranslationRequest, type TranslationResult } from "../../app/.server/providers/types";
 import { pendingDraftDigests, recordRejectedAttempts } from "../../app/.server/review/drafts";
-import { setAiConsent, setBulkPublishMode, setTranslationStyle } from "../../app/.server/settings/shop-settings";
+import { consentedEngines, getShopSettings, missingConsent, setAiConsent, setBulkPublishMode, setTranslationStyle } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
+import { aiTranslateResource, EngineConsentRequiredError } from "../../app/.server/translation/product-translation-service";
 import { runEditorAction } from "../../app/.server/translation/resource-editor";
 import { getMonthlyUsage, getMonthlyUsageByProvider } from "../../app/.server/usage/usage-ledger";
 import type { EngineId } from "../../app/lib/engines";
@@ -35,13 +36,17 @@ class FakeEngine implements TranslationProvider {
   readonly calls: TranslationRequest[] = [];
   private readonly mock = new MockTranslationProvider();
   readonly capabilities?: { formality: boolean; context: boolean };
+  /** Only with `languages`: the engine's own list (without it, every language). */
+  readonly targetSupport?: (locales: readonly string[]) => Promise<Map<string, boolean>>;
   constructor(
     readonly id: EngineId,
     private readonly fail: Array<{ kind: TranslationProviderError["kind"]; billed?: number }> = [],
-    private readonly options: { dropFormality?: boolean; during?: () => Promise<void> } = {},
+    private readonly options: { dropFormality?: boolean; during?: () => Promise<void>; languages?: readonly string[] } = {},
   ) {
     // DeepL declares nothing (it applies everything); the others have no form of address.
     if (id !== "deepl") this.capabilities = { formality: false, context: false };
+    const languages = options.languages;
+    if (languages) this.targetSupport = async (locales) => new Map(locales.map((l) => [l, languages.includes(l)]));
   }
   async translate(request: TranslationRequest): Promise<TranslationResult> {
     this.calls.push(request);
@@ -198,6 +203,34 @@ describe("a refusal because an engine couldn't keep the markup", () => {
   });
 });
 
+describe("a language only an engine the shop hasn't allowed serves", () => {
+  it("sends no text to DeepL: the editor names the engine, the job stops for this language only", async () => {
+    // DeepL doesn't offer German here; Azure does, and the shop's consent covers DeepL only.
+    const deepl = new FakeEngine("deepl", [], { languages: ["fr"] });
+    const azure = new FakeEngine("azure", [], { languages: ["de", "fr"] });
+    const provider = router(deepl, azure);
+    const { shop, store, deps, itemIds } = await setup(provider, { consent: ["deepl"] });
+    const editor = await aiTranslateResource(
+      { admin: store.asAdmin(), shopId: shop.id, resourceId: "gid://shopify/Product/1", targetLocale: "de", keys: ["title"], provider, monthlyLimit: 1_000_000 },
+      app,
+    ).catch((e: unknown) => e);
+    expect(editor).toBeInstanceOf(EngineConsentRequiredError);
+    expect((editor as EngineConsentRequiredError).engine).toBe("azure");
+    const item = await processItem(deps, { shopId: shop.id, itemId: itemIds[0]! }, 1).catch((e: unknown) => e);
+    expect(item).toBeInstanceOf(EngineConsentRequiredError);
+    // A stop for this language only: automatic and smart translation of the others go on.
+    expect(classifyError(item)).toEqual({ kind: "job-stop", code: "ENGINE_CONSENT", scope: "language" });
+    expect(deepl.calls).toHaveLength(0);
+    expect(azure.calls).toHaveLength(0);
+    expect(await getMonthlyUsage(shop.id, undefined, app)).toBe(0);
+    // Allowed in Settings: Azure translates the next item.
+    expect(await setAiConsent({ shopId: shop.id, granted: true, actorId: null, shown: ["deepl", "azure-eu"] }, app)).toBe("saved");
+    await processItem(deps, { shopId: shop.id, itemId: itemIds[1]! }, 1);
+    expect(azure.calls.length).toBeGreaterThan(0);
+    expect(deepl.calls).toHaveLength(0);
+  });
+});
+
 describe("consent for several engines (setAiConsent)", () => {
   const consentOf = (shopId: string) =>
     withTenant(shopId, (tx) => tx.shopSettings.findFirstOrThrow({ where: { shopId }, select: { consentVersion: true, aiDataProcessingConsentAt: true } }), app);
@@ -220,6 +253,36 @@ describe("consent for several engines (setAiConsent)", () => {
     expect(consent.consentVersion).toBe("2026-11-engines-v1:azure-eu,deepl");
     expect(consent.aiDataProcessingConsentAt).not.toBeNull();
     expect(await grants(shop.id)).toBe(1);
+  });
+
+  it("keeps what the shop allowed when it allows another engine while one is off for a moment", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    expect(await setAiConsent({ shopId: shop.id, granted: true, actorId: "7", shown: ["deepl", "azure-eu"] }, app)).toBe("saved");
+    // The same deploy adds Google and has a typo in Azure's region: Azure is off.
+    vi.stubEnv("AZURE_TRANSLATOR_REGION", "west europe!");
+    vi.stubEnv("GOOGLE_TRANSLATE_API_KEY", "ui-google-key-0005-fictional0000");
+    resetConfigCache();
+    expect(missingConsent(await getShopSettings(shop.id, app))).toEqual(["google-global"]);
+    // "Allow these too": Azure's consent stays.
+    expect(await setAiConsent({ shopId: shop.id, granted: true, actorId: "7", shown: ["deepl", "google-global"] }, app)).toBe("saved");
+    expect((await consentOf(shop.id)).consentVersion).toBe("2026-11-engines-v1:azure-eu,deepl,google-global");
+    const audit = await ownerDb.auditLog.findMany({ where: { shopId: shop.id, action: "ai_consent.granted" }, select: { metadata: true } });
+    expect(audit.map((a) => a.metadata)).toEqual(
+      expect.arrayContaining([{ version: "2026-11-engines-v1:azure-eu,deepl" }, { version: "2026-11-engines-v1:azure-eu,deepl,google-global" }]),
+    );
+    // The typo fixed: nothing to allow again.
+    vi.stubEnv("AZURE_TRANSLATOR_REGION", "westeurope");
+    resetConfigCache();
+    const settings = await getShopSettings(shop.id, app);
+    expect(missingConsent(settings)).toEqual([]);
+    expect(consentedEngines(settings)).toEqual(["deepl", "azure", "google"]);
+    // A withdrawn consent isn't carried over, and DeepL alone is still the legacy version.
+    await setAiConsent({ shopId: shop.id, granted: false, actorId: "7", shown: null }, app);
+    vi.stubEnv("AZURE_TRANSLATOR_KEY", "");
+    vi.stubEnv("GOOGLE_TRANSLATE_API_KEY", "");
+    resetConfigCache();
+    expect(await setAiConsent({ shopId: shop.id, granted: true, actorId: "7", shown: ["deepl"] }, app)).toBe("saved");
+    expect((await consentOf(shop.id)).consentVersion).toBe("2026-10-deepl-v1");
   });
 
   it("accepts a missing list only while DeepL is the only engine", async () => {

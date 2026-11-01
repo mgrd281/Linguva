@@ -31,6 +31,7 @@ import {
 } from "../../lib/resource-kinds";
 import {
   AiConsentRequiredError,
+  EngineConsentRequiredError,
   AiRequestTooLargeError,
   aiTranslateResource,
   ResourceNotFoundError,
@@ -39,6 +40,7 @@ import {
   translationDigest,
 } from "./product-translation-service";
 import { collectEditorEdits } from "./editor-edits";
+import type { EngineId } from "../../lib/engines";
 import { isMachineTranslatable, segmentField } from "./translate-fields";
 import { listRevisions } from "./revisions";
 import { removeTranslation, restoreRevision } from "./history";
@@ -252,7 +254,7 @@ export type EditorActionResult =
   | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string; code?: string }> }
   | { kind: "consent" }
   | { kind: "smart"; excluded: boolean }
-  | { kind: "error"; code: string; retryAfterSeconds?: number };
+  | { kind: "error"; code: string; retryAfterSeconds?: number; engine?: EngineId };
 
 function rateLimited(error: RequestRateLimitedError) {
   return {
@@ -265,6 +267,7 @@ function rateLimited(error: RequestRateLimitedError) {
 /** Error code for a failed AI translation, or undefined if the error is unexpected. */
 function aiErrorCode(error: unknown): string | undefined {
   if (error instanceof AiConsentRequiredError) return "CONSENT_REQUIRED";
+  if (error instanceof EngineConsentRequiredError) return "ENGINE_CONSENT";
   if (error instanceof AiRequestTooLargeError) return "REQUEST_TOO_LARGE";
   if (error instanceof QuotaExceededError) {
     return QUOTA_CODES[error.scope];
@@ -374,7 +377,8 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
       if (error instanceof RequestRateLimitedError) return rateLimited(error);
       if (error instanceof ResourceNotFoundError) throw new Response("Not found", { status: 404 });
       const code = aiErrorCode(error);
-      if (code) return { kind: "error", code } satisfies EditorActionResult;
+      // The engine to allow is named (a language only it serves).
+      if (code) return { kind: "error", code, ...(error instanceof EngineConsentRequiredError ? { engine: error.engine } : {}) } satisfies EditorActionResult;
       throw error;
     }
   }

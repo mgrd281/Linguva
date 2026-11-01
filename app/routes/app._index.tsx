@@ -21,6 +21,7 @@ import { deeplKeysUsage } from "../.server/providers/deepl-usage";
 import { operatorEngines } from "../.server/providers/engine-status";
 import { deeplApiKeys, getConfig, isOperatorShop, translationEngineOrder } from "../.server/lib/config";
 import { getQueues, getWorkerStatus } from "../.server/queue/client";
+import { consentedEngines, getShopSettings } from "../.server/settings/shop-settings";
 import { ProgressBar } from "../components/ProgressBar";
 import { durationText, percentLabel, SURFACE_COLOUR, TRACK_COLOUR } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
@@ -57,7 +58,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // A count that waits or is stuck: no worker processing jobs (its heartbeat is gone) explains it.
   const waiting = overview.measurement.state === "waiting" || overview.measurement.state === "stalled";
   const workerStopped = waiting && (await getWorkerStatus()).state === "stopped";
-  const engines = operator && multi ? await operatorEngines(config, overview.targetLocales) : null;
+  // Counted among the engines this store allowed: one it hasn't translates nothing for it yet.
+  const engines = operator && multi ? await operatorEngines(config, overview.targetLocales, { allowed: consentedEngines(await getShopSettings(shop.id)) }) : null;
   return { ...overview, aiProvider: provider?.id ?? null, idempotencyKey: randomUUID(), jobsAvailable, workerStopped, deeplQuota: deeplQuota ? await deeplQuota : null, engines };
 };
 

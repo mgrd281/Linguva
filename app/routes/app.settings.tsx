@@ -1108,6 +1108,9 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
           <s-stack direction="block" gap="small-200">
             <s-heading>{t("settings.ai.extra.heading")}</s-heading>
             <s-paragraph>{t("settings.ai.extra.body", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })}</s-paragraph>
+            {/* The notice the stored version stands for: every service in use, their order and the failover. */}
+            <s-paragraph>{consentLead(i18n, data.engines.configured)}</s-paragraph>
+            <s-paragraph>{t("settings.ai.personal.multi")}</s-paragraph>
             <s-stack direction="inline">
               <fetcher.Form method="post">
                 <input type="hidden" name="intent" value="grant-consent" />

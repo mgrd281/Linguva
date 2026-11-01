@@ -84,8 +84,9 @@ translation changed in Shopify after Linguva read it is never overwritten (`docs
    Operations Ltd., Google Cloud EMEA Ltd.), their data processing terms (Microsoft Products and Services
    DPA, Google Cloud Data Processing Addendum) and subprocessors; the transfer mechanism for global
    processing (`azure-global`, `google-global`); the wording of the multi-engine notice in Settings and
-   the editor (`settings.ai.lead.multi`, `editor.consent.body.multi`, consent version
-   `2026-11-engines-v1`); and whether an outdated multi-engine consent still covers DeepL (the code keeps
+   the editor (`settings.ai.lead.multi`, `editor.consent.body.multi` with `editor.consent.order`, and
+   `settings.ai.extra.body`, the "Allow these too" box that shops with a DeepL-only consent agree to, which
+   shows `settings.ai.lead.multi` beside it; consent version `2026-11-engines-v1`); and whether an outdated multi-engine consent still covers DeepL (the code keeps
    DeepL running for such shops: `consentTokens` in `app/.server/settings/ai-consent.ts`).
 5. **Retention** of audit entries and privacy request records (today: no deletion job).
 6. **Host logs:** what Railway's own request logs contain (IP addresses?) and for how long. **Owner.**

@@ -63,6 +63,7 @@ const PLAIN_MESSAGE_ERRORS = new Set([
   "BackgroundJobsUnavailableError",
   "ConfirmationRequiredError",
   "DecryptionError",
+  "EngineConsentRequiredError",
   "GlossaryLimitError",
   "ItemPermanentError",
   "JobStopError",

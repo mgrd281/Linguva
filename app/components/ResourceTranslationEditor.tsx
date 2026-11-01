@@ -12,7 +12,8 @@ import { HtmlPreview } from "./HtmlPreview";
 import { StructuredEditor, StructuredView } from "./StructuredValue";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
-import { isDeepLOnly, processorsText } from "../lib/engine-texts";
+import { isDeepLOnly, orderTexts, processorsText } from "../lib/engine-texts";
+import { ENGINE_NAMES, isEngineId } from "../lib/engines";
 import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
 import { useI18n } from "../i18n/react";
@@ -90,6 +91,8 @@ export function ResourceTranslationEditor() {
   // Errors of the action that ran last (AI translation or memory suggestions).
   const lastData = filledFrom === "memory" ? memoryFetcher.data : aiFetcher.data;
   const actionError = lastData?.kind === "error" ? lastData : null;
+  // A language only an engine the shop hasn't allowed serves: that engine, by name.
+  const consentEngine = actionError && "engine" in actionError && typeof actionError.engine === "string" && isEngineId(actionError.engine) ? actionError.engine : null;
   const saved = saveFetcher.data?.kind === "saved" ? saveFetcher.data.outcomes : null;
   const saveStatus = new Map(saved?.map((o) => [o.key, o]) ?? []);
   const translating = aiFetcher.state !== "idle";
@@ -203,6 +206,8 @@ export function ResourceTranslationEditor() {
             {isDeepLOnly(data.ai.consentTokens)
               ? t("editor.consent.body", { singular })
               : t("editor.consent.body.multi", { singular, processors: processorsText(i18n, data.ai.consentTokens) })}
+            {/* Several services: their order and the failover, as in Settings (the same consent version). */}
+            {data.ai.consentTokens.length > 1 ? ` ${t("editor.consent.order", orderTexts(i18n, data.ai.consentTokens))}` : null}
           </s-paragraph>
           {/* The page showed an older list of services: nothing was stored, the list above is the current one. */}
           {consentFetcher.data?.kind === "error" && consentFetcher.data.code === "CONSENT_CHANGED" ? (
@@ -250,10 +255,16 @@ export function ResourceTranslationEditor() {
           heading={filledFrom === "memory" ? t("editor.aiError.memoryHeading") : t("editor.aiError.heading")}
         >
           <s-paragraph>
-            {aiErrorMessage(i18n, actionError.code)}
+            {consentEngine ? t("editor.aiError.ENGINE_CONSENT.named", { engine: ENGINE_NAMES[consentEngine] }) : aiErrorMessage(i18n, actionError.code)}
             {"retryAfterSeconds" in actionError && actionError.retryAfterSeconds
               ? ` ${t("editor.aiError.retryAfter", { seconds: Number(actionError.retryAfterSeconds) })}`
               : ""}
+            {actionError.code === "ENGINE_CONSENT" ? (
+              <>
+                {" "}
+                <s-link href="/app/settings">{t("common.nav.settings")}</s-link>
+              </>
+            ) : null}
           </s-paragraph>
         </s-banner>
       ) : null}

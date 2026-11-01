@@ -9,7 +9,7 @@ import {
 } from "@shopify/shopify-api";
 import { TranslationProviderError } from "../providers/types";
 import { QUOTA_CODES, QuotaExceededError } from "../usage/usage-ledger";
-import { AiConsentRequiredError } from "../translation/product-translation-service";
+import { AiConsentRequiredError, EngineConsentRequiredError } from "../translation/product-translation-service";
 
 /** Stops the whole job (remaining items are cancelled), e.g. quota used up. */
 export class JobStopError extends Error {
@@ -50,6 +50,8 @@ export function classifyError(error: unknown): ErrorClass {
   if (error instanceof JobStopError) return { kind: "job-stop", code: error.code };
   if (error instanceof ItemPermanentError) return { kind: "item-permanent", code: error.code };
   if (error instanceof AiConsentRequiredError) return { kind: "job-stop", code: "CONSENT_REQUIRED" };
+  // Only this language waits for the merchant to allow its engine: no shop-wide pause.
+  if (error instanceof EngineConsentRequiredError) return { kind: "job-stop", code: "ENGINE_CONSENT", scope: "language" };
   if (error instanceof QuotaExceededError) {
     // One item that alone needs more than the limit fails by itself; the others still fit.
     if (error.requested > error.limit) return { kind: "item-permanent", code: "TOO_LARGE_FOR_LIMIT" };

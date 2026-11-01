@@ -248,6 +248,7 @@ export const en = {
   "language.error.generic": "That didn't work. Try again.",
   "language.error.NOTHING_TO_TRANSLATE": "There's nothing left to translate here.",
   "language.error.CONSENT_REQUIRED": "Allow AI translation in the settings first.",
+  "language.error.ENGINE_CONSENT": "Only a translation service your store hasn't allowed yet translates this language. Allow it in the settings first.",
   "language.error.AI_NOT_CONFIGURED": "AI translation isn't set up for this app yet.",
   "language.error.UNKNOWN_INTENT": "This action isn't available.",
 } as const satisfies Record<string, Message>;
@@ -499,6 +500,7 @@ export const de: Translation<typeof en> = {
   "language.error.generic": "Das hat nicht geklappt. Versuch es noch einmal.",
   "language.error.NOTHING_TO_TRANSLATE": "Hier gibt es nichts mehr zu übersetzen.",
   "language.error.CONSENT_REQUIRED": "Erlaube zuerst die KI-Übersetzung in den Einstellungen.",
+  "language.error.ENGINE_CONSENT": "Diese Sprache übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat. Erlaube ihn zuerst in den Einstellungen.",
   "language.error.AI_NOT_CONFIGURED": "Die KI-Übersetzung ist für diese App noch nicht eingerichtet.",
   "language.error.UNKNOWN_INTENT": "Diese Aktion ist nicht verfügbar.",
 };
@@ -750,6 +752,7 @@ export const fr: Translation<typeof en> = {
   "language.error.generic": "Cela n'a pas fonctionné. Réessayez.",
   "language.error.NOTHING_TO_TRANSLATE": "Il ne reste rien à traduire ici.",
   "language.error.CONSENT_REQUIRED": "Autorisez d'abord la traduction par IA dans les paramètres.",
+  "language.error.ENGINE_CONSENT": "Seul un service de traduction que votre boutique n'a pas encore autorisé traduit cette langue. Autorisez-le d'abord dans les paramètres.",
   "language.error.AI_NOT_CONFIGURED": "La traduction par IA n'est pas encore configurée pour cette application.",
   "language.error.UNKNOWN_INTENT": "Cette action n'est pas disponible.",
 };
@@ -1001,6 +1004,7 @@ export const es: Translation<typeof en> = {
   "language.error.generic": "No funcionó. Inténtalo de nuevo.",
   "language.error.NOTHING_TO_TRANSLATE": "Aquí ya no queda nada que traducir.",
   "language.error.CONSENT_REQUIRED": "Primero permite la traducción con IA en la configuración.",
+  "language.error.ENGINE_CONSENT": "Solo un servicio de traducción que tu tienda aún no ha permitido traduce este idioma. Primero permítelo en la configuración.",
   "language.error.AI_NOT_CONFIGURED": "La traducción con IA aún no está configurada para esta aplicación.",
   "language.error.UNKNOWN_INTENT": "Esta acción no está disponible.",
 };

@@ -182,6 +182,7 @@ describe("runtime role cannot change security", () => {
     ["create a shadowing function in public", `CREATE FUNCTION public.similarity(text, unknown) RETURNS real LANGUAGE sql AS $$ SELECT 1::real $$`],
     ["create a table in public", `CREATE TABLE public.x (id int)`],
     ["truncate tenant data", `TRUNCATE "TranslationMemory"`],
+    ["truncate merchant engine keys", `TRUNCATE "ShopEngineCredential"`],
     ["delete revisions", `DELETE FROM "TranslationRevision"`],
     ["read the audit log", `SELECT * FROM "AuditLog"`],
   ];
@@ -215,6 +216,19 @@ describe("a database user without grants (linguva_probe)", () => {
     for (const table of ["Shop", "Session", "AuditLog", "TranslationDraft", "UsageLedger", "CoverageItem", "CoverageCount"]) {
       await expect(probe.$queryRawUnsafe(`SELECT 1 FROM "${table}" LIMIT 1`)).rejects.toThrow(/permission denied/);
     }
+  });
+
+  it("can't read, write or empty the merchants' engine keys (Own key plan), whatever app.shop_id says", async () => {
+    const { a } = await twoShopsWithMemory();
+    await expect(probe.$queryRawUnsafe(`SELECT 1 FROM "ShopEngineCredential" LIMIT 1`)).rejects.toThrow(/permission denied/);
+    await expect(
+      probe.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.shop_id', ${a.id}, true)`;
+        return tx.$queryRawUnsafe(`SELECT "secret" FROM "ShopEngineCredential"`);
+      }),
+    ).rejects.toThrow(/permission denied/);
+    await expect(probe.$executeRawUnsafe(`DELETE FROM "ShopEngineCredential"`)).rejects.toThrow(/permission denied/);
+    await expect(probe.$executeRawUnsafe(`TRUNCATE "ShopEngineCredential"`)).rejects.toThrow(/permission denied/);
   });
 });
 

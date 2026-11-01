@@ -59,27 +59,28 @@ model Shop {
   createdAt      DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
 
-  installations    ShopInstallation[]
-  settings         ShopSettings?
-  locales          ShopLocale[]
-  auditLogs        AuditLog[]
-  revisions        TranslationRevision[]
-  usage            UsageLedger[]
-  jobs             TranslationJob[]
-  jobItems         TranslationJobItem[]
-  memory           TranslationMemory[]
-  glossaries       Glossary[]
-  glossaryTerms    GlossaryTerm[]
-  drafts           TranslationDraft[]
-  coverageReports  CoverageReport[]
-  coverageItems    CoverageItem[]
-  coverageCounts   CoverageCount[]
-  coverageSegments CoverageSegment[]
-  complimentary    ComplimentaryAccess?
-  subscription     ShopSubscription?
-  smartConfig      SmartAutoConfig?
-  smartRuns        SmartAutoRun[]
-  smartExclusions  SmartAutoExclusion[]
+  installations     ShopInstallation[]
+  settings          ShopSettings?
+  locales           ShopLocale[]
+  auditLogs         AuditLog[]
+  revisions         TranslationRevision[]
+  usage             UsageLedger[]
+  jobs              TranslationJob[]
+  jobItems          TranslationJobItem[]
+  memory            TranslationMemory[]
+  glossaries        Glossary[]
+  glossaryTerms     GlossaryTerm[]
+  drafts            TranslationDraft[]
+  coverageReports   CoverageReport[]
+  coverageItems     CoverageItem[]
+  coverageCounts    CoverageCount[]
+  coverageSegments  CoverageSegment[]
+  complimentary     ComplimentaryAccess?
+  subscription      ShopSubscription?
+  smartConfig       SmartAutoConfig?
+  smartRuns         SmartAutoRun[]
+  smartExclusions   SmartAutoExclusion[]
+  engineCredentials ShopEngineCredential[]
 
   @@index([smartNextRunAt])
 }
@@ -285,6 +286,8 @@ model UsageLedger {
   idempotencyKey String
   /// "smart" for Smart Auto-Translate (its budgets sum these rows); null otherwise.
   origin         String?
+  /// "merchant": the Own key plan's own keys (no Linguva limit, no Linguva cost); null: Linguva's engines.
+  payer          String?
   createdAt      DateTime  @default(now()) @db.Timestamptz(3)
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -831,4 +834,36 @@ model SmartAutoExclusion {
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@id([shopId, resourceGid])
+}
+
+/// A merchant's own translation engine key (Own key plan; docs/AI_ENGINES.md). One row per shop
+/// and engine. `secret` is a TokenCipher envelope bound to shop, engine, data location and region,
+/// never plaintext; `hint` is its last four characters. Deleted on app/uninstalled; shop/redact cascades.
+model ShopEngineCredential {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopId        String    @db.Uuid
+  /// deepl | azure | google
+  engine        String
+  secret        String
+  hint          String
+  /// eu | global (DeepL eu, Google global)
+  dataLocation  String
+  /// Azure only
+  region        String?
+  /// DeepL only: free | pro
+  deeplPlan     String?
+  /// OK | QUOTA | REFUSED | UNREADABLE | RECHECK
+  status        String    @default("OK")
+  /// +1 on every save or replace; guards every write about a used or checked key
+  keyVersion    Int       @default(1)
+  verifiedAt    DateTime  @db.Timestamptz(3)
+  /// A code only (OWN_KEY_*), never text from the engine
+  lastErrorCode String?
+  lastErrorAt   DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, engine])
 }

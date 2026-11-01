@@ -293,6 +293,16 @@ A policy may only be created together with its table (a second permissive policy
 | `Shop.smartNextRunAt` (indexed) | A global due index for the worker's tick, outside RLS like the rest of `Shop`, which the runtime role can update. It is only a hint: the tick re-reads the configuration under the shop's tenant before doing anything, and writes the hint only for the tenant it holds. |
 | Cross-tenant risk | None added: every read and write of the new rows goes through `withTenant`; queue payloads carry ids only and are re-read under their tenant. |
 
+## 5r. Database change review: own engine keys (migration 20261106090000)
+
+| Change | Review |
+|---|---|
+| `ShopEngineCredential` (new) | One row per shop and engine. `secret` holds a TokenCipher envelope (CHECK: envelope format only, never plaintext), bound by AAD to shop, engine, data location and region. `hint`: exactly 4 characters. `keyVersion` ≥ 1, +1 on every save or replace; every write about a used or checked key and every re-encryption is guarded by it (no lost updates). Codes only in `status` (incl. `RECHECK` for the restore runbook) and `lastErrorCode`. No free text. |
+| `UsageLedger.payer` (new column) | NULL or `'merchant'` (and never with `origin`). Merchant rows skip every Linguva limit and never touch `PlatformUsageDay`; Linguva's sums filter `payer IS NULL`. The CHECK is added `NOT VALID` (every existing row is NULL; new and updated rows are checked; no full scan under ACCESS EXCLUSIVE on the hottest write table), with `lock_timeout = '5s'` for the whole migration. |
+| Row-level security | `ShopEngineCredential`: ENABLE + FORCE + the standard `tenant_isolation` policy. `UsageLedger`: unchanged. |
+| Grants | `ShopEngineCredential`: SELECT, INSERT, UPDATE, DELETE to `linguva_app` (replace, check, remove; uninstall deletes). `UsageLedger`: unchanged (SELECT, INSERT). |
+| Cross-tenant risk | Reads and writes only through `withTenant`; FK `shopId` → `Shop` ON DELETE CASCADE (shop/redact erases the keys); a ciphertext copied to another row fails to decrypt (AAD). |
+
 ## 5n. Hosted stages: staging isolation and release guard (no database change)
 
 Hosting on Railway (docs/RAILWAY_STAGING.md) adds configuration guards, one public route and a container image; no migration.

@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { isEngineId, type EngineId } from "../../lib/engines";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import type { EngineCharge } from "./engine-charge";
@@ -21,6 +22,12 @@ export const QUOTA_CODES: Record<QuotaScope, string> = {
 
 /** Where usage came from: "smart" for Smart Auto-Translate (its budgets sum these). */
 export type UsageOrigin = "smart";
+
+/**
+ * Who pays for the characters: "merchant" = the Own key plan's own engine keys (no Linguva
+ * limit applies and PlatformUsageDay never counts them); absent (NULL in the ledger) = Linguva.
+ */
+export type UsagePayer = "merchant";
 
 /** A merchant's own budget on top of the plan's limits, in their time zone's day and month. */
 export interface UsageBudget {
@@ -56,9 +63,10 @@ export function dayKey(date: Date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Linguva's characters since a time (the daily cap): rows paid by the merchant don't count. */
 async function sumCharsSince(tx: TenantTx, shopId: string, since: Date): Promise<number> {
   const result = await tx.usageLedger.aggregate({
-    where: { shopId, createdAt: { gte: since } },
+    where: { shopId, createdAt: { gte: since }, payer: null },
     _sum: { chars: true },
   });
   return result._sum.chars ?? 0;
@@ -96,9 +104,10 @@ async function platformChars(tx: TenantTx, day: string): Promise<number> {
   return Number(rows[0]?.chars ?? 0);
 }
 
+/** Linguva's characters in a period (the allowance): rows paid by the merchant don't count. */
 async function sumChars(tx: TenantTx, shopId: string, period: string): Promise<number> {
   const result = await tx.usageLedger.aggregate({
-    where: { shopId, periodKey: period },
+    where: { shopId, periodKey: period, payer: null },
     _sum: { chars: true },
   });
   return result._sum.chars ?? 0;
@@ -127,7 +136,8 @@ export async function getMonthlyUsage(
 /**
  * The shop's characters this month per engine (rows without one count as
  * DeepL's, the only engine before others existed). Charged characters only:
- * partials lost to failover aren't in a shop's ledger. Inside the tenant.
+ * partials lost to failover aren't in a shop's ledger. Linguva's engines only
+ * (the cost blend): rows paid by the merchant don't count. Inside the tenant.
  */
 export async function getMonthlyUsageByProvider(
   shopId: string,
@@ -136,7 +146,7 @@ export async function getMonthlyUsageByProvider(
 ): Promise<Record<string, number>> {
   const rows = await withTenant(
     shopId,
-    (tx) => tx.usageLedger.groupBy({ by: ["provider"], where: { shopId, periodKey: period }, _sum: { chars: true } }),
+    (tx) => tx.usageLedger.groupBy({ by: ["provider"], where: { shopId, periodKey: period, payer: null }, _sum: { chars: true } }),
     client,
   );
   const usage: Record<string, number> = {};
@@ -145,6 +155,31 @@ export async function getMonthlyUsageByProvider(
     usage[provider] = (usage[provider] ?? 0) + (row._sum.chars ?? 0);
   }
   return usage;
+}
+
+/**
+ * Characters the shop translated through its own keys in a period, per engine (Own key plan):
+ * the rows paid by the merchant. Rows of a provider outside ENGINE_IDS (none expected) count in
+ * the total only. Inside the tenant.
+ */
+export async function getOwnKeyUsage(
+  shopId: string,
+  period: string = periodKey(),
+  client: PrismaClient = defaultClient,
+): Promise<{ total: number; byEngine: Partial<Record<EngineId, number>> }> {
+  const rows = await withTenant(
+    shopId,
+    (tx) => tx.usageLedger.groupBy({ by: ["provider"], where: { shopId, periodKey: period, payer: "merchant" }, _sum: { chars: true } }),
+    client,
+  );
+  let total = 0;
+  const byEngine: Partial<Record<EngineId, number>> = {};
+  for (const row of rows) {
+    const chars = row._sum.chars ?? 0;
+    total += chars;
+    if (row.provider !== null && isEngineId(row.provider)) byEngine[row.provider] = (byEngine[row.provider] ?? 0) + chars;
+  }
+  return { total, byEngine };
 }
 
 export interface Reservation {
@@ -163,9 +198,11 @@ export interface Reservation {
   provider: string;
   /** Copied to the settle and release rows, so a budget sums the net usage. */
   origin?: UsageOrigin;
+  /** Copied to the settle and release rows: "merchant" rows never touch PlatformUsageDay. */
+  payer?: UsagePayer;
 }
 
-/** Shop daily usage (UTC day), for display. */
+/** Shop daily usage of Linguva's characters (UTC day), for display. */
 export async function getDailyUsage(shopId: string, client: PrismaClient = defaultClient): Promise<number> {
   const since = new Date(`${dayKey()}T00:00:00.000Z`);
   return withTenant(shopId, (tx) => sumCharsSince(tx, shopId, since), client);
@@ -176,6 +213,11 @@ export async function getDailyUsage(shopId: string, client: PrismaClient = defau
  * advisory lock serialises concurrent reservations, so parallel requests
  * can't overshoot the limit. Re-using an idempotency key returns the
  * existing reservation without counting twice.
+ *
+ * `payer: "merchant"` (Own key plan): the characters go through the shop's own
+ * keys, so no Linguva limit applies (monthly allowance, daily cap, smart
+ * budgets, platform cap) and the platform counter isn't touched; the row is
+ * still written (idempotency, the shop's own-key usage figures).
  */
 export async function reserveUsage(
   input: {
@@ -191,6 +233,8 @@ export async function reserveUsage(
     platformDailyLimit?: number;
     /** Smart Auto-Translate: its origin and the merchant's budgets. */
     budget?: UsageBudget;
+    /** "merchant": the shop's own engine keys pay (Own key plan); no Linguva limit applies. */
+    payer?: UsagePayer;
   },
   client: PrismaClient = defaultClient,
 ): Promise<Reservation> {
@@ -215,7 +259,26 @@ export async function reserveUsage(
           chars: already.chars,
           provider: already.provider ?? input.provider,
           ...(already.origin ? { origin: already.origin as UsageOrigin } : {}),
+          ...(already.payer ? { payer: "merchant" as const } : {}),
         };
+      }
+      if (input.payer === "merchant") {
+        // The merchant's own keys: none of Linguva's limits, and not Linguva's cost. Never a smart
+        // row (Own key has no Smart Auto-Translate; UsageLedger_payer_check), so a budget is ignored.
+        await tx.usageLedger.create({
+          data: {
+            shopId: input.shopId,
+            periodKey: period,
+            kind: "RESERVE",
+            chars: input.chars,
+            provider: input.provider,
+            idempotencyKey: input.key,
+            origin: null,
+            payer: "merchant",
+            createdAt: now,
+          },
+        });
+        return null;
       }
       const used = await sumChars(tx, input.shopId, period);
       if (used + input.chars > input.limit) {
@@ -266,7 +329,8 @@ export async function reserveUsage(
       at: now,
       chars: input.chars,
       provider: input.provider,
-      ...(input.budget ? { origin: input.budget.origin } : {}),
+      ...(input.budget && input.payer !== "merchant" ? { origin: input.budget.origin } : {}),
+      ...(input.payer === "merchant" ? { payer: "merchant" as const } : {}),
     }
   );
 }
@@ -303,9 +367,10 @@ export async function settleUsage(
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:settle`,
         origin: reservation.origin ?? null,
+        payer: reservation.payer ?? null,
         createdAt: reservation.at,
       });
-      if (inserted && delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
+      if (inserted && delta !== 0 && reservation.payer !== "merchant") await addPlatformChars(tx, reservation.day, delta, null);
     },
     client,
   );
@@ -331,6 +396,7 @@ async function settleByEngine(
         provider,
         idempotencyKey,
         origin: reservation.origin ?? null,
+        payer: reservation.payer ?? null,
         createdAt: reservation.at,
       });
       // `:settle` first: releaseUsage looks for it, so the reservation can't be released afterwards.
@@ -338,8 +404,9 @@ async function settleByEngine(
       if (!inserted) return;
       for (const [engine, chars] of others) await insertOnce(tx, row(chars, engine, `${reservation.key}:settle:${engine}`));
       // The platform counts what every engine billed, the lost partials too (they cost the platform).
+      // Own keys: the merchant's engines billed them, never Linguva's.
       const delta = charged - reservation.chars + lost;
-      if (delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
+      if (delta !== 0 && reservation.payer !== "merchant") await addPlatformChars(tx, reservation.day, delta, null);
     },
     client,
   );
@@ -366,9 +433,10 @@ export async function releaseUsage(
         provider: reservation.provider,
         idempotencyKey: `${reservation.key}:release`,
         origin: reservation.origin ?? null,
+        payer: reservation.payer ?? null,
         createdAt: reservation.at,
       });
-      if (inserted) await addPlatformChars(tx, reservation.day, -reservation.chars, null);
+      if (inserted && reservation.payer !== "merchant") await addPlatformChars(tx, reservation.day, -reservation.chars, null);
     },
     client,
   );

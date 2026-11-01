@@ -27,7 +27,7 @@ TOKEN_ENCRYPTION_KEYS=k1:$(openssl rand -base64 32)
 SHOPIFY_API_KEY=image-check
 SHOPIFY_API_SECRET=$(openssl rand -hex 24)
 SHOPIFY_APP_URL=http://localhost:$PORT
-SCOPES=read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales
+SCOPES=read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales
 PORT=$PORT
 VARS
 

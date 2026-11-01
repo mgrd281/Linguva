@@ -25,8 +25,9 @@ violations.
   is for the owner's review, not for search engines or for linking from anywhere public yet.
 - **No real domain yet.** Contact is `shop@softwarekey.de`; provider Karina Khrystych (Softwarekey),
   from https://www.softwarekey.de/policies/legal-notice.
-- **Impressum and website privacy page exist** (`impressum.html`, `datenschutz.html`), from the owner's Softwarekey legal notice; a lawyer has not reviewed them. AGB, AVV and the app's own privacy policy are not written yet, so the footer does not link them.
-- **German only.** The design has an English/French/Spanish rollout planned
+- **Impressum and website privacy page exist** (`impressum.html`, `datenschutz.html`), from the owner's Softwarekey legal notice; a lawyer has not reviewed them. AGB and AVV are not written yet.
+- **The app's privacy policy and support page exist as drafts** (`privacy.html` at `/privacy`, `support.html` at `/support`, English and German), written from `docs/LEGAL_FACTS.md`; open points are marked `<mark class="open">`. The app serves them only with `PUBLIC_PAGES=on` (404 otherwise), and the footer links to them (`<!--public-->…<!--/public-->`) only then; the draft notice (`<!--draft-->`) stays until `LEGAL_TEXTS_REVIEWED=yes` and no open point is left. The separate Caddy image serves every file in this folder, without that gate.
+- **German only** (except the bilingual `privacy.html` and `support.html`). The design has an English/French/Spanish rollout planned
   (`docs/research/website.md` §2.2); only German is built.
 - **Inter is self-hosted** (`public/site-fonts/`, SIL OFL): the pages make no third-party requests. The separate Caddy image does not include these fonts.
 - **Hero variant B (night)** exists only as a design board (`Web-Hero-Nacht.dc.html` on the canvas),

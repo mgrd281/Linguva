@@ -16,7 +16,7 @@ const serverEnv: Record<string, string> = {
   SHOPIFY_API_KEY: UI_ENV.apiKey,
   SHOPIFY_API_SECRET: UI_ENV.apiSecret,
   SHOPIFY_APP_URL: UI_ENV.appUrl,
-  SCOPES: "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales",
+  SCOPES: "read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales",
   TRANSLATION_PROVIDER: "mock",
   // Billing on (simulated Partner API), but no forced plan selection.
   SHOPIFY_PARTNER_ORG_ID: "1",
@@ -35,6 +35,8 @@ const serverEnv: Record<string, string> = {
   AI_SHOP_REQUESTS_PER_MINUTE: "1000",
   // Short, so the timeout test doesn't wait 15 s.
   SHOPIFY_TIMEOUT_MS: "3000",
+  // The app's privacy policy and support page, as drafts (no LEGAL_TEXTS_REVIEWED).
+  PUBLIC_PAGES: "on",
 };
 // The global setup seeds the same database with the app's own modules.
 Object.assign(process.env, serverEnv);

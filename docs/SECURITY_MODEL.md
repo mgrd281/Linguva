@@ -13,7 +13,28 @@ Status: the controls below are implemented and tested where a test is named (`te
 | Operators | Yes (owner database role) | Command-line tools (`pnpm ops:complimentary`, `pnpm preflight`) run on the operator's machine with `MIGRATION_DATABASE_URL`; no admin UI (planned, §6) |
 | Workers | Yes, but re-authorize | Re-check Shop status + entitlement from the DB on every job |
 
-Every loader and action of an app or webhook route authenticates itself, through `requireShop`, `webhookAction` (the HMAC check) or a reviewed delegate that calls `requireShop`: React Router runs a child route's action without its parent's loader, so the layout's check never covers an action. `tests/security/structure.test.ts` parses each route module with the TypeScript compiler and requires the call in each exported loader and action itself (not elsewhere in the file, not in a nested function, imported from where it is defined); only the reviewed public routes (landing page, login form, health checks) are exempt.
+Every loader and action of an app or webhook route authenticates itself, through `requireShop`, `webhookAction` (the HMAC check) or a reviewed delegate that calls `requireShop`: React Router runs a child route's action without its parent's loader, so the layout's check never covers an action. `tests/security/structure.test.ts` parses each route module with the TypeScript compiler and requires the call in each exported loader and action itself (not elsewhere in the file, not in a nested function, imported from where it is defined); only the reviewed public routes are exempt: the website (`/`, `/preise`, `/impressum`, `/datenschutz`), the app's privacy policy and support page (`/privacy`, `/support`: static pages that read no database, Redis or Shopify, ignore `shop` and `host`, set no cookie, load nothing from another host, and answer 404 unless `PUBLIC_PAGES=on`), the login route (no form outside development) and the health checks.
+
+## 1a. Access scopes, and why each one is needed
+
+Every scope in `shopify.app.toml` has a row here (`tests/unit/scopes-documented.test.ts` checks it). No customer or order scopes (ADR-007). `write_locales` was removed: Linguva never adds, enables or publishes a language (it calls no `shopLocaleEnable`, `shopLocaleUpdate` or `shopLocaleDisable`), so requesting it would be over-requesting (requirement 3.2, Shopify's `SCOPE_OVER_REQUEST` check).
+
+| Scope | Required or optional | Feature | API objects and mutations |
+|---|---|---|---|
+| `read_products` | Required | Products, collections, variants and option values, product images (alt text) | `products`, `collections`, `translatableResources(PRODUCT, COLLECTION, PRODUCT_OPTION, PRODUCT_OPTION_VALUE, MEDIA_IMAGE, COLLECTION_IMAGE)` |
+| `read_content` | Required | Blogs and blog posts, their image alt texts | `translatableResources(BLOG, ARTICLE, ARTICLE_IMAGE)` |
+| `read_online_store_pages` | Required | Pages | `translatableResources(PAGE)` |
+| `read_translations` | Required | Reading existing translations, coverage counts, outdated detection | `translatableResources`, `translatableResource` (`translations`, `translatableContent` digests) |
+| `write_translations` | Required | Publishing approved translations, removing a translation | `translationsRegister`, `translationsRemove` |
+| `read_locales` | Required | Which languages the store has, which is primary, which are published | `shopLocales` |
+| `read_markets` | Optional | Countries and markets on the Overview and language pages | `markets`, `backupRegion` (country → language) |
+| `read_online_store_navigation` | Optional | Menus and menu links | `translatableResources(MENU, LINK)` |
+| `read_metaobjects` | Optional | Metaobjects and their fields | `translatableResources(METAOBJECT)` |
+| `read_themes` | Optional | Theme texts and sections | `translatableResources(ONLINE_STORE_THEME and its JSON templates)` |
+| `read_legal_policies` | Optional | Store policies (refund, privacy, terms, shipping) | `translatableResources(SHOP_POLICY)` |
+| `read_shipping` | Optional | Delivery method names | `translatableResources(DELIVERY_METHOD_DEFINITION)` |
+
+`read_content` and `read_online_store_pages`: Shopify accepts either one for pages, blogs and articles in `translatableResources`. Both are kept until a check on the dev store (`docs/DEV_STORE_VERIFICATION.md`) shows that pages, blogs and articles all load with `read_content` alone; then `read_online_store_pages` can be dropped in a separate change that is deployed with `shopify app deploy`.
 
 ## 2. Multi-tenant controls
 
@@ -42,7 +63,7 @@ Every loader and action of an app or webhook route authenticates itself, through
 - AI output for HTML fields is never trusted. The pipeline (TRANSLATION_ENGINE.md §3) translates **text nodes only** and rebuilds the HTML from the source DOM structure, so the provider can't introduce tags or attributes.
 - A final pass runs a sanitizer allow-list (no `<script>`, no `on*` attributes, no `javascript:` URLs). The output tag/attribute set must be a subset of the source's.
 - The admin UI renders translations as text or inside a sandboxed preview. It never uses `dangerouslySetInnerHTML` with unsanitized content.
-- CSP and security headers are set (`frame-ancestors https://*.myshopify.com https://admin.shopify.com` as required for embedded apps).
+- CSP and security headers are set (`frame-ancestors` names the requesting store and the admin, as required for embedded apps; without a shop only `https://admin.shopify.com`, never a wildcard, which Shopify's security check rates High as `STATIC_FRAME_ANCESTORS`).
 
 ## 5. Webhooks
 
@@ -51,7 +72,7 @@ Every loader and action of an app or webhook route authenticates itself, through
 - **Replays: no time window.** The HMAC covers only the body; neither `X-Shopify-Webhook-Id` nor `X-Shopify-Triggered-At` is signed, so a captured delivery can be sent again with a new id, and a window on an unsigned header couldn't stop that. The handlers' own state checks are the control:
   - `shop/redact` erases only a shop that is uninstalled (or already gone), deciding under a lock on its `Shop` row. For an installed shop it deletes nothing, records the request as `RECEIVED` with resolution `SHOP_ACTIVE_NOT_DELETED` and logs a warning with the webhook and shop ids, for the operator to check: a replay, or an uninstall that never reached the app (then the data has to be erased by hand). Tested by replaying a genuine delivery's body and HMAC with a new id after a reinstall (`tests/integration/webhooks.test.ts`).
   - A replayed `customers/*` request only records the evidence again; a content webhook only queues a check of the shop's own resource.
-  - A replayed `app/uninstalled` marks the shop uninstalled, deletes its sessions and cancels its running jobs; the next app open reinstalls it through token exchange. An interruption (cancelled jobs have to be started again), no data is deleted.
+  - A replayed `app/uninstalled` marks the shop uninstalled, deletes its sessions, cancels its running jobs and forgets the cached plan; the next app open reinstalls it through token exchange and asks Shopify for the plan again. An interruption (cancelled jobs have to be started again), no data is deleted.
   - Residual: a replayed `shop/redact` while the shop is uninstalled erases its data before Shopify's own (48 hours after the uninstall), so a reinstall within those hours starts empty.
 - Handlers only persist and enqueue, and respond within a few hundred ms; `shop/redact` deletes the shop's rows in the request itself (one transaction, longer for a large shop).
 - The delivery log keeps finished entries for 14 days (`purgeWebhookLog`, run by the worker's sweep): long enough for Shopify's retries, short enough that frequent product webhooks don't grow the table. It stores topic, shop domain and a payload hash, never the payload.
@@ -138,7 +159,7 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 | Header | Value | Why |
 |---|---|---|
 | Content-Security-Policy | Shopify's `frame-ancestors` for the store's admin, plus `base-uri 'self'; object-src 'none'` | Clickjacking, base-tag and plugin injection |
-| (no shop in the request) | `frame-ancestors https://admin.shopify.com https://*.myshopify.com` | Before, such pages had no framing protection at all |
+| (no shop in the request) | `frame-ancestors https://admin.shopify.com` | Before, such pages had no framing protection at all; no `*.myshopify.com` wildcard (Shopify's `STATIC_FRAME_ANCESTORS` check) |
 | Content-Security-Policy `script-src` (phase G) | `'self' 'nonce-…' https://cdn.shopify.com`, a new nonce per page; React Router's inline scripts carry it. Not on the Vite dev server (its refresh script is inline) | An injected inline script or event handler doesn't run (tested); scripts only from the app and Shopify's CDN (App Bridge, Polaris) |
 | X-Content-Type-Options | `nosniff` | MIME sniffing |
 | Referrer-Policy | `strict-origin-when-cross-origin` | No full app URLs (with `shop`, `host`) sent to other sites |

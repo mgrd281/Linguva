@@ -6,13 +6,14 @@ vi.hoisted(() => {
 });
 
 import { PrismaClient } from "@prisma/client";
+import { grantComplimentaryAccess } from "../../app/.server/billing/complimentary";
 import { ensureShopGid, getBillingStatus, SUBSCRIPTION_TTL_MS, type BillingDeps } from "../../app/.server/billing/subscription";
 import { createBulkJob } from "../../app/.server/jobs/bulk-jobs";
 import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { listPendingDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
-import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
+import { markShopUninstalled, upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
 import { periodKey, QuotaExceededError } from "../../app/.server/usage/usage-ledger";
@@ -119,6 +120,81 @@ describe("subscription status", () => {
     expect(await withTenant(b.id, (tx) => tx.shopSubscription.count(), app)).toBe(0);
     expect(await app.shopSubscription.count()).toBe(0);
     expect(await withTenant(a.id, (tx) => tx.shopSubscription.count(), app)).toBe(1);
+  });
+});
+
+describe("uninstall and reinstall (App Store requirement 1.2.2)", () => {
+  /**
+   * A Pro store, uninstalled (Shopify cancels the subscription then) and
+   * installed again an hour later, well inside the 6-hour cache.
+   */
+  async function reinstalledProStore(extra: Partial<BillingDeps> = {}) {
+    const s = await shop("reinstall.myshopify.com");
+    const api = fakePartnerApi({ handle: "pro" });
+    let now = new Date("2026-10-30T09:00:00Z");
+    const d = deps(api, { now: () => now, ...extra });
+    expect(await getBillingStatus(d, s)).toMatchObject({ state: "ACTIVE", entitlements: PLANS.pro });
+    await markShopUninstalled(s.shopDomain, app);
+    now = new Date(now.getTime() + 60 * 60_000);
+    const { event, shop: again } = await upsertInstalledShop({ shopDomain: s.shopDomain, shopifyShopGid: s.shopifyShopGid }, app);
+    expect(event).toBe("REINSTALLED");
+    return { s: again, api, d };
+  }
+
+  it("asks Shopify again, and sends a store without a plan back to the plan page", async () => {
+    const { s, api, d } = await reinstalledProStore();
+    api.set(null);
+    // The way the app's layout loads it: no forced check.
+    expect(await getBillingStatus(d, s)).toMatchObject({ state: "NONE", entitlements: PLANS.free, mustChoosePlan: true });
+    expect(api.calls).toHaveLength(2);
+  });
+
+  it("gives the plan Shopify reports after the reinstall", async () => {
+    const { s, api, d } = await reinstalledProStore();
+    api.set({ handle: "starter" });
+    expect(await getBillingStatus(d, s)).toMatchObject({ state: "ACTIVE", entitlements: PLANS.starter, mustChoosePlan: false });
+    expect(api.calls).toHaveLength(2);
+  });
+
+  it("never gives back the cancelled plan when Shopify can't be asked", async () => {
+    const { s, api, d } = await reinstalledProStore();
+    api.set({ status: 503 });
+    expect(await getBillingStatus(d, s)).toMatchObject({ state: "NONE", entitlements: PLANS.free, mustChoosePlan: true });
+    // Plans not required: Free, and nobody is sent anywhere.
+    expect(await getBillingStatus({ ...d, required: false }, s)).toMatchObject({ state: "NONE", entitlements: PLANS.free, mustChoosePlan: false });
+    // A failed check leaves the reset in place: the next one asks again.
+    api.set({ handle: "pro" });
+    expect(await getBillingStatus(d, s)).toMatchObject({ state: "ACTIVE", entitlements: PLANS.pro });
+  });
+
+  it("asks again after a reinstall even when the plan was cached after the uninstall", async () => {
+    // For example an uninstall recorded before the reset existed.
+    const s = await shop("reinstall-old.myshopify.com");
+    const api = fakePartnerApi({ handle: "business" });
+    const d = deps(api);
+    await getBillingStatus(d, s);
+    await markShopUninstalled(s.shopDomain, app);
+    await withTenant(s.id, (tx) => tx.shopSubscription.update({ where: { shopId: s.id }, data: { state: "ACTIVE", planHandle: "business", checkedAt: new Date() } }), app);
+    await upsertInstalledShop({ shopDomain: s.shopDomain }, app);
+    api.set(null);
+    expect(await getBillingStatus(d, s)).toMatchObject({ state: "NONE", entitlements: PLANS.free, mustChoosePlan: true });
+    expect(api.calls).toHaveLength(2);
+  });
+
+  it("keeps owner complimentary access across a reinstall", async () => {
+    const s = await shop("reinstall-own.myshopify.com");
+    await grantComplimentaryAccess(ownerDb, { shopifyShopGid: s.shopifyShopGid!, reason: "Own store", operator: "owner" });
+    const d = deps(fakePartnerApi(null), { complimentaryGids: [s.shopifyShopGid!] });
+    await markShopUninstalled(s.shopDomain, app);
+    await upsertInstalledShop({ shopDomain: s.shopDomain }, app);
+    expect(await getBillingStatus(d, s)).toMatchObject({ state: "COMPLIMENTARY", mustChoosePlan: false });
+  });
+
+  it("leaves a store that was never checked without a row", async () => {
+    const s = await shop("reinstall-new.myshopify.com");
+    await markShopUninstalled(s.shopDomain, app);
+    await upsertInstalledShop({ shopDomain: s.shopDomain }, app);
+    expect(await withTenant(s.id, (tx) => tx.shopSubscription.count(), app)).toBe(0);
   });
 });
 

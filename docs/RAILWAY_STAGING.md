@@ -117,7 +117,7 @@ Generate the encryption key in your terminal: `echo "k1:$(openssl rand -base64 3
 | `ALLOWED_SHOPS` | `linguva-test-lab.myshopify.com` |
 | `SHOPIFY_API_KEY` | Client ID of the "Linguva Staging" app (§5.5) |
 | `SHOPIFY_API_SECRET` | Its client secret (secret) |
-| `SCOPES` | `read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales,write_locales` |
+| `SCOPES` | `read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales` |
 | `TOKEN_ENCRYPTION_KEYS` | The generated `k1:…` value (secret; staging only, never reused in production) |
 | `LINGUVA_APP_PASSWORD` | From §5.2 (secret) |
 | `LOG_LEVEL` | `info` |
@@ -279,3 +279,49 @@ Clean-up still open (owner): Postgres-B0jH's public TCP proxy (only needed while
 | 7 | Deploying newer commits to production (§8a) | Changes what KARINEX's staff see | None beyond the running service |
 
 What I changed in the repository (this branch, nothing deployed): the Dockerfile, `.dockerignore`, the staging guards, `/healthz`, `pnpm ops:smoke`, `scripts/db/hosted-roles.sql`, `scripts/ci/image-check.sh` and its CI step, the two Shopify app templates in `deploy/shopify/`, and this document.
+
+## 10. The public App Store app (prepared, not created; every step needs the owner's approval)
+
+"Linguva KARINEX" (§8) is a custom-distribution app for one store, and Shopify doesn't let a custom app become public. The App Store needs a **new** app with public distribution, created in the Partner organization that will own the listing, configured from `deploy/shopify/shopify.app.public.toml` (`--config public`). KARINEX keeps its app, its Railway environment and its variables unchanged.
+
+**A separate Railway project.** `RAILWAY_ENVIRONMENT_NAME` must equal `LINGUVA_STAGE` (`app/.server/lib/config.ts`), so the public app's environment is named `production` too. In the KARINEX project that name is taken, so the public app runs in its own Railway project (environment `production`, its own `web`, Postgres and Redis, database roles from §5.2 with new passwords). Nothing in the KARINEX project changes.
+
+**Variables of the public app's `web` service.** Every setting the app reads, and what it is for the public app. The owner step is the one in OWNER_DECISIONS.md and docs/APP_STORE_SUBMISSION.md (O-numbers there).
+
+| Variable | Public app | Provided by |
+|---|---|---|
+| `NODE_ENV` | `production` (set by the image) | Dockerfile |
+| `LOG_LEVEL` | default `info` | — |
+| `DATABASE_URL` | the `linguva_app` role over Railway's private network; **no public TCP proxy** on Postgres | Owner (§5.2) |
+| `MIGRATION_DATABASE_URL` | the `linguva_migrator` role, private network, used only by the pre-deploy step | Owner (§5.2) |
+| `REDIS_URL` | Railway Redis, private network | Railway |
+| `TOKEN_ENCRYPTION_KEYS` | **new** keys, never KARINEX's (`openssl rand -base64 32`, as §5.3) | Owner |
+| `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` | the **new** public app's client ID and secret | Owner (Partner Dashboard) |
+| `SHOPIFY_APP_URL` | `https://PUBLIC-APP-DOMAIN` (the same address as `application_url`) | Owner (domain) |
+| `SCOPES` | `read_products,read_content,read_online_store_pages,read_translations,write_translations,read_locales` (as `shopify.app.toml`; no `write_locales`) | — |
+| `LINGUVA_STAGE` | `production` | Owner |
+| `LINGUVA_PRODUCTION_APPROVED` | `yes`, set by the owner when releasing | Owner |
+| `RAILWAY_ENVIRONMENT_NAME` | set by Railway: `production` | Railway |
+| `ALLOWED_SHOPS` | **not set**: the App Store app serves every store that installs it | — |
+| `TRANSLATION_PROVIDER` | default `deepl` (`mock` is refused in production) | — |
+| `DEEPL_API_KEY`, `DEEPL_API_KEYS` | the DeepL key(s), only after approval of the cost | Owner |
+| `DEEPL_API_URL` | not set (chosen from the key) | — |
+| `AI_MONTHLY_CHAR_LIMIT` | not set once billing is on (each plan has its allowance) | — |
+| `AI_DAILY_CHAR_LIMIT` | `1000000` (PRICING_DECISION.md §9 step 6) | Owner |
+| `AI_PLATFORM_DAILY_CHAR_LIMIT` | `3000000` (PRICING_DECISION.md §9 step 6; the 100,000 default must not go live) | Owner |
+| `AI_COST_USD_PER_MILLION_CHARS` | `27.5` (PRICING_DECISION.md §9 step 6) | Owner |
+| `AI_MAX_CHARS_PER_REQUEST`, `AI_USER_REQUESTS_PER_MINUTE`, `AI_SHOP_REQUESTS_PER_MINUTE`, `MEMORY_SUGGESTIONS_PER_MINUTE` | defaults | — |
+| `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE` | the public app's Partner organization and app | Owner (Partner Dashboard) |
+| `SHOPIFY_PARTNER_API_VERSION` | default | — |
+| `BILLING_REQUIRED` | `true`, set **last**, after the plans are checked on a dev store (PRICING_DECISION.md §9 steps 5–6) | Owner |
+| `OPERATOR_SHOPS` | the owner's own stores, if they install the public app (shows the DeepL quota card); else not set | Owner |
+| `COMPLIMENTARY_SHOP_GIDS` | the owner's own stores' GIDs, if they should use it for free; else not set | Owner |
+| Job settings: `SHOPIFY_JOB_BUCKET_SIZE`, `SHOPIFY_JOB_RESTORE_PER_SECOND`, `WORKER_CONCURRENCY`, `SHOPIFY_TIMEOUT_MS` | defaults | — |
+| `LINGUVA_EMBEDDED_WORKER` | not set (on in production, §8b) | — |
+| `PUBLIC_PAGES` | `on`, so `/privacy` and `/support` exist for the listing (production refuses it without `LEGAL_TEXTS_REVIEWED=yes`) | Owner, after the lawyer |
+| `LEGAL_TEXTS_REVIEWED` | `yes` once the lawyer has resolved every open point (docs/LEGAL_FACTS.md) | Owner, after the lawyer |
+| `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `60` (§8b) | Owner |
+
+`tests/unit/deploy-config.test.ts` checks that this table names every setting in `app/.server/lib/config.ts`.
+
+After the first deploy: `pnpm ops:smoke --url https://PUBLIC-APP-DOMAIN --expect-worker`, then `pnpm shopify app deploy --config public` (scopes, webhooks, compliance topics), then the submission steps in docs/APP_STORE_SUBMISSION.md.

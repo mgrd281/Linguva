@@ -33,7 +33,7 @@ describe("app configuration (shopify.app.toml)", () => {
   it("requests exactly the reviewed scopes; feature scopes only as optional", () => {
     // Changing scopes needs merchant re-approval and a SECURITY_MODEL entry: update this test deliberately.
     expect(tomlString(toml, "scopes")!.split(",").sort()).toEqual(
-      ["read_content", "read_locales", "read_online_store_pages", "read_products", "read_translations", "write_locales", "write_translations"],
+      ["read_content", "read_locales", "read_online_store_pages", "read_products", "read_translations", "write_translations"],
     );
     const optional = JSON.parse(/^optional_scopes = (.*)$/m.exec(toml)![1]!) as string[];
     expect(optional.sort()).toEqual(

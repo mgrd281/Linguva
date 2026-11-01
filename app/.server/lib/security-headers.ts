@@ -13,9 +13,10 @@
  * Cross-Origin-Opener-Policy (App Bridge opens admin windows).
  */
 
-// The Shopify admin and storefront hosts that may embed the app when a
-// request doesn't name a shop; the library sets the exact store otherwise.
-const FALLBACK_FRAME_ANCESTORS = "frame-ancestors https://admin.shopify.com https://*.myshopify.com;";
+// The Shopify admin may embed the app when a request doesn't name a shop; the
+// library sets the exact store otherwise. No wildcard: Shopify's security check
+// rates a static "https://*.myshopify.com" (STATIC_FRAME_ANCESTORS) as High.
+const FALLBACK_FRAME_ANCESTORS = "frame-ancestors https://admin.shopify.com;";
 const EXTRA_CSP = "base-uri 'self'; object-src 'none';";
 const SCRIPT_HOSTS = "https://cdn.shopify.com";
 

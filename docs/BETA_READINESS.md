@@ -15,7 +15,7 @@ Review date: 2026-10-27, branch `claude/gallant-pasteur-8opy75` (draft PR, not m
 | B3 | Plans not created in the Partner Dashboard; no Partner API client | Billing can't be verified (L1–L14); prices decided 2026-10-30 (PRICING_DECISION.md) | Owner: create exactly the decided plans `free/starter/pro/business` (PRICING_DECISION.md §9), Partner API client |
 | B4 | AI provider not verified (no DeepL key) | Translation quality, real character counts and costs unknown | Owner: approve a DeepL API Free key first (no cost), then a budget |
 | B5 | No production hosting, backups, monitoring, error tracking | A beta needs a reachable, monitored service | Owner: choose and approve hosting (separate from KARINEX/SOFTWAREFACH systems) |
-| B6 | Legal: privacy policy, data processing terms, sub-processor list (DeepL), App Store listing | Required by the App Store and GDPR | Owner, with legal review |
+| B6 | Legal: privacy policy, data processing terms, sub-processor list (DeepL), App Store listing | Required by the App Store and GDPR | Owner, with legal review. Prepared: the app's privacy policy (`/privacy`, naming DeepL, Railway and Shopify) and support page as drafts, docs/LEGAL_FACTS.md, docs/APP_STORE_SUBMISSION.md |
 | B7 | Branch protection on `main` (required reviews, code owners) not enabled; repository public | Reviews of security-sensitive changes aren't enforced | Owner: GitHub settings |
 
 ### 1b. Engineering (no accounts needed)

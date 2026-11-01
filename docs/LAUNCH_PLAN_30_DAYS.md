@@ -14,9 +14,9 @@ Launch starts only when all of these are true. Owner items are detailed in OWNER
 | G2 | DeepL quality checked on a reference set in DE/FR/ES | Development, after the owner provides a key | Open |
 | G3 | Prices and trial configured in the Partner Dashboard | Owner | Open |
 | G4 | Hosting with backups, monitoring and error alerts; the app's posture check passing in production | Owner (decision, account) + development | Open |
-| G5 | Privacy policy, terms, data processing agreement, imprint published | Owner (legal) | Open |
+| G5 | Privacy policy, terms, data processing agreement, imprint published | Owner (legal) | Imprint online (`/impressum`); the app's privacy policy drafted and served by the app at `/privacy` once reviewed (`PUBLIC_PAGES`, docs/LEGAL_FACTS.md); website later. Terms and data processing agreement open |
 | G6 | Listing submitted and approved by Shopify's app review (takes days to weeks; plan for it) | Owner submits, development answers review findings | Open |
-| G7 | Support: an address, a reply-within-one-business-day promise, a short FAQ | Owner | Open |
+| G7 | Support: an address, a reply-within-one-business-day promise, a short FAQ | Owner | Drafted: `/support` with the address and an FAQ of 8 questions at `#faq`, served by the app; website later. The reply promise is the owner's to confirm |
 
 ## 1. Week 1 (days 1–7): closed beta with 3–5 merchants
 

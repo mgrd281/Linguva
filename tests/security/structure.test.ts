@@ -177,8 +177,20 @@ function routeHandlers(file: Source) {
 }
 
 describe("every page and webhook authenticates", () => {
-  // Routes anyone may call, reviewed: the website (home and pricing pages), Shopify's login form and the health checks.
-  const PUBLIC = ["app/routes/_index/route.tsx", "app/routes/preise.tsx", "app/routes/impressum.tsx", "app/routes/datenschutz.tsx", "app/routes/auth.login/route.tsx", "app/routes/healthz.tsx", "app/routes/healthz_.worker.tsx"];
+  // Routes anyone may call, reviewed: the website (home, pricing, imprint and privacy pages), the app's privacy
+  // policy and support page (static site pages: no database, Redis or Shopify, no cookies, 404 unless
+  // PUBLIC_PAGES=on), Shopify's login and the health checks.
+  const PUBLIC = [
+    "app/routes/_index/route.tsx",
+    "app/routes/preise.tsx",
+    "app/routes/impressum.tsx",
+    "app/routes/datenschutz.tsx",
+    "app/routes/privacy.tsx",
+    "app/routes/support.tsx",
+    "app/routes/auth.login/route.tsx",
+    "app/routes/healthz.tsx",
+    "app/routes/healthz_.worker.tsx",
+  ];
   const modules = routeModules();
   const routes = modules.filter((r) => !PUBLIC.includes(r.path) && routeHandlers(r).length > 0);
 

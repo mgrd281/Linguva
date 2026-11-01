@@ -1,6 +1,6 @@
 /**
- * Hosting configuration (docs/RAILWAY_STAGING.md): the staging and
- * production Shopify app templates ask for exactly the development app's
+ * Hosting configuration (docs/RAILWAY_STAGING.md): the staging, production and public
+ * Shopify app templates ask for exactly the development app's
  * scopes and webhooks, never use a development tunnel or store, and the
  * image runs unprivileged without local secrets.
  */
@@ -11,7 +11,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 const section = (toml: string, name: string) => toml.slice(toml.indexOf(`[${name}]`)).split(/\n\[(?!\[)/)[0]!;
 const dev = read("shopify.app.toml");
 
-describe.each(["staging", "production"])("Shopify app template: %s", (stage) => {
+describe.each(["staging", "production", "public"])("Shopify app template: %s", (stage) => {
   const toml = read(`deploy/shopify/shopify.app.${stage}.toml`);
 
   it("has the development app's scopes and webhooks", () => {
@@ -64,5 +64,27 @@ describe("background jobs in the web container", () => {
     expect(pkg.scripts["build:worker"]).toMatch(/--outfile=build\/worker\/index\.js/);
     expect(pkg.scripts.build).toMatch(/build:worker/);
     expect(read("app/.server/jobs/embedded-worker.ts")).toContain('"build/worker/index.js"');
+  });
+});
+
+describe("the public App Store app (RAILWAY_STAGING.md §10)", () => {
+  const doc = read("docs/RAILWAY_STAGING.md");
+  const publicSection = doc.slice(doc.indexOf("## 10. The public App Store app"));
+  const settings = [...read("app/.server/lib/config.ts").matchAll(/^ {2}([A-Z][A-Z0-9_]+): /gm)].map(([, name]) => name!);
+
+  it("lists every setting the app reads, and the Shopify variables", () => {
+    expect(settings.length).toBeGreaterThan(30);
+    const missing = [...settings, "SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_APP_URL", "SCOPES", "MIGRATION_DATABASE_URL"].filter(
+      (name) => !publicSection.includes(`\`${name}\``),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("serves every store (no ALLOWED_SHOPS) and is a new app, not KARINEX's", () => {
+    expect(publicSection).toMatch(/\| `ALLOWED_SHOPS` \| \*\*not set\*\*/);
+    const toml = read("deploy/shopify/shopify.app.public.toml");
+    expect(toml).toMatch(/^name = "Linguva"$/m);
+    expect(toml).toMatch(/^application_url = "https:\/\/PUBLIC-APP-DOMAIN"$/m);
+    expect(toml).not.toMatch(/up\.railway\.app|45dv93|karinex\.myshopify/i);
   });
 });

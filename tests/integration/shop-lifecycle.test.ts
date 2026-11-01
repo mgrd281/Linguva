@@ -49,6 +49,33 @@ describe("shop lifecycle", () => {
     expect(settings).toHaveLength(1);
   });
 
+  it("marks the cached plan as cancelled and unchecked on uninstall (Shopify cancels the subscription)", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN, shopifyShopGid: "gid://shopify/Shop/77" }, app);
+    const plan = {
+      state: "ACTIVE" as const,
+      planHandle: "pro",
+      pendingPlanHandle: "starter",
+      billingPeriod: "EVERY_30_DAYS",
+      trialEndsAt: new Date("2026-11-05T00:00:00Z"),
+      cancelAtEndOfCycle: true,
+      currentPeriodEnd: new Date("2026-11-30T00:00:00Z"),
+      checkedAt: new Date(),
+    };
+    await withTenant(shop.id, (tx) => tx.shopSubscription.create({ data: { shopId: shop.id, ...plan } }), app);
+    await markShopUninstalled(DOMAIN, app);
+    const row = await withTenant(shop.id, (tx) => tx.shopSubscription.findUniqueOrThrow({ where: { shopId: shop.id } }), app);
+    expect(row).toMatchObject({
+      state: "NONE",
+      planHandle: null,
+      pendingPlanHandle: null,
+      billingPeriod: null,
+      trialEndsAt: null,
+      cancelAtEndOfCycle: false,
+      currentPeriodEnd: null,
+      checkedAt: new Date(0),
+    });
+  });
+
   it("deletes stored sessions on uninstall", async () => {
     await upsertInstalledShop({ shopDomain: DOMAIN }, app);
     await app.session.create({

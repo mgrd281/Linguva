@@ -51,6 +51,8 @@ const enginesEnv: Record<string, string> = {
   AZURE_TRANSLATOR_KEY: "uiazurekey0004fictional0000000000",
   AZURE_TRANSLATOR_REGION: "westeurope",
   GOOGLE_TRANSLATE_API_KEY: "ui-google-key-0005-fictional0000",
+  // The Own key plan shown (its Plan page card and website texts); the main server keeps it off.
+  OWN_KEY_PLAN_VISIBLE: "on",
 };
 // The global setup seeds the same database with the app's own modules.
 Object.assign(process.env, serverEnv);

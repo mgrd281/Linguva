@@ -103,3 +103,44 @@ test("the editor's permission names the services and their order", async ({ page
   await expect(banner.getByText(/our translation providers \(DeepL SE .*Google Cloud EMEA Ltd\. .*\)/)).toBeVisible();
   await expect(banner.getByText(/Texts go to DeepL first; only if it can't translate them are they sent to Microsoft Azure, then Google Cloud\./)).toBeVisible();
 });
+
+test("with the Own key plan shown, the website names it: the pricing card across the grid, the homepage's fifth plan, the privacy section", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("pageerror", (e) => errors.push(e.message));
+
+  await page.goto("/preise");
+  const card = page.locator("article.plan-wide");
+  await expect(card.getByRole("heading", { level: 2, name: "Own key" })).toBeVisible();
+  await expect(card.getByText("Nur monatlich")).toBeVisible();
+  await expect(card.getByText(/Lege bei deinem Dienst ein Kostenlimit oder Budget fest/)).toBeVisible();
+  // Its stylesheet loads under the page's CSP: the card spans the four columns of the plans grid.
+  const grid = (await page.locator(".plans").boundingBox())!;
+  const wide = (await card.boundingBox())!;
+  expect(Math.abs(wide.width - grid.width)).toBeLessThanOrEqual(1);
+  await expect(page.locator(".plans article.plan")).toHaveCount(5);
+  await expectNoHorizontalScroll(page);
+  await expectAccessible(page);
+
+  await page.goto("/");
+  await expect(page.getByRole("list", { name: "Die fünf Tarife" }).getByRole("listitem")).toHaveCount(5);
+  await expect(page.getByText("Glossar ab Pro und in Own key")).toBeVisible();
+  await expectNoHorizontalScroll(page);
+
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "Stores on the Own key plan" })).toBeVisible();
+  await expect(page.locator("#de").getByRole("heading", { name: "Shops im Tarif Own key" })).toBeAttached();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ["/preise", "/"]) {
+    await page.goto(path);
+    await expectNoHorizontalScroll(page);
+  }
+  expect(errors).toEqual([]);
+});
+
+test("with the Own key plan shown, a merchant's Plan page has its card beside the four", async ({ page }) => {
+  await openApp(page, "engines", "/app/plan");
+  await expect(page.getByRole("group", { name: "Own key", exact: true })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});

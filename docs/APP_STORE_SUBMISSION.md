@@ -79,9 +79,9 @@ Limited visibility (only people with the link can install) suits the first 3 to 
 | O4 | Partner API client ("Manage apps") | — |
 | O5 | Legal data (already on `/impressum`) and the support mailbox and reply time | `/support` shows shop@softwarekey.de and two working days, marked as open |
 | O6 | Approve merging this branch | — |
-| O7 | Lawyer: `site/privacy.html`, `site/support.html`, imprint; terms and a data processing agreement for merchants; then `LEGAL_TEXTS_REVIEWED=yes` | docs/LEGAL_FACTS.md lists the open questions |
+| O7 | Lawyer: `site/privacy.html`, `site/support.html`, imprint; terms and a data processing agreement for merchants; then `LEGAL_TEXTS_REVIEWED=yes`. Terms of service: the store is the customer of the translation service whose key it adds and is responsible for that service's charges and its account; Linguva sets no character limit on own keys. | docs/LEGAL_FACTS.md lists the open questions (open question 9: the Own key plan) |
 | O8 | Deploy the public app with the §10 variables; `shopify app deploy --config public`; no public database or Redis proxy (also remove KARINEX's) | RAILWAY_STAGING.md §10 |
-| O9 | The four plans exactly as PRICING_DECISION.md §9 | — |
+| O9 | The four plans exactly as PRICING_DECISION.md §9; Own key later, in one sitting with `OWN_KEY_PLAN_VISIBLE=on` (§9 step 11) | `OWN_KEY_HANDLES` are mapped; the plan stays hidden until the flag is on |
 | O10 | Decide `BILLING_REQUIRED`, set it last | — |
 | O11 | Test on the dev store (DEV_STORE_TEST_PLAN.md) | — |
 | O12 | Fill in this form; contacts; protected customer data opt-out | this document |

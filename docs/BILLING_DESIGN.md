@@ -25,11 +25,12 @@ Status: **Implemented and tested locally against a simulated Partner API; not ve
 | Enforcement: monthly characters from the plan (editor and worker), languages, bulk jobs (route and worker, checked per item), automatic publishing, glossary editing | editor, list, coverage, settings, glossary, processors | Implemented, Tested locally |
 | Billing off (no Partner API settings): unmetered, environment limits | — | Implemented, Tested locally |
 | Owner complimentary access (§4): configuration allowlist + operator grant, audit, cost estimate | `app/.server/billing/complimentary.ts`, `scripts/ops/complimentary.ts` | Implemented, Tested locally |
+| Own key plan: `OWN_KEY_PLAN`, `OWN_KEY_PRICE` ($49 a month, monthly only) and `OWN_KEY_HANDLES`, outside the ladder of four (`PLANS`); `OWN_KEY_PLAN_VISIBLE` shows its card; entitlements never depend on it. Translates only with the store's own engine keys (docs/AI_ENGINES.md, "Merchant's own keys") | `app/lib/plans.ts`, `app/.server/billing/subscription.ts`, `app/.server/providers/shop-translation.ts` | Implemented, Tested locally |
 | Usage-based overage via App Events | — | Not at launch (Managed Pricing has no merchant spending cap) |
 
 Testing without charges: locally, every subscription state (none, active plan, trial, pending downgrade, cancellation at period end, unknown plan handle, Partner API errors, throttling, timeouts) is simulated by `tests/support/fake-partner-api.ts` (`tests/unit/billing.test.ts`, `tests/integration/billing.test.ts`). On Shopify, DEV_STORE_TEST_PLAN.md §L walks through the same states on a development store, where every plan costs $0.
 
-Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE`, `BILLING_REQUIRED`. The plan handles in the Partner Dashboard must be `free`, `starter`, `pro`, `business`, or `app/lib/plans.ts` must be changed to match them.
+Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE`, `BILLING_REQUIRED`. Handles must be `free`, `starter`, `pro`, `business` or `own-key` (the app also maps `ownkey`/`own_key` in case the Partner Dashboard refuses the hyphen, and the private test handles `own-key-test`/`ownkeytest`/`own_key_test`: `OWN_KEY_HANDLES`), or `app/lib/plans.ts` must be changed to match them.
 
 ## 2. Plans (decided 2026-10-30, PRICING_DECISION.md; `app/lib/plans.ts` follows this table)
 
@@ -39,6 +40,7 @@ Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `
 | STARTER | 29 | 290 | 300,000 | 3 | + translating whole areas at once (bulk), automatic translation of new and changed content |
 | PRO | 99 | 990 | 1,200,000 | 10 | + glossary editing, optional automatic publishing |
 | BUSINESS | 299 | monthly only | 4,000,000 | 20 | + smart schedule (Smart Auto-Translate) |
+| OWN KEY (`own-key`) | 49 | monthly only | 0 included Linguva characters; no Linguva limit through the store's own keys | 10 | Pro's features (bulk, automatic translation, glossary, automatic publishing); no smart schedule; no trial; AI translation only with the store's own DeepL, Microsoft Azure or Google Cloud key, never Linguva's (`OWN_KEY_PLAN`, not part of the upgrade ladder) |
 | ENTERPRISE | private plan | — | negotiated | 20 | + custom limits. Its handle must be mapped in `app/lib/plans.ts` and deployed before the plan is created (unknown handles get Free's limits; PRICING_DECISION.md §9 step 4) |
 
 - Trial: 7 days on Starter, Pro and Business ("Free trial duration" in the Partner Dashboard), with at most 100,000 AI characters while it runs (§1a, trial allowance). Free has no trial. `TRIAL_DAYS` in `app/lib/plans.ts` must equal the Partner Dashboard (0 there means 0 here, and no trial text anywhere).
@@ -48,7 +50,7 @@ Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `
 - Overage: not at launch. Managed Pricing has no usage caps, so a merchant couldn't set a spending cap; $40 per extra million would earn 13.3% (PRICING_DECISION.md §6.3). If ever, at least $69 per extra million and only with an in-app cap.
 - Yearly: Starter and Pro cost 10 × the monthly price (2 months free); Business is billed monthly only.
 - **Changing a price** (both places, the same day): the plan in the Partner Dashboard, `PLAN_PRICES` in `app/lib/plans.ts` with its pinned values in `tests/unit/plan-prices.test.ts`, and the pricing details in both listing languages (APP_STORE_LISTING.md). Read Shopify's rules for existing subscribers first (PRICING_DECISION.md §9 step 8).
-- Up to 8 public plans are allowed (VERIFIED). We use 4 public plans plus private plans.
+- Up to 8 public plans are allowed (VERIFIED). We use 4 public plans plus private plans, and a fifth public plan, Own key, once the owner creates it (PRICING_DECISION.md §9 step 11).
 
 ## 3. Entitlement resolution (server-side only)
 
@@ -72,6 +74,8 @@ The operator's own stores get every feature without a monthly subscription. No c
 2. **Database grant:** an active `ComplimentaryAccess` row, created by the operator tool with the **owner** database role. The app's runtime role can only read it (under RLS, own shop only); the posture check fails (`RUNTIME_CAN_WRITE_GRANTS`) if it ever gains write access. The row's GID must equal `Shop.shopifyShopGid`, which comes from Shopify (`shop { id }` with the store's own token), never from a request.
 
 Names, domains and e-mail addresses are never used for the decision. Removing the GID from the configuration ends access at the next request; so does revocation or expiry.
+
+Complimentary access wins over Own key (no own keys): such a store translates with Linguva's engines, and keys it saved earlier show as not used on its plan.
 
 | | |
 |---|---|
@@ -104,13 +108,14 @@ The shop GID is shown in Shopify admin URLs only indirectly; the easiest way to 
 - **Release** the unused remainder when the job ends. A sweeper expires reservations older than 24h.
 - **Overage** events are sent to the App Events API with `idempotency_key = ledgerRowId`. A delivery outbox table plus retry guarantees at-least-once sending, and the idempotency key makes that effectively exactly-once.
 - Monthly reconciliation compares ledger totals against App Events delivered and Shopify-reported charges, and alerts on drift.
+- **Who pays** (`UsageLedger.payer`, Own key plan): NULL for Linguva's engines; `'merchant'` for calls through the store's own keys. Merchant rows go through the same reserve → settle/release pipeline but skip the monthly, daily, smart and platform checks, never touch `PlatformUsageDay`, and are left out of every allowance and cost sum (`payer IS NULL`); the Plan page and Settings show them as "through your keys" (`getOwnKeyUsage`).
 
 ## 6. Lifecycle cases
 
 | Event | Handling |
 |---|---|
 | Trial | Shopify-managed; we read `trialEndsAt`. While it is ahead, the AI allowance is at most 100,000 characters (`TRIAL_AI_CHARS`); the Plan page shows the end date and both allowances (its meter names the trial's end as when more characters come, if that is before the 1st), the smart budgets say why they can't be higher, and the Overview's used-up banner names the day the trial ends when that comes before the 1st. Automatic translation and the smart schedule that stopped at the trial's allowance pause until the trial ends, not until the next month (`app/.server/jobs/queues.ts`). Trial days are tracked by Shopify across reinstalls (VERIFIED) |
-| Upgrade / downgrade | Shopify prorates. On downgrade, extra languages stay but go read-only; nothing is deleted |
-| Cancel / uninstall | Stop jobs and release reservations. Data is retained per DATABASE_SCHEMA §4. Uninstall also marks the cached subscription as none and unchecked, so a reinstall asks Shopify again (§1a). A replayed `app/uninstalled` (SECURITY_MODEL §5) only costs one more Partner API check on the next open |
+| Upgrade / downgrade | Shopify prorates. On downgrade, extra languages stay but go read-only; nothing is deleted. A plan change keeps the store's own engine keys, unused off the Own key plan |
+| Cancel / uninstall | Stop jobs and release reservations. Data is retained per DATABASE_SCHEMA §4. Uninstall also marks the cached subscription as none and unchecked, so a reinstall asks Shopify again (§1a). A replayed `app/uninstalled` (SECURITY_MODEL §5) only costs one more Partner API check on the next open, and the store's own engine keys. Uninstall deletes the store's own engine keys; shop/redact erases them by cascade |
 | Frozen (failed payment) | Read-only mode with a banner |
 | Refund / correction | Partner Dashboard credit. The ledger gets an `ADJUST` row with a reason and an audit entry |

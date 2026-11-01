@@ -41,6 +41,16 @@ Decided in [PRICING_DECISION.md](PRICING_DECISION.md) and verified the same day.
 
 **Your steps:** create exactly these plans in the Partner Dashboard (PRICING_DECISION.md §9), check them on the dev store (DEV_STORE_TEST_PLAN.md L11–L14), then set the production values of §9 step 6, `BILLING_REQUIRED=true` last. Later price changes: Partner Dashboard, `PLAN_PRICES` and both listing languages on the same day.
 
+**Own key plan (decided 2026-11; implemented, hidden):** `own-key`, $49 a month, monthly only, no trial, for large stores with their own DeepL, Microsoft Azure or Google Cloud key: Pro's features, 0 included characters, no Linguva character limit, and never Linguva's keys (`OWN_KEY_PLAN`, `OWN_KEY_PRICE` in `app/lib/plans.ts`). The app maps the handle regardless of the flag; `OWN_KEY_PLAN_VISIBLE=on` only shows its card on the Plan page and its texts on the website.
+
+**Your steps for Own key** (PRICING_DECISION.md §9 step 11, only after the four plans and billing are live):
+1. Precondition: the four plans are live and the `SHOPIFY_PARTNER_*` settings are set in production (production refuses `OWN_KEY_PLAN_VISIBLE=on` without them). Merge and deploy with the flag unset.
+2. The lawyer resolves the own-key open points in the privacy page (docs/LEGAL_FACTS.md, open question 9).
+3. Create the private test plan `own-key-test` ($49 monthly, no trial, welcome link `/app/welcome`) for `linguva-test-lab`, and test it there with your own DeepL API Free key with a low cost limit (DEV_STORE_TEST_PLAN.md L15–L20). Then delete or archive it.
+4. Create the public plan `own-key` with no display name and no top features (merchants can't see it yet).
+5. In one sitting: enter its pricing content in English and German from APP_STORE_LISTING.md (Own key block), set `OWN_KEY_PLAN_VISIBLE=on` in production and redeploy, then check the Plan page, `/preise` and Shopify's plan page.
+6. Rollback: delete the pricing content, set the flag off and redeploy; subscribers keep their entitlements.
+
 ## 4. Hosting and running costs (unblocks: production, monitoring)
 
 Staging on Railway is prepared (docs/RAILWAY_STAGING.md): what to click, the variables, and which steps need your approval (§9). Production for KARINEX follows after staging is verified.
@@ -71,6 +81,7 @@ These need a lawyer or a reviewed template.
 - The app's privacy policy (`/privacy`, English and German) and a support page with FAQ (`/support#faq`) are drafted from the facts in docs/LEGAL_FACTS.md. Open points for the lawyer are marked in the pages and listed in LEGAL_FACTS.md: your role for store content and the data processing agreement for merchants, legal bases, the safeguard for US hosting (Railway), DeepL's terms, retention of audit entries, the host's logs and backups.
 - They are off by default (`PUBLIC_PAGES=off`: 404). After the lawyer's review: set `LEGAL_TEXTS_REVIEWED=yes` and `PUBLIC_PAGES=on`; production refuses `PUBLIC_PAGES=on` without the review.
 - Terms of service and the data processing agreement for merchants are not written yet.
+- Terms of service: the store is the customer of the translation service whose key it adds and is responsible for that service's charges and its account; Linguva sets no character limit on own keys. (Own key plan; O7 in docs/APP_STORE_SUBMISSION.md.)
 
 The submission steps, in order: docs/APP_STORE_SUBMISSION.md (O1–O16).
 

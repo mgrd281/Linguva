@@ -20,6 +20,7 @@
 | `pro` | **$99** | **$990** (2 months free) | 1,200,000 | 10 | Glossary editing; optional automatic publishing |
 | `business` | **$299** | monthly only | 4,000,000 | 20 | Smart schedule (Smart Auto-Translate) |
 
+- **Own key (decided 2026-11):** $49 a month, monthly only, for large stores with their own DeepL, Microsoft Azure or Google Cloud key; Pro's features, 0 included characters, no Linguva character limit, never Linguva's keys. Hidden until `OWN_KEY_PLAN_VISIBLE=on`. Not part of the ladder above (`OWN_KEY_PLAN`, `OWN_KEY_PRICE` in `app/lib/plans.ts`); the owner creates it in §9 step 11.
 - **Trial:** 7 days on Starter, Pro and Business. While the trial runs, AI translation is limited to **100,000 characters**.
   - This needs a new trial allowance in the app (§10.2). Today's code gives a trialing store its plan's full allowance.
   - Until the trial allowance ships, the trial is 0 days.
@@ -222,6 +223,7 @@ How this is used:
 - **4.2.2 / 4.2.3:** no prices in images, the icon or the logo.
   - None of today's App Store screenshots (`tests/ui/app-store-screenshots.spec.ts`: products, editor, review, glossary, settings, overview, language page) shows `/app/plan`.
   - Keep it that way: never add the Plan page or any price to a listing image.
+- **1.2.1 for Own key:** Linguva's only charge is the $49 a month through Shopify App Pricing. The translation fees are not app charges: DeepL, Microsoft or Google bill them under the merchant's own contract and account with them. Linguva never collects, marks up or resells them and stores no engine billing data. The plan's pricing content discloses them (§9 step 11: the additional-charges text).
 - **4.3.3:** no "the best", no stats and no unsubstantiated claims in the listing. The pricing texts in §10.3 state plan facts only.
 - **No written rule** was found saying that prices inside the app must match the listing. App Review applies it in practice:
   - App Review quoted on Shopify's community: "The pricing plans listed in your app are not references on your app listing", and every charge and the free trial time "must be included in the pricing section".
@@ -391,14 +393,15 @@ Do nothing here before steps 0 and 1 are done. Nothing in this section has been 
    | `pro` | Monthly with a yearly option | 99.00 | 990.00 | 7 | **off** | `/app/welcome` |
    | `business` | Monthly | 299.00 | — | 7 | **off** | `/app/welcome` |
 
-   - Check each handle before you click **Save**. The app maps only `free`, `starter`, `pro` and `business` (`app/lib/plans.ts`). Any other handle gets Free's limits and a warning in the log.
+   - No row for Own key here: it is created in step 11, after the four plans are live.
+   - Check each handle before you click **Save**. The app maps only `free`, `starter`, `pro` and `business` (`app/lib/plans.ts`), and the Own key handles of step 11 (`OWN_KEY_HANDLES`). Any other handle gets Free's limits and a warning in the log.
    - The docs don't say a handle can be edited later. If one is wrong, replace that plan before any merchant subscribes.
    - Leave "Free for partners and developers" **off** on paid plans. Otherwise any partner's development store could use Business's 4,000,000 characters a month for free.
    - App Review doesn't need that option: reviewers can select existing plans at no charge (§5.1). If a reviewer still reports that they can't switch plans, answer them in the review thread instead of turning the option on.
 3. **Add a description in every published language:** Published languages → Edit (English, then German) → Pricing content. For each plan, enter the **Display name** (Free / Starter / Pro / Business) and the **Top features** from §10.3, then Save.
    - A plan without a description in a language is not shown to merchants in that language.
    - Keep each feature under about 80 characters. The editor shows its own limit.
-4. **No other public plans and no private plans at launch.** Later, a yearly Business plan can be created as a private plan for a store that asks.
+4. **No other public plans and no private plans at launch** (besides Own key, step 11, and its private test plan, deleted after the test). Later, a yearly Business plan can be created as a private plan for a store that asks.
    - Before you create it, its handle (for example `business-yearly`) must be mapped to Business's entitlements in `app/lib/plans.ts`, and that code deployed.
    - Otherwise the store pays for Business and gets Free's limits, because `entitlementsFor` gives Free's limits to unknown handles.
 5. **Test on `linguva-test-lab`:** your organization's development store, where every plan is free to test.
@@ -415,6 +418,19 @@ Do nothing here before steps 0 and 1 are done. Nothing in this section has been 
    - `BILLING_REQUIRED=true`
 7. **Revenue share:** register for the 0% share on the first $1M (one-time $19 per Partner account, shopify.dev revenue-share page). Link any associated developer accounts.
 8. **Changing a price later:** change the Partner Dashboard, `PLAN_PRICES` and both listing languages on the same day. Read Shopify's current rules on price changes for existing subscribers before you change a live plan.
+
+Later, once steps 0–8 are done and the four plans are live:
+
+11. **The Own key plan** (`own-key`, $49 a month, monthly only, no trial; in the app `OWN_KEY_PLAN`, `OWN_KEY_PRICE`, `OWN_KEY_HANDLES`, `OWN_KEY_PLAN_VISIBLE`). Rule: Shopify shows a public plan to merchants (its plan selection page and the App Store listing) only once it has a display name and top features in the merchant's language (§5.1). The env flag hides only Linguva's own texts. So the plan's pricing content and the flag go on **together, in one sitting**, and the full test runs before anything is public, on a private plan.
+    0. **Precondition:** steps 0–6 above are done: Free, Starter, Pro and Business are live, the `SHOPIFY_PARTNER_*` settings are set in production, and `linguva-test-lab`'s Plan page shows a real plan (not "billing off"). Without billing every shop is UNMETERED on Linguva's engines, so an Own key subscriber would translate at Linguva's cost; production refuses `OWN_KEY_PLAN_VISIBLE=on` without the Partner settings (`app/.server/lib/config.ts`).
+    1. Merge and deploy. `OWN_KEY_PLAN_VISIBLE` stays unset (off). Production is unchanged for every store.
+    2. Lawyer: resolve the own-key open points in privacy.html (EN and DE) before the flag goes on with `PUBLIC_PAGES=on` (docs/LEGAL_FACTS.md, open question 9).
+    3. **Private test plan.** Partner Dashboard → Managed Pricing → **Private plans** → Add: handle **`own-key-test`** (if the editor refuses the hyphen, `ownkeytest`; both are mapped, `OWN_KEY_HANDLES`), Billing **Monthly**, **49.00**, no trial, "Free for partners and developers" **off**, Welcome link **`/app/welcome`**, available only to `linguva-test-lab` (UNCONFIRMED: the exact way the editor restricts a private plan to one store; development stores of the owner's organization test every plan free, §5.1).
+    4. **Test on `linguva-test-lab`** with the private plan (production app; staging and development refuse real keys): choose it → `/app/welcome` → the welcome banner says "Add your DeepL, Microsoft Azure or Google Cloud key", the Plan page shows "Own key", $49, no trial, primary "Add your key". Settings: add the owner's own DeepL API Free key (`…:fx`, with a low cost limit in the DeepL account); only the last four characters show; allow AI translation (own-key notice). Translate one product in the editor and run one small bulk job; the owner's DeepL usage rises, Linguva's does not; the Plan page shows "Through your keys this calendar month"; the Overview shows no "used up" banner. Then DEV_STORE_TEST_PLAN L15–L20. Remove the key; the editor says "Add your translation key". Switch the dev store back to Free. Record the results in DEV_STORE_TEST_PLAN §L. Then delete or archive the private plan.
+    5. **Public plan without content.** Public plans → **Add** (after Business): handle **`own-key`** (type exactly; if refused, `ownkey`, which is mapped too), Billing **Monthly**, **49.00**, no yearly charge, Free trial duration **empty**, "Free for partners and developers" **off**, Welcome link **`/app/welcome`**. Enter **no display name and no top features in any language**: merchants can't see it yet.
+    6. **One sitting, in this order:** (a) pricing content in English and German: Display name **Own key**, top features and the additional-charges text from `docs/APP_STORE_LISTING.md` (Own key block); (b) set `OWN_KEY_PLAN_VISIBLE=on` in Railway production and redeploy; (c) check the Plan page card, `/preise`, Shopify's plan page on `linguva-test-lab` (five plans; how the yearly toggle shows the monthly-only plan, DEV_STORE_TEST_PLAN L11) and, with `PUBLIC_PAGES=on`, the privacy and support pages.
+    7. **Rollback:** delete the pricing content of `own-key` in both languages (the plan disappears for merchants), set the flag off and redeploy. Existing subscribers keep their entitlements (handles are mapped regardless of the flag).
+    8. Price changes later: Partner Dashboard, `OWN_KEY_PRICE` and both listing languages on the same day.
 
 ## 10. What the app and the docs must change
 
@@ -574,6 +590,8 @@ Add `tests/unit/plan-prices.test.ts`:
 - **Formatting:** the price formatter gives `$29`, `29 $`, `29 $US` and `29 US$` (with U+00A0) for en, de, fr and es, and Free gives the word.
 
 Because no allowance changes, no existing allowance test changes.
+
+Own key plan (2026-11), additions only (the pinned cases of the four plans are unchanged): `tests/unit/plan-prices.test.ts` (`OWN_KEY_PRICE` pinned at 49 / null with the same margin formula, `trialDaysFor` 0) and `billing.test.ts` (`OWN_KEY_HANDLES` pinned to the six handles, `OWN_KEY_PLAN`) gained cases; new files `tests/unit/own-key-plan.test.ts` (Plan page card, hero, table note, FAQ), `own-keys-card.test.ts`, `own-key-formats.test.ts`, `own-key-checker.test.ts`, `own-key-cipher.test.ts`, `own-key-codes.test.ts`, `own-key-errors.test.ts`, `own-key-messages.test.ts`, `key-check-limits.test.ts`, `auto-pause.test.ts`, `secret.test.ts`, `shop-translation.test.ts`, `public-pages-own-key.test.ts`; integration `engine-credentials.test.ts`, `engine-key-maintenance.test.ts`, `own-key-translation.test.ts`, `editor-own-key.test.ts`, `own-key-consent.test.ts`, `own-key-auto-translate.test.ts`, `own-key-language-page.test.ts`, `own-key-pages.test.ts`, `own-key-plan-overview.test.ts`, `settings-own-keys.test.ts`; security `engine-credentials-security.test.ts`, `own-key-isolation.test.ts`, `credentials-structure.test.ts`; UI `tests/ui/own-keys.spec.ts`.
 
 ### 10.6 Docs
 

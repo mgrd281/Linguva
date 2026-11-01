@@ -4,10 +4,14 @@
 # blocks go with their parent; the remaining single/deepl markers are invisible comments).
 # A deployment with more engines serves privacy.html, support.html, index.html and preise.html
 # from the app, not from this image.
+# The Own key plan's texts are always hidden here (as OWN_KEY_PLAN_VISIBLE=off): the second Perl
+# program drops every <!--ownkey-->…<!--/ownkey--> block and keeps the <!--ownkey:off--> texts without
+# their markers, the same as applyOwnKeyBlocks(html, false). With the plan shown, the app serves the pages.
 FROM alpine:3.20 AS pages
 RUN apk add --no-cache perl
 COPY *.html /pages/
-RUN perl -0pi -e 's/<!--engines:several-->.*?<!--\/engines:several-->//gs; s/<!--engines:multi-->.*?<!--\/engines:multi-->//gs; 1 while s/<!--engine:(?!deepl-->)([a-z-]+)-->.*?<!--\/engine:\1-->//gs' /pages/*.html
+RUN perl -0pi -e 's/<!--engines:several-->.*?<!--\/engines:several-->//gs; s/<!--engines:multi-->.*?<!--\/engines:multi-->//gs; 1 while s/<!--engine:(?!deepl-->)([a-z-]+)-->.*?<!--\/engine:\1-->//gs' /pages/*.html \
+ && perl -0pi -e 's/<!--ownkey-->.*?<!--\/ownkey-->//gs; s/<!--\/?ownkey:off-->//g' /pages/*.html
 
 FROM caddy:2.10.2-alpine
 COPY Caddyfile /etc/caddy/Caddyfile

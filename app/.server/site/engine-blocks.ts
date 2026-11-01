@@ -12,6 +12,9 @@
  *   but not "several");
  * - `<!--engines:order:en-->` / `:de` becomes the services' legal names in
  *   routing order.
+ *
+ * And the Own key plan's blocks (`applyOwnKeyBlocks`): `<!--ownkey-->…`
+ * only with OWN_KEY_PLAN_VISIBLE=on, `<!--ownkey:off-->…` only without it.
  */
 import { translate } from "../../i18n/i18n";
 import { engineOfToken, type ConsentToken } from "../../lib/engines";
@@ -55,6 +58,26 @@ export function applyEngineBlocks(html: string, engines: PageEngines): string {
     .replace(/<!--engines:single-->([\s\S]*?)<!--\/engines:single-->/g, (_match, inner: string) => (single ? inner : ""))
     .replace(/<!--engines:multi-->([\s\S]*?)<!--\/engines:multi-->/g, (_match, inner: string) => (single ? "" : inner))
     .replace(/<!--engines:order:(en|de)-->/g, (_match, locale: "en" | "de") => order(locale));
+}
+
+const OWN_KEY_BLOCK = /<!--ownkey-->([\s\S]*?)<!--\/ownkey-->/g;
+const OWN_KEY_OFF_BLOCK = /<!--ownkey:off-->([\s\S]*?)<!--\/ownkey:off-->/g;
+
+/**
+ * The Own key plan's blocks (docs/PRICING_DECISION.md §9 step 11): `<!--ownkey-->…<!--/ownkey-->`
+ * stays only while the plan is shown (OWN_KEY_PLAN_VISIBLE=on), `<!--ownkey:off-->…<!--/ownkey:off-->`
+ * only while it isn't. Never nested in each other or in engine blocks. With the plan hidden a page
+ * is byte for byte what it was before the plan existed.
+ */
+export function applyOwnKeyBlocks(html: string, visible: boolean): string {
+  return html
+    .replace(OWN_KEY_BLOCK, (_match, inner: string) => (visible ? inner : ""))
+    .replace(OWN_KEY_OFF_BLOCK, (_match, inner: string) => (visible ? "" : inner));
+}
+
+/** Whether an own-key block (shown only with OWN_KEY_PLAN_VISIBLE=on) still contains an open point. */
+export function ownKeyBlocksHaveOpenMarks(html: string): boolean {
+  return [...html.matchAll(OWN_KEY_BLOCK)].some(([, inner]) => inner!.includes('<mark class="open">'));
 }
 
 /** Engine blocks kept for these tags that still contain an open point (`<mark class="open">`). */

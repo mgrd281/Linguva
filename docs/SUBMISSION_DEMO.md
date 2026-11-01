@@ -39,6 +39,7 @@ The Plan page shows prices: it may appear in the screencast (Shopify's rules on 
 >
 > 1. **Install** Linguva on a development store. Before or after installing, add and publish at least one more language in Shopify (Settings → Languages). The review store we prepared already has German, French and Spanish and a demo catalog.
 > 2. **Plan:** on Shopify's plan page, choose **Business** so every feature in the listing is unlocked. Reviewers can select plans at no charge.
+>    To test Own key, choose it on Shopify's plan page and add the DeepL API Free test key given in the testing-instructions field (owner provides one with a low cost limit, removed after review).
 > 3. **Allow AI translation first:** in Linguva, Settings → AI permission → "Allow AI translation". Until then no text is sent to the translation service (DeepL).
 > 4. **Overview:** "Count now" counts what is translated. **Content** shows each language area by area.
 > 5. **Translate in bulk:** Content → Products → "Translate all into German" → confirm. **Jobs** shows the progress. The results wait as drafts.
@@ -48,7 +49,7 @@ The Plan page shows prices: it may appear in the screencast (Shopify's rules on 
 > 9. **Automatic translation:** Settings → Translating changes → "Shortly after saving"; edit a product in Shopify and its translation appears in Review about a minute later.
 > 10. **Import & export:** Settings → Tools → Import & export.
 > 11. **Plan and usage:** Settings → AI characters. Changing the plan goes through Shopify's plan page.
-> 12. **Uninstall and reinstall:** uninstalling removes Linguva's access at once; Shopify's shop/redact request 48 hours later erases the store's data. After a reinstall Linguva asks Shopify for the plan again.
+> 12. **Uninstall and reinstall:** uninstalling removes Linguva's access at once; Shopify's shop/redact request 48 hours later erases the store's data. After a reinstall Linguva asks Shopify for the plan again. Uninstalling also deletes the store's own translation keys at once (Own key plan).
 >
 > Help and FAQ: https://PUBLIC-APP-DOMAIN/support#faq · Support: SUPPORT-EMAIL · Emergency contact: in the Partner Dashboard.
 

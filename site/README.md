@@ -11,9 +11,11 @@ it reads and writes nothing, so it does not affect the privacy posture.
 - `index.html` — the home page (hero variant **A**, light).
 - `preise.html` — the pricing page, with the decided prices from `app/lib/plans.ts` /
   `docs/PRICING_DECISION.md` (Free; Starter $29 or $290/year; Pro $99 or $990/year; Business $299
-  a month only).
-- `assets/` — the shared stylesheet (`style.css`, built from the design's tokens) and the real
-  screenshots of the redesigned app pages that the home page shows.
+  a month only). Own key ($49 a month only, own engine key) appears only with `OWN_KEY_PLAN_VISIBLE=on`
+  (served by the app; the Caddy image never shows it).
+- `assets/` — the shared stylesheet (`style.css`, built from the design's tokens), the Own key card's
+  one rule (`own-key.css`, linked only inside preise.html's `<!--ownkey-->` block, so `style.css` stays
+  as it was) and the real screenshots of the redesigned app pages that the home page shows.
 
 Both pages are fluid from 1440 px down to 390 px (checked: no sideways scroll at 1440, 1024, 768
 or 390 px) and pass an automated accessibility check (axe, WCAG 2.1 A/AA and 2.1 A/AA) with zero
@@ -28,6 +30,7 @@ violations.
 - **Impressum and website privacy page exist** (`impressum.html`, `datenschutz.html`), from the owner's Softwarekey legal notice; a lawyer has not reviewed them. AGB and AVV are not written yet.
 - **The app's privacy policy and support page exist as drafts** (`privacy.html` at `/privacy`, `support.html` at `/support`, English and German), written from `docs/LEGAL_FACTS.md`; open points are marked `<mark class="open">`. The app serves them only with `PUBLIC_PAGES=on` (404 otherwise), and the footer links to them (`<!--public-->…<!--/public-->`) only then; the draft notice (`<!--draft-->`) stays until `LEGAL_TEXTS_REVIEWED=yes` and no open point is left. The separate Caddy image serves every file in this folder, without that gate.
 - **The Caddy image always shows the DeepL-only texts.** The pages carry engine blocks (`<!--engine:…-->`, `<!--engines:…-->`) that the app resolves for its configured translation engines (`app/.server/site/engine-blocks.ts`). The image can't see that configuration, so `site/Dockerfile` drops the multi-engine texts and every engine block but DeepL's when it is built. Once Microsoft Azure or Google Cloud is set up, `privacy.html`, `support.html`, `index.html` and `preise.html` must be served by the app, not by this image.
+- **The Own key plan's texts** (`<!--ownkey-->…<!--/ownkey-->`, and `<!--ownkey:off-->…` for the words they replace) are shown by the app only with `OWN_KEY_PLAN_VISIBLE=on` (`applyOwnKeyBlocks`); with it off every page is byte for byte what it was before. The Caddy image always drops them (`site/Dockerfile`'s second Perl program), so with the plan shown these pages, too, must come from the app.
 - **German only** (except the bilingual `privacy.html` and `support.html`). The design has an English/French/Spanish rollout planned
   (`docs/research/website.md` §2.2); only German is built.
 - **Inter is self-hosted** (`public/site-fonts/`, SIL OFL): the pages make no third-party requests. The separate Caddy image does not include these fonts.

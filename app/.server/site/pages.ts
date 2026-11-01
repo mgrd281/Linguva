@@ -7,9 +7,9 @@ import pricingHtml from "../../../site/preise.html?raw";
 import appPrivacyHtml from "../../../site/privacy.html?raw";
 import supportHtml from "../../../site/support.html?raw";
 import { engineConsentTokens, getConfig, type AppConfig } from "../lib/config";
-import { applyEngineBlocks, DEEPL_ONLY, engineSectionsWithOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
+import { applyEngineBlocks, applyOwnKeyBlocks, DEEPL_ONLY, engineSectionsWithOpenMarks, ownKeyBlocksHaveOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
 
-export { engineBlocksWithOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
+export { applyOwnKeyBlocks, engineBlocksWithOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
 
 // The marketing website (site/) served by the app on its public address.
 const ASSETS = import.meta.glob<string>("../../../site/assets/*", { query: "?url", import: "default", eager: true });
@@ -53,13 +53,19 @@ export const PUBLIC_ONLY: ReadonlySet<SitePage> = new Set(["appPrivacy", "suppor
  * `<!--engines:several-->…` only with two or more engines, and
  * `<!--engines:order:en|de-->` becomes the services' legal names in routing
  * order; so an open point in an unused engine's block never shows the draft
- * notice. `<!--public-->…<!--/public-->` (links to the gated pages) stays
+ * notice. Then the Own key plan's blocks: `<!--ownkey-->…<!--/ownkey-->`
+ * only with OWN_KEY_PLAN_VISIBLE=on (`ownKeyPlan`), `<!--ownkey:off-->…`
+ * only without it; an open point in a hidden block never shows the draft
+ * notice either. `<!--public-->…<!--/public-->` (links to the gated pages) stays
  * only with PUBLIC_PAGES=on. `<!--draft-->…<!--/draft-->` (the draft notice)
  * stays until LEGAL_TEXTS_REVIEWED=yes and no open point
  * (`<mark class="open">`) is left in the page.
  */
-export function pageHtml(html: string, { publicPages, reviewed, engines = DEEPL_ONLY }: { publicPages: boolean; reviewed: boolean; engines?: PageEngines }): string {
-  const withEngines = applyEngineBlocks(html, engines);
+export function pageHtml(
+  html: string,
+  { publicPages, reviewed, engines = DEEPL_ONLY, ownKeyPlan = false }: { publicPages: boolean; reviewed: boolean; engines?: PageEngines; ownKeyPlan?: boolean },
+): string {
+  const withEngines = applyOwnKeyBlocks(applyEngineBlocks(html, engines), ownKeyPlan);
   const draft = !reviewed || withEngines.includes('<mark class="open">');
   return withEngines
     .replace(/<!--public-->([\s\S]*?)<!--\/public-->/g, (_match, inner: string) => (publicPages ? inner : ""))
@@ -100,10 +106,22 @@ export function openEngineSections(config: AppConfig, html: string = PAGES.appPr
   return engineSectionsWithOpenMarks(html, pageEngineTags(config));
 }
 
-/** Advice at start (never fatal): with PUBLIC_PAGES=on, an engine section with open points shows the draft notice. */
+/** Whether the privacy page's Own key section (shown with OWN_KEY_PLAN_VISIBLE=on) still has open points. */
+export function openOwnKeySection(html: string = PAGES.appPrivacy): boolean {
+  return ownKeyBlocksHaveOpenMarks(html);
+}
+
+/**
+ * Advice at start (never fatal): with PUBLIC_PAGES=on, an engine section with open points, or the
+ * Own key section while the plan is shown, shows the draft notice.
+ */
 export function siteConfigWarnings(config: AppConfig): string[] {
   if (config.PUBLIC_PAGES !== "on") return [];
-  return openEngineSections(config).map((tag) => `PUBLIC_PAGES=on: the privacy page's ${tag} section still has open points, so the draft notice shows on it`);
+  const warnings = openEngineSections(config).map((tag) => `PUBLIC_PAGES=on: the privacy page's ${tag} section still has open points, so the draft notice shows on it`);
+  if (config.OWN_KEY_PLAN_VISIBLE === "on" && openOwnKeySection()) {
+    warnings.push("OWN_KEY_PLAN_VISIBLE=on and PUBLIC_PAGES=on: the privacy page's own-key section still has open points, so the draft notice shows on it");
+  }
+  return warnings;
 }
 
 export function sitePage(
@@ -115,7 +133,12 @@ export function sitePage(
   if (PUBLIC_ONLY.has(page) && !publicPages) {
     throw new Response("Not Found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
-  const html = pageHtml(PAGES[page], { publicPages, reviewed: config.LEGAL_TEXTS_REVIEWED === "yes", engines: pageEngines(config) });
+  const html = pageHtml(PAGES[page], {
+    publicPages,
+    reviewed: config.LEGAL_TEXTS_REVIEWED === "yes",
+    engines: pageEngines(config),
+    ownKeyPlan: config.OWN_KEY_PLAN_VISIBLE === "on",
+  });
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8",
     "Content-Security-Policy": CSP,

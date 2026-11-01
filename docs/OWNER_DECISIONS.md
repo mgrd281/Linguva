@@ -63,7 +63,16 @@ The app needs a web process, a worker process, PostgreSQL 16 and Redis 7, plus b
 - Terms of service, and a data processing agreement for merchants (GDPR, Art. 28).
 - Imprint (Impressum) for a German business.
 
-These need a lawyer or a reviewed template; I can draft the technical facts (what data, where, how long) from SECURITY_MODEL.md.
+These need a lawyer or a reviewed template.
+
+**Prepared (2026-11-01):**
+
+- The imprint and the website's privacy page are online at `/impressum` and `/datenschutz` (from your Softwarekey legal notice).
+- The app's privacy policy (`/privacy`, English and German) and a support page with FAQ (`/support#faq`) are drafted from the facts in docs/LEGAL_FACTS.md. Open points for the lawyer are marked in the pages and listed in LEGAL_FACTS.md: your role for store content and the data processing agreement for merchants, legal bases, the safeguard for US hosting (Railway), DeepL's terms, retention of audit entries, the host's logs and backups.
+- They are off by default (`PUBLIC_PAGES=off`: 404). After the lawyer's review: set `LEGAL_TEXTS_REVIEWED=yes` and `PUBLIC_PAGES=on`; production refuses `PUBLIC_PAGES=on` without the review.
+- Terms of service and the data processing agreement for merchants are not written yet.
+
+The submission steps, in order: docs/APP_STORE_SUBMISSION.md (O1–O16).
 
 ## 6. Smaller decisions
 
@@ -71,7 +80,7 @@ These need a lawyer or a reviewed template; I can draft the technical facts (wha
 |---|---|---|
 | 6.1 | Branch protection on `main` (GitHub setting, free) | Require the CI check and a review before merging |
 | 6.2 | App icon (1200 × 1200) | **Decided 2026-10-30:** the ribbon L with the A and 文 cards (docs/BRAND_ASSETS.md §1); upload `docs/brand/linguva-icon-1200.png` in the Partner Dashboard |
-| 6.3 | Support address and response promise | One business day |
+| 6.3 | Support address and response promise | `/support` says shop@softwarekey.de and two working days, marked as open until you confirm (O5) |
 | 6.4 | Native speakers for the French and Spanish interface | One person per language, 2–3 hours each (I18N_REVIEW.md) |
 | 6.5 | 3–5 beta merchants from your network (not your production stores) | Complimentary access for 60 days |
 | 6.6 | App name in the listing | "Linguva: Translate & Review" |

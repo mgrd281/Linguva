@@ -22,7 +22,7 @@ import { itemsHref, percentLabel } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
 import { Flag } from "../components/Flag";
 import { SHOWN_STATES, StateIcon, StateKey, StateLines, TextStateBar } from "../components/ItemStates";
-import { BIG_HEADING, Breadcrumbs, languageErrorText, NumberedSteps, PLAIN_LIST, StepNumber, type StepView } from "../components/LanguageLayout";
+import { BIG_HEADING, Breadcrumbs, languageErrorText, NumberedSteps, PLAIN_LIST, settingsLinkFor, StepNumber, type StepView } from "../components/LanguageLayout";
 import { ProgressBar } from "../components/ProgressBar";
 import { StepStrip } from "../components/StepStrip";
 import { TranslateConfirm } from "../components/TranslateConfirm";
@@ -299,7 +299,7 @@ function NextSteps(ctx: StepContext) {
       )}
       {gate ? (
         <s-text color="subdued">
-          {languageErrorText(i18n, gate)} {gate === "CONSENT_REQUIRED" || gate === "ENGINE_CONSENT" ? <s-link href="/app/settings">{t("common.nav.settings")}</s-link> : null}
+          {languageErrorText(i18n, gate)} {settingsLinkFor(gate) ? <s-link href={settingsLinkFor(gate)!}>{t("common.nav.settings")}</s-link> : null}
         </s-text>
       ) : null}
     </s-stack>

@@ -20,6 +20,7 @@ import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { periodKey } from "../../app/.server/usage/usage-ledger";
 import { testEnv } from "../support/env";
+import { seedOwnKey } from "../support/own-keys";
 import { setWorkerRunning } from "./helpers";
 import { DEMO_GLOSSARY, demoDrafts } from "./fixtures/demo-store";
 import { fullArabicDraft, REVIEW_LOCALES, reviewDrafts } from "./fixtures/review-store";
@@ -301,6 +302,25 @@ export default async function globalSetup() {
         }),
       app,
     );
+
+    // The Own key plan's stores (own-keys.spec.ts): keys through the app's own save (mock mode: test keys).
+    await seedOwnKey(ids.ownkeyReady!, { engine: "deepl", apiKey: "mock-deepl-0061:fx" }, { client: app, mode: "mock" });
+    // The own-key permission for its key's service (stored as 2026-11-ownkey-v1:deepl).
+    await setAiConsent({ shopId: ids.ownkeyReady!, granted: true, actorId: null, shown: ["deepl"], consent: { configured: ["deepl"], payer: "merchant" } }, app);
+    await seedOwnKey(ids.ownkeyRefused!, { engine: "azure", apiKey: "mock-azure-0062" }, { client: app, mode: "mock" });
+    await owner.$transaction([
+      owner.$executeRaw`SELECT set_config('app.shop_id', ${ids.ownkeyRefused!}, true)`,
+      owner.$executeRaw`UPDATE "ShopEngineCredential" SET "status" = 'REFUSED', "lastErrorCode" = 'OWN_KEY_AUTH_AZURE', "lastErrorAt" = now() WHERE "shopId" = ${ids.ownkeyRefused!}::uuid`,
+    ]);
+    // Measured, so the Overview's next step and the language page's areas are past counting.
+    for (const key of ["ownkey", "ownkeyReady", "ownkeyRefused", "ownkeyPending"] as const) {
+      const shopStore = UI_SHOPS[key].build();
+      const coverageDeps: CoverageDeps = { prisma: app, adminFor: async () => shopStore.asAdmin(), keyPrefix: "lv:ui-test" };
+      const locales = UI_SHOPS[key].locales.filter((l) => !l.primary).map((l) => l.locale);
+      const { report } = await createCoverageReport({ shopId: ids[key]!, locales, requestedBy: null, idempotencyKey: `ui-coverage-${key}` }, app);
+      let next: CoveragePagePayload | null = { shopId: ids[key]!, reportId: report.id, segmentIndex: 0, cursor: null };
+      while (next) next = await runCoveragePage(coverageDeps, next);
+    }
 
     // No worker runs in these tests: a heartbeat left from an earlier run would say otherwise.
     await setWorkerRunning(false);

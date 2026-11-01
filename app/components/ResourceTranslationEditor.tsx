@@ -14,6 +14,7 @@ import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
 import { isDeepLOnly, orderTexts, processorsText } from "../lib/engine-texts";
 import { ENGINE_NAMES, isEngineId } from "../lib/engines";
+import { parseOwnKeyCode } from "../lib/own-keys";
 import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
 import { useI18n } from "../i18n/react";
@@ -23,11 +24,15 @@ import { fieldName, hasMessage, issueName, jobErrorMessage, kindLabel, kindSingu
 type EditorLoader = () => ReturnType<typeof loadEditorData>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
 
-/** Text for an AI or memory error code (editor.aiError.*). */
-function aiErrorMessage(i18n: I18n, code: string) {
+/** Text for an AI or memory error code (editor.aiError.*); an own key's quota or refusal names its engine. */
+function aiErrorMessage(i18n: I18n, code: string, engine?: string | null) {
   const key = `editor.aiError.${code}`;
-  return hasMessage(key) ? i18n.t(key) : i18n.t("editor.aiError.generic");
+  if (!hasMessage(key)) return i18n.t("editor.aiError.generic");
+  return i18n.t(key, engine && isEngineId(engine) ? { engine: ENGINE_NAMES[engine] } : {});
 }
+
+/** The own key's codes send the merchant to Settings › Your translation keys. */
+const isOwnKeyError = (code: string) => code === "OWN_KEY_MISSING" || code === "OWN_KEY_QUOTA" || code === "OWN_KEY_AUTH";
 
 /** Text for why an AI result was discarded (editor.rejection.*). */
 function rejectionMessage(i18n: I18n, reason: string) {
@@ -45,6 +50,13 @@ function saveErrorMessage(i18n: I18n, outcome: { message?: string; code?: string
 }
 
 const EDITOR_SAVE_BAR = "linguva-editor-save-bar";
+
+/** Why an own-key shop can't translate with AI here: every saved key refused, else no key yet. */
+function ownKeyHint(i18n: I18n, unavailable: string | null): string {
+  const own = parseOwnKeyCode(unavailable);
+  if (own?.kind === "AUTH") return i18n.t("editor.aiError.OWN_KEY_AUTH", { engine: ENGINE_NAMES[own.engine] });
+  return i18n.t("editor.aiError.OWN_KEY_MISSING");
+}
 
 export function ResourceTranslationEditor() {
   const data = useLoaderData<EditorLoader>();
@@ -207,9 +219,12 @@ export function ResourceTranslationEditor() {
       {data.ai.available && !data.ai.consent ? (
         <s-banner tone="info" heading={t("editor.consent.heading")}>
           <s-paragraph>
-            {isDeepLOnly(data.ai.consentTokens)
-              ? t("editor.consent.body", { singular })
-              : t("editor.consent.body.multi", { singular, processors: processorsText(i18n, data.ai.consentTokens) })}
+            {/* Own key plan: the merchant's own keys, under its own contract with the services. */}
+            {data.ai.ownKey
+              ? t("editor.consent.body.ownKey", { singular, processors: processorsText(i18n, data.ai.consentTokens) })
+              : isDeepLOnly(data.ai.consentTokens)
+                ? t("editor.consent.body", { singular })
+                : t("editor.consent.body.multi", { singular, processors: processorsText(i18n, data.ai.consentTokens) })}
             {/* Several services: their order and the failover, as in Settings (the same consent version). */}
             {data.ai.consentTokens.length > 1 ? ` ${t("editor.consent.order", orderTexts(i18n, data.ai.consentTokens))}` : null}
           </s-paragraph>
@@ -259,7 +274,9 @@ export function ResourceTranslationEditor() {
           heading={filledFrom === "memory" ? t("editor.aiError.memoryHeading") : t("editor.aiError.heading")}
         >
           <s-paragraph>
-            {consentEngine ? t("editor.aiError.ENGINE_CONSENT.named", { engine: ENGINE_NAMES[consentEngine] }) : aiErrorMessage(i18n, actionError.code)}
+            {consentEngine
+              ? t("editor.aiError.ENGINE_CONSENT.named", { engine: ENGINE_NAMES[consentEngine] })
+              : aiErrorMessage(i18n, actionError.code, "engine" in actionError && typeof actionError.engine === "string" ? actionError.engine : null)}
             {"retryAfterSeconds" in actionError && actionError.retryAfterSeconds
               ? ` ${t("editor.aiError.retryAfter", { seconds: Number(actionError.retryAfterSeconds) })}`
               : ""}
@@ -267,6 +284,11 @@ export function ResourceTranslationEditor() {
               <>
                 {" "}
                 <s-link href="/app/settings">{t("common.nav.settings")}</s-link>
+              </>
+            ) : isOwnKeyError(actionError.code) ? (
+              <>
+                {" "}
+                <s-link href="/app/settings#settings-keys">{t("common.nav.settings")}</s-link>
               </>
             ) : null}
           </s-paragraph>
@@ -329,19 +351,28 @@ export function ResourceTranslationEditor() {
               {t("editor.toolbar.fillMemory")}
             </s-button>
           </memoryFetcher.Form>
-          <s-text color="subdued">
-            {data.ai.available
-              ? limit === null || remaining === null
-                ? null
-                : remaining === Math.max(0, limit - data.ai.used)
-                  ? t("editor.toolbar.leftThisMonth", { remaining, limit })
-                  : t("editor.toolbar.leftToday", {
-                      remaining,
-                      monthRemaining: Math.max(0, limit - data.ai.used),
-                      limit,
-                    })
-              : t("editor.toolbar.notConfigured")}
-          </s-text>
+          {data.ai.ownKey && !data.ai.available ? (
+            // Own key plan without a usable key: what is missing, and where to add it.
+            <s-text color="subdued">
+              {ownKeyHint(i18n, data.ai.ownKey.unavailable)} <s-link href="/app/settings#settings-keys">{t("common.nav.settings")}</s-link>
+            </s-text>
+          ) : (
+            <s-text color="subdued">
+              {data.ai.ownKey
+                ? t("editor.ai.ownKey", { chars: data.ai.ownKey.chars })
+                : data.ai.available
+                  ? limit === null || remaining === null
+                    ? null
+                    : remaining === Math.max(0, limit - data.ai.used)
+                      ? t("editor.toolbar.leftThisMonth", { remaining, limit })
+                      : t("editor.toolbar.leftToday", {
+                          remaining,
+                          monthRemaining: Math.max(0, limit - data.ai.used),
+                          limit,
+                        })
+                  : t("editor.toolbar.notConfigured")}
+            </s-text>
+          )}
         </s-stack>
         {data.smart ? (
           <s-checkbox
@@ -442,7 +473,7 @@ export function ResourceTranslationEditor() {
         </s-stack>
       </saveFetcher.Form>
 
-      <AttachedResourcesPanel data={data} errorMessage={(code) => aiErrorMessage(i18n, code)} />
+      <AttachedResourcesPanel data={data} errorMessage={(code, engine) => aiErrorMessage(i18n, code, engine)} />
     </s-page>
   );
 

@@ -33,6 +33,8 @@ const serverEnv: Record<string, string> = {
   AI_MONTHLY_CHAR_LIMIT: "1000000",
   AI_USER_REQUESTS_PER_MINUTE: "1000",
   AI_SHOP_REQUESTS_PER_MINUTE: "1000",
+  // The Own key plan's key checks (mock mode: offline): own-keys.spec.ts saves and checks more than 3 a minute.
+  OWN_KEY_CHECKS_PER_MINUTE: "100",
   // Short, so the timeout test doesn't wait 15 s.
   SHOPIFY_TIMEOUT_MS: "3000",
   // The app's privacy policy and support page, as drafts (no LEGAL_TEXTS_REVIEWED).

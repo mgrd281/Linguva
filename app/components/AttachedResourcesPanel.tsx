@@ -25,8 +25,8 @@ export function AttachedResourcesPanel({
   errorMessage,
 }: {
   data: EditorData;
-  /** Text for an AI error code, in the interface language. */
-  errorMessage: (code: string) => string;
+  /** Text for an AI error code, in the interface language (an own key's stop names its engine). */
+  errorMessage: (code: string, engine?: string | null) => string;
 }) {
   const i18n = useI18n();
   const sourceName = i18n.language(data.sourceLocale, data.sourceName);
@@ -77,7 +77,7 @@ export function AttachedResourcesPanel({
         {aiError || ai?.stopped ? (
           <s-banner tone="critical" heading={t("editor.aiError.heading")}>
             <s-paragraph>
-              {errorMessage(aiError?.code ?? ai?.stopped ?? "")}
+              {errorMessage(aiError?.code ?? ai?.stopped ?? "", (aiError && "engine" in aiError && typeof aiError.engine === "string" ? aiError.engine : null) ?? ai?.engine ?? null)}
               {ai?.stopped && Object.keys(ai.drafts).length ? ` ${t("editor.attached.stoppedDrafts")}` : ""}
             </s-paragraph>
           </s-banner>

@@ -67,6 +67,12 @@ export const PLAN_ICON: Record<PlanHandle, IconType> = {
   business: "organization",
 };
 
+/**
+ * The Own key plan's sign (outside PLAN_ICON, which is the ladder of four): "connect", the merchant's
+ * own service plugged in. No feature's icon, and not "key", which is the complimentary state's.
+ */
+export const OWN_KEY_ICON: IconType = "connect";
+
 /** The hero's sign when the store has no plan of its own to show. */
 export const STATE_ICON = {
   complimentary: "key",

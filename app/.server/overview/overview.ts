@@ -22,7 +22,7 @@ import { getDailyUsage, getMonthlyUsage, getOwnKeyUsage, nextPeriodStart } from 
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import type { BillingStatus } from "../billing/subscription";
 import type { ConsentToken } from "../../lib/engines";
-import type { OwnKeySummary } from "../../lib/own-keys";
+import { usableOwnKey, type OwnKeySummary } from "../../lib/own-keys";
 import { usesOwnKeys } from "../../lib/plans";
 import { MAX_ENABLED_LOCALES } from "../../lib/locale-limits";
 import { usageLevel } from "../../lib/usage";
@@ -257,6 +257,8 @@ export async function loadOverview(
     unreadable,
     countries: countries && "rows" in countries ? countries : null,
     remainingLocales: locales.remainingEnabled,
+    // Own key plan: a key comes before the permission (which covers the keys' services).
+    ...(options.ownKeys?.access === "plan" && !options.ownKeys.keys.some(usableOwnKey) ? { ownKeyMissing: true } : {}),
   };
   const next = nextStep(stepInput);
   const now = new Date(options.now ?? Date.now());
@@ -303,6 +305,8 @@ export async function loadOverview(
     pendingDrafts,
     activeJobs,
     jobs,
+    /** The Own key plan or a pending change to it (its keys' summaries: hints only), else null. */
+    ownKeys: options.ownKeys ?? null,
     usage: {
       used,
       limit: limits.limit,

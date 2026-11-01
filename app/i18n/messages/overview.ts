@@ -178,6 +178,15 @@ export const en = {
   "overview.engines.state.refused": "Refused by {engine}",
   "overview.engines.state.unreachable": "{engine} not reachable",
   "overview.engines.notAllowed": "Not allowed in this store yet:",
+  // The Own key plan (docs/AI_ENGINES.md).
+  "overview.checklist.ownKey.label": "Add your translation key",
+  "overview.checklist.ownKey.detail": "On the Own key plan, Linguva translates with your own DeepL, Microsoft Azure or Google Cloud key.",
+  "overview.checklist.ownKey.action": "Add key",
+  "overview.usage.ownKey": "AI translation this calendar month (UTC) with your keys: {chars} characters",
+  "overview.usage.ownKeyMissing": "AI translation needs your translation key",
+  "overview.banner.ownKeyPending": "Your plan changes to Own key on {date}. Add your translation key before then, so translation goes on without a break.",
+  "overview.banner.ownKey.heading": "A translation key needs your attention",
+  "overview.banner.ownKey.action": "Open settings",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -357,6 +366,14 @@ export const de: Translation<typeof en> = {
   "overview.engines.state.refused": "Von {engine} abgelehnt",
   "overview.engines.state.unreachable": "{engine} nicht erreichbar",
   "overview.engines.notAllowed": "In diesem Shop noch nicht erlaubt:",
+  "overview.checklist.ownKey.label": "Füge deinen Übersetzungsschlüssel hinzu",
+  "overview.checklist.ownKey.detail": "Im Tarif Own key übersetzt Linguva mit deinem eigenen Schlüssel für DeepL, Microsoft Azure oder Google Cloud.",
+  "overview.checklist.ownKey.action": "Schlüssel hinzufügen",
+  "overview.usage.ownKey": "KI-Übersetzung in diesem Kalendermonat (UTC) mit deinen Schlüsseln: {chars} Zeichen",
+  "overview.usage.ownKeyMissing": "KI-Übersetzung braucht deinen Übersetzungsschlüssel",
+  "overview.banner.ownKeyPending": "Dein Tarif wechselt am {date} zu Own key. Füge vorher deinen Übersetzungsschlüssel hinzu, damit die Übersetzung ohne Unterbrechung weitergeht.",
+  "overview.banner.ownKey.heading": "Ein Übersetzungsschlüssel braucht deine Aufmerksamkeit",
+  "overview.banner.ownKey.action": "Einstellungen öffnen",
 };
 
 export const fr: Translation<typeof en> = {
@@ -537,6 +554,14 @@ export const fr: Translation<typeof en> = {
   "overview.engines.state.refused": "Refusé par {engine}",
   "overview.engines.state.unreachable": "{engine} injoignable",
   "overview.engines.notAllowed": "Pas encore autorisé dans cette boutique :",
+  "overview.checklist.ownKey.label": "Ajoutez votre clé de traduction",
+  "overview.checklist.ownKey.detail": "Avec le forfait Own key, Linguva traduit avec votre propre clé DeepL, Microsoft Azure ou Google Cloud.",
+  "overview.checklist.ownKey.action": "Ajouter une clé",
+  "overview.usage.ownKey": "Traduction IA ce mois civil (UTC) avec vos clés : {chars} caractères",
+  "overview.usage.ownKeyMissing": "La traduction IA requiert votre clé de traduction",
+  "overview.banner.ownKeyPending": "Votre forfait passe à Own key le {date}. Ajoutez votre clé de traduction d'ici là, pour que la traduction continue sans interruption.",
+  "overview.banner.ownKey.heading": "Une clé de traduction requiert votre attention",
+  "overview.banner.ownKey.action": "Ouvrir les paramètres",
 };
 
 export const es: Translation<typeof en> = {
@@ -716,4 +741,12 @@ export const es: Translation<typeof en> = {
   "overview.engines.state.refused": "Rechazado por {engine}",
   "overview.engines.state.unreachable": "{engine} no disponible",
   "overview.engines.notAllowed": "Aún no permitido en esta tienda:",
+  "overview.checklist.ownKey.label": "Añade tu clave de traducción",
+  "overview.checklist.ownKey.detail": "Con el plan Own key, Linguva traduce con tu propia clave de DeepL, Microsoft Azure o Google Cloud.",
+  "overview.checklist.ownKey.action": "Añadir clave",
+  "overview.usage.ownKey": "Traducción con IA en este mes natural (UTC) con tus claves: {chars} caracteres",
+  "overview.usage.ownKeyMissing": "La traducción con IA necesita tu clave de traducción",
+  "overview.banner.ownKeyPending": "Tu plan cambia a Own key el {date}. Añade antes tu clave de traducción para que la traducción continúe sin interrupción.",
+  "overview.banner.ownKey.heading": "Una clave de traducción necesita tu atención",
+  "overview.banner.ownKey.action": "Abrir Configuración",
 };

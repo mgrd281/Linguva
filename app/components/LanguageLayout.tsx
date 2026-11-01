@@ -19,6 +19,16 @@ export function languageErrorText(i18n: I18n, code: string): string {
   return i18n.t("language.error.generic");
 }
 
+/**
+ * Where a translate gate's fix is: the AI permission in Settings, or (Own key plan) the keys card
+ * there. Null for a gate fixed elsewhere (the plan, the jobs, the installation).
+ */
+export function settingsLinkFor(code: string): string | null {
+  if (code === "CONSENT_REQUIRED" || code === "ENGINE_CONSENT") return "/app/settings";
+  if (code === "OWN_KEY_MISSING" || code === "OWN_KEY_REFUSED") return "/app/settings#settings-keys";
+  return null;
+}
+
 /** "Overview › Danish › Products": links up, then the page itself. */
 export function Breadcrumbs({ i18n, trail, current }: { i18n: I18n; trail: Array<{ href: string; label: string; before?: ReactNode }>; current: string }) {
   const separator = (

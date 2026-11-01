@@ -7,9 +7,9 @@
  */
 import { INTL_LOCALE, type I18n } from "../../i18n/i18n";
 import { FEATURE_ICON, PLAN_FEATURE_ROWS, PRICE_ROW, type FeatureRow } from "../../lib/plan-features";
-import { monthsFree, priceLabel, yearlyHandles } from "../../lib/plan-prices";
-import { PLAN_ORDER, planName } from "../../lib/plan-view";
-import { PLANS, type PlanHandle } from "../../lib/plans";
+import { formatUsd, monthsFree, priceLabel, yearlyHandles } from "../../lib/plan-prices";
+import { PLAN_ORDER, planName, type OwnKeyPlanView } from "../../lib/plan-view";
+import { PLANS, type KnownPlanHandle, type PlanHandle } from "../../lib/plans";
 import { TRACK_COLOUR } from "../Coverage";
 import { EMPHASIS } from "./styles";
 
@@ -33,7 +33,8 @@ export function featureTableCounts() {
   return { rows: PLAN_FEATURE_ROWS.reduce((sum, group) => sum + group.rows.length, 0), groups: PLAN_FEATURE_ROWS.length };
 }
 
-export function PlanFeatureTable({ i18n, current }: { i18n: I18n; current: PlanHandle | null }) {
+/** `ownKeyPlan`: when the Own key plan is shown, one note under the table (it isn't one of the columns). */
+export function PlanFeatureTable({ i18n, current, ownKeyPlan }: { i18n: I18n; current: KnownPlanHandle | null; ownKeyPlan?: Pick<OwnKeyPlanView, "visible" | "price"> | null }) {
   const { t } = i18n;
   const counts = featureTableCounts();
   const yearly = yearlyHandles();
@@ -135,6 +136,11 @@ export function PlanFeatureTable({ i18n, current }: { i18n: I18n; current: PlanH
             </tbody>
           ))}
         </table>
+        {ownKeyPlan?.visible ? (
+          <div style={{ padding: "12px 16px 16px" }}>
+            <s-text color="subdued">{t("plan.compare.ownKeyNote", { price: formatUsd(i18n.locale, ownKeyPlan.price.monthlyUsd) })}</s-text>
+          </div>
+        ) : null}
       </details>
     </s-section>
   );

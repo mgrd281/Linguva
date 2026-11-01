@@ -15,10 +15,11 @@ import type { ReactNode } from "react";
 import { INTL_LOCALE, type I18n, type MessageKey } from "../../i18n/i18n";
 import { everyPlanRows, FEATURE_ICON, PLAN_CARD_FEATURES, PLAN_ICON } from "../../lib/plan-features";
 import { formatUsd, monthsFree, priceLabel } from "../../lib/plan-prices";
-import { PLAN_ORDER, planName, type FitReason, type HeroView, type ShopUse } from "../../lib/plan-view";
+import { PLAN_ORDER, planName, type FitReason, type HeroView, type OwnKeyPlanView, type ShopUse } from "../../lib/plan-view";
 import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type PlanHandle } from "../../lib/plans";
 import { IconTile } from "../CategoryCard";
 import { PLAIN_LIST } from "../LanguageLayout";
+import { OwnKeyPlanCard } from "./OwnKeyPlanCard";
 import { CARD_NAME, EMPHASIS, PRICE, SECTION_HEADING, STAT, SUB_HEADING } from "./styles";
 
 const AUDIENCE: Record<PlanHandle, MessageKey> = {
@@ -60,9 +61,11 @@ export interface PlanCardsProps {
   trial: boolean;
   recommendation: { plan: PlanHandle; reasons: FitReason[] } | null;
   use: ShopUse | null;
+  /** The Own key plan: its card under the four, when it is shown (OwnKeyPlanView.visible). */
+  ownKeyPlan?: OwnKeyPlanView | null;
 }
 
-export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recommendation, use }: PlanCardsProps) {
+export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recommendation, use, ownKeyPlan }: PlanCardsProps) {
   const { t } = i18n;
   const buttonFor = (handle: PlanHandle) => choosePlanUrl !== null && hero.current !== handle;
   const hasFoot = PLAN_ORDER.some((handle) => buttonFor(handle) || (trial && PLAN_PRICES[handle].monthlyUsd > 0));
@@ -118,6 +121,8 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
           ))}
         </s-grid>
       </s-query-container>
+      {/* Not one of the ladder's columns: a card of its own under the four. */}
+      {ownKeyPlan?.visible ? <OwnKeyPlanCard i18n={i18n} plan={{ ...ownKeyPlan, choosePlanUrl }} hero={hero} now={now} /> : null}
       <s-paragraph color="subdued">{t(choosePlanUrl ? "plan.price.footnote" : "plan.price.usd")}</s-paragraph>
       <s-section>
         <s-stack direction="block" gap="base">

@@ -4,14 +4,17 @@
  * order a merchant needs them: the AI permission while it is missing, how
  * changes are translated (nothing, shortly after saving, on a schedule),
  * publishing, the form of address, translation memory, the permission once
- * given, and the tools. Every state says what really happens: "On" only
- * when the work runs (plan, installation, permission, pause, languages).
+ * given, and the tools. On the Own key plan (or with saved keys) the
+ * merchant's translation keys come right before the permission, wherever
+ * it is. Every state says what really happens: "On" only when the work
+ * runs (plan, installation, permission, pause, languages).
  */
 import { useRef, useState, type ReactNode } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
+import { checkEngineKey, ownKeysView, removeEngineKey, saveEngineKey, type EngineKeyErrorCode } from "../.server/credentials/service";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 import { countTerms } from "../.server/glossary/glossary";
 import { getConfig } from "../.server/lib/config";
@@ -42,6 +45,7 @@ import { settleAfterConsent } from "../.server/smart/runs";
 import { getMonthlyUsage, nextPeriodStart, periodKey } from "../.server/usage/usage-ledger";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
 import { NoLanguagesCard } from "../components/ContentTiles";
+import { KEYS_CARD, keysState, ownKeyCostNote, OwnKeysCard, type KeyFetcher } from "../components/OwnKeysCard";
 import { Flag } from "../components/Flag";
 import { BIG_HEADING, PLAIN_LIST } from "../components/LanguageLayout";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
@@ -65,13 +69,15 @@ import {
 } from "../components/SettingsParts";
 import { scheduleSummary, smartErrorText, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
 import type { I18n } from "../i18n/i18n";
+import { jobErrorMessage } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { basicState, changesMode, effectivePublishMode, smartState, type BasicState, type SmartState } from "../lib/automation-state";
-import { consentLead, enginesText, isDeepLOnly, processorsText } from "../lib/engine-texts";
-import { ENGINE_NAMES, engineOfToken, type ConsentToken, type EngineId } from "../lib/engines";
+import { consentLead, enginesText, isDeepLOnly, orderTexts, processorsText } from "../lib/engine-texts";
+import { ENGINE_NAMES, engineOfToken, isEngineId, type ConsentToken, type EngineId } from "../lib/engines";
 import { localeCountry } from "../lib/flags";
 import { formalityPronouns, supportsFormality } from "../lib/formality";
 import { languageList } from "../lib/name-lists";
+import { isOwnKeyCode, usableOwnKey } from "../lib/own-keys";
 import { entitlementsFor, TRIAL_AI_CHARS } from "../lib/plans";
 import { usagePercent } from "../lib/plan-view";
 import { usageLevel } from "../lib/usage";
@@ -158,8 +164,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     resetsOn: (trialRise ?? nextMonth).toISOString(),
     used: await getMonthlyUsage(shop.id, period),
     limit: limits.limit,
+    // The Own key plan's keys (summaries: never a key, hints of four characters): on the plan, with a
+    // pending change to it, or saved under another plan (to remove them). Null for every other shop.
+    ownKeys: await ownKeysView(shop.id, billing),
   };
 };
+
+/** A key form's failure: its code, the engine only when it was a valid id, and the wait (never the key). */
+function keyFailure(result: { error: EngineKeyErrorCode; retryAfterMs?: number }, engine: EngineId | undefined) {
+  return {
+    ok: false as const,
+    error: result.error,
+    ...(engine ? { engine } : {}),
+    ...(result.retryAfterMs !== undefined ? { retryAfterSeconds: Math.max(1, Math.ceil(result.retryAfterMs / 1000)) } : {}),
+  };
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, shop, actorId } = await requireShop(request);
@@ -216,6 +235,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const enabled = form.get("enabled") === "true";
     await setReuseMachineMemory({ shopId: shop.id, enabled });
     return { ok: true, saved: "memory" as const, reuse: enabled };
+  }
+  // The Own key plan's keys. The key is read once, passed on, and never returned, logged or put into
+  // an error; replies carry codes and the key's state only. The plan is checked again on the server.
+  if (intent === "save-key" || intent === "check-key" || intent === "remove-key") {
+    const posted = form.get("engine");
+    const engine = typeof posted === "string" && isEngineId(posted) ? posted : undefined;
+    if (intent === "remove-key") {
+      const removed = await removeEngineKey({ shopId: shop.id, actorId, engine: posted });
+      return removed.ok ? { ok: true as const, saved: "key-removed" as const, engine: engine! } : keyFailure(removed, engine);
+    }
+    const billing = await shopBilling(admin, shop);
+    if (intent === "save-key") {
+      const saved = await saveEngineKey({
+        shopId: shop.id,
+        actorId,
+        billing,
+        form: { engine: posted, apiKey: form.get("apiKey"), region: form.get("region"), location: form.get("location") },
+      });
+      return saved.ok
+        ? { ok: true as const, saved: "key" as const, engine: saved.summary.engine, replaced: saved.replaced, status: saved.summary.status }
+        : keyFailure(saved, engine);
+    }
+    const checked = await checkEngineKey({ shopId: shop.id, actorId, billing, engine: posted });
+    return checked.ok ? { ok: true as const, saved: "key-check" as const, engine: checked.summary.engine, status: checked.summary.status } : keyFailure(checked, engine);
   }
   if (intent !== "grant-consent" && intent !== "revoke-consent") {
     return { ok: false };
@@ -306,6 +349,11 @@ export default function Settings() {
   const autoFetcher = useFetcher<typeof action>();
   // The smart schedule's actions go to its page's action, which checks the plan again.
   const smartFetcher = useFetcher<SmartResult>();
+  // One per translation service of the keys card (its add/replace, check and remove forms).
+  const deeplKeyFetcher = useFetcher<typeof action>();
+  const azureKeyFetcher = useFetcher<typeof action>();
+  const googleKeyFetcher = useFetcher<typeof action>();
+  const keyFetchers: Record<EngineId, KeyFetcher> = { deepl: deeplKeyFetcher, azure: azureKeyFetcher, google: googleKeyFetcher };
 
   // Confirmations: a toast for what was saved; problems stay on the page.
   useResultToast(smartFetcher.data, smartToast(t, smartFetcher.data));
@@ -344,11 +392,16 @@ export default function Settings() {
   });
 
   const hasLanguages = data.style.languages.length > 0;
-  // The page's one primary button is the next step that is needed: a language, then the permission.
-  const consentPrimary = hasLanguages && !data.consent;
+  // The page's one primary button is the next step that is needed: a language, then (Own key plan)
+  // a working key, then the permission.
+  const noKey = ownKeyMissing(data);
+  const consentPrimary = hasLanguages && !noKey && !data.consent;
 
   const glance = glanceTiles(data, i18n);
   const permission = <PermissionCard data={data} i18n={i18n} fetcher={consentFetcher} primary={consentPrimary} />;
+  // Right before the permission, wherever it is: the permission covers the keys' services. Its key
+  // keeps it the same card when it moves (the typed key's form, its result's toast and focus).
+  const keys = data.ownKeys ? <OwnKeysCard key={KEYS_CARD} data={data.ownKeys} i18n={i18n} fetchers={keyFetchers} primary={hasLanguages && noKey} /> : null;
 
   return (
     <s-page heading={t("common.nav.settings")}>
@@ -359,11 +412,13 @@ export default function Settings() {
         </s-stack>
         {hasLanguages ? null : <NoLanguagesCard i18n={i18n} body={t("settings.noLanguages.body")} />}
         <Glance label={t("settings.glance")} tiles={glance} />
+        {data.consent ? null : keys}
         {data.consent ? null : permission}
         <ChangesCard data={data} i18n={i18n} autoFetcher={autoFetcher} smartFetcher={smartFetcher} consentFetcher={consentFetcher} />
         <PublishingCard data={data} i18n={i18n} fetcher={modeFetcher} />
         <StyleCard data={data} i18n={i18n} fetcher={styleFetcher} />
         <MemoryCard data={data} i18n={i18n} fetcher={memoryFetcher} />
+        {data.consent ? keys : null}
         {data.consent ? permission : null}
         <SettingCard id="settings-tools" icon="wrench" heading={t("settings.tools.heading")}>
           <LinkTiles label={t("settings.tools.heading")} links={TOOLS.map((tool) => ({ href: tool.href, icon: tool.icon, name: t(tool.label), detail: t(tool.detail) }))} />
@@ -419,6 +474,21 @@ function glanceTiles(data: Data, i18n: I18n): GlanceTile[] {
           : t("settings.glance.style.mixed");
   const usage = usagePercent(data.used, data.limit);
   const level = usageLevel(data.used, data.limit);
+  // Own key plan: no Linguva allowance to show; the keys take the tile's place (still six tiles).
+  const own = data.ownKeys?.plan ? data.ownKeys : null;
+  const ownProblem = own?.keys.some((k) => k.status !== "OK");
+  const ownUsable = own?.keys.filter(usableOwnKey).length ?? 0;
+  const keysTile: GlanceTile | null = own
+    ? {
+        key: "keys",
+        target: KEYS_CARD,
+        icon: "connect",
+        label: t("settings.glance.keys.label"),
+        short: t("settings.glance.short.keys"),
+        state: keysState(i18n, own.keys),
+        line: ownProblem ? t("settings.glance.keys.problem") : ownUsable ? t("settings.glance.keys.ok", { count: ownUsable }) : t("settings.glance.keys.none"),
+      }
+    : null;
   return [
     {
       key: "ai",
@@ -465,7 +535,7 @@ function glanceTiles(data: Data, i18n: I18n): GlanceTile[] {
         : { label: t("settings.memory.approved.title"), icon: "check-circle", tone: "neutral" },
       line: data.reuseMachineMemory ? t("settings.glance.memory.machine") : t("settings.glance.memory.approved"),
     },
-    {
+    keysTile ?? {
       key: "usage",
       href: "/app/plan",
       icon: "gauge",
@@ -488,9 +558,26 @@ function glanceTiles(data: Data, i18n: I18n): GlanceTile[] {
 
 // ─── Translating changes ──────────────────────────────────────────────────────
 
-/** Why it is paused, in a few words ("Daily limit reached"). */
+/** Why it is paused, in a few words ("Daily limit reached"); an own key's stop: "Waits for your key". */
 function pauseShort(i18n: I18n, reason: string): string {
+  if (isOwnKeyCode(reason)) return i18n.t("settings.changes.pause.OWN_KEY");
   return i18n.t(`settings.changes.pause.${PAUSE_SHORT[reason] ?? "PROVIDER"}` as "settings.changes.pause.PROVIDER");
+}
+
+/** On the Own key plan without a usable key: nothing translates with AI before one is added. */
+function ownKeyMissing(data: Data): boolean {
+  return Boolean(data.ownKeys?.plan) && !data.ownKeys!.keys.some(usableOwnKey);
+}
+
+/** "Add your translation key first.", leading to the keys card (no navigation). */
+function NoKeyLine({ i18n }: { i18n: I18n }) {
+  return (
+    <StateLine icon="connect">
+      <s-link href={`#${KEYS_CARD}`} onClick={() => focusCard(KEYS_CARD)}>
+        {i18n.t("settings.changes.line.noKey")}
+      </s-link>
+    </StateLine>
+  );
 }
 
 /** The card's state: its badge and the reason line the glance tile shows too. */
@@ -532,7 +619,9 @@ function changesView(data: Data, i18n: I18n): { mode: ReturnType<typeof changesM
       basic === "plan"
         ? t("settings.changes.line.notInPlan")
         : basic === "unavailable"
-          ? t("settings.changes.line.unavailable")
+          ? ownKeyMissing(data)
+            ? t("settings.changes.line.noKey")
+            : t("settings.changes.line.unavailable")
           : basic === "consent"
             ? t("settings.changes.waiting.CONSENT")
             : basic === "paused" && data.auto.paused
@@ -540,7 +629,10 @@ function changesView(data: Data, i18n: I18n): { mode: ReturnType<typeof changesM
               : basic === "noLanguage"
                 ? t("settings.changes.waiting.NO_LANGUAGE")
                 : t("settings.changes.line.basic", { languages: languageList(i18n, names, 2) });
-    return { mode, basic, smart, badge: basicBadge(i18n, basic), line };
+    // Own key plan without a key: it needs the merchant's key, not the installation.
+    const badge: SettingState =
+      basic === "unavailable" && ownKeyMissing(data) ? { label: t("settings.changes.badge.noKey"), icon: "connect", tone: "warning" } : basicBadge(i18n, basic);
+    return { mode, basic, smart, badge, line };
   }
   return { mode, basic, smart, badge: { label: t("common.state.off"), icon: "minus-circle", tone: "neutral" }, line: t("settings.changes.line.manual") };
 }
@@ -652,7 +744,9 @@ function ChangesCard({
         </InlineNotice>
       );
     } else if (basic === "unavailable") {
-      state = (
+      state = ownKeyMissing(data) ? (
+        <NoKeyLine i18n={i18n} />
+      ) : (
         <InlineNotice icon="disabled" heading={t("settings.auto.unavailable.heading")}>
           {t("settings.auto.unavailable.body")}
         </InlineNotice>
@@ -665,10 +759,16 @@ function ChangesCard({
         </s-banner>
       );
     } else if (basic === "paused" && data.auto.paused) {
-      const key = AUTO_PAUSE_REASONS.includes(data.auto.paused.reason) ? data.auto.paused.reason : "PROVIDER";
+      const reason = data.auto.paused.reason;
+      const key = AUTO_PAUSE_REASONS.includes(reason) ? reason : "PROVIDER";
       state = (
         <s-banner tone="warning" heading={t("settings.auto.paused.heading")}>
-          <s-paragraph>{t(`settings.auto.paused.${key}` as "settings.auto.paused.PROVIDER", { date: i18n.dateTime(data.auto.paused.until) })}</s-paragraph>
+          <s-paragraph>
+            {isOwnKeyCode(reason)
+              ? // An own key's stop: what its service said, and that a working key lifts the pause.
+                t("settings.auto.paused.OWN_KEY", { problem: jobErrorMessage(i18n, reason) ?? "", date: i18n.dateTime(data.auto.paused.until) })
+              : t(`settings.auto.paused.${key}` as "settings.auto.paused.PROVIDER", { date: i18n.dateTime(data.auto.paused.until) })}
+          </s-paragraph>
         </s-banner>
       );
     } else {
@@ -772,7 +872,7 @@ function ChangesCard({
               <LockLine plan="Starter" text={t("settings.changes.basic.plan")} {...(lockLink ? { link: lockLink } : {})} />
             )
           ) : !data.auto.available ? (
-            mode === "basic" ? null : <StateLine icon="disabled">{t("settings.changes.line.unavailable")}</StateLine>
+            mode === "basic" ? null : ownKeyMissing(data) ? <NoKeyLine i18n={i18n} /> : <StateLine icon="disabled">{t("settings.changes.line.unavailable")}</StateLine>
           ) : !data.consent && mode !== "basic" ? (
             needsConsent
           ) : (mode === "basic" && basic !== "plan") || choosingBasic ? (
@@ -829,6 +929,12 @@ function ChangesCard({
         </OptionCard>
       </OptionGrid>
       {!errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
+      {/* Own key plan: nothing limits automatic translation through the keys but the services' own budgets. */}
+      {data.ownKeys?.plan && data.ownKeys.keys.some(usableOwnKey) && data.auto.planIncludes ? (
+        <StateLine icon="cash-dollar" tone="caution">
+          {ownKeyCostNote(i18n, data.ownKeys.keys)}
+        </StateLine>
+      ) : null}
       {smartError ? (
         <s-banner tone="critical" heading={t("automatic.error.actionHeading")}>
           <s-paragraph>{smartErrorText(i18n, smartError)}</s-paragraph>
@@ -842,7 +948,8 @@ function ChangesCard({
               { icon: "check", text: t("settings.auto.how.missing") },
               { icon: "eye-check-mark", text: t("settings.auto.how.publishing") },
               { icon: "clock", text: t("settings.auto.how.later") },
-              { icon: "gauge", text: t("settings.auto.how.allowance") },
+              // Own key plan: no AI characters of Linguva's (the cost note above says who bills).
+              ...(data.ownKeys?.plan ? [] : [{ icon: "gauge" as const, text: t("settings.auto.how.allowance") }]),
             ]}
           />
         </More>
@@ -1076,6 +1183,15 @@ function MemoryCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: 
 
 // ─── AI permission ────────────────────────────────────────────────────────────
 
+/**
+ * The permission's lead on the Own key plan: the merchant's own keys, under its own contract with
+ * each service; with several, their order and the failover (as the operator's multi-engine notice).
+ */
+function ownKeyLead(i18n: I18n, tokens: readonly ConsentToken[]): string {
+  if (tokens.length > 1) return i18n.t("settings.ai.lead.ownKey.multi", { processors: processorsText(i18n, tokens), ...orderTexts(i18n, tokens) });
+  return i18n.t("settings.ai.lead.ownKey.one", { processors: processorsText(i18n, tokens) });
+}
+
 function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I18n; fetcher: ReturnType<typeof useFetcher<typeof action>>; primary: boolean }) {
   const { t } = i18n;
   const busy = fetcher.state !== "idle";
@@ -1083,13 +1199,18 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
   const tokens = data.engines.text;
   const deeplOnly = isDeepLOnly(tokens);
   const changed = fetcher.data && "error" in fetcher.data && fetcher.data.error === "CONSENT_CHANGED";
+  // Own key plan: the own-key notice (a different notice from Linguva's, asked for separately).
+  const own = Boolean(data.ownKeys?.plan);
+  // Before the first usable key there is nothing to allow.
+  const noKey = own && data.engines.configured.length === 0;
+  const lead = (shown: readonly ConsentToken[]) => (own ? ownKeyLead(i18n, shown) : consentLead(i18n, shown));
   return (
     <SettingCard
       id="settings-ai"
       icon="shield-check-mark"
       heading={t("settings.ai.heading")}
       state={data.consent ? { label: t("common.state.allowed"), icon: "check-circle", tone: "success" } : { label: t("settings.ai.notAllowed"), icon: "minus-circle", tone: "warning" }}
-      lead={consentLead(i18n, tokens)}
+      lead={noKey ? undefined : lead(tokens)}
     >
       {changed ? (
         <s-banner tone="warning">
@@ -1105,6 +1226,8 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
           <s-button commandFor={REVOKE_MODAL} command="--show" {...(busy ? { loading: true } : {})}>
             {t("settings.ai.withdraw")}
           </s-button>
+        ) : noKey ? (
+          <StateLine icon="connect">{t("settings.ai.noKey")}</StateLine>
         ) : (
           <fetcher.Form method="post">
             <input type="hidden" name="intent" value="grant-consent" />
@@ -1120,9 +1243,13 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
         <s-box padding="base" border="base" borderRadius="base">
           <s-stack direction="block" gap="small-200">
             <s-heading>{t("settings.ai.extra.heading")}</s-heading>
-            <s-paragraph>{t("settings.ai.extra.body", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })}</s-paragraph>
+            <s-paragraph>
+              {own
+                ? t("settings.ai.extra.body.ownKey", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })
+                : t("settings.ai.extra.body", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })}
+            </s-paragraph>
             {/* The notice the stored version stands for: every service in use, their order and the failover. */}
-            <s-paragraph>{consentLead(i18n, data.engines.configured)}</s-paragraph>
+            <s-paragraph>{lead(data.engines.configured)}</s-paragraph>
             <s-paragraph>{t("settings.ai.personal.multi")}</s-paragraph>
             <s-stack direction="inline">
               <fetcher.Form method="post">
@@ -1137,7 +1264,8 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
           </s-stack>
         </s-box>
       ) : null}
-      {!data.aiAvailable ? (
+      {/* The operator's engines only: an own-key shop without a key adds one instead (the keys card). */}
+      {!data.aiAvailable && !data.ownKeys?.plan ? (
         <s-banner tone="warning" heading={t("settings.ai.notConfigured.heading")}>
           <s-paragraph>{t("settings.ai.notConfigured.body")}</s-paragraph>
         </s-banner>

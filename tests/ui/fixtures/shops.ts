@@ -509,6 +509,54 @@ export const UI_SHOPS = {
     plan: null,
     build: () => new FakeShopifyStore(2),
   },
+  // The Own key plan (tests/ui/own-keys.spec.ts): the main server's mock mode accepts only "mock-…" test keys
+  // and never calls an engine; keys are seeded through the app's own save (real cipher and keyring).
+  ownkey: {
+    // Subscribed, no key, no permission yet (read-only in the tests: both projects see it unchanged).
+    domain: "ui-ownkey.myshopify.com",
+    gid: "gid://shopify/Shop/91060",
+    name: "Own Key Store",
+    locales: [en, de],
+    plan: "own-key",
+    build: () => new FakeShopifyStore(2),
+  },
+  ownkeyReady: {
+    // A DeepL key (mock-deepl-0061:fx) and the own-key permission for it.
+    domain: "ui-ownkey-ready.myshopify.com",
+    gid: "gid://shopify/Shop/91061",
+    name: "Own Key Ready Store",
+    locales: [en, de],
+    plan: "own-key",
+    build: () => new FakeShopifyStore(2),
+  },
+  ownkeyRefused: {
+    // An Azure key (mock-azure-0062) the service refused since.
+    domain: "ui-ownkey-refused.myshopify.com",
+    gid: "gid://shopify/Shop/91062",
+    name: "Own Key Refused Store",
+    locales: [en, de],
+    plan: "own-key",
+    build: () => new FakeShopifyStore(2),
+  },
+  ownkeyPending: {
+    // Pro, changing to Own key at the end of the cycle; no key yet.
+    domain: "ui-ownkey-pending.myshopify.com",
+    gid: "gid://shopify/Shop/91063",
+    name: "Own Key Pending Store",
+    locales: [en, de],
+    plan: "pro",
+    subscription: { pendingPlan: "own-key", periodEndDays: 12 },
+    build: () => new FakeShopifyStore(2),
+  },
+  ownkeyEdit: {
+    // Subscribed, for the tests that add, replace, check and remove keys (each starts by removing them).
+    domain: "ui-ownkey-edit.myshopify.com",
+    gid: "gid://shopify/Shop/91064",
+    name: "Own Key Edit Store",
+    locales: [en, de],
+    plan: "own-key",
+    build: () => new FakeShopifyStore(2),
+  },
 } satisfies Record<string, UiShop>;
 
 export type UiShopKey = keyof typeof UI_SHOPS;

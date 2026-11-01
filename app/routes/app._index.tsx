@@ -38,6 +38,9 @@ import { emptyCounts } from "../lib/coverage-rules";
 import { localeCountry } from "../lib/flags";
 import { categoryOf, languagePath } from "../lib/language-categories";
 import type { I18n, MessageKey } from "../i18n/i18n";
+import { jobErrorMessage } from "../i18n/labels";
+import { ENGINE_IDS, ENGINE_NAMES } from "../lib/engines";
+import { usableOwnKey } from "../lib/own-keys";
 import { languageList, upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
 
@@ -163,6 +166,13 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
         icon: <StateIcon state="waiting" />,
         action: { href: "/app/review", label: t("language.next.review.action") },
       };
+    case "own-key":
+      return {
+        title: t("overview.checklist.ownKey.label"),
+        detail: t("overview.checklist.ownKey.detail"),
+        icon: <s-icon type="connect" />,
+        action: { href: "/app/settings#settings-keys", label: t("overview.checklist.ownKey.action") },
+      };
     case "consent":
       return {
         title: t("overview.checklist.consent.label"),
@@ -210,6 +220,19 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
     case "done":
       return { title: t("overview.next.done.label"), detail: t("overview.next.done.detail"), icon: <StateIcon state="complete" /> };
   }
+}
+
+/** Own key plan: the first saved key that needs the merchant (ENGINE_IDS order), and what its service said. */
+function ownKeyProblem(data: Data, i18n: I18n): string | null {
+  if (data.ownKeys?.access !== "plan") return null;
+  for (const engine of ENGINE_IDS) {
+    const key = data.ownKeys.keys.find((k) => k.engine === engine);
+    if (!key || key.status === "OK") continue;
+    if (key.status === "UNREADABLE") return i18n.t("settings.keys.state.UNREADABLE");
+    if (key.status === "RECHECK") return i18n.t("settings.keys.state.RECHECK");
+    return (key.lastErrorCode ? jobErrorMessage(i18n, key.lastErrorCode) : null) ?? i18n.t(key.status === "QUOTA" ? "settings.keys.state.QUOTA" : "settings.keys.state.REFUSED", { engine: ENGINE_NAMES[engine] });
+  }
+  return null;
 }
 
 /** Outdated or failed texts across the languages, or countries without their language: a quieter row each. */
@@ -705,6 +728,22 @@ export default function Overview() {
         </s-query-container>
 
         {recounter.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
+        {ownKeyProblem(data, i18n) ? (
+          <s-banner tone="warning" heading={t("overview.banner.ownKey.heading")}>
+            <s-paragraph>
+              {ownKeyProblem(data, i18n)} <s-link href="/app/settings#settings-keys">{t("overview.banner.ownKey.action")}</s-link>
+            </s-paragraph>
+          </s-banner>
+        ) : null}
+        {/* A change to Own key waits for the cycle's end: the key is needed by then. */}
+        {data.ownKeys?.access === "pending" && data.ownKeys.startsOn && data.ownKeys.keys.length === 0 ? (
+          <s-banner tone="info">
+            <s-paragraph>
+              {t("overview.banner.ownKeyPending", { date: i18n.date(data.ownKeys.startsOn, "long") })}{" "}
+              <s-link href="/app/settings#settings-keys">{t("overview.checklist.ownKey.action")}</s-link>
+            </s-paragraph>
+          </s-banner>
+        ) : null}
         {data.aiAvailable && data.usage.level === "exhausted" ? (
           <s-banner tone="critical" heading={t(data.usage.trialEndsAt ? "overview.banner.exhausted.headingTrial" : "overview.banner.exhausted.heading")}>
             <s-paragraph>
@@ -737,7 +776,14 @@ export default function Overview() {
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="small-200">
             <s-text color="subdued">{data.measuredAt ? t("overview.footer.counted", { date: i18n.dateTime(data.measuredAt) }) : null}</s-text>
             <s-text color="subdued">
-              {data.aiAvailable ? t("overview.usage.characters", { used: data.usage.used, limit: data.usage.limit }) : t("overview.usage.notConfigured")}
+              {/* Own key plan: its keys' characters (or that a key is needed), never Linguva's allowance. */}
+              {data.ownKeys?.access === "plan"
+                ? data.ownKeys.keys.some(usableOwnKey)
+                  ? t("overview.usage.ownKey", { chars: data.usage.ownKey?.total ?? 0 })
+                  : t("overview.usage.ownKeyMissing")
+                : data.aiAvailable
+                  ? t("overview.usage.characters", { used: data.usage.used, limit: data.usage.limit })
+                  : t("overview.usage.notConfigured")}
             </s-text>
           </s-grid>
         </s-query-container>

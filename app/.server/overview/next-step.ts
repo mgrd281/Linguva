@@ -11,6 +11,8 @@ export type NextStep =
   | { id: "add-language" }
   | { id: "measure" }
   | { id: "review"; count: number }
+  /** The Own key plan without a usable key: nothing translates with AI before one is added. */
+  | { id: "own-key" }
   | { id: "consent" }
   | { id: "first-translation"; href: string }
   | { id: "publish-language" }
@@ -59,6 +61,8 @@ export interface NextStepInput {
   countries: { rows: readonly CountryCoverage[]; missing: ReadonlyArray<{ locale: string; reason: MissingReason; countries: readonly CountryCoverage[] }> } | null;
   /** Languages the store can still add (Shopify allows MAX_ENABLED_LOCALES). */
   remainingLocales: number;
+  /** On the Own key plan without a usable key (absent on every other plan). */
+  ownKeyMissing?: boolean;
 }
 
 /** Reasons in the order they're asked for: cheapest fix first. */
@@ -103,6 +107,7 @@ export function nextStep(input: NextStepInput): NextStep | null {
   const unmeasured = input.targets.some((t) => t.published && !measured.has(t.locale));
   if (input.jobsAvailable && (measured.size === 0 || unmeasured)) return { id: "measure" };
   if (input.pendingDrafts > 0) return { id: "review", count: input.pendingDrafts };
+  if (input.ownKeyMissing) return { id: "own-key" };
   if (input.aiAvailable && !input.consent) return { id: "consent" };
   if (!input.firstTranslation.done) return { id: "first-translation", href: input.firstTranslation.href };
   if (!input.targets.some((t) => t.published)) return { id: "publish-language" };

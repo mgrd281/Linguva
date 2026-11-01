@@ -13,9 +13,9 @@ import { prisma as defaultClient } from "../lib/db";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { shopTranslationFacts } from "../providers/shop-translation";
 import { withTenant } from "../tenancy/with-tenant";
-import { getDailyUsage, getMonthlyUsage, getMonthlyUsageByProvider, nextPeriodStart, periodKey } from "../usage/usage-ledger";
-import { effectiveRatePerMillion, planSelectionUrl } from "../../lib/plans";
-import type { ShopUse } from "../../lib/plan-view";
+import { getDailyUsage, getMonthlyUsage, getMonthlyUsageByProvider, getOwnKeyUsage, nextPeriodStart, periodKey } from "../usage/usage-ledger";
+import { effectiveRatePerMillion, isOwnKeyHandle, OWN_KEY_PRICE, planSelectionUrl } from "../../lib/plans";
+import type { OwnKeyPlanView, PlanOwnKeys, ShopUse } from "../../lib/plan-view";
 import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { aiLimitsFor } from "./billing";
 import { allowedTargetLocales, type BillingStatus } from "./subscription";
@@ -95,8 +95,22 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
   const config = getConfig();
   const appHandle = config.SHOPIFY_APP_HANDLE;
   // The operator's engines, or the shop's own keys on the Own key plan (no decryption).
-  const aiAvailable = (await shopTranslationFacts(input.shop.id, billing, { client, config })).available;
+  const facts = await shopTranslationFacts(input.shop.id, billing, { client, config });
+  const aiAvailable = facts.available;
   const sub = billing.subscription;
+  const choosePlanUrl = billing.configured && appHandle ? planSelectionUrl(input.shop.shopDomain, appHandle) : null;
+  // The Own key plan: shown by the flag, and always to its subscriber or a store changing to it.
+  const ownKeyCurrent = billing.state === "ACTIVE" && isOwnKeyHandle(sub?.planHandle);
+  const ownKeyPending = isOwnKeyHandle(sub?.pendingPlanHandle);
+  const ownKeyPlan: OwnKeyPlanView = {
+    visible: config.OWN_KEY_PLAN_VISIBLE === "on" || ownKeyCurrent || ownKeyPending,
+    current: ownKeyCurrent,
+    pending: ownKeyPending,
+    choosePlanUrl,
+    price: OWN_KEY_PRICE,
+  };
+  // Its keys (summaries only) and what went through them this month, for the subscriber's hero.
+  const ownKeys: PlanOwnKeys | null = ownKeyCurrent && facts.keys ? { keys: facts.keys, usage: await getOwnKeyUsage(input.shop.id, periodKey(now), client) } : null;
   const targets = locales ? locales.locales.filter((l) => !l.primary) : null;
   // The same function enforcement uses: the page can't disagree with what the editor and jobs allow.
   const allowed = targets ? allowedTargetLocales(billing.entitlements, targets.map((l) => l.locale)) : [];
@@ -118,7 +132,7 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
           checkedAt: sub.checkedAt.toISOString(),
         }
       : null,
-    choosePlanUrl: billing.configured && appHandle ? planSelectionUrl(input.shop.shopDomain, appHandle) : null,
+    choosePlanUrl,
     usage: { month, today },
     // Not the platform cap: that is the operator's figure for all stores together.
     limits: { limit: limits.limit, dailyLimit: limits.dailyLimit },
@@ -138,8 +152,11 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
             items: targets.map((l) => ({ locale: l.locale, name: l.name, published: l.published, inPlan: allowed.includes(l.locale) })),
           }
         : null,
-    // What the store uses, for "Fits your store" (nothing to recommend without its languages or without AI).
-    use: targets && aiAvailable ? ({ languages: targets.length, monthChars: month, ...flags } satisfies ShopUse) : null,
+    // What the store uses, for "Fits your store" (nothing to recommend without its languages or without AI,
+    // nor to an Own key subscriber: its fit depends on its own engine account, which this can't show).
+    use: targets && aiAvailable && !ownKeyCurrent ? ({ languages: targets.length, monthChars: month, ...flags } satisfies ShopUse) : null,
+    ownKeyPlan,
+    ownKeys,
   };
 }
 

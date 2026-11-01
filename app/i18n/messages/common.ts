@@ -213,6 +213,10 @@ export const en = {
   "common.issue.FORMALITY_NOT_APPLIED": "Form of address not applied (other service)",
   "common.issue.SPACING_CHANGED": "Spacing next to a link or formatting changed",
   "common.issue.ENGINE_MARKUP": "The translation service couldn't keep the formatting",
+  // The Own key plan (docs/AI_ENGINES.md).
+  "common.jobError.OWN_KEY_QUOTA": "Your {engine} key's quota is used up. Translation stopped; Linguva didn't switch to its own services. Check your {engine} account, then resume.",
+  "common.jobError.OWN_KEY_AUTH": "{engine} refused your key, or the service isn't set up for it (Google: Cloud Translation API enabled and billing on; Azure: the right region). Translation stopped. Fix it in your {engine} account and click Check again in Settings, or replace the key; then resume.",
+  "common.jobError.OWN_KEY_MISSING": "No working translation key. Add one in Settings, then resume.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -427,6 +431,9 @@ export const de: Translation<typeof en> = {
   "common.issue.FORMALITY_NOT_APPLIED": "Anrede nicht übernommen (anderer Dienst)",
   "common.issue.SPACING_CHANGED": "Abstand an einem Link oder einer Formatierung geändert",
   "common.issue.ENGINE_MARKUP": "Der Übersetzungsdienst konnte die Formatierung nicht erhalten",
+  "common.jobError.OWN_KEY_QUOTA": "Das Kontingent deines {engine}-Schlüssels ist aufgebraucht. Die Übersetzung wurde angehalten; Linguva hat nicht zu eigenen Diensten gewechselt. Prüfe dein {engine}-Konto und setze dann fort.",
+  "common.jobError.OWN_KEY_AUTH": "{engine} hat deinen Schlüssel abgelehnt, oder der Dienst ist dafür nicht eingerichtet (Google: Cloud Translation API aktiviert und Abrechnung an; Azure: die richtige Region). Die Übersetzung wurde angehalten. Behebe es in deinem {engine}-Konto und klicke in den Einstellungen auf „Erneut prüfen“, oder ersetze den Schlüssel; setze dann fort.",
+  "common.jobError.OWN_KEY_MISSING": "Kein funktionierender Übersetzungsschlüssel. Füge in den Einstellungen einen hinzu und setze dann fort.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -641,6 +648,9 @@ export const fr: Translation<typeof en> = {
   "common.issue.FORMALITY_NOT_APPLIED": "Forme de politesse non appliquée (autre service)",
   "common.issue.SPACING_CHANGED": "Espacement modifié près d'un lien ou d'une mise en forme",
   "common.issue.ENGINE_MARKUP": "Le service de traduction n'a pas pu conserver la mise en forme",
+  "common.jobError.OWN_KEY_QUOTA": "Le quota de votre clé {engine} est épuisé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Vérifiez votre compte {engine}, puis reprenez.",
+  "common.jobError.OWN_KEY_AUTH": "{engine} a refusé votre clé, ou le service n'est pas configuré pour elle (Google : API Cloud Translation activée et facturation active ; Azure : la bonne région). La traduction s'est arrêtée. Corrigez-le dans votre compte {engine} et cliquez sur « Vérifier à nouveau » dans les paramètres, ou remplacez la clé ; puis reprenez.",
+  "common.jobError.OWN_KEY_MISSING": "Aucune clé de traduction valide. Ajoutez-en une dans les paramètres, puis reprenez.",
 };
 
 export const es: Translation<typeof en> = {
@@ -855,4 +865,7 @@ export const es: Translation<typeof en> = {
   "common.issue.FORMALITY_NOT_APPLIED": "Tratamiento no aplicado (otro servicio)",
   "common.issue.SPACING_CHANGED": "Espaciado cambiado junto a un enlace o formato",
   "common.issue.ENGINE_MARKUP": "El servicio de traducción no pudo mantener el formato",
+  "common.jobError.OWN_KEY_QUOTA": "La cuota de tu clave de {engine} está agotada. La traducción se detuvo; Linguva no cambió a sus propios servicios. Revisa tu cuenta de {engine} y luego reanuda.",
+  "common.jobError.OWN_KEY_AUTH": "{engine} rechazó tu clave, o el servicio no está configurado para ella (Google: API Cloud Translation activada y facturación activa; Azure: la región correcta). La traducción se detuvo. Corrígelo en tu cuenta de {engine} y haz clic en «Comprobar de nuevo» en Configuración, o sustituye la clave; luego reanuda.",
+  "common.jobError.OWN_KEY_MISSING": "No hay ninguna clave de traducción válida. Añade una en Configuración y luego reanuda.",
 };

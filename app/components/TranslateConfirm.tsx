@@ -3,7 +3,7 @@
  * gets translated, counted honestly in items and texts; whether the
  * results wait for approval or go live; that the merchant's own and
  * approved translations stay; and the AI characters it uses of what is
- * left this month. Open it with a button that has `commandFor={id}` and
+ * left this month (Own key plan: that the merchant's own service bills them). Open it with a button that has `commandFor={id}` and
  * `command="--show"`.
  */
 import { useRef } from "react";
@@ -75,7 +75,12 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
               </s-text>
               {estimate.chars !== null && estimate.chars > aiRemaining ? <s-text tone="caution">{t("language.confirm.charsOver")}</s-text> : null}
             </Point>
-          ) : null}
+          ) : (
+            // Own key plan: no Linguva allowance; the merchant's own service bills these characters.
+            <Point icon="gauge" title={t("language.confirm.chars")}>
+              <s-text color="subdued">{estimate.chars !== null ? t("language.confirm.ownKey", { chars: estimate.chars }) : t("language.confirm.ownKeyUnknown")}</s-text>
+            </Point>
+          )}
           {estimate.attached ? <s-checkbox ref={attached} label={t("language.confirm.attached")} details={t("language.confirm.attachedDetails")} /> : null}
         </s-stack>
       ) : null}

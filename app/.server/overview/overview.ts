@@ -272,6 +272,8 @@ export async function loadOverview(
   const trialEndsAt = billing.trialEndsAt && billing.trialEndsAt < nextPeriodStart(now) ? billing.trialEndsAt.toISOString() : null;
   return {
     shopName: shop.name,
+    // The store's additional languages (the operator's translation services card counts them per engine).
+    targetLocales: targets.map((l) => l.locale),
     primary: locales.primary?.name ?? null,
     primaryLocale: locales.primary?.locale ?? null,
     maxLocales: MAX_ENABLED_LOCALES,

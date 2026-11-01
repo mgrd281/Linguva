@@ -147,6 +147,21 @@ describe("DeepLProvider", () => {
     expect(calls.length).toBe(1);
   });
 
+  it.each([
+    ["Value for 'source_lang' not supported.", "UNSUPPORTED_LANGUAGE"],
+    ["Bad request. Reason: Value for 'target_lang' not supported.", "UNSUPPORTED_LANGUAGE"],
+    ["Parameter 'text' not specified.", undefined],
+  ])("names a language DeepL refuses as such (400 %s), without keeping the body", async (message, reason) => {
+    const { impl, calls } = fakeFetch([() => Response.json({ message }, { status: 400 })]);
+    const error = (await new DeepLProvider({ apiKey: "k", fetch: impl, retry: noSleep })
+      .translate({ segments: ["hello"], sourceLocale: "hr", targetLocale: "de" })
+      .catch((e: unknown) => e)) as TranslationProviderError;
+    expect(error).toBeInstanceOf(TranslationProviderError);
+    expect(error).toMatchObject({ kind: "invalid", status: 400, message: "deepl invalid: HTTP 400" });
+    expect(error.reason).toBe(reason);
+    expect(calls.length).toBe(1);
+  });
+
   it("gives up after the retry budget", async () => {
     const { impl, calls } = fakeFetch([() => new Response(null, { status: 500 })]);
     await expect(

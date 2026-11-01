@@ -64,7 +64,7 @@ app/
     privacy/        compliance webhook handlers
     locales/        shopLocales sync
     translation/    segmentation, protection, validation, translate/save services
-    providers/      DeepL, mock, retry
+    providers/      DeepL, Microsoft Azure, Google Cloud, engine router, mock, retry
     jobs/           bulk jobs: processors, queues, errors
     queue/          Redis connection, token bucket
     usage/          usage ledger and quota
@@ -92,7 +92,8 @@ docs/               architecture, security, billing, roadmap
 | [docs/TRANSLATION_ENGINE.md](docs/TRANSLATION_ENGINE.md) | Feasibility matrix, translation pipeline |
 | [docs/BILLING_DESIGN.md](docs/BILLING_DESIGN.md) | Shopify App Pricing, entitlements, metering |
 | [docs/PRICING_DECISION.md](docs/PRICING_DECISION.md) | Prices, trial and yearly rule (decided 2026-10-30), margins, daily caps, the owner's Partner Dashboard steps |
-| [docs/COST_MODEL.md](docs/COST_MODEL.md) | Unit economics (DeepL and Shopify rates of 2026-10-30) |
+| [docs/COST_MODEL.md](docs/COST_MODEL.md) | Unit economics (DeepL and Shopify rates of 2026-10-30; Azure and Google rates) |
+| [docs/AI_ENGINES.md](docs/AI_ENGINES.md) | Translation engines: DeepL first, Microsoft Azure and Google Cloud as further engines, routing, consent, owner setup |
 | [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) | Implemented / Tested Locally / Verified on Shopify, per feature |
 | [docs/DEV_STORE_TEST_PLAN.md](docs/DEV_STORE_TEST_PLAN.md) | Test cases on a development store, beta exit criteria, results log |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Progress, milestones, risks, decisions |

@@ -14,10 +14,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 import { countTerms } from "../.server/glossary/glossary";
-import { getConfig } from "../.server/lib/config";
+import { engineConsentTokens, getConfig } from "../.server/lib/config";
 import { prisma } from "../.server/lib/db";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { getTranslationProvider } from "../.server/providers";
+import { formalityEngines } from "../.server/providers/language-support";
 import { getQueues } from "../.server/queue/client";
 import {
   AI_STORE_CONTEXT_MAX,
@@ -26,11 +27,13 @@ import {
   formalityFor,
   getShopSettings,
   hasCurrentAiConsent,
+  missingConsent,
   setAiConsent,
   setAutoTranslate,
   setBulkPublishMode,
   setReuseMachineMemory,
   setTranslationStyle,
+  textConsentTokens,
 } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
 import { getSmartConfig, setSmartEnabled } from "../.server/smart/config";
@@ -64,6 +67,8 @@ import { scheduleSummary, smartErrorText, SmartStateBanner, smartToast } from ".
 import type { I18n } from "../i18n/i18n";
 import { useI18n } from "../i18n/react";
 import { basicState, changesMode, effectivePublishMode, smartState, type BasicState, type SmartState } from "../lib/automation-state";
+import { consentLead, enginesText, isDeepLOnly, processorsText } from "../lib/engine-texts";
+import { ENGINE_NAMES, engineOfToken, type ConsentToken, type EngineId } from "../lib/engines";
 import { localeCountry } from "../lib/flags";
 import { formalityPronouns, supportsFormality } from "../lib/formality";
 import { languageList } from "../lib/name-lists";
@@ -93,7 +98,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // New AI characters arrive with the UTC month, or when a running trial ends first and the plan's own allowance starts then (as on the Plan page).
   const trialRise =
     billing.trialEndsAt && billing.trialEndsAt < nextMonth && entitlementsFor(billing.subscription?.planHandle).monthlyChars > TRIAL_AI_CHARS ? billing.trialEndsAt : null;
+  // Which translation services the texts name: what a current consent covers, else every one in use
+  // (DeepL only: today's texts). With several engines, the engine that serves each language first
+  // (only among those the texts name), for the form of address.
+  const configured = engineConsentTokens(getConfig());
+  const consented = hasCurrentAiConsent(settings, configured);
+  const text = textConsentTokens(settings, configured);
+  // Azure or Google alone serve every language without a form of address, too.
+  const { servedBy, noFormality } = await formalityEngines(getTranslationProvider(), targets, text.map(engineOfToken));
   return {
+    engines: {
+      configured,
+      text,
+      missing: consented ? missingConsent(settings, configured) : ([] as ConsentToken[]),
+      servedBy,
+      noFormality,
+    },
     // One Check now per page view (a double click is one check).
     smartCheckKey: crypto.randomUUID(),
     smart: smart
@@ -195,10 +215,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent !== "grant-consent" && intent !== "revoke-consent") {
     return { ok: false };
   }
-  await setAiConsent({ shopId: shop.id, granted: intent === "grant-consent", actorId });
+  // The services the page showed: a page from before an engine was added stores nothing and shows the new list.
+  const shown = form.get("consentTokens");
+  const saved = await setAiConsent({ shopId: shop.id, granted: intent === "grant-consent", actorId, shown: typeof shown === "string" ? shown.split(",").filter(Boolean) : null });
+  if (saved === "changed") return { ok: false, error: "CONSENT_CHANGED" };
   // The smart schedule waits for consent no longer than needed.
   if (intent === "grant-consent") await settleAfterConsent({ prisma, adminFor: async () => admin, billingFor: async () => shopBilling(admin, shop) }, shop);
-  return { ok: true, saved: "consent" as const, granted: intent === "grant-consent" };
+  // "extend": more services allowed beside a consent already given (the permission card stays where it is).
+  return { ok: true, saved: "consent" as const, granted: intent === "grant-consent", extended: form.get("extend") === "true" };
 };
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
@@ -300,9 +324,10 @@ export default function Settings() {
   useFreshResult(smartFetcher, (result) => {
     if (result?.ok && (result.done === "on" || result.done === "off")) focusById(result.done === "on" ? "settings-changes-smart" : "settings-changes-manual");
   });
-  // Permission given: on to the next step, the card that is now where the permission was. Withdrawn: to the permission, now first.
+  // Permission given: on to the next step, the card that is now where the permission was. More services
+  // allowed, or permission withdrawn: back to the permission card (it stays, or is now first).
   useFreshResult(consentFetcher, (result) => {
-    if (result && "granted" in result) focusCard(result.granted ? "settings-changes" : "settings-ai");
+    if (result && "granted" in result) focusCard(result.granted && !result.extended ? "settings-changes" : "settings-ai");
   });
 
   const hasLanguages = data.style.languages.length > 0;
@@ -335,6 +360,24 @@ export default function Settings() {
   );
 }
 
+// ─── Translation services ─────────────────────────────────────────────────────
+
+/** The services the page showed, posted with every "allow": a page from before an engine was added changes nothing. */
+function ConsentTokensInput({ data }: { data: Data }) {
+  return <input type="hidden" name="consentTokens" value={data.engines.configured.join(",")} />;
+}
+
+/** The engine that translates a language first, when several engines are in use (null: DeepL only, or none serves it). */
+function servingEngine(data: Data, locale: string): EngineId | null {
+  return data.engines.servedBy?.[locale] ?? null;
+}
+
+/** The language has formal and informal forms and its engine can set them. */
+function hasFormalityChoice(data: Data, locale: string): boolean {
+  const engine = servingEngine(data, locale);
+  return supportsFormality(locale) && !(engine && data.engines.noFormality.includes(engine));
+}
+
 // ─── At a glance ──────────────────────────────────────────────────────────────
 
 /** Six tiles: each state with its reason or value, never a generic sentence. */
@@ -348,10 +391,13 @@ function glanceTiles(data: Data, i18n: I18n): GlanceTile[] {
       : publish === "AUTO_PUBLISH"
         ? t("settings.glance.publish.auto")
         : t("settings.glance.publish.review");
-  const formalities = data.style.languages.filter((l) => supportsFormality(l.locale)).map((l) => l.formality);
+  // With several engines, only languages DeepL serves have a choice.
+  const formalities = data.style.languages.filter((l) => hasFormalityChoice(data, l.locale)).map((l) => l.formality);
   const address = !data.style.languages.length
     ? t("settings.glance.style.noLanguage")
-    : formalities.every((f) => f === "default")
+    : data.engines.servedBy && formalities.length === 0
+      ? t("settings.style.noChoice")
+      : formalities.every((f) => f === "default")
       ? t("settings.style.deeplDecides")
       : formalities.every((f) => f === "more")
         ? t("settings.style.formal")
@@ -521,6 +567,7 @@ function ChangesCard({
   const grantButton = (variant: "secondary" | "primary" = "secondary") => (
     <consentFetcher.Form method="post">
       <input type="hidden" name="intent" value="grant-consent" />
+      <ConsentTokensInput data={data} />
       <s-button type="submit" variant={variant} {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
         {t("settings.ai.allow")}
       </s-button>
@@ -718,7 +765,7 @@ function ChangesCard({
           ) : (mode === "basic" && basic !== "plan") || choosingBasic ? (
             basicForm
           ) : null}
-          {errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} /> : null}
+          {errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
         </OptionCard>
         <OptionCard
           id="settings-changes-smart"
@@ -768,7 +815,7 @@ function ChangesCard({
           ) : null}
         </OptionCard>
       </OptionGrid>
-      {!errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} /> : null}
+      {!errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
       {smartError ? (
         <s-banner tone="critical" heading={t("automatic.error.actionHeading")}>
           <s-paragraph>{smartErrorText(i18n, smartError)}</s-paragraph>
@@ -791,7 +838,7 @@ function ChangesCard({
   );
 }
 
-function AutoError({ i18n, error }: { i18n: I18n; error: string }) {
+function AutoError({ i18n, error, tokens }: { i18n: I18n; error: string; tokens: readonly ConsentToken[] }) {
   const { t } = i18n;
   if (error === "SMART_ON")
     return (
@@ -802,7 +849,7 @@ function AutoError({ i18n, error }: { i18n: I18n; error: string }) {
   if (error === "CONSENT_REQUIRED")
     return (
       <s-banner tone="critical" heading={t("settings.auto.consent.heading")}>
-        <s-paragraph>{t("settings.auto.consent.body")}</s-paragraph>
+        <s-paragraph>{isDeepLOnly(tokens) ? t("settings.auto.consent.body") : t("settings.auto.consent.body.multi", { engines: enginesText(i18n, tokens) })}</s-paragraph>
       </s-banner>
     );
   if (error === "NO_LANGUAGE")
@@ -881,6 +928,10 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
     setFormKey((k) => k + 1);
     setDirty(false);
   };
+  // DeepL and at least one other service in the texts: only DeepL applies the form of address and the context.
+  const withFallback = data.engines.text.includes("deepl") && !isDeepLOnly(data.engines.text);
+  // No DeepL at all (Azure, Google or both): no service in use reads the store context.
+  const contextUnused = !data.engines.text.includes("deepl");
   const optionLabel = (locale: string, kind: "formal" | "informal") => {
     const pronouns = formalityPronouns(locale);
     if (!pronouns) return kind === "formal" ? t("settings.style.formal") : t("settings.style.informal");
@@ -913,7 +964,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
                             {name}
                           </span>
                         </s-grid>
-                        {supportsFormality(l.locale) ? (
+                        {hasFormalityChoice(data, l.locale) ? (
                           <s-select name={`formality:${l.locale}`} label={name} labelAccessibilityVisibility="exclusive" value={l.formality}>
                             <s-option value="default">{t("settings.style.deeplDecides")}</s-option>
                             <s-option value="more">{optionLabel(l.locale, "formal")}</s-option>
@@ -921,11 +972,14 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
                           </s-select>
                         ) : (
                           <>
-                            {/* DeepL has no choice for this language: what is stored stays as it is. */}
+                            {/* No choice for this language (DeepL has none, or another service without one
+                                translates it): what is stored stays as it is. */}
                             <input type="hidden" name={`formality:${l.locale}`} value={l.formality} />
                             <s-text color="subdued">
                               <s-text accessibilityVisibility="exclusive">{`${name}: `}</s-text>
-                              {t("settings.style.noChoice")}
+                              {supportsFormality(l.locale) && servingEngine(data, l.locale)
+                                ? t("settings.style.engineNoChoice", { engine: ENGINE_NAMES[servingEngine(data, l.locale)!] })
+                                : t("settings.style.noChoice")}
                             </s-text>
                           </>
                         )}
@@ -938,11 +992,23 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
           ) : (
             <StateLine icon="language">{t("settings.style.noLanguages")}</StateLine>
           )}
+          {/* DeepL is always first when it is used, so "if DeepL can't translate" stays true. Only a
+              chosen form (formal or informal) is dropped by the other services and raises
+              FORMALITY_NOT_APPLIED; "DeepL decides" sends none. */}
+          {withFallback && data.style.languages.some((l) => hasFormalityChoice(data, l.locale) && l.formality !== "default") ? (
+            <s-text color="subdued">{t("settings.style.fallbackNote")}</s-text>
+          ) : null}
           <s-text-area
             name="storeContext"
             label={t("settings.style.storeContext.label")}
             placeholder={t("settings.style.storeContext.placeholder")}
-            details={t("settings.style.storeContext.details")}
+            details={
+              contextUnused
+                ? t("settings.style.storeContext.detailsUnused")
+                : withFallback
+                  ? t("settings.style.storeContext.detailsDeepL")
+                  : t("settings.style.storeContext.details")
+            }
             value={data.style.storeContext}
             maxLength={data.style.maxContext}
             rows={2}
@@ -1001,16 +1067,24 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
   const { t } = i18n;
   const busy = fetcher.state !== "idle";
   const revoke = () => fetcher.submit({ intent: "revoke-consent" }, { method: "post" });
+  const tokens = data.engines.text;
+  const deeplOnly = isDeepLOnly(tokens);
+  const changed = fetcher.data && "error" in fetcher.data && fetcher.data.error === "CONSENT_CHANGED";
   return (
     <SettingCard
       id="settings-ai"
       icon="shield-check-mark"
       heading={t("settings.ai.heading")}
       state={data.consent ? { label: t("common.state.allowed"), icon: "check-circle", tone: "success" } : { label: t("settings.ai.notAllowed"), icon: "minus-circle", tone: "warning" }}
-      lead={t("settings.ai.lead")}
+      lead={consentLead(i18n, tokens)}
     >
+      {changed ? (
+        <s-banner tone="warning">
+          <s-paragraph>{t("settings.ai.changed")}</s-paragraph>
+        </s-banner>
+      ) : null}
       <More summary={t("settings.ai.detailsSummary")}>
-        <s-paragraph>{t("settings.ai.personal")}</s-paragraph>
+        <s-paragraph>{deeplOnly ? t("settings.ai.personal") : t("settings.ai.personal.multi")}</s-paragraph>
         <s-paragraph>{t("settings.ai.details")}</s-paragraph>
       </More>
       <s-stack direction="inline">
@@ -1021,19 +1095,42 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
         ) : (
           <fetcher.Form method="post">
             <input type="hidden" name="intent" value="grant-consent" />
+            <ConsentTokensInput data={data} />
             <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(busy ? { loading: true } : {})}>
               {t("settings.ai.allow")}
             </s-button>
           </fetcher.Form>
         )}
       </s-stack>
+      {data.consent && data.engines.missing.length ? (
+        // Engines added after the shop's consent: used only once the merchant allows them too.
+        <s-box padding="base" border="base" borderRadius="base">
+          <s-stack direction="block" gap="small-200">
+            <s-heading>{t("settings.ai.extra.heading")}</s-heading>
+            <s-paragraph>{t("settings.ai.extra.body", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })}</s-paragraph>
+            {/* The notice the stored version stands for: every service in use, their order and the failover. */}
+            <s-paragraph>{consentLead(i18n, data.engines.configured)}</s-paragraph>
+            <s-paragraph>{t("settings.ai.personal.multi")}</s-paragraph>
+            <s-stack direction="inline">
+              <fetcher.Form method="post">
+                <input type="hidden" name="intent" value="grant-consent" />
+                <input type="hidden" name="extend" value="true" />
+                <ConsentTokensInput data={data} />
+                <s-button type="submit" {...(busy ? { loading: true } : {})}>
+                  {t("settings.ai.extra.action")}
+                </s-button>
+              </fetcher.Form>
+            </s-stack>
+          </s-stack>
+        </s-box>
+      ) : null}
       {!data.aiAvailable ? (
         <s-banner tone="warning" heading={t("settings.ai.notConfigured.heading")}>
           <s-paragraph>{t("settings.ai.notConfigured.body")}</s-paragraph>
         </s-banner>
       ) : null}
       <s-modal id={REVOKE_MODAL} heading={t("settings.ai.revoke.heading")} accessibilityLabel={t("settings.ai.revoke.heading")}>
-        <s-paragraph>{t("settings.ai.revoke.body")}</s-paragraph>
+        <s-paragraph>{deeplOnly ? t("settings.ai.revoke.body") : t("settings.ai.revoke.body.multi", { engines: enginesText(i18n, tokens) })}</s-paragraph>
         <s-button slot="primary-action" variant="primary" tone="critical" commandFor={REVOKE_MODAL} command="--hide" onClick={revoke}>
           {t("settings.ai.withdraw")}
         </s-button>

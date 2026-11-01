@@ -1,4 +1,5 @@
 import { isWrongScript } from "../../lib/scripts";
+import { isEngineRouter } from "../providers/engine-router";
 import type { TranslationProvider } from "../providers/types";
 import type { SegmentPair } from "../memory/alignment";
 import {
@@ -141,6 +142,11 @@ export interface PreparedTranslation {
   memoryEntryIds: string[];
   /** Unique source segments that still need a provider. */
   pending: string[];
+  /**
+   * Per pending source: true when every field it comes from is an HTML
+   * field, so a line break in it is whitespace (HTML-transport engines only).
+   */
+  softBreaks: boolean[];
   /** Characters the provider would be sent. */
   providerChars: number;
   /** Characters saved by memory hits and de-duplication. */
@@ -195,6 +201,8 @@ export async function prepareTranslation(input: {
   const fromMemory = new Map<string, string>();
   for (const [source, hit] of hits) fromMemory.set(source, hit.target);
   const pending = unique.filter((s) => !fromMemory.has(s));
+  const inPlainField = new Set(work.filter((w) => !HTML_TYPES.has(w.field.type)).flatMap((w) => w.doc.segments.map((s) => s.source)));
+  const softBreaks = pending.map((s) => !inPlainField.has(s));
   const totalChars = all.reduce((sum, s) => sum + s.length, 0);
   const providerChars = pending.reduce((sum, s) => sum + s.length, 0);
 
@@ -206,6 +214,7 @@ export async function prepareTranslation(input: {
     fixed,
     memoryEntryIds: [...hits.values()].map((h) => h.id),
     pending,
+    softBreaks,
     providerChars,
     charsSaved: totalChars - providerChars,
   };
@@ -213,11 +222,18 @@ export async function prepareTranslation(input: {
 
 export interface CompleteTranslationInput {
   provider: TranslationProvider;
+  /**
+   * The engines the shop's AI consent covers (consentedEngines). Required, so
+   * no call site forgets it: a router translates with none of them when it is
+   * empty. A single-engine provider ignores it (consent was checked before).
+   */
+  engines: readonly string[];
   sourceLocale: string;
   targetLocale: string;
   glossary?: readonly GlossaryRule[];
   context?: string;
   formality?: "more" | "less";
+  /** Routers only (routerSignal): the stop and deadline, checked between engines. */
   signal?: AbortSignal;
 }
 
@@ -233,8 +249,15 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
   for (const source of prepared.fixed) targets.set(source, source);
   let billedCharacters = 0;
   let provider = input.provider.id;
+  let lostByEngine: Readonly<Record<string, number>> | undefined;
+  /** What the engine reported per source: a refused or flagged segment, a dropped form of address. */
+  const notes = new Map<string, "ENGINE_MARKUP" | "SPACING_CHANGED">();
+  let formalityDropped = false;
 
   if (prepared.pending.length) {
+    const router = isEngineRouter(input.provider);
+    // Only engines on the HTML transport read these: a bare DeepL request object stays exactly as before.
+    const engineFields = router || input.provider.capabilities !== undefined;
     const result = await input.provider.translate(
       {
         segments: prepared.pending,
@@ -242,13 +265,23 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
         targetLocale: input.targetLocale,
         context: input.context,
         ...(input.formality ? { formality: input.formality } : {}),
+        ...(router ? { engines: input.engines } : {}),
+        ...(engineFields && prepared.softBreaks.some(Boolean) ? { softBreaks: prepared.softBreaks } : {}),
       },
       input.signal,
     );
     prepared.pending.forEach((source, i) => targets.set(source, result.translations[i] ?? ""));
     billedCharacters = result.billedCharacters;
     provider = result.provider;
+    lostByEngine = result.lostByEngine;
+    for (const note of result.notes ?? []) {
+      const source = prepared.pending[note.index];
+      // A refusal wins over a warning for the same source.
+      if (source !== undefined && notes.get(source) !== "ENGINE_MARKUP") notes.set(source, note.code);
+    }
+    formalityDropped = Boolean(input.formality) && (result.dropped ?? []).includes("formality");
   }
+  const pendingSet = new Set(prepared.pending);
 
   for (const { field, doc } of prepared.work) {
     const segmentTargets = new Map<string, string>();
@@ -256,6 +289,17 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
     const issues: ValidationIssue[] = [];
     let structureError: string | null = null;
     let memorySegments = 0;
+    const fromEngine = doc.segments.some((seg) => pendingSet.has(seg.source));
+    const segmentNotes = new Set(doc.segments.map((seg) => notes.get(seg.source)).filter(Boolean));
+    // The engine couldn't map its output back to the field's codes: refused before the checks
+    // read it, so it doesn't show as broken tags (and it is tried again with another engine).
+    if (segmentNotes.has("ENGINE_MARKUP")) {
+      outcomes.push({ key: field.key, status: "rejected", reason: "ENGINE_MARKUP", issues: [] });
+      continue;
+    }
+    // Kept, but waits in Review: a warning keeps it out of automatic publishing.
+    if (segmentNotes.has("SPACING_CHANGED")) issues.push({ code: "SPACING_CHANGED", severity: "warning" });
+    if (formalityDropped && fromEngine) issues.push({ code: "FORMALITY_NOT_APPLIED", severity: "warning", detail: provider });
 
     for (const seg of doc.segments) {
       const target = targets.get(seg.source) ?? "";
@@ -319,6 +363,7 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
     outcomes,
     billedCharacters,
     provider,
+    ...(lostByEngine ? { lostByEngine } : {}),
     memoryHits: prepared.fromMemory.size,
     charsSaved: prepared.charsSaved,
     memoryEntryIds: prepared.memoryEntryIds,

@@ -14,8 +14,8 @@
 import type { ComplimentaryAccess, PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "../tenancy/with-tenant";
-import { getMonthlyUsage, periodKey } from "../usage/usage-ledger";
-import { estimatedCostUsd, PLANS, type Entitlements } from "../../lib/plans";
+import { getMonthlyUsage, getMonthlyUsageByProvider, periodKey } from "../usage/usage-ledger";
+import { estimatedCostByProvider, estimatedCostUsd, PLANS, type Entitlements } from "../../lib/plans";
 
 const SHOP_GID = /^gid:\/\/shopify\/Shop\/\d+$/;
 
@@ -160,11 +160,14 @@ export async function revokeComplimentaryAccess(
 
 /**
  * Usage and estimated AI cost of every store with a complimentary grant
- * (active or not) for a month, for the operator's internal report.
+ * (active or not) for a month, for the operator's internal report. With
+ * `ratesByProvider` (USD per million characters per engine) each row adds
+ * its characters per engine and the cost at each engine's rate; without it,
+ * one rate for every character, as before engines could be combined.
  */
 export async function complimentaryUsageReport(
   owner: PrismaClient,
-  options: { allowlist: readonly string[]; usdPerMillionChars: number; period?: string },
+  options: { allowlist: readonly string[]; usdPerMillionChars: number; period?: string; ratesByProvider?: Readonly<Record<string, number>> },
 ) {
   const period = options.period ?? periodKey();
   // Shop isn't under RLS; each grant is read under its own tenant.
@@ -174,6 +177,7 @@ export async function complimentaryUsageReport(
     const access = await withTenant(shop.id, (tx) => tx.complimentaryAccess.findUnique({ where: { shopId: shop.id } }), owner);
     if (!access) continue;
     const chars = await getMonthlyUsage(shop.id, period, owner);
+    const byProvider = options.ratesByProvider ? await getMonthlyUsageByProvider(shop.id, period, owner) : null;
     rows.push({
       // For the operator's reading only; decisions use the GID.
       shopDomain: shop.shopDomain,
@@ -183,7 +187,8 @@ export async function complimentaryUsageReport(
       monthlyCharLimit: access.monthlyCharLimit,
       period,
       chars,
-      estimatedCostUsd: estimatedCostUsd(chars, options.usdPerMillionChars),
+      ...(byProvider ? { byProvider } : {}),
+      estimatedCostUsd: byProvider && options.ratesByProvider ? estimatedCostByProvider(byProvider, options.ratesByProvider) : estimatedCostUsd(chars, options.usdPerMillionChars),
       grantedBy: access.grantedBy,
       revokedAt: access.revokedAt,
       expiresAt: access.expiresAt,

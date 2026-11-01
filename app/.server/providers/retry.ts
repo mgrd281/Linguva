@@ -11,6 +11,21 @@ export interface RetryOptions {
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
+ * Retry-After as milliseconds: delta-seconds ("7", "1.5") or an HTTP date.
+ * Undefined when absent or unreadable; never negative (a date in the past is 0).
+ */
+export function parseRetryAfter(header: string | null, now = Date.now()): number | undefined {
+  const value = header?.trim();
+  if (!value) return undefined;
+  if (/^\d+(\.\d+)?$/.test(value)) return Math.round(Number(value) * 1000);
+  // HTTP dates start with a day name ("Wed, 21 Oct 2026 07:28:00 GMT"); this
+  // keeps Date.parse from reading "-5" or "2026" as a date.
+  if (!/^[A-Za-z]{3}/.test(value)) return undefined;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - now) : undefined;
+}
+
+/**
  * Retries retryable provider errors with exponential backoff and full
  * jitter, honouring Retry-After when the provider sends one. Other errors
  * (quota, auth, invalid) fail immediately.

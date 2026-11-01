@@ -39,6 +39,9 @@ importers:
       bullmq:
         specifier: 6.3.12
         version: 6.3.12(ioredis@6.0.0)
+      entities:
+        specifier: ^8.0.0
+        version: 8.1.0
       ioredis:
         specifier: 6.0.0
         version: 6.0.0

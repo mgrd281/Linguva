@@ -6,8 +6,12 @@ import { providerContext } from "../../lib/resource-kinds";
 import { logger } from "../lib/logger";
 import { alignDocuments, type SegmentPair } from "../memory/alignment";
 import { recordMemoryUse, storeMemory } from "../memory/translation-memory";
-import { billedBeforeFailure, type TranslationProvider } from "../providers/types";
-import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
+import type { TranslationProvider } from "../providers/types";
+import { INTERACTIVE_DEADLINE_MS } from "../providers/engine-router";
+import { consentGap, plannedEngine, routerSignal } from "../providers/index";
+import type { EngineId } from "../../lib/engines";
+import { consentedEngines, formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
+import { chargedChars, chargeForFailure, chargeForResult } from "../usage/engine-charge";
 import {
   getTranslatableResource,
   registerTranslations,
@@ -32,6 +36,17 @@ export class AiConsentRequiredError extends Error {
   constructor() {
     super("AI data processing consent is required");
     this.name = "AiConsentRequiredError";
+  }
+}
+
+/**
+ * Only an engine the shop's consent doesn't cover serves the language (several engines
+ * configured): nothing is sent; the merchant allows `engine` in Settings first.
+ */
+export class EngineConsentRequiredError extends Error {
+  constructor(readonly engine: EngineId) {
+    super(`Consent for ${engine} is required for this language`);
+    this.name = "EngineConsentRequiredError";
   }
 }
 
@@ -84,11 +99,14 @@ export async function aiTranslateResource(
     dailyLimit?: number;
     platformDailyLimit?: number;
     maxRequestChars?: number;
+    /** The request's own signal (the merchant left the page): a router stops before its next engine. */
+    signal?: AbortSignal;
   },
   client: PrismaClient = defaultClient,
 ) {
   const settings = await getShopSettings(input.shopId, client);
   if (!hasCurrentAiConsent(settings)) throw new AiConsentRequiredError();
+  const engines = consentedEngines(settings);
 
   const resource = await loadResource(input.admin, input.resourceId, input.targetLocale);
   const wanted = new Set(input.keys);
@@ -108,6 +126,11 @@ export async function aiTranslateResource(
   if (input.maxRequestChars !== undefined && prepared.providerChars > input.maxRequestChars) {
     throw new AiRequestTooLargeError(prepared.providerChars, input.maxRequestChars);
   }
+  // A language only an engine the shop hasn't allowed serves: nothing is sent to the others.
+  if (prepared.providerChars) {
+    const gap = await consentGap(input.provider, input.targetLocale, engines);
+    if (gap) throw new EngineConsentRequiredError(gap);
+  }
   const reservation = prepared.providerChars
     ? await reserveUsage(
         {
@@ -117,31 +140,35 @@ export async function aiTranslateResource(
           limit: input.monthlyLimit,
           dailyLimit: input.dailyLimit,
           platformDailyLimit: input.platformDailyLimit,
-          provider: input.provider.id,
+          provider: await plannedEngine(input.provider, input.targetLocale, engines, sourceLocaleOf(resource)),
         },
         client,
       )
     : null;
 
   let result: Awaited<ReturnType<typeof completeTranslation>>;
+  const signal = routerSignal(input.provider, input.signal, INTERACTIVE_DEADLINE_MS);
   try {
     result = await completeTranslation(prepared, {
       provider: input.provider,
+      engines,
       sourceLocale: sourceLocaleOf(resource),
       targetLocale: input.targetLocale,
       glossary: context.glossary.rules,
       context: translationContext(settings.aiStoreContext, providerContext(resource.resourceId, titleField?.value, input.resourceType)),
       formality: formalityFor(settings, input.targetLocale),
+      ...(signal ? { signal } : {}),
     });
   } catch (error) {
     // Only the provider call failed: release what it didn't bill.
     if (reservation) {
-      const billed = billedBeforeFailure(error);
-      await (billed > 0 ? settleUsage(reservation, billed, client) : releaseUsage(reservation, client));
+      const charge = chargeForFailure(error, reservation.chars, reservation.provider);
+      const billed = chargedChars(charge);
+      await (billed > 0 || Object.keys(charge.lost).length > 0 ? settleUsage(reservation, billed, client, charge) : releaseUsage(reservation, client));
     }
     throw error;
   }
-  if (reservation) await settleUsage(reservation, result.billedCharacters, client);
+  if (reservation) await settleUsage(reservation, result.billedCharacters, client, chargeForResult(result));
   await recordMemoryUse(input.shopId, result.memoryEntryIds, client);
   return {
     outcomes: result.outcomes,

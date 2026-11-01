@@ -22,6 +22,11 @@ export const en = {
   "languages.usage.count": "{enabled} of {max} languages enabled, {published} published.",
   "languages.usage.source":
     "Shopify is the source of truth for which languages are enabled and published. This list is read from your store each time you open it.",
+  "languages.ai.with": "with {engine}",
+  "languages.ai.needsConsent": "Available with {engine} once you allow it in Settings",
+  "languages.ai.unsupportedWith": "Not available with {engine}: translate in the editor or import a CSV",
+  "languages.ai.unsupportedAny": "Not available with the AI services set up: translate in the editor or import a CSV",
+  "languages.ai.settingsLink": "Open Settings",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -45,6 +50,11 @@ export const de: Translation<typeof en> = {
   "languages.usage.count": "{enabled} von {max} Sprachen aktiviert, {published} veröffentlicht.",
   "languages.usage.source":
     "Shopify legt fest, welche Sprachen aktiviert und veröffentlicht sind. Diese Liste wird bei jedem Öffnen aus deinem Shop gelesen.",
+  "languages.ai.with": "mit {engine}",
+  "languages.ai.needsConsent": "Mit {engine} verfügbar, sobald du es in den Einstellungen erlaubst",
+  "languages.ai.unsupportedWith": "Mit {engine} nicht verfügbar: im Editor übersetzen oder eine CSV importieren",
+  "languages.ai.unsupportedAny": "Mit den eingerichteten KI-Diensten nicht verfügbar: im Editor übersetzen oder eine CSV importieren",
+  "languages.ai.settingsLink": "Einstellungen öffnen",
 };
 
 export const fr: Translation<typeof en> = {
@@ -68,6 +78,11 @@ export const fr: Translation<typeof en> = {
   "languages.usage.count": "Langues activées : {enabled} sur {max} (publiées : {published}).",
   "languages.usage.source":
     "Shopify détermine quelles langues sont activées et publiées. Cette liste est lue depuis votre boutique chaque fois que vous l'ouvrez.",
+  "languages.ai.with": "avec {engine}",
+  "languages.ai.needsConsent": "Disponible avec {engine} dès que vous l'autorisez dans les paramètres",
+  "languages.ai.unsupportedWith": "Indisponible avec {engine} : traduisez dans l'éditeur ou importez un CSV",
+  "languages.ai.unsupportedAny": "Indisponible avec les services d'IA configurés : traduisez dans l'éditeur ou importez un CSV",
+  "languages.ai.settingsLink": "Ouvrir les paramètres",
 };
 
 export const es: Translation<typeof en> = {
@@ -91,4 +106,9 @@ export const es: Translation<typeof en> = {
   "languages.usage.count": "Idiomas activados: {enabled} de {max} (publicados: {published}).",
   "languages.usage.source":
     "Shopify determina qué idiomas están activados y publicados. Esta lista se lee de tu tienda cada vez que la abres.",
+  "languages.ai.with": "con {engine}",
+  "languages.ai.needsConsent": "Disponible con {engine} en cuanto lo permitas en Configuración",
+  "languages.ai.unsupportedWith": "No disponible con {engine}: traduce en el editor o importa un CSV",
+  "languages.ai.unsupportedAny": "No disponible con los servicios de IA configurados: traduce en el editor o importa un CSV",
+  "languages.ai.settingsLink": "Abrir Configuración",
 };

@@ -30,12 +30,13 @@ import { loadCounts } from "../coverage/items";
 import { COVERAGE_TYPES } from "../coverage/coverage";
 import { measurementState, scanningOf, UNDER_WAY } from "../overview/measurement";
 import type { MarketCountriesResult } from "../markets/countries";
-import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { consentedEngines, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { allowedTargetLocales } from "../billing/subscription";
 import { getMonthlyUsage } from "../usage/usage-ledger";
 import { getQueues } from "../queue/client";
-import { getTranslationProvider } from "../providers";
+import { consentGap, getTranslationProvider } from "../providers";
+import type { EngineId } from "../../lib/engines";
 import { BackgroundJobsUnavailableError, startBulkJob } from "../jobs/start-job";
 import { ATTACHED_BULK_TYPES, isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
 import { activeJobs, categoryJob } from "../jobs/active-jobs";
@@ -182,15 +183,31 @@ function inSmartScope(note: SmartCoverageNote | null, locale: string, category: 
  * the merchant can change), then the plan, the plan's languages and the AI
  * consent, the gates of the Coverage page and its action. Null: it can.
  */
-export type BulkGate = "JOBS_UNAVAILABLE" | "AI_NOT_CONFIGURED" | "PLAN_BULK" | "PLAN_LANGUAGE" | "CONSENT_REQUIRED";
+export type BulkGate = "JOBS_UNAVAILABLE" | "AI_NOT_CONFIGURED" | "PLAN_BULK" | "PLAN_LANGUAGE" | "CONSENT_REQUIRED" | "ENGINE_CONSENT";
 
-function bulkGate(input: { jobsAvailable: boolean; aiAvailable: boolean; entitlements: Entitlements; targets: readonly string[]; locale: string; consent: boolean }): BulkGate | null {
+/** `engineConsent`: only an engine the shop hasn't allowed serves the language (consentGap). */
+function bulkGate(input: {
+  jobsAvailable: boolean;
+  aiAvailable: boolean;
+  entitlements: Entitlements;
+  targets: readonly string[];
+  locale: string;
+  consent: boolean;
+  engineConsent?: EngineId | null;
+}): BulkGate | null {
   if (!input.jobsAvailable) return "JOBS_UNAVAILABLE";
   if (!input.aiAvailable) return "AI_NOT_CONFIGURED";
   if (!input.entitlements.bulk) return "PLAN_BULK";
   if (!allowedTargetLocales(input.entitlements, input.targets).includes(input.locale)) return "PLAN_LANGUAGE";
   if (!input.consent) return "CONSENT_REQUIRED";
+  if (input.engineConsent) return "ENGINE_CONSENT";
   return null;
+}
+
+/** The engine the shop would have to allow before this language can be translated (several engines only). */
+function engineConsentGap(settings: Awaited<ReturnType<typeof getShopSettings>>, locale: string): Promise<EngineId | null> {
+  if (!hasCurrentAiConsent(settings)) return Promise.resolve(null);
+  return consentGap(getTranslationProvider(), locale, consentedEngines(settings));
 }
 
 /** Texts to translate of the given types in a language, by state: counted texts only (URL handles are never machine translated). */
@@ -367,7 +384,7 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
   const measurement = measurementState(summary.report, { jobsAvailable, now: options.now ?? Date.now() });
   const scanning = scanningOf(summary.report, measurement, locale);
   const canCount = jobsAvailable && !UNDER_WAY.has(measurement.state);
-  const gate = bulkGate({ jobsAvailable, aiAvailable, entitlements: billing.entitlements, targets, locale, consent: hasCurrentAiConsent(settings) });
+  const gate = bulkGate({ jobsAvailable, aiAvailable, entitlements: billing.entitlements, targets, locale, consent: hasCurrentAiConsent(settings), engineConsent: await engineConsentGap(settings, locale) });
   const tallies = categoryTallies(summary.counts, locale);
   const headline = headlineByLocale(summary.counts).get(locale) ?? tally(emptyCounts());
   const itemCount = (id: CategoryId) => {
@@ -824,7 +841,7 @@ export async function loadCategoryItems(
     titlesUnavailable: nodes === null || content === null,
     bulk: {
       estimate,
-      gate: bulkGate({ jobsAvailable, aiAvailable, entitlements: billing.entitlements, targets, locale, consent: hasCurrentAiConsent(settings) }),
+      gate: bulkGate({ jobsAvailable, aiAvailable, entitlements: billing.entitlements, targets, locale, consent: hasCurrentAiConsent(settings), engineConsent: await engineConsentGap(settings, locale) }),
       publishMode: publishModeOf(settings, billing.entitlements),
       aiRemaining: aiRemaining(billing, used),
     },
@@ -863,13 +880,15 @@ export async function translateCategoryAction(
   const targets = (await fetchAndSyncShopLocales(admin, shop.id, client)).locales.filter((l) => !l.primary).map((l) => l.locale);
   if (!targets.includes(locale)) return { error: "INVALID_REQUEST" };
   const billing = await shopBilling(admin, shop);
+  const settings = await getShopSettings(shop.id, client);
   const gate = bulkGate({
     jobsAvailable: getQueues() !== null,
     aiAvailable: getTranslationProvider() !== null,
     entitlements: billing.entitlements,
     targets,
     locale,
-    consent: hasCurrentAiConsent(await getShopSettings(shop.id, client)),
+    consent: hasCurrentAiConsent(settings),
+    engineConsent: await engineConsentGap(settings, locale),
   });
   if (gate) return { error: gate };
   const types = typesToTranslate(await loadCounts(shop.id, client), locale, category);

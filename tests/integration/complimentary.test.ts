@@ -30,7 +30,11 @@ const shopify = vi.hoisted(() => {
  * Owner complimentary access: every feature without a subscription for the
  * operator's own stores, while AI usage stays metered and costed.
  */
+import { spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { build } from "esbuild";
 import { PrismaClient } from "@prisma/client";
 import { Session } from "@shopify/shopify-api";
 import type { LoaderFunctionArgs } from "react-router";
@@ -45,13 +49,15 @@ import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { setAiConsent, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
-import { getMonthlyUsage } from "../../app/.server/usage/usage-ledger";
+import { getMonthlyUsage, reserveUsage, settleUsage } from "../../app/.server/usage/usage-ledger";
+import { chargeForResult } from "../../app/.server/usage/engine-charge";
 import { resetConfigCache } from "../../app/.server/lib/config";
 import { PLANS } from "../../app/lib/plans";
 import { loader as planLoader } from "../../app/routes/app.plan";
 import { sessionStorage } from "../../app/shopify.server";
 import { ownerDb, resetDatabase } from "../support/db";
 import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
+import { testEnv } from "../support/env";
 import { FakeShopifyStore } from "../support/fake-store";
 
 const app = new PrismaClient();
@@ -176,6 +182,61 @@ describe("owner complimentary access", () => {
     expect(report).toEqual([
       expect.objectContaining({ shopifyShopGid: OWN, active: true, chars: used, estimatedCostUsd: Math.round((used / 1e6) * 25 * 100) / 100 }),
     ]);
+    expect(report[0]).not.toHaveProperty("byProvider");
+  });
+
+  it("reports characters and cost per engine when rates per engine are given (one engine: the same figure)", async () => {
+    const s = await shop("own-store.myshopify.com", OWN);
+    await grant(OWN);
+    const single = await reserveUsage({ shopId: s.id, key: "deepl-only", chars: 400_000, limit: 10_000_000, provider: "deepl" }, app);
+    await settleUsage(single, 400_000, app);
+    const rates = { deepl: 25, azure: 10, google: 20 };
+    const [deeplOnly] = await complimentaryUsageReport(ownerDb, { allowlist: [OWN], usdPerMillionChars: 25, ratesByProvider: rates });
+    const [plain] = await complimentaryUsageReport(ownerDb, { allowlist: [OWN], usdPerMillionChars: 25 });
+    expect(deeplOnly).toMatchObject({ chars: 400_000, byProvider: { deepl: 400_000 }, estimatedCostUsd: plain!.estimatedCostUsd });
+    // Azure answered a second request: its characters at its own rate.
+    const failover = await reserveUsage({ shopId: s.id, key: "azure", chars: 200_000, limit: 10_000_000, provider: "deepl" }, app);
+    await settleUsage(failover, 200_000, app, chargeForResult({ provider: "azure", billedCharacters: 200_000 }));
+    const [mixed] = await complimentaryUsageReport(ownerDb, { allowlist: [OWN], usdPerMillionChars: 25, ratesByProvider: rates });
+    expect(mixed).toMatchObject({ chars: 600_000, byProvider: { deepl: 400_000, azure: 200_000 }, estimatedCostUsd: 12 });
+  });
+
+  it("prints the report with only MIGRATION_DATABASE_URL set, as documented (no other app variable)", async () => {
+    const s = await shop("own-store.myshopify.com", OWN);
+    await grant(OWN);
+    const reservation = await reserveUsage({ shopId: s.id, key: "report", chars: 400_000, limit: 10_000_000, provider: "deepl" }, app);
+    await settleUsage(reservation, 400_000, app);
+    // The operator tool as `pnpm build:ops` bundles it, run in a clean environment.
+    const bundle = await build({
+      entryPoints: ["scripts/ops/complimentary.ts"],
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node22",
+      packages: "external",
+      write: false,
+      logLevel: "silent",
+    });
+    // Under node_modules, so the bundle's external packages (Prisma) resolve as from build/ops.
+    const dir = join(process.cwd(), "node_modules", ".cache", "linguva-tests");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, `complimentary-${process.pid}.mjs`);
+    writeFileSync(file, bundle.outputFiles[0]!.text);
+    try {
+      const run = spawnSync(process.execPath, [file, "report"], {
+        env: { PATH: process.env.PATH ?? "", MIGRATION_DATABASE_URL: testEnv.MIGRATION_DATABASE_URL!, COMPLIMENTARY_SHOP_GIDS: OWN },
+        encoding: "utf8",
+        timeout: 60_000,
+      });
+      expect(run.stderr).not.toMatch(/Invalid environment configuration/);
+      expect(run.status, run.stderr).toBe(0);
+      expect(run.stdout).toContain("own-store.myshopify.com");
+      expect(run.stdout).toContain("Estimate at 25 USD per million characters for DeepL (AI_COST_USD_PER_MILLION_CHARS).");
+      expect(run.stdout).toContain("Estimate at 10 USD per million characters for Microsoft Azure");
+      expect(run.stdout).toContain("Estimate at 20 USD per million characters for Google Cloud");
+    } finally {
+      rmSync(file, { force: true });
+    }
   });
 
   it("keeps the plan's entitlements for everyone else", async () => {

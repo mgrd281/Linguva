@@ -16,7 +16,13 @@ export type IssueCode =
   | "LENGTH_RATIO"
   | "UNTRANSLATED"
   | "WRONG_SCRIPT"
-  | "FORMALITY_MISMATCH";
+  | "FORMALITY_MISMATCH"
+  // Another engine (no form of address) translated a language with a chosen one: waits in Review.
+  | "FORMALITY_NOT_APPLIED"
+  // An engine lost a word separator next to a link or formatting: waits in Review.
+  | "SPACING_CHANGED"
+  // An engine's output couldn't be mapped back to the field's formatting: refused.
+  | "ENGINE_MARKUP";
 
 export interface ValidationIssue {
   code: IssueCode;

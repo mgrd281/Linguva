@@ -152,6 +152,8 @@ export const en = {
     other: "You edited {count} texts and haven't approved them yet. They will be lost if you leave.",
   },
   "review.leave.leave": "Leave and discard",
+  "review.hint.FORMALITY_NOT_APPLIED": "Check the form of address",
+  "review.hint.SPACING_CHANGED": "Check the spaces around links and formatting",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -308,6 +310,8 @@ export const de: Translation<typeof en> = {
     other: "Du hast {count} Texte geändert und noch nicht freigegeben. Sie gehen verloren, wenn du die Seite verlässt.",
   },
   "review.leave.leave": "Verlassen und verwerfen",
+  "review.hint.FORMALITY_NOT_APPLIED": "Anrede prüfen",
+  "review.hint.SPACING_CHANGED": "Leerzeichen an Links und Formatierungen prüfen",
 };
 
 export const fr: Translation<typeof en> = {
@@ -471,6 +475,8 @@ export const fr: Translation<typeof en> = {
     other: "Vous avez modifié {count} textes sans les approuver. Ils seront perdus si vous quittez la page.",
   },
   "review.leave.leave": "Quitter et abandonner",
+  "review.hint.FORMALITY_NOT_APPLIED": "Vérifiez la forme de politesse",
+  "review.hint.SPACING_CHANGED": "Vérifiez les espaces autour des liens et de la mise en forme",
 };
 
 export const es: Translation<typeof en> = {
@@ -631,4 +637,6 @@ export const es: Translation<typeof en> = {
     other: "Editaste {count} textos y aún no los aprobaste. Se perderán si sales.",
   },
   "review.leave.leave": "Salir y descartar",
+  "review.hint.FORMALITY_NOT_APPLIED": "Revisa el tratamiento",
+  "review.hint.SPACING_CHANGED": "Revisa los espacios junto a enlaces y formato",
 };

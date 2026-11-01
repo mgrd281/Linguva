@@ -1,6 +1,8 @@
 /**
  * The DeepL keys' remaining quota as rings, for the operator's own stores:
  * one ring per key with what is left in the middle, and the state in words.
+ * Its parts (ring, key tile, colours, badges) are shared with the
+ * translation services card (TranslationEngines.tsx).
  */
 import type { DeepLKeyUsage } from "../.server/providers/deepl-usage";
 import type { I18n } from "../i18n/i18n";
@@ -12,7 +14,7 @@ const RADIUS = 46;
 const STROKE = 10;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-type Key = Omit<DeepLKeyUsage, "plan"> & { plan: string };
+export type Key = Omit<DeepLKeyUsage, "plan"> & { plan: string };
 
 /** Share left, 0–100; null when DeepL reports no limit or couldn't be asked. */
 export function shareLeft(key: Pick<DeepLKeyUsage, "used" | "limit">): number | null {
@@ -20,14 +22,14 @@ export function shareLeft(key: Pick<DeepLKeyUsage, "used" | "limit">): number | 
   return Math.max(0, Math.min(100, ((key.limit - key.used) / key.limit) * 100));
 }
 
-function colourFor(left: number | null, state: DeepLKeyUsage["state"]): string {
+export function colourFor(left: number | null, state: DeepLKeyUsage["state"]): string {
   if (state !== "ok" || left === null) return ITEM_STATE_LOOK.missing.colour;
   if (left < 10) return ITEM_STATE_LOOK.failed.colour;
   if (left < 30) return ITEM_STATE_LOOK.outdated.colour;
   return ITEM_STATE_LOOK.complete.colour;
 }
 
-function QuotaRing({ left, colour, figure, caption, label }: { left: number | null; colour: string; figure: string; caption: string; label: string }) {
+export function QuotaRing({ left, colour, figure, caption, label }: { left: number | null; colour: string; figure: string; caption: string; label: string }) {
   const length = left === null ? 0 : Math.max(left > 0 ? 3 : 0, (left / 100) * CIRCUMFERENCE);
   return (
     <div style={{ position: "relative", width: 96, height: 96, flex: "none" }}>
@@ -61,15 +63,57 @@ const STATE_TEXT = {
   unreachable: "overview.deepl.state.unreachable",
 } as const;
 
-const STATE_BADGE = {
+export const STATE_BADGE = {
   ok: { tone: "success", icon: "check-circle" },
   resting: { tone: "warning", icon: "clock" },
   refused: { tone: "critical", icon: "alert-circle" },
   unreachable: { tone: "neutral", icon: "alert-circle" },
 } as const;
 
-export function DeepLQuota({ keys, i18n }: { keys: Key[]; i18n: I18n }) {
+/** One key's tile: its ring, plan, hint, usage and state when it isn't ok. */
+export function DeepLKeyTile({ keyUsage: key, i18n }: { keyUsage: Key; i18n: I18n }) {
   const { t, number, percent } = i18n;
+  const left = shareLeft(key);
+  const name = t("overview.deepl.key", { position: key.position });
+  const figure = key.state === "refused" || key.state === "unreachable" ? "–" : left === null ? "∞" : percent(Math.floor(left));
+  const badge = STATE_BADGE[key.state];
+  return (
+    <s-box padding="base" border="base" borderRadius="large-100">
+      <s-grid gridTemplateColumns="auto 1fr" columnGap="base" alignItems="center">
+        <QuotaRing
+          left={key.state === "ok" ? left : 0}
+          colour={colourFor(left, key.state)}
+          figure={figure}
+          caption={t("overview.deepl.left")}
+          label={t("overview.deepl.ringLabel", { name, figure })}
+        />
+        <s-stack direction="block" gap="small-300">
+          <s-text type="strong">{name}</s-text>
+          <s-text color="subdued">
+            {key.plan === "free" ? "Free" : "Pro"} · …{key.hint}
+          </s-text>
+          {key.used !== null ? (
+            <s-text>
+              {key.limit !== null
+                ? t("overview.deepl.remaining", { left: number(Math.max(0, key.limit - key.used)), limit: number(key.limit) })
+                : t("overview.deepl.unlimited", { used: number(key.used) })}
+            </s-text>
+          ) : null}
+          {key.state !== "ok" ? (
+            <s-stack direction="inline">
+              <s-badge tone={badge.tone} icon={badge.icon}>
+                {t(STATE_TEXT[key.state])}
+              </s-badge>
+            </s-stack>
+          ) : null}
+        </s-stack>
+      </s-grid>
+    </s-box>
+  );
+}
+
+export function DeepLQuota({ keys, i18n }: { keys: Key[]; i18n: I18n }) {
+  const { t, number } = i18n;
   const counted = keys.filter((k) => k.state !== "refused" && k.used !== null && k.limit !== null);
   const totalLimit = counted.reduce((s, k) => s + (k.limit ?? 0), 0);
   const totalLeft = counted.reduce((s, k) => s + Math.max(0, (k.limit ?? 0) - (k.used ?? 0)), 0);
@@ -94,43 +138,7 @@ export function DeepLQuota({ keys, i18n }: { keys: Key[]; i18n: I18n }) {
           <s-query-container>
             <s-grid gridTemplateColumns="@container (inline-size > 460px) 1fr 1fr, (inline-size > 720px) 1fr 1fr 1fr, 1fr" gap="base">
               {keys.map((key) => {
-                const left = shareLeft(key);
-                const name = t("overview.deepl.key", { position: key.position });
-                const figure = key.state === "refused" || key.state === "unreachable" ? "–" : left === null ? "∞" : percent(Math.floor(left));
-                const badge = STATE_BADGE[key.state];
-                return (
-                  <s-box key={key.position} padding="base" border="base" borderRadius="large-100">
-                    <s-grid gridTemplateColumns="auto 1fr" columnGap="base" alignItems="center">
-                      <QuotaRing
-                        left={key.state === "ok" ? left : 0}
-                        colour={colourFor(left, key.state)}
-                        figure={figure}
-                        caption={t("overview.deepl.left")}
-                        label={t("overview.deepl.ringLabel", { name, figure })}
-                      />
-                      <s-stack direction="block" gap="small-300">
-                        <s-text type="strong">{name}</s-text>
-                        <s-text color="subdued">
-                          {key.plan === "free" ? "Free" : "Pro"} · …{key.hint}
-                        </s-text>
-                        {key.used !== null ? (
-                          <s-text>
-                            {key.limit !== null
-                              ? t("overview.deepl.remaining", { left: number(Math.max(0, key.limit - key.used)), limit: number(key.limit) })
-                              : t("overview.deepl.unlimited", { used: number(key.used) })}
-                          </s-text>
-                        ) : null}
-                        {key.state !== "ok" ? (
-                          <s-stack direction="inline">
-                            <s-badge tone={badge.tone} icon={badge.icon}>
-                              {t(STATE_TEXT[key.state])}
-                            </s-badge>
-                          </s-stack>
-                        ) : null}
-                      </s-stack>
-                    </s-grid>
-                  </s-box>
-                );
+                return <DeepLKeyTile key={key.position} keyUsage={key} i18n={i18n} />;
               })}
             </s-grid>
           </s-query-container>

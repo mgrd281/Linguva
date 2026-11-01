@@ -1,3 +1,4 @@
+import { errorJson } from "./engine-http";
 import { withRetry, type RetryOptions } from "./retry";
 import {
   TranslationProviderError,
@@ -64,6 +65,13 @@ function parseRetryAfter(header: string | null): number | undefined {
   if (!header) return undefined;
   const seconds = Number(header);
   return Number.isFinite(seconds) ? seconds * 1000 : undefined;
+}
+
+/** A 400 whose message names the source_lang or target_lang field as not supported. */
+async function refusesLanguage(response: Response): Promise<boolean> {
+  const body = (await errorJson(response)) as { message?: unknown } | null;
+  const message = typeof body?.message === "string" ? body.message : "";
+  return /\b(?:source|target)_lang\b/.test(message) && /not supported|unsupported/i.test(message);
 }
 
 /** Target languages per API host, read from DeepL (GET /v2/languages) and kept for a day. */
@@ -205,13 +213,18 @@ export class DeepLProvider implements TranslationProvider {
               ? "auth"
               : "invalid";
       // The body may echo request details; only the status is surfaced.
-      throw new TranslationProviderError(
+      const error = new TranslationProviderError(
         this.id,
         kind,
         `HTTP ${status}`,
         status,
         parseRetryAfter(response.headers.get("retry-after")),
       );
+      // "Value for 'source_lang' not supported": DeepL doesn't translate this pair (its source list
+      // is shorter than its target list, which is all the router can check), so another engine may.
+      // Only the field's name is looked for; nothing from the body is kept.
+      if (status === 400 && (await refusesLanguage(response))) error.reason = "UNSUPPORTED_LANGUAGE";
+      throw error;
     }
 
     const body = (await response.json()) as {

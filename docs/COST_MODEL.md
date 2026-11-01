@@ -72,3 +72,18 @@ What this means for the plans (DeepL API Growth at $27.50 per million characters
 - Per-shop monthly cost cap (`Entitlement.costCapMicros`) and a global daily provider spend alert.
 - Cost estimate is shown and confirmed before every bulk job.
 - `ProviderUsage` feeds a per-shop gross margin view in the admin center.
+
+## 4. Further engines (Microsoft Azure, Google Cloud)
+
+Set up only after the owner's decision (docs/AI_ENGINES.md). DeepL stays first, so with DeepL configured the other engines translate only what DeepL can't (a language it doesn't offer, its limit used up, an outage).
+
+| Engine | Rate used in estimates | Variable | What the engine bills |
+|---|---|---|---|
+| DeepL | 27.5 USD per million (Growth, production) | `AI_COST_USD_PER_MILLION_CHARS` (also the rate of ledger rows without an engine) | `billed_characters`; tags and context not billed |
+| Microsoft Azure Translator S1 | 10 USD per million (list price; F0: 2,000,000 free a month, a hard cap) | `AI_COST_USD_PER_MILLION_CHARS_AZURE` | every code point of each text, markup included, surrogate pairs count 2 |
+| Google Cloud Translation (NMT) | 20 USD per million after the free 500,000 a month | `AI_COST_USD_PER_MILLION_CHARS_GOOGLE` | every code point, markup included; an empty query counts 1 |
+
+- **What the shop is counted is the same whatever engine answers:** DeepL's number, or for Azure and Google the text without inline codes. The estimate (ledger characters × the engine's rate, `estimatedCostByProvider` in `app/lib/plans.ts`, per engine in `pnpm ops:complimentary report`) therefore **doesn't include the markup Azure and Google bill** (`<span id="lg1">…</span>` = 22 characters per formatting code, `<img id="lx1"/>` = 15): typically a few percent on rich text.
+- **Failover partials:** when an engine billed earlier batches and then failed (quota, outage), and another engine translated the request, the shop is charged only the answering engine's count; the failed engine's partial is counted in the platform counter (`PlatformUsageDay`) only, not in a shop's cost or allowance. A request where every engine failed charges the shop at most its reservation.
+- **Not metered at all** (DeepL today too): a timeout or 5xx that the engine had already processed, then retried (3 retries), is billed by the engine again on each attempt.
+- The Plan page's internal rate for the owner's complimentary stores is the month's effective rate: exactly DeepL's while only DeepL translated, else the blend of the engines' rates.

@@ -1,7 +1,10 @@
 /**
- * Languages whose form of address DeepL can set (its `formality` option),
- * and the pronouns that name the two forms in Settings. For other
- * languages DeepL ignores the option, so Settings offers no choice.
+ * DeepL's formality languages: those whose form of address DeepL can set
+ * (its `formality` option), and the pronouns that name the two forms in
+ * Settings. For other languages DeepL ignores the option, so Settings offers
+ * no choice. Azure and Google have no formality option: a result of theirs
+ * for one of these languages carries FORMALITY_NOT_APPLIED and waits in
+ * Review.
  * https://developers.deepl.com/docs/api-reference/translate (formality)
  */
 const FORMALITY_LANGUAGES = new Set(["de", "fr", "it", "es", "nl", "pl", "pt", "ja", "ru"]);

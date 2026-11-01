@@ -11,7 +11,7 @@ import { Redis } from "ioredis";
 import { heartbeatKey } from "../../app/.server/queue/heartbeat";
 import { keyPrefix } from "../../app/.server/queue/redis";
 import { testEnv } from "../support/env";
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { UI_ENV, UI_SHOPS, type UiShopKey } from "./fixtures/shops";
 
 const b64url = (value: string | Buffer) => Buffer.from(value).toString("base64url");
@@ -82,7 +82,9 @@ export async function openApp(page: Page, shopKey: UiShopKey, path: string, opti
   await page.route("https://cdn.shopify.com/shopifycloud/app-bridge.js", (route) =>
     route.fulfill({ contentType: "text/javascript", body: appBridgeStub(token, shop.domain) }),
   );
-  const url = new URL(path, UI_ENV.appUrl);
+  // The engines project runs against its own server (playwright.config.ts).
+  const base = (test.info().project.use as { baseURL?: string }).baseURL ?? UI_ENV.appUrl;
+  const url = new URL(path, base);
   url.searchParams.set("embedded", "1");
   url.searchParams.set("shop", shop.domain);
   url.searchParams.set("host", Buffer.from(`admin.shopify.com/store/${shop.domain.replace(".myshopify.com", "")}`).toString("base64"));

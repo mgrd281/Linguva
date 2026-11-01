@@ -6,7 +6,10 @@ import imprintHtml from "../../../site/impressum.html?raw";
 import pricingHtml from "../../../site/preise.html?raw";
 import appPrivacyHtml from "../../../site/privacy.html?raw";
 import supportHtml from "../../../site/support.html?raw";
-import { getConfig, type AppConfig } from "../lib/config";
+import { engineConsentTokens, getConfig, type AppConfig } from "../lib/config";
+import { applyEngineBlocks, DEEPL_ONLY, engineSectionsWithOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
+
+export { engineBlocksWithOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
 
 // The marketing website (site/) served by the app on its public address.
 const ASSETS = import.meta.glob<string>("../../../site/assets/*", { query: "?url", import: "default", eager: true });
@@ -44,17 +47,33 @@ const SCRIPTS = [...new Set(Object.values(PAGES).flatMap(scriptHashes))].join(" 
 export const PUBLIC_ONLY: ReadonlySet<SitePage> = new Set(["appPrivacy", "support"]);
 
 /**
- * A page as served. `<!--public-->…<!--/public-->` (links to the gated pages)
- * stays only with PUBLIC_PAGES=on. `<!--draft-->…<!--/draft-->` (the draft
- * notice) stays until LEGAL_TEXTS_REVIEWED=yes and no open point
+ * A page as served. Engine blocks first: `<!--engine:TAG-->…` stays only for
+ * an engine (or engine and data location) in use, `<!--engines:single-->…`
+ * only with DeepL alone, `<!--engines:multi-->…` otherwise,
+ * `<!--engines:several-->…` only with two or more engines, and
+ * `<!--engines:order:en|de-->` becomes the services' legal names in routing
+ * order; so an open point in an unused engine's block never shows the draft
+ * notice. `<!--public-->…<!--/public-->` (links to the gated pages) stays
+ * only with PUBLIC_PAGES=on. `<!--draft-->…<!--/draft-->` (the draft notice)
+ * stays until LEGAL_TEXTS_REVIEWED=yes and no open point
  * (`<mark class="open">`) is left in the page.
  */
-export function pageHtml(html: string, { publicPages, reviewed }: { publicPages: boolean; reviewed: boolean }): string {
-  const draft = !reviewed || html.includes('<mark class="open">');
-  return html
+export function pageHtml(html: string, { publicPages, reviewed, engines = DEEPL_ONLY }: { publicPages: boolean; reviewed: boolean; engines?: PageEngines }): string {
+  const withEngines = applyEngineBlocks(html, engines);
+  const draft = !reviewed || withEngines.includes('<mark class="open">');
+  return withEngines
     .replace(/<!--public-->([\s\S]*?)<!--\/public-->/g, (_match, inner: string) => (publicPages ? inner : ""))
     .replace(/<!--draft-->([\s\S]*?)<!--\/draft-->/g, (_match, inner: string) => (draft ? inner : ""));
 }
+
+/** The engines a page names: from the full configuration; a partial one (tests) names DeepL alone. */
+function pageEngines(config: SiteConfig): PageEngines {
+  if (config.TRANSLATION_PROVIDER === undefined) return DEEPL_ONLY;
+  const full = config as AppConfig;
+  return { tags: pageEngineTags(full), order: engineConsentTokens(full) };
+}
+
+type SiteConfig = Pick<AppConfig, "PUBLIC_PAGES" | "LEGAL_TEXTS_REVIEWED"> & Partial<AppConfig>;
 
 const CSP = [
   "default-src 'none'",
@@ -67,16 +86,36 @@ const CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
+/** The raw page files (preflight reads the app's privacy policy for open points in engine blocks). */
+export function siteSource(page: SitePage): string {
+  return PAGES[page];
+}
+
+/**
+ * Engines added beside DeepL whose section of the app's privacy policy still
+ * has open points (the lawyer resolves them before the key is added). DeepL's
+ * section is reviewed with the rest of the page (LEGAL_TEXTS_REVIEWED).
+ */
+export function openEngineSections(config: AppConfig, html: string = PAGES.appPrivacy): string[] {
+  return engineSectionsWithOpenMarks(html, pageEngineTags(config));
+}
+
+/** Advice at start (never fatal): with PUBLIC_PAGES=on, an engine section with open points shows the draft notice. */
+export function siteConfigWarnings(config: AppConfig): string[] {
+  if (config.PUBLIC_PAGES !== "on") return [];
+  return openEngineSections(config).map((tag) => `PUBLIC_PAGES=on: the privacy page's ${tag} section still has open points, so the draft notice shows on it`);
+}
+
 export function sitePage(
   request: Request,
   page: SitePage,
-  config: Pick<AppConfig, "PUBLIC_PAGES" | "LEGAL_TEXTS_REVIEWED"> = getConfig(),
+  config: SiteConfig = getConfig(),
 ): Response {
   const publicPages = config.PUBLIC_PAGES === "on";
   if (PUBLIC_ONLY.has(page) && !publicPages) {
     throw new Response("Not Found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
-  const html = pageHtml(PAGES[page], { publicPages, reviewed: config.LEGAL_TEXTS_REVIEWED === "yes" });
+  const html = pageHtml(PAGES[page], { publicPages, reviewed: config.LEGAL_TEXTS_REVIEWED === "yes", engines: pageEngines(config) });
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8",
     "Content-Security-Policy": CSP,

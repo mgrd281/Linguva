@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { ENGINE_IDS, ENGINE_NAMES, isEngineId, type ConsentToken, type EngineId } from "../../lib/engines";
+import { AZURE_EU_ENDPOINT, AZURE_GLOBAL_ENDPOINT } from "../providers/azure";
+import { parseServiceAccount, type ServiceAccountCredentials } from "../providers/google-auth";
 
 const keyEntry = /^[A-Za-z0-9_-]{1,32}:[A-Za-z0-9+/]{43}=$/;
 const shopDomain = /^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$/;
@@ -50,11 +53,92 @@ function isHttps(value: string): boolean {
   }
 }
 
+/** Azure's "Location/Region" as the portal shows it ("West Europe" → westeurope); "global" means none. */
+function azureRegion(value: unknown): unknown {
+  const v = pasted(value);
+  if (typeof v !== "string") return v;
+  const region = v.toLowerCase().replace(/\s+/g, "");
+  return region === "global" ? undefined : region;
+}
+
+/** A pasted endpoint without its query, a trailing slash or a "/translate" path (the client adds it). */
+function azureEndpoint(value: unknown): unknown {
+  const v = pasted(value);
+  return typeof v === "string" ? v.replace(/[?#].*$/, "").replace(/\/+$/, "").replace(/\/translate$/i, "").replace(/\/+$/, "") : v;
+}
+
+/**
+ * Engine variables (docs/AI_ENGINES.md). Validated twice: in the schema with
+ * a fallback (a value that doesn't validate turns its engine off and never
+ * stops the start: a typo in a new Azure or Google variable must not take
+ * KARINEX down), and by engineConfigProblems for warnings and preflight.
+ */
+const engineFields = {
+  AZURE_TRANSLATOR_KEY: z.preprocess(
+    pasted,
+    z.string().regex(/^[A-Za-z0-9]{16,128}$/, "doesn't look like a Translator key (Azure portal: Keys and Endpoint, Key 1)").optional(),
+  ),
+  AZURE_TRANSLATOR_REGION: z.preprocess(
+    azureRegion,
+    z.string().regex(/^[a-z0-9]{2,32}$/, "must be the resource's Location/Region, for example westeurope").optional(),
+  ),
+  // The key never goes to another host: only Microsoft's EU and global endpoints.
+  AZURE_TRANSLATOR_ENDPOINT: z.preprocess(
+    azureEndpoint,
+    z
+      .string()
+      .refine(isHttps, "must be an https:// address")
+      .refine((v): boolean => v === AZURE_EU_ENDPOINT || v === AZURE_GLOBAL_ENDPOINT, `must be empty (EU endpoint), ${AZURE_EU_ENDPOINT} or ${AZURE_GLOBAL_ENDPOINT}`)
+      .optional(),
+  ),
+  GOOGLE_TRANSLATE_API_KEY: z.preprocess(
+    pasted,
+    z.string().regex(/^[A-Za-z0-9._-]{20,200}$/, "doesn't look like a Google Cloud API key").optional(),
+  ),
+  GOOGLE_TRANSLATE_CREDENTIALS: z.preprocess(
+    pasted,
+    z
+      .string()
+      .transform((value, ctx): ServiceAccountCredentials => {
+        const credentials = parseServiceAccount(value);
+        if (credentials) return credentials;
+        ctx.addIssue({ code: "custom", message: "must be the service account's JSON key file, or that file in base64" });
+        return z.NEVER;
+      })
+      .optional(),
+  ),
+} as const;
+
+/**
+ * What a region, endpoint or Google key file that doesn't validate becomes:
+ * never a real value, so the helpers below see the variable was set and keep
+ * the engine off (a missing region would otherwise send requests that Azure
+ * refuses, and a broken key file would switch Google to the API key's global
+ * processing).
+ */
+const INVALID = "(invalid)";
+
+/** Engine credentials staging refuses, even when their value doesn't validate. */
+const ENGINE_CREDENTIALS = ["AZURE_TRANSLATOR_KEY", "GOOGLE_TRANSLATE_API_KEY", "GOOGLE_TRANSLATE_CREDENTIALS"] as const;
+
 /** Every configured DeepL key, in order and without repeats: DEEPL_API_KEY first, then DEEPL_API_KEYS. */
 export function deeplApiKeys(env: { DEEPL_API_KEY?: string | undefined; DEEPL_API_KEYS?: string | undefined }): string[] {
   const listed = (env.DEEPL_API_KEYS ?? "").split(/[\s,;]+/).map((k) => k.replace(/^["']|["']$/g, "").trim());
   return [...new Set([env.DEEPL_API_KEY ?? "", ...listed].filter(Boolean))];
 }
+
+/**
+ * Internal cost estimate for AI usage reports (USD per million characters
+ * sent to the provider). Set it to the provider contract's price. Also read
+ * on their own (costRatesFromEnv) by the operator's report.
+ */
+const costRateFields = {
+  // DeepL's rate; also the rate of ledger rows without an engine.
+  AI_COST_USD_PER_MILLION_CHARS: z.coerce.number().nonnegative().default(25),
+  // Microsoft Azure Translator S1 and Google Cloud Translation NMT list prices.
+  AI_COST_USD_PER_MILLION_CHARS_AZURE: z.preprocess(pasted, z.coerce.number().nonnegative().default(10)),
+  AI_COST_USD_PER_MILLION_CHARS_GOOGLE: z.preprocess(pasted, z.coerce.number().nonnegative().default(20)),
+} as const;
 
 const schema = z.object({
   NODE_ENV: z
@@ -78,6 +162,23 @@ const schema = z.object({
   // More DeepL keys, separated by commas, spaces or line breaks: the next one is used when a key's quota is used up.
   DEEPL_API_KEYS: z.preprocess(pasted, z.string().min(1).optional()),
   DEEPL_API_URL: z.preprocess(deeplBaseUrl, z.string().url().refine(isHttps, "must be an https:// address").optional()),
+  // More engines (optional; docs/AI_ENGINES.md). With only DeepL set, nothing changes.
+  AZURE_TRANSLATOR_KEY: engineFields.AZURE_TRANSLATOR_KEY.catch(undefined),
+  AZURE_TRANSLATOR_REGION: engineFields.AZURE_TRANSLATOR_REGION.catch(INVALID),
+  // Empty: Microsoft's EU endpoint (texts processed in the EU only).
+  AZURE_TRANSLATOR_ENDPOINT: engineFields.AZURE_TRANSLATOR_ENDPOINT.catch(INVALID),
+  // Google Cloud Translation: an API key (v2, global) or a service account's JSON key file (v3, EU), which wins.
+  GOOGLE_TRANSLATE_API_KEY: engineFields.GOOGLE_TRANSLATE_API_KEY.catch(undefined),
+  // A key file that doesn't validate keeps Google off: never a silent fall back to the API key (global processing).
+  GOOGLE_TRANSLATE_CREDENTIALS: z
+    .unknown()
+    .transform((value): ServiceAccountCredentials | typeof INVALID | undefined => {
+      const result = engineFields.GOOGLE_TRANSLATE_CREDENTIALS.safeParse(value);
+      return result.success ? result.data : INVALID;
+    })
+    .optional(),
+  // Which engines and in which order (commas or spaces; default deepl,azure,google). DeepL, when used, is always first.
+  TRANSLATION_ENGINES: z.preprocess(pasted, z.string().optional()),
   // Monthly AI character allowance per shop until plans are wired to billing.
   AI_MONTHLY_CHAR_LIMIT: z.preprocess(charCount, z.coerce.number().int().positive().default(20_000)),
   // Daily cap per shop (UTC day); defaults to the monthly allowance.
@@ -100,7 +201,7 @@ const schema = z.object({
   SHOPIFY_PARTNER_API_VERSION: z.string().regex(/^\d{4}-\d{2}$|^unstable$/).default("2026-10"),
   // "true": shops without a subscription are sent to the plan selection page.
   BILLING_REQUIRED: z.enum(["true", "false"]).default("false"),
-  // The operator's own stores (*.myshopify.com, comma-separated): only they see operator details such as the DeepL keys' quota.
+  // The operator's own stores (*.myshopify.com, comma-separated): only they see operator details such as the translation engines' state.
   OPERATOR_SHOPS: z.string().optional(),
   // Owner complimentary access (BILLING_DESIGN §4): Shopify shop GIDs
   // (gid://shopify/Shop/<id>) of the operator's own stores. A store gets
@@ -112,11 +213,15 @@ const schema = z.object({
       (v) => !v || v.split(",").every((gid) => /^gid:\/\/shopify\/Shop\/\d+$/.test(gid.trim())),
       "must be comma-separated gid://shopify/Shop/<id> values",
     ),
-  // Internal cost estimate for AI usage reports (USD per million characters
-  // sent to the provider). Set it to the provider contract's price.
-  AI_COST_USD_PER_MILLION_CHARS: z.coerce.number().nonnegative().default(25),
-  // "mock" returns marked pseudo-translations for development and tests.
-  TRANSLATION_PROVIDER: z.preprocess(pasted, z.enum(["deepl", "mock"]).default("deepl")),
+  ...costRateFields,
+  // "engines" (default): the engines configured above; "deepl" is the older
+  // spelling of the same and is what it is stored as, so every comparison
+  // with "deepl" stays as it was. "mock" returns marked pseudo-translations
+  // for development and tests.
+  TRANSLATION_PROVIDER: z.preprocess((value) => {
+    const v = pasted(value);
+    return v === "engines" ? "deepl" : v;
+  }, z.enum(["deepl", "mock"]).default("deepl")),
   // Background jobs are disabled when no Redis is configured.
   REDIS_URL: z.string().url().optional(),
   // Per-shop Shopify Admin API budget used by background jobs (points).
@@ -244,10 +349,12 @@ function withNumberedDeeplKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 export function getConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && env === process.env) return cached;
   const result = schema.safeParse(withNumberedDeeplKeys(env));
-  if (!result.success) {
-    const fields = result.error.issues
-      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-      .join("; ");
+  // No paid engine from staging, even with a value that doesn't validate
+  // (the schema turns those engines off, so it can't see them).
+  const stagingRefusals =
+    env.LINGUVA_STAGE === "staging" ? ENGINE_CREDENTIALS.filter((name) => pasted(env[name]) !== undefined).map((name) => `${name}: must not be set in staging`) : [];
+  if (!result.success || stagingRefusals.length) {
+    const fields = [...(result.success ? [] : result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`)), ...stagingRefusals].join("; ");
     throw new Error(`Invalid environment configuration (${fields})`);
   }
   if (env === process.env) cached = result.data;
@@ -271,23 +378,188 @@ export function dropMigrationDatabaseUrl(env: NodeJS.ProcessEnv = process.env): 
  * 1,000,000 characters a day lets one store's first pass stop AI
  * translation for every store. Advice only: never a reason not to start.
  */
-export function configWarnings(config: AppConfig): string[] {
+export function configWarnings(config: AppConfig, env?: NodeJS.ProcessEnv | Record<string, string | undefined>): string[] {
   const warnings: string[] = [];
   if (config.BILLING_REQUIRED === "true" && config.AI_PLATFORM_DAILY_CHAR_LIMIT < 1_000_000) {
     warnings.push(
       "AI_PLATFORM_DAILY_CHAR_LIMIT is below 1,000,000 while BILLING_REQUIRED=true: one store's first pass can stop AI translation for every store (docs/PRICING_DECISION.md §8: 3,000,000 at launch)",
     );
   }
+  warnings.push(...engineWarnings(config, env));
   return warnings;
 }
 
 /** Logs configWarnings once, at start. Never throws: an invalid configuration is reported where it is used. */
 export function logConfigWarnings(log: (message: string) => void, env: NodeJS.ProcessEnv = process.env): void {
   try {
-    for (const warning of configWarnings(getConfig(env))) log(warning);
+    for (const warning of configWarnings(getConfig(env), env)) log(warning);
   } catch {
     // Not this function's concern (getConfig reports it on first use).
   }
+}
+
+// ---------------------------------------------------------------- translation engines
+
+export interface AzureTranslatorSettings {
+  key: string;
+  region?: string;
+  endpoint: typeof AZURE_EU_ENDPOINT | typeof AZURE_GLOBAL_ENDPOINT;
+  /** eu: Microsoft's EU endpoint (France Central or West Europe); global: the closest data centre, possibly outside the EU. */
+  dataLocation: "eu" | "global";
+}
+
+/** Azure Translator, or null when it isn't set up (or one of its variables doesn't validate). */
+export function azureTranslatorSettings(config: AppConfig): AzureTranslatorSettings | null {
+  const key = config.AZURE_TRANSLATOR_KEY;
+  if (!key || config.AZURE_TRANSLATOR_REGION === INVALID || config.AZURE_TRANSLATOR_ENDPOINT === INVALID) return null;
+  const endpoint = config.AZURE_TRANSLATOR_ENDPOINT === AZURE_GLOBAL_ENDPOINT ? AZURE_GLOBAL_ENDPOINT : AZURE_EU_ENDPOINT;
+  return {
+    key,
+    ...(config.AZURE_TRANSLATOR_REGION ? { region: config.AZURE_TRANSLATOR_REGION } : {}),
+    endpoint,
+    dataLocation: endpoint === AZURE_EU_ENDPOINT ? "eu" : "global",
+  };
+}
+
+export type GoogleTranslateSettings =
+  | { kind: "apiKey"; apiKey: string; dataLocation: "global" }
+  | { kind: "serviceAccount"; credentials: ServiceAccountCredentials; dataLocation: "eu" };
+
+/**
+ * Google Cloud Translation: the service account (v3, EU endpoint) wins over an API key (v2, global).
+ * A key file that is set but doesn't validate turns Google off: the operator chose EU processing.
+ */
+export function googleTranslateSettings(config: AppConfig): GoogleTranslateSettings | null {
+  if (config.GOOGLE_TRANSLATE_CREDENTIALS === INVALID) return null;
+  if (config.GOOGLE_TRANSLATE_CREDENTIALS) return { kind: "serviceAccount", credentials: config.GOOGLE_TRANSLATE_CREDENTIALS, dataLocation: "eu" };
+  if (config.GOOGLE_TRANSLATE_API_KEY) return { kind: "apiKey", apiKey: config.GOOGLE_TRANSLATE_API_KEY, dataLocation: "global" };
+  return null;
+}
+
+/** TRANSLATION_ENGINES as written: known engines in order (DeepL first), and what was ignored or moved. Pure. */
+export function parseEngineList(value: string | undefined): { engines: EngineId[]; unknown: string[]; repeated: EngineId[]; deeplMoved: boolean } {
+  const names = (value ?? "").split(/[\s,;]+/).map((n) => n.trim().toLowerCase()).filter(Boolean);
+  const engines: EngineId[] = [];
+  const unknown: string[] = [];
+  const repeated: EngineId[] = [];
+  for (const name of names) {
+    if (!isEngineId(name)) unknown.push(name);
+    else if (engines.includes(name)) repeated.push(name);
+    else engines.push(name);
+  }
+  // DeepL, when used, is always first: the legal and settings texts ("only when DeepL can't translate") stay true.
+  const deeplMoved = engines.indexOf("deepl") > 0;
+  if (deeplMoved) engines.sort((a, b) => (a === "deepl" ? -1 : b === "deepl" ? 1 : 0));
+  return { engines, unknown, repeated, deeplMoved };
+}
+
+function engineConfigured(config: AppConfig, id: EngineId): boolean {
+  if (id === "deepl") return deeplApiKeys(config).length > 0;
+  if (id === "azure") return azureTranslatorSettings(config) !== null;
+  return googleTranslateSettings(config) !== null;
+}
+
+/** The engines TRANSLATION_ENGINES selects; unset, or naming no engine at all (a typo), the default order. */
+function listedEngines(config: AppConfig): EngineId[] {
+  const listed = config.TRANSLATION_ENGINES === undefined ? [] : parseEngineList(config.TRANSLATION_ENGINES).engines;
+  // A list without a single known engine never switches AI translation off.
+  return listed.length ? listed : [...ENGINE_IDS];
+}
+
+/** Configured engines in routing order (TRANSLATION_ENGINES or the default), DeepL first; [] with the mock provider. */
+export function translationEngineOrder(config: AppConfig): EngineId[] {
+  if (config.TRANSLATION_PROVIDER === "mock") return [];
+  return listedEngines(config).filter((id) => engineConfigured(config, id));
+}
+
+/** The consent token of an engine in use: the engine plus where it processes. */
+export function engineConsentToken(config: AppConfig, id: EngineId): ConsentToken {
+  if (id === "deepl") return "deepl";
+  if (id === "azure") return azureTranslatorSettings(config)?.dataLocation === "global" ? "azure-global" : "azure-eu";
+  return googleTranslateSettings(config)?.dataLocation === "eu" ? "google-eu" : "google-global";
+}
+
+/** Consent / legal-text tokens of the engines in use, in routing order; mock or none → ["deepl"] (today's texts). */
+export function engineConsentTokens(config: AppConfig): ConsentToken[] {
+  const order = translationEngineOrder(config);
+  return order.length ? order.map((id) => engineConsentToken(config, id)) : ["deepl"];
+}
+
+/** Problems with the engine variables (names and rules only, never a value). */
+export function engineConfigProblems(env: NodeJS.ProcessEnv | Record<string, string | undefined>): Array<{ variable: string; message: string }> {
+  const problems: Array<{ variable: string; message: string }> = [];
+  for (const [variable, field] of Object.entries(engineFields)) {
+    const result = field.safeParse(env[variable]);
+    if (!result.success) problems.push({ variable, message: result.error.issues[0]?.message ?? "doesn't validate" });
+  }
+  return problems;
+}
+
+/** USD per million characters for a ledger provider value (null, "mock", unknown → DeepL's rate). */
+export function costRatePerMillion(config: AppConfig, provider: string | null): number {
+  if (provider === "azure") return config.AI_COST_USD_PER_MILLION_CHARS_AZURE;
+  if (provider === "google") return config.AI_COST_USD_PER_MILLION_CHARS_GOOGLE;
+  return config.AI_COST_USD_PER_MILLION_CHARS;
+}
+
+/** Cost rates per engine (USD per million characters). */
+export function costRates(config: AppConfig): Record<EngineId, number> {
+  return { deepl: costRatePerMillion(config, "deepl"), azure: costRatePerMillion(config, "azure"), google: costRatePerMillion(config, "google") };
+}
+
+/**
+ * The same rates read from the three rate variables alone, validated as the
+ * app reads them: for the operator's report (scripts/ops/complimentary.ts),
+ * which runs with its own database URL and none of the app's other variables.
+ */
+export function costRatesFromEnv(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): Record<EngineId, number> {
+  const rates = z.object(costRateFields).parse(env);
+  return { deepl: rates.AI_COST_USD_PER_MILLION_CHARS, azure: rates.AI_COST_USD_PER_MILLION_CHARS_AZURE, google: rates.AI_COST_USD_PER_MILLION_CHARS_GOOGLE };
+}
+
+/** Advice about the engine variables (never fatal; names, never values). */
+function engineWarnings(config: AppConfig, env?: NodeJS.ProcessEnv | Record<string, string | undefined>): string[] {
+  const warnings: string[] = [];
+  if (env) {
+    for (const problem of engineConfigProblems(env)) warnings.push(`${problem.variable} ${problem.message}: it is ignored, that engine is off`);
+  }
+  if (config.TRANSLATION_PROVIDER === "mock") return warnings;
+  const withCredentials = ENGINE_IDS.filter((id) => engineConfigured(config, id));
+  if (config.TRANSLATION_ENGINES !== undefined) {
+    const list = parseEngineList(config.TRANSLATION_ENGINES);
+    if (list.engines.length === 0) warnings.push("TRANSLATION_ENGINES names no engine (deepl, azure, google): the default order is used");
+    for (const id of withCredentials.filter((e) => list.engines.length > 0 && !list.engines.includes(e))) {
+      warnings.push(`${ENGINE_NAMES[id]} has credentials but TRANSLATION_ENGINES doesn't list it: it isn't used`);
+    }
+    for (const id of list.engines.filter((e) => !withCredentials.includes(e))) {
+      warnings.push(`TRANSLATION_ENGINES lists ${id} without its credentials: it is skipped`);
+    }
+    // Only a short, name-shaped entry is echoed (a typo like "bing"); anything else may be a key
+    // pasted into the wrong field (they sit next to each other), so it is counted, never shown.
+    const named = list.unknown.filter((n) => /^[a-z][a-z0-9-]{0,11}$/.test(n));
+    for (const name of named) warnings.push(`TRANSLATION_ENGINES: "${name}" isn't an engine: ignored`);
+    const unnamed = list.unknown.length - named.length;
+    if (unnamed) warnings.push(`TRANSLATION_ENGINES has ${unnamed} ${unnamed === 1 ? "entry that isn't an engine name" : "entries that aren't engine names"} (not shown, it may be a key): ignored`);
+    for (const id of list.repeated) warnings.push(`TRANSLATION_ENGINES lists ${id} twice: once is enough`);
+    if (list.deeplMoved) warnings.push("TRANSLATION_ENGINES: DeepL always comes first (it is moved to the front)");
+  }
+  if (config.GOOGLE_TRANSLATE_CREDENTIALS && config.GOOGLE_TRANSLATE_CREDENTIALS !== INVALID && config.GOOGLE_TRANSLATE_API_KEY) {
+    warnings.push("GOOGLE_TRANSLATE_API_KEY and GOOGLE_TRANSLATE_CREDENTIALS are both set: the service account is used");
+  }
+  const order = translationEngineOrder(config);
+  const azure = azureTranslatorSettings(config);
+  if (azure && order.includes("azure")) {
+    if (azure.dataLocation === "global") {
+      warnings.push(
+        "Microsoft Azure uses the global endpoint: texts may be processed outside the EU; the privacy texts say so. Leave AZURE_TRANSLATOR_ENDPOINT empty for the EU endpoint",
+      );
+    }
+    if (!azure.region) warnings.push("AZURE_TRANSLATOR_REGION is empty: only a Global resource works without it; a regional one answers 401");
+  }
+  if (googleTranslateSettings(config)?.dataLocation === "global" && order.includes("google")) {
+    warnings.push("Google Cloud uses the API key (v2): texts may be processed outside the EU; the privacy texts say so");
+  }
+  return warnings;
 }
 
 /** Whether a store is one of the operator's own (OPERATOR_SHOPS). No list: none is. */

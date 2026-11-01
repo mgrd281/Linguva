@@ -218,6 +218,7 @@ export const en = {
   "automatic.error.actionHeading": "That didn't work",
   "automatic.error.NOT_ON": "Retrying works while the smart schedule is on and not paused.",
   "automatic.error.PAUSED": "It is paused. Resume it first.",
+  "automatic.types.personal.multi": "May contain personal data. Choose it only if that data may go to {engines}.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -437,6 +438,7 @@ export const de: Translation<typeof en> = {
   "automatic.error.actionHeading": "Das hat nicht geklappt",
   "automatic.error.NOT_ON": "Erneut versuchen geht, solange der intelligente Zeitplan an und nicht pausiert ist.",
   "automatic.error.PAUSED": "Er ist pausiert. Setze ihn zuerst fort.",
+  "automatic.types.personal.multi": "Kann personenbezogene Daten enthalten. Wähle es nur, wenn diese an {engines} gehen dürfen.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -658,6 +660,7 @@ export const fr: Translation<typeof en> = {
   "automatic.error.actionHeading": "Cela n'a pas fonctionné",
   "automatic.error.NOT_ON": "Réessayer fonctionne tant que la planification intelligente est activée et pas en pause.",
   "automatic.error.PAUSED": "Elle est en pause. Reprenez-la d'abord.",
+  "automatic.types.personal.multi": "Peut contenir des données personnelles. Choisissez-le seulement si elles peuvent être envoyées à {engines}.",
 };
 
 export const es: Translation<typeof en> = {
@@ -877,4 +880,5 @@ export const es: Translation<typeof en> = {
   "automatic.error.actionHeading": "No se pudo completar",
   "automatic.error.NOT_ON": "Reintentar funciona mientras la programación inteligente está activada y sin pausa.",
   "automatic.error.PAUSED": "Está en pausa. Reanúdala primero.",
+  "automatic.types.personal.multi": "Puede contener datos personales. Elígelo solo si pueden enviarse a {engines}.",
 };

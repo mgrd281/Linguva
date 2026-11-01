@@ -290,9 +290,12 @@ export function createItemProcessor(deps: JobDependencies) {
             // A trial's lower allowance ends with the trial, mostly before the month: a pause for it ends then too.
             const allowanceRisesAt = automatic && decision.code === "QUOTA_EXCEEDED" ? await trialEnd(deps, payload.shopId) : null;
             // Automatic translation waits for the limit or the provider instead of failing again on every change.
-            if (item.job.requestedBy === AUTO_REQUESTED_BY) await autoPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma, allowanceRisesAt);
+            // Not when only this language's engines are used up or refused (another engine still serves the
+            // shop's other languages): this job stops, the others go on.
+            const shopWide = decision.scope !== "language";
+            if (shopWide && item.job.requestedBy === AUTO_REQUESTED_BY) await autoPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma, allowanceRisesAt);
             // So does the smart schedule: its other jobs stop at their next item, and its page says why.
-            if (item.job.requestedBy === SMART_REQUESTED_BY) await smartPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma, allowanceRisesAt);
+            if (shopWide && item.job.requestedBy === SMART_REQUESTED_BY) await smartPauseAfterStop(payload.shopId, decision.code, new Date(), deps.prisma, allowanceRisesAt);
           }
           log.warn({ code: decision.code }, "job stopped");
           throw new UnrecoverableError(decision.code);

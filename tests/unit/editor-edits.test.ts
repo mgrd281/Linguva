@@ -51,4 +51,14 @@ describe("collectEditorEdits", () => {
     );
     expect(edits[0]).toMatchObject({ key: "meta_title", origin: "AI", provider: "deepl", approved: true });
   });
+
+  it("reads each field's own engine first, then the form's, and drops values outside the known engines", () => {
+    const fields = { "value:meta_title": "SEO DE", "digest:meta_title": "d3", "origin:meta_title": "AI" };
+    expect(collectEditorEdits(resource, form({ ...fields, provider: "deepl", "provider:meta_title": "azure" }))[0]!.provider).toBe("azure");
+    expect(collectEditorEdits(resource, form({ ...fields, provider: "google" }))[0]!.provider).toBe("google");
+    expect(collectEditorEdits(resource, form({ ...fields, "provider:meta_title": "memory" }))[0]!.provider).toBe("memory");
+    expect(collectEditorEdits(resource, form({ ...fields, provider: "<script>" }))[0]!.provider).toBeNull();
+    expect(collectEditorEdits(resource, form({ ...fields, "provider:meta_title": "deepl+azure" }))[0]!.provider).toBeNull();
+    expect(collectEditorEdits(resource, form(fields))[0]!.provider).toBeNull();
+  });
 });

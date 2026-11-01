@@ -27,6 +27,28 @@ describe("staging configuration", () => {
     expect(() => config({ ...staging, DEEPL_API_KEY_2: "secret-value:fx" })).toThrow(/DEEPL_API_KEYS: must not be set in staging/);
   });
 
+  it("refuses every other engine's credential too, even one that doesn't validate, naming only the variable", () => {
+    for (const [variable, value] of [
+      ["AZURE_TRANSLATOR_KEY", "uiazurekey0004fictional0000000000"],
+      ["AZURE_TRANSLATOR_KEY", "secret value that is not a key"],
+      ["GOOGLE_TRANSLATE_API_KEY", "ui-google-key-0005-fictional0000"],
+      ["GOOGLE_TRANSLATE_API_KEY", "secret!"],
+      ["GOOGLE_TRANSLATE_CREDENTIALS", '{"secret":"json"}'],
+    ] as const) {
+      let message = "";
+      try {
+        config({ ...staging, [variable]: value });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message, `${variable}=${value.length}`).toMatch(new RegExp(`${variable}: must not be set in staging`));
+      expect(message).not.toContain(value);
+      expect(message).not.toMatch(/secret/);
+    }
+    // Empty is unset.
+    expect(() => config({ ...staging, AZURE_TRANSLATOR_KEY: "  " })).not.toThrow();
+  });
+
   it("names the variable but never echoes a key's value", () => {
     let message = "";
     try {

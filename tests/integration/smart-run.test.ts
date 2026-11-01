@@ -24,6 +24,7 @@ import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.
 import { createItemProcessor, requeueStalledDiscovery, type Queues } from "../../app/.server/jobs/queues";
 import { forgetCurrentLocales } from "../../app/.server/locales/current-locales";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
+import { TranslationProviderError, type TranslationProvider } from "../../app/.server/providers/types";
 import { saveDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
 import { addSmartExclusion, getSmartConfig, pauseSmart, resumeSmart, saveSmartSettings, setSmartEnabled, smartPauseAfterStop } from "../../app/.server/smart/config";
@@ -274,6 +275,37 @@ describe("a scheduled run", () => {
     expect((await runRows(shop.id))[0]).toMatchObject({ status: "COMPLETED", errorCode: "SMART_BUDGET_DAILY" });
     // Not a "complete" check: something it found is still waiting.
     expect((await getSmartConfig(shop.id, app))!.lastSuccessAt).toBeNull();
+  });
+
+  it("doesn't pause the schedule when only this language's engines are used up (the router's scoped quota)", async () => {
+    const { shop, deps, pages, coverage, jobs } = await setup(2);
+    await turnOn(shop.id, value({ locales: ["de", "fr"] }));
+    await smartTick(deps, DUE);
+    await measure(coverage, pages[0]!);
+    const [de, fr] = await smartJobs(shop.id);
+    // Synthetic router failure: Azure used up for German, DeepL still serving other languages.
+    const usedUp = (scope?: "language"): TranslationProvider => ({
+      id: "deepl",
+      translate: async () => {
+        const error = new TranslationProviderError("azure", "quota", "fake", 403);
+        if (scope) error.scope = scope;
+        throw error;
+      },
+    });
+    const run = (provider: TranslationProvider, itemId: string) =>
+      createItemProcessor({ ...jobs, provider })({ data: { shopId: shop.id, itemId }, id: itemId, attemptsMade: 0, opts: { attempts: 5 } } as never);
+    await expect(run(usedUp("language"), de!.items[0]!.id)).rejects.toThrow("PROVIDER_QUOTA");
+    const config = (await getSmartConfig(shop.id, app))!;
+    expect(config.pausedAt).toBeNull();
+    expect(config.pauseReason).toBeNull();
+    // The German job stopped; French goes on.
+    const [deAfter, frAfter] = await smartJobs(shop.id);
+    expect(deAfter).toMatchObject({ status: "FAILED", errorCode: "PROVIDER_QUOTA" });
+    expect(frAfter!.status).not.toBe("FAILED");
+    expect(await processItem(jobs, { shopId: shop.id, itemId: fr!.items[0]!.id }, 1)).toMatchObject({ status: "SUCCEEDED" });
+    // Every engine used up (no scope): the schedule pauses, as with DeepL alone.
+    await expect(run(usedUp(), fr!.items[1]!.id)).rejects.toThrow("PROVIDER_QUOTA");
+    expect((await getSmartConfig(shop.id, app))!.pauseReason).toBe("PROVIDER");
   });
 
   it("stops at a trial's allowance: the schedule pauses only until the trial ends, when the plan's allowance applies", async () => {

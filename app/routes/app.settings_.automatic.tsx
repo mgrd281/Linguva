@@ -15,12 +15,12 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 import { enqueueCoveragePage, enqueueItems } from "../.server/jobs/queues";
-import { getConfig } from "../.server/lib/config";
+import { engineConsentTokens, getConfig } from "../.server/lib/config";
 import { prisma } from "../.server/lib/db";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { getTranslationProvider } from "../.server/providers";
 import { getQueues } from "../.server/queue/client";
-import { getShopSettings, hasCurrentAiConsent } from "../.server/settings/shop-settings";
+import { getShopSettings, hasCurrentAiConsent, textConsentTokens } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchShopTimeZone } from "../.server/shopify/shop-time-zone";
 import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled } from "../.server/smart/config";
@@ -38,6 +38,8 @@ import { scheduleSummary, smartErrorText, SmartPreview, SmartStateBanner, smartT
 import { groupLabel, itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { effectivePublishMode } from "../lib/automation-state";
+import { consentLead, enginesText, isDeepLOnly } from "../lib/engine-texts";
+import type { ConsentToken } from "../lib/engines";
 import type { IconName } from "../lib/icons";
 import { CATEGORIES, categoryOf, isCategoryId, TIERS, type CategoryId } from "../lib/language-categories";
 import { languageList } from "../lib/name-lists";
@@ -71,6 +73,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // The shop's zone first (Shopify may spell it differently from Intl), then Intl's list.
   const zones = [...new Set([...(panel.config ? [panel.config.timeZone] : []), ...(shopTimeZone ? [shopTimeZone] : []), "UTC", ...Intl.supportedValuesOf("timeZone")])];
   return {
+    // The translation services in use (posted with "allow") and the ones the texts name.
+    engines: { configured: engineConsentTokens(getConfig()), text: textConsentTokens(settings) },
     entitled: billing.entitlements.smartAuto,
     // Turning on needs both: the page says so instead of a button that is refused.
     consent: context.consent,
@@ -248,7 +252,7 @@ export default function SmartAutomatic() {
   const settingsFetcher = useFetcher<typeof action>();
   const actionFetcher = useFetcher<typeof action>();
   // The permission is granted where it lives (Settings' action), without leaving the page.
-  const consentFetcher = useFetcher<{ ok: boolean; granted?: boolean }>();
+  const consentFetcher = useFetcher<{ ok: boolean; granted?: boolean; error?: string }>();
   useResultToast(settingsFetcher.data, smartToast(t, settingsFetcher.data));
   useResultToast(actionFetcher.data, smartToast(t, actionFetcher.data));
   useResultToast(consentFetcher.data, consentFetcher.data?.granted ? t("settings.ai.savedAllowed") : null);
@@ -385,10 +389,31 @@ export default function SmartAutomatic() {
     if (!form) return;
     form.requestSubmit();
   };
+  // What the grant button agrees to, next to it: with an engine beside DeepL, the services by
+  // their legal names and data locations (the tokens the form posts are exactly these), and a
+  // list that changed before the click (the page then shows the new one). DeepL alone: today's texts.
+  const consentChanged = consentFetcher.data?.error === "CONSENT_CHANGED";
+  const consentNote =
+    isDeepLOnly(data.engines.configured) && !consentChanged ? null : (
+      <s-stack direction="block" gap="small-200">
+        {consentChanged ? (
+          <s-banner tone="warning">
+            <s-paragraph>{t("settings.ai.changed")}</s-paragraph>
+          </s-banner>
+        ) : null}
+        {isDeepLOnly(data.engines.configured) ? null : (
+          <>
+            <s-paragraph>{consentLead(i18n, data.engines.configured)}</s-paragraph>
+            <s-paragraph>{t("settings.ai.personal.multi")}</s-paragraph>
+          </>
+        )}
+      </s-stack>
+    );
   // A form: in the summary's actions it fills its place like the other buttons; elsewhere it sits in an inline stack.
   const grantButton = (variant: "primary" | "secondary") => (
     <consentFetcher.Form method="post" action="/app/settings">
       <input type="hidden" name="intent" value="grant-consent" />
+      <input type="hidden" name="consentTokens" value={data.engines.configured.join(",")} />
       <s-button type="submit" variant={variant} {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
         {t("settings.ai.allow")}
       </s-button>
@@ -557,13 +582,28 @@ export default function SmartAutomatic() {
                   {stoppedByPlan ? t("automatic.page.notInPlan") : t("automatic.page.keptOff")}
                 </InlineNotice>
               ) : (
-                <SmartStateBanner status={panel.status} zone={panel.zone} consentAction={<s-stack direction="inline">{grantButton("primary")}</s-stack>} />
+                <SmartStateBanner
+                  status={panel.status}
+                  zone={panel.zone}
+                  consentAction={
+                    consentNote ? (
+                      <s-stack direction="block" gap="small-200">
+                        {consentNote}
+                        <s-stack direction="inline">{grantButton("primary")}</s-stack>
+                      </s-stack>
+                    ) : (
+                      <s-stack direction="inline">{grantButton("primary")}</s-stack>
+                    )
+                  }
+                />
               )}
               {!readOnly && notConfigured ? <StateLine icon="info">{canTurnOn ? t("automatic.hero.setUpHint") : !data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine> : null}
               {!readOnly && panel.status.state === "off" && data.basicOn && canTurnOn ? <StateLine icon="info">{t("settings.changes.replacesBasic")}</StateLine> : null}
               {!readOnly && !notConfigured && panel.status.state === "off" && !canTurnOn ? (
                 <StateLine icon="info">{!data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine>
               ) : null}
+              {/* Next to the summary's grant button: what it agrees to. */}
+              {!readOnly && panel.status.state === "off" && !data.consent ? consentNote : null}
               {panel.noAccess.length ? (
                 <InlineNotice icon="lock" heading={t("automatic.noAccess.heading")} actions={accessHref ? <s-button href={accessHref}>{t("coverage.types.allowAccess")}</s-button> : undefined}>
                   {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => kindLabel(i18n, type)), 4) })}
@@ -860,7 +900,7 @@ export default function SmartAutomatic() {
                             <IconTile icon={icon} size={28} color="base" iconSize="base" />
                             {types.length === 1 ? (
                               <div style={{ paddingTop: 4 }}>
-                                <TypeCheckbox type={types[0]!} checked={chosenTypes.has(types[0]!)} i18n={i18n} disabled={readOnly} />
+                                <TypeCheckbox type={types[0]!} checked={chosenTypes.has(types[0]!)} i18n={i18n} disabled={readOnly} engines={data.engines.text} />
                               </div>
                             ) : (
                               <div role="group" aria-labelledby={`smart-area-${area}`} style={{ paddingTop: 4 }}>
@@ -870,7 +910,7 @@ export default function SmartAutomatic() {
                                   </span>
                                   <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px" }}>
                                     {types.map((type) => (
-                                      <TypeCheckbox key={type} type={type} checked={chosenTypes.has(type)} i18n={i18n} disabled={readOnly} />
+                                      <TypeCheckbox key={type} type={type} checked={chosenTypes.has(type)} i18n={i18n} disabled={readOnly} engines={data.engines.text} />
                                     ))}
                                   </div>
                                 </s-stack>
@@ -1000,14 +1040,28 @@ export default function SmartAutomatic() {
 }
 
 /** A content type of the smart schedule, with the personal-data note where it applies. */
-function TypeCheckbox({ type, checked, i18n, disabled }: { type: SmartType; checked: boolean; i18n: ReturnType<typeof useI18n>; disabled: boolean }) {
+function TypeCheckbox({
+  type,
+  checked,
+  i18n,
+  disabled,
+  engines,
+}: {
+  type: SmartType;
+  checked: boolean;
+  i18n: ReturnType<typeof useI18n>;
+  disabled: boolean;
+  /** The services the texts name: DeepL only keeps today's note. */
+  engines: readonly ConsentToken[];
+}) {
+  const personal = isDeepLOnly(engines) ? i18n.t("automatic.types.personal") : i18n.t("automatic.types.personal.multi", { engines: enginesText(i18n, engines) });
   return (
     <s-checkbox
       name="type"
       value={type}
       label={kindLabel(i18n, type)}
       disabled={disabled}
-      {...(SMART_PERSONAL_DATA_TYPES.has(type) ? { details: i18n.t("automatic.types.personal") } : {})}
+      {...(SMART_PERSONAL_DATA_TYPES.has(type) ? { details: personal } : {})}
       {...(checked ? { defaultChecked: true } : {})}
     />
   );

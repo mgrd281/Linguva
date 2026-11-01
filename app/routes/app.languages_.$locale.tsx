@@ -299,7 +299,7 @@ function NextSteps(ctx: StepContext) {
       )}
       {gate ? (
         <s-text color="subdued">
-          {languageErrorText(i18n, gate)} {gate === "CONSENT_REQUIRED" ? <s-link href="/app/settings">{t("common.nav.settings")}</s-link> : null}
+          {languageErrorText(i18n, gate)} {gate === "CONSENT_REQUIRED" || gate === "ENGINE_CONSENT" ? <s-link href="/app/settings">{t("common.nav.settings")}</s-link> : null}
         </s-text>
       ) : null}
     </s-stack>

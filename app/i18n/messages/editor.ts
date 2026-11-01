@@ -32,6 +32,8 @@ export const en = {
   "editor.aiError.retryAfter": "Try again in {seconds} s.",
   "editor.aiError.AI_NOT_CONFIGURED": "AI translation isn't configured for this app yet.",
   "editor.aiError.CONSENT_REQUIRED": "Allow AI processing below before translating with AI.",
+  "editor.aiError.ENGINE_CONSENT": "Only a translation service your store hasn't allowed yet translates this language. Allow it in Settings first.",
+  "editor.aiError.ENGINE_CONSENT.named": "Only {engine} translates this language, and your store hasn't allowed it yet. Allow it in Settings first.",
   "editor.aiError.QUOTA_EXCEEDED": "This month's AI translation allowance is used up.",
   "editor.aiError.DAILY_LIMIT": "Today's AI translation allowance is used up. It resets at midnight UTC.",
   "editor.aiError.PLATFORM_LIMIT": "The app's AI translation limit for today is reached. It resets at midnight UTC.",
@@ -163,6 +165,10 @@ export const en = {
   "editor.structured.notTranslated": "Not translated yet",
 
   "editor.preview.empty": "The preview appears here once there is a translation.",
+  "editor.rejection.ENGINE_MARKUP": "The translation service couldn't keep the formatting, so the result was discarded.",
+  "editor.consent.body.multi": "To translate with AI, the {singular} text you choose is sent to our translation providers ({processors}) for processing. No customer data is sent. You can review every result before it is published.",
+  "editor.consent.order": "Texts go to {first} first; only if it can't translate them are they sent to {next}.",
+  "editor.aiError.CONSENT_CHANGED": "The list of translation services has changed. Check it and allow again.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -196,6 +202,8 @@ export const de: Translation<typeof en> = {
   "editor.aiError.retryAfter": "Versuche es in {seconds} s erneut.",
   "editor.aiError.AI_NOT_CONFIGURED": "KI-Übersetzung ist für diese App noch nicht eingerichtet.",
   "editor.aiError.CONSENT_REQUIRED": "Erlaube zuerst die KI-Verarbeitung, bevor du mit KI übersetzt.",
+  "editor.aiError.ENGINE_CONSENT": "Diese Sprache übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat. Erlaube ihn zuerst in den Einstellungen.",
+  "editor.aiError.ENGINE_CONSENT.named": "Diese Sprache übersetzt nur {engine}, und dein Shop hat diesen Dienst noch nicht erlaubt. Erlaube ihn zuerst in den Einstellungen.",
   "editor.aiError.QUOTA_EXCEEDED": "Das KI-Kontingent dieses Monats ist aufgebraucht.",
   "editor.aiError.DAILY_LIMIT": "Das KI-Kontingent für heute ist aufgebraucht. Es wird um Mitternacht UTC zurückgesetzt.",
   "editor.aiError.PLATFORM_LIMIT": "Das Tageslimit der App für KI-Übersetzungen ist erreicht. Es wird um Mitternacht UTC zurückgesetzt.",
@@ -333,6 +341,10 @@ export const de: Translation<typeof en> = {
   "editor.structured.notTranslated": "Noch nicht übersetzt",
 
   "editor.preview.empty": "Die Vorschau erscheint hier, sobald es eine Übersetzung gibt.",
+  "editor.rejection.ENGINE_MARKUP": "Der Übersetzungsdienst konnte die Formatierung nicht erhalten, daher wurde das Ergebnis verworfen.",
+  "editor.consent.body.multi": "Für die KI-Übersetzung wird der ausgewählte Text dieses Eintrags ({singular}) zur Verarbeitung an unsere Übersetzungsanbieter ({processors}) gesendet. Es werden keine Kundendaten gesendet. Du kannst jedes Ergebnis prüfen, bevor es veröffentlicht wird.",
+  "editor.consent.order": "Texte gehen zuerst an {first}; nur wenn dieser Dienst sie nicht übersetzen kann, gehen sie an {next}.",
+  "editor.aiError.CONSENT_CHANGED": "Die Liste der Übersetzungsdienste hat sich geändert. Prüfe sie und erlaube erneut.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -367,6 +379,8 @@ export const fr: Translation<typeof en> = {
   "editor.aiError.retryAfter": "Réessayez dans {seconds} s.",
   "editor.aiError.AI_NOT_CONFIGURED": "La traduction par IA n'est pas encore configurée pour cette application.",
   "editor.aiError.CONSENT_REQUIRED": "Autorisez le traitement par IA ci-dessous avant de traduire avec l'IA.",
+  "editor.aiError.ENGINE_CONSENT": "Seul un service de traduction que votre boutique n'a pas encore autorisé traduit cette langue. Autorisez-le d'abord dans les paramètres.",
+  "editor.aiError.ENGINE_CONSENT.named": "Seul {engine} traduit cette langue, et votre boutique ne l'a pas encore autorisé. Autorisez-le d'abord dans les paramètres.",
   "editor.aiError.QUOTA_EXCEEDED": "Le quota d'IA de ce mois-ci est épuisé.",
   "editor.aiError.DAILY_LIMIT": "Le quota d'IA d'aujourd'hui est épuisé. Il est réinitialisé à minuit UTC.",
   "editor.aiError.PLATFORM_LIMIT": "La limite quotidienne de traduction IA de l'application est atteinte. Elle est réinitialisée à minuit UTC.",
@@ -508,6 +522,10 @@ export const fr: Translation<typeof en> = {
   "editor.structured.notTranslated": "Pas encore traduit",
 
   "editor.preview.empty": "L'aperçu s'affiche ici dès qu'une traduction existe.",
+  "editor.rejection.ENGINE_MARKUP": "Le service de traduction n'a pas pu conserver la mise en forme ; le résultat a donc été rejeté.",
+  "editor.consent.body.multi": "Pour traduire avec l'IA, le texte que vous choisissez pour cet élément ({singular}) est envoyé à nos prestataires de traduction ({processors}) pour être traité. Aucune donnée client n'est envoyée. Vous pouvez réviser chaque résultat avant sa publication.",
+  "editor.consent.order": "Les textes vont d'abord à {first} ; seulement s'il ne peut pas les traduire, ils sont envoyés à {next}.",
+  "editor.aiError.CONSENT_CHANGED": "La liste des services de traduction a changé. Vérifiez-la et autorisez à nouveau.",
 };
 
 export const es: Translation<typeof en> = {
@@ -542,6 +560,8 @@ export const es: Translation<typeof en> = {
   "editor.aiError.retryAfter": "Inténtalo de nuevo en {seconds} s.",
   "editor.aiError.AI_NOT_CONFIGURED": "La traducción con IA aún no está configurada para esta aplicación.",
   "editor.aiError.CONSENT_REQUIRED": "Antes de traducir con IA, permite el procesamiento con IA más abajo.",
+  "editor.aiError.ENGINE_CONSENT": "Solo un servicio de traducción que tu tienda aún no ha permitido traduce este idioma. Permítelo primero en la configuración.",
+  "editor.aiError.ENGINE_CONSENT.named": "Solo {engine} traduce este idioma, y tu tienda aún no lo ha permitido. Permítelo primero en la configuración.",
   "editor.aiError.QUOTA_EXCEEDED": "Se agotó la cuota de IA de este mes.",
   "editor.aiError.DAILY_LIMIT": "Se agotó la cuota de IA de hoy. Se restablece a medianoche UTC.",
   "editor.aiError.PLATFORM_LIMIT": "Se alcanzó el límite diario de traducción con IA de la aplicación. Se restablece a medianoche UTC.",
@@ -680,4 +700,8 @@ export const es: Translation<typeof en> = {
   "editor.structured.notTranslated": "Aún sin traducir",
 
   "editor.preview.empty": "La vista previa aparecerá aquí cuando haya una traducción.",
+  "editor.rejection.ENGINE_MARKUP": "El servicio de traducción no pudo mantener el formato, así que el resultado se descartó.",
+  "editor.consent.body.multi": "Para traducir con IA, el texto que elijas de este elemento ({singular}) se envía a nuestros proveedores de traducción ({processors}) para su procesamiento. No se envían datos de clientes. Puedes revisar cada resultado antes de que se publique.",
+  "editor.consent.order": "Los textos van primero a {first}; solo si no puede traducirlos se envían a {next}.",
+  "editor.aiError.CONSENT_CHANGED": "La lista de servicios de traducción ha cambiado. Revísala y vuelve a permitirlo.",
 };

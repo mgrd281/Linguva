@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, mock) and the bulk worker (§2.1–2.3) are **implemented and tested**; the admin center is **planned**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
+Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, Microsoft Azure, Google Cloud, mock; several engines behind a router) and the bulk worker (§2.1–2.3) are **implemented and tested**; the admin center is **planned**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
 
 ## 1. Principles
 
@@ -70,7 +70,7 @@ Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, mo
 
 ### 2.3 Translation provider layer
 
-`TranslationProvider` interface: `id`, `supports(pair)`, `estimateCost(segments)`, `translate(batch, ctx)`, `classifyError(e)`. Adapters planned: DeepL, one LLM provider (configurable), and a `MockProvider` for tests. A routing policy picks the provider per segment (see TRANSLATION_ENGINE.md).
+`TranslationProvider` interface (`app/.server/providers/types.ts`): `id`, optional `capabilities` (`formality`, `context`; absent = everything, as DeepL), `translate(request, signal?)` returning the translations, the characters charged to the shop, the engine that answered (`provider`) and, for the HTML-transport engines, what they couldn't apply (`dropped`) and per-segment notes (`notes`); optional `targetSupport(locales)` read from the engine's own language list. Errors are `TranslationProviderError` with a `kind` (retryable, quota, auth, invalid), an optional `reason` (`UNSUPPORTED_LANGUAGE`, `REQUEST_TOO_LARGE`, `RATE_LIMITED`, `CONFIGURATION`, `TOKEN_GRANT`) and what earlier batches billed. Adapters: DeepL (one key or a key pool), Microsoft Azure Translator v3, Google Cloud Translation (v2 with an API key, v3 on the EU endpoint with a service account; markup through `html-transport.ts`), and a mock for tests. With one engine configured `getTranslationProvider()` returns it; with two or more an `EngineRouter` (`engine-router.ts`): consented engines only, DeepL first, failover per request, rests per process (docs/AI_ENGINES.md).
 
 ### 2.4 Admin control center
 
@@ -113,7 +113,7 @@ linguva/
 │   ├── tenancy/              # withTenant(), RLS session var, guards
 │   ├── shopify/              # typed GraphQL ops, throttle, digests
 │   ├── translation/          # pipeline, normalizers, validators
-│   ├── providers/            # deepl/, llm/, mock/, router.ts
+│   ├── providers/            # deepl, azure, google, html-transport, engine-router, mock
 │   ├── memory/               # translation memory
 │   ├── glossary/
 │   ├── seo/

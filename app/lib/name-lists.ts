@@ -38,6 +38,14 @@ export function languageList(i18n: I18n, names: readonly string[], shown = 3): s
 }
 
 /**
+ * Translation services inside a sentence: "DeepL and Microsoft Azure". Never
+ * shortened: a list of data processors in a legal text is complete.
+ */
+export function engineList(i18n: I18n, names: readonly string[]): string {
+  return new Intl.ListFormat(INTL_LOCALE[i18n.locale], { type: "conjunction" }).format(names);
+}
+
+/**
  * "Bulgarian (Bulgaria)", "Italian (Italy, Switzerland)": the language and the
  * countries it would reach. A regional name that says its only country needs
  * none ("Portuguese (Brazil)", "portugués de Portugal"); with parentheses in

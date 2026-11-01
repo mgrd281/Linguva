@@ -24,6 +24,7 @@ import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.
 import { createItemProcessor, createQueues, createWorkers, type Queues, type WorkerSet } from "../../app/.server/jobs/queues";
 import type { CurrentLocales } from "../../app/.server/locales/current-locales";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
+import { TranslationProviderError, type TranslationProvider } from "../../app/.server/providers/types";
 import { searchPendingDrafts } from "../../app/.server/review/drafts";
 import { getShopSettings, setAiConsent, setAutoTranslate } from "../../app/.server/settings/shop-settings";
 import { reserveUsage } from "../../app/.server/usage/usage-ledger";
@@ -369,6 +370,31 @@ describe("automatic translation follows the shop and its plan", () => {
     // A new choice by the merchant lifts the pause.
     await setAutoTranslate({ shopId: shop.id, enabled: true, locales: ["de"], allowedLocales: ["de"], actorId: "7" }, app);
     expect((await getShopSettings(shop.id, app)).autoPausedUntil).toBeNull();
+  });
+
+  it("doesn't pause when only this language's engines are used up (the router's scoped quota), and pauses when every engine is", async () => {
+    const { shop, deps } = await setup();
+    // Synthetic router failure: Azure used up for this language, DeepL still serving the others.
+    const usedUp = (scope?: "language"): TranslationProvider => ({
+      id: "deepl",
+      translate: async () => {
+        const error = new TranslationProviderError("azure", "quota", "fake", 403);
+        if (scope) error.scope = scope;
+        throw error;
+      },
+    });
+    const run = async (scope?: "language") => {
+      const { itemIds } = await createAutoItems(app, { shopId: shop.id, ...P });
+      const processor = createItemProcessor({ ...deps, provider: usedUp(scope) });
+      await expect(processor({ data: { shopId: shop.id, itemId: itemIds[0]! }, id: itemIds[0]!, attemptsMade: 0, opts: { attempts: 5 } } as never)).rejects.toThrow("PROVIDER_QUOTA");
+    };
+    await run("language");
+    expect((await getShopSettings(shop.id, app)).autoPausedUntil).toBeNull();
+    expect((await jobs(shop.id))[0]).toMatchObject({ status: "FAILED", errorCode: "PROVIDER_QUOTA" });
+    await run();
+    const settings = await getShopSettings(shop.id, app);
+    expect(settings.autoPauseReason).toBe("PROVIDER_QUOTA");
+    expect(settings.autoPausedUntil!.getTime()).toBeGreaterThan(Date.now());
   });
 
   it("pauses at a trial's allowance only until the trial ends, when the plan's allowance applies", async () => {

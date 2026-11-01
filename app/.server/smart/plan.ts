@@ -12,7 +12,10 @@ import { logger } from "../lib/logger";
 import type { CoverageChange } from "../coverage/items";
 import { ACTIVE_JOB_STATUSES, completeIfDone, handOverAutomaticJobTx, isAutomaticJob } from "../jobs/bulk-jobs";
 import { planResourceWork } from "../jobs/needs-work";
+import { getTranslationProvider, plannedEngine } from "../providers";
+import { isEngineRouter } from "../providers/engine-router";
 import { pendingDraftDigests } from "../review/drafts";
+import { consentedEngines, getShopSettings } from "../settings/shop-settings";
 import { isEditableAttachedField } from "../translation/attached-editor";
 import { latestRevisions } from "../translation/revisions";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
@@ -75,6 +78,7 @@ export async function planSmartPage(
       });
       return {
         run,
+        primaryLocale: config.primaryLocale,
         excluded,
         busy: new Set(busy.map((b) => b.resourceGid)),
         busyOwners: new Set(busy.filter((b) => b.job.includeAttached).map((b) => b.resourceGid)),
@@ -94,10 +98,15 @@ export async function planSmartPage(
     return !skip && !busy && c.observed;
   });
   const gids = candidates.map((c) => c.resourceGid);
+  // With several engines: markup one engine couldn't keep is planned again once another serves the language.
+  const provider = getTranslationProvider();
+  const engine = isEngineRouter(provider)
+    ? await plannedEngine(provider, input.locale, consentedEngines(await getShopSettings(input.shopId, client)), state.primaryLocale ?? undefined)
+    : undefined;
   const [latest, pendingDrafts] = await Promise.all([
     latestRevisions(input.shopId, gids, input.locale, client),
     // Like every automatic job: a field whose last machine draft the checks refused waits for a person.
-    pendingDraftDigests(input.shopId, gids, input.locale, client, { includeRefused: true }),
+    pendingDraftDigests(input.shopId, gids, input.locale, client, { includeRefused: true, ...(engine ? { engine } : {}) }),
   ]);
   // A coverage type that isn't one of the chosen content types: their images or custom fields.
   const attached = !run.resourceTypes.includes(input.resourceType);

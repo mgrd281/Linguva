@@ -4,7 +4,7 @@
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { data } from "react-router";
-import { aiUsageLimits, getConfig } from "../lib/config";
+import { aiUsageLimits, engineConsentTokens, getConfig } from "../lib/config";
 import { sanitizeHtml } from "../lib/sanitize-html";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { getTranslationProvider } from "../providers";
@@ -31,6 +31,7 @@ import {
 } from "../../lib/resource-kinds";
 import {
   AiConsentRequiredError,
+  EngineConsentRequiredError,
   AiRequestTooLargeError,
   aiTranslateResource,
   ResourceNotFoundError,
@@ -39,6 +40,7 @@ import {
   translationDigest,
 } from "./product-translation-service";
 import { collectEditorEdits } from "./editor-edits";
+import type { EngineId } from "../../lib/engines";
 import { isMachineTranslatable, segmentField } from "./translate-fields";
 import { listRevisions } from "./revisions";
 import { removeTranslation, restoreRevision } from "./history";
@@ -74,6 +76,8 @@ export interface EditorContext {
   billing?: BillingStatus;
   /** The shop's additional languages in Shopify's order (for plan limits). */
   targetLocales?: string[];
+  /** The request's signal: with several engines, AI translation stops before its next engine once the merchant leaves. */
+  signal?: AbortSignal;
 }
 
 /** Authenticates the request and resolves the resource and target language. */
@@ -110,6 +114,7 @@ export async function resolveEditorContext(
       query: (url.searchParams.get("q") ?? "").slice(0, 100),
       page: Math.max(1, Math.min(10_000, Number(url.searchParams.get("page")) || 1)),
     },
+    signal: request.signal,
   };
 }
 
@@ -210,6 +215,8 @@ export async function loadEditorData(ctx: EditorContext) {
     ai: {
       available: getTranslationProvider() !== null,
       consent: hasCurrentAiConsent(settings),
+      // The translation services the consent banner names and posts (DeepL only: today's text).
+      consentTokens: engineConsentTokens(getConfig()),
       used: await getMonthlyUsage(shopId),
       limit: editorLimits(ctx).limit,
       usedToday: await getDailyUsage(shopId),
@@ -234,7 +241,10 @@ export type EditorActionResult =
       drafts: Record<string, string>;
       rejected: Record<string, string>;
       warnings: Record<string, string[]>;
+      /** The engine of the first draft (with several engines, items may differ: see providers). */
       provider: string;
+      /** The engine that wrote each draft, by attachedRef. */
+      providers: Record<string, string>;
       /** Set when translation stopped early (drafts so far are kept). */
       stopped?: string;
     }
@@ -244,7 +254,7 @@ export type EditorActionResult =
   | { kind: "saved"; outcomes: Array<{ key: string; status: string; message?: string; code?: string }> }
   | { kind: "consent" }
   | { kind: "smart"; excluded: boolean }
-  | { kind: "error"; code: string; retryAfterSeconds?: number };
+  | { kind: "error"; code: string; retryAfterSeconds?: number; engine?: EngineId };
 
 function rateLimited(error: RequestRateLimitedError) {
   return {
@@ -257,6 +267,7 @@ function rateLimited(error: RequestRateLimitedError) {
 /** Error code for a failed AI translation, or undefined if the error is unexpected. */
 function aiErrorCode(error: unknown): string | undefined {
   if (error instanceof AiConsentRequiredError) return "CONSENT_REQUIRED";
+  if (error instanceof EngineConsentRequiredError) return "ENGINE_CONSENT";
   if (error instanceof AiRequestTooLargeError) return "REQUEST_TOO_LARGE";
   if (error instanceof QuotaExceededError) {
     return QUOTA_CODES[error.scope];
@@ -311,7 +322,10 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
   }
 
   if (intent === "grant-consent") {
-    await setAiConsent({ shopId, granted: true, actorId });
+    const shown = form.get("consentTokens");
+    const saved = await setAiConsent({ shopId, granted: true, actorId, shown: typeof shown === "string" ? shown.split(",").filter(Boolean) : null });
+    // The page showed an older list of translation services: nothing stored, it shows the current one.
+    if (saved === "changed") return { kind: "error", code: "CONSENT_CHANGED" } satisfies EditorActionResult;
     // The smart schedule waits for consent no longer than needed.
     await settleAfterConsent({ prisma: defaultClient, adminFor: async () => admin, billingFor: ctx.billing ? async () => ctx.billing! : undefined }, { id: shopId, shopDomain: ctx.shopDomain ?? "" });
     return { kind: "consent" } satisfies EditorActionResult;
@@ -338,6 +352,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
         dailyLimit: limits.dailyLimit,
         platformDailyLimit: limits.platformDailyLimit,
         maxRequestChars: config.AI_MAX_CHARS_PER_REQUEST,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
       const drafts: Record<string, string> = {};
       const rejected: Record<string, string> = {};
@@ -362,7 +377,8 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
       if (error instanceof RequestRateLimitedError) return rateLimited(error);
       if (error instanceof ResourceNotFoundError) throw new Response("Not found", { status: 404 });
       const code = aiErrorCode(error);
-      if (code) return { kind: "error", code } satisfies EditorActionResult;
+      // The engine to allow is named (a language only it serves).
+      if (code) return { kind: "error", code, ...(error instanceof EngineConsentRequiredError ? { engine: error.engine } : {}) } satisfies EditorActionResult;
       throw error;
     }
   }
@@ -385,6 +401,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
     const drafts: Record<string, string> = {};
     const rejected: Record<string, string> = {};
     const warnings: Record<string, string[]> = {};
+    const providers: Record<string, string> = {};
     let stopped: string | undefined;
     for (const item of attachedAiTargets(resources)) {
       try {
@@ -399,11 +416,14 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
           dailyLimit: limits.dailyLimit,
           platformDailyLimit: limits.platformDailyLimit,
           maxRequestChars: config.AI_MAX_CHARS_PER_REQUEST,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
         for (const o of result.outcomes) {
           const ref = attachedRef(item.resourceId, o.key);
           if (o.status === "translated") {
             drafts[ref] = o.value;
+            // Each item's own engine: with several engines, items can fail over differently.
+            providers[ref] = result.provider;
             if (o.issues.length) warnings[ref] = o.issues.map((i) => i.code);
           } else if (o.status === "rejected") {
             rejected[ref] = o.reason;
@@ -421,7 +441,8 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
       drafts,
       rejected,
       warnings,
-      provider: provider.id,
+      provider: Object.values(providers)[0] ?? provider.id,
+      providers,
       ...(stopped ? { stopped } : {}),
     } satisfies EditorActionResult;
   }

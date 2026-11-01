@@ -31,6 +31,7 @@ import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { headlineByLocale } from "../../app/lib/coverage-view";
 import { CATEGORY_IDS, ITEM_STATES, type CategoryId } from "../../app/lib/language-categories";
 import { ownerDb, resetDatabase } from "../support/db";
+import { FAKE_AZURE_KEY } from "../support/engine-fixtures";
 import { FakeShopifyStore } from "../support/fake-store";
 
 const app = new PrismaClient();
@@ -550,6 +551,37 @@ describe("translating a category", () => {
   afterEach(async () => {
     // The discovery pages the jobs queued (no worker runs here).
     for (const job of await queued()) await job.remove();
+  });
+
+  it("refuses before any job when only an engine the shop hasn't allowed serves the language (ENGINE_CONSENT)", async () => {
+    const { shop, store } = await outdoorShop();
+    shops.add(shop.id);
+    // Allowed while DeepL was the only engine; then Azure was added (fictional keys).
+    vi.stubEnv("DEEPL_API_KEY", "fictional-deepl-key:fx");
+    resetConfigCache();
+    expect(await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app)).toBe("saved");
+    vi.stubEnv("AZURE_TRANSLATOR_KEY", FAKE_AZURE_KEY);
+    vi.stubEnv("AZURE_TRANSLATOR_REGION", "westeurope");
+    resetConfigCache();
+    // The engines' fictional language lists (nothing else may be asked): DeepL without German.
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      asked.push(`${url.hostname}${url.pathname}`);
+      if (url.hostname === "api-free.deepl.com" && url.pathname === "/v2/languages") return Response.json([{ language: "FR" }]);
+      if (url.hostname === "api.cognitive.microsofttranslator.com" && url.pathname === "/languages") return Response.json({ translation: { de: { name: "German" }, fr: { name: "French" } } });
+      throw new Error(`unexpected request ${url.hostname}${url.pathname}`);
+    });
+    try {
+      expect(await translateCategoryAction(store.asAdmin(), shop, { locale: "de", form: form({ category: "navigation" }), requestedBy: "7" }, app)).toEqual({ error: "ENGINE_CONSENT" });
+      expect(await jobs(shop.id)).toHaveLength(0);
+      // French: DeepL serves it, so the gate isn't this one.
+      expect(await translateCategoryAction(store.asAdmin(), shop, { locale: "fr", form: form({ category: "navigation" }), requestedBy: "7" }, app)).not.toEqual({ error: "ENGINE_CONSENT" });
+      // Only the language lists were read: no text went anywhere.
+      expect(asked.every((a) => a.endsWith("/languages"))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("starts one job per type with texts to translate, once, and opens it", async () => {

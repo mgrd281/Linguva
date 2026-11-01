@@ -61,6 +61,7 @@ export const en = {
   "common.jobError.DAILY_LIMIT": "Today's AI translation allowance is used up. Resume the job tomorrow (after midnight UTC).",
   "common.jobError.PLATFORM_LIMIT": "The app's AI translation limit for today is reached. Resume the job tomorrow (after midnight UTC).",
   "common.jobError.CONSENT_REQUIRED": "AI processing was not allowed. Allow it under Settings, then resume.",
+  "common.jobError.ENGINE_CONSENT": "Only a translation service your store hasn't allowed yet translates this language. Allow it under Settings, then resume.",
   "common.jobError.AI_NOT_CONFIGURED": "AI translation isn't configured for this app.",
   "common.jobError.PROVIDER_QUOTA": "The translation service quota is exhausted.",
   "common.jobError.PROVIDER_AUTH": "The translation service rejected our credentials.",
@@ -203,6 +204,15 @@ export const en = {
   "common.group.Theme": "Theme",
   "common.group.Checkout": "Checkout",
   "common.group.Notifications": "Notifications",
+  "common.engine.legal.deepl": "DeepL SE (Germany)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, EU data centres)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, data centres worldwide)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, EU data centres)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, data centres worldwide)",
+  "common.engine.then": "{a}, then {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Form of address not applied (other service)",
+  "common.issue.SPACING_CHANGED": "Spacing next to a link or formatting changed",
+  "common.issue.ENGINE_MARKUP": "The translation service couldn't keep the formatting",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -265,6 +275,7 @@ export const de: Translation<typeof en> = {
   "common.jobError.DAILY_LIMIT": "Das KI-Kontingent für heute ist aufgebraucht. Setze den Auftrag morgen fort (nach Mitternacht UTC).",
   "common.jobError.PLATFORM_LIMIT": "Das Tageslimit der App für KI-Übersetzungen ist erreicht. Setze den Auftrag morgen fort (nach Mitternacht UTC).",
   "common.jobError.CONSENT_REQUIRED": "Die KI-Verarbeitung wurde nicht erlaubt. Erlaube sie unter „Einstellungen“ und setze den Auftrag dann fort.",
+  "common.jobError.ENGINE_CONSENT": "Diese Sprache übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat. Erlaube ihn unter „Einstellungen“ und setze den Auftrag dann fort.",
   "common.jobError.AI_NOT_CONFIGURED": "KI-Übersetzung ist für diese App nicht eingerichtet.",
   "common.jobError.PROVIDER_QUOTA": "Das Kontingent des Übersetzungsdienstes ist erschöpft.",
   "common.jobError.PROVIDER_AUTH": "Der Übersetzungsdienst hat unsere Zugangsdaten abgelehnt.",
@@ -407,6 +418,15 @@ export const de: Translation<typeof en> = {
   "common.group.Theme": "Theme",
   "common.group.Checkout": "Checkout",
   "common.group.Notifications": "Benachrichtigungen",
+  "common.engine.legal.deepl": "DeepL SE (Deutschland)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, Rechenzentren in der EU)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, Rechenzentren weltweit)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, Rechenzentren in der EU)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, Rechenzentren weltweit)",
+  "common.engine.then": "{a}, dann {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Anrede nicht übernommen (anderer Dienst)",
+  "common.issue.SPACING_CHANGED": "Abstand an einem Link oder einer Formatierung geändert",
+  "common.issue.ENGINE_MARKUP": "Der Übersetzungsdienst konnte die Formatierung nicht erhalten",
 };
 
 export const fr: Translation<typeof en> = {
@@ -469,6 +489,7 @@ export const fr: Translation<typeof en> = {
   "common.jobError.DAILY_LIMIT": "Le quota d'IA d'aujourd'hui est épuisé. Reprenez la tâche demain (après minuit UTC).",
   "common.jobError.PLATFORM_LIMIT": "La limite quotidienne de traduction IA de l'application est atteinte. Reprenez la tâche demain (après minuit UTC).",
   "common.jobError.CONSENT_REQUIRED": "Le traitement par IA n'a pas été autorisé. Autorisez-le dans « Paramètres », puis reprenez la tâche.",
+  "common.jobError.ENGINE_CONSENT": "Seul un service de traduction que votre boutique n'a pas encore autorisé traduit cette langue. Autorisez-le dans « Paramètres », puis reprenez la tâche.",
   "common.jobError.AI_NOT_CONFIGURED": "La traduction IA n'est pas configurée pour cette application.",
   "common.jobError.PROVIDER_QUOTA": "Le quota du service de traduction est épuisé.",
   "common.jobError.PROVIDER_AUTH": "Le service de traduction a refusé nos identifiants.",
@@ -611,6 +632,15 @@ export const fr: Translation<typeof en> = {
   "common.group.Theme": "Thème",
   "common.group.Checkout": "Paiement",
   "common.group.Notifications": "Notifications",
+  "common.engine.legal.deepl": "DeepL SE (Allemagne)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centres de données dans l'UE)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centres de données dans le monde entier)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, centres de données dans l'UE)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, centres de données dans le monde entier)",
+  "common.engine.then": "{a}, puis {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Forme de politesse non appliquée (autre service)",
+  "common.issue.SPACING_CHANGED": "Espacement modifié près d'un lien ou d'une mise en forme",
+  "common.issue.ENGINE_MARKUP": "Le service de traduction n'a pas pu conserver la mise en forme",
 };
 
 export const es: Translation<typeof en> = {
@@ -673,6 +703,7 @@ export const es: Translation<typeof en> = {
   "common.jobError.DAILY_LIMIT": "La cuota de IA de hoy está agotada. Reanuda la tarea mañana (después de la medianoche UTC).",
   "common.jobError.PLATFORM_LIMIT": "Se alcanzó el límite diario de traducción con IA de la aplicación. Reanuda la tarea mañana (después de la medianoche UTC).",
   "common.jobError.CONSENT_REQUIRED": "No se permitió el procesamiento con IA. Permítelo en «Configuración» y luego reanuda la tarea.",
+  "common.jobError.ENGINE_CONSENT": "Solo un servicio de traducción que tu tienda aún no ha permitido traduce este idioma. Permítelo en «Configuración» y luego reanuda la tarea.",
   "common.jobError.AI_NOT_CONFIGURED": "La traducción con IA no está configurada para esta aplicación.",
   "common.jobError.PROVIDER_QUOTA": "La cuota del servicio de traducción está agotada.",
   "common.jobError.PROVIDER_AUTH": "El servicio de traducción rechazó nuestras credenciales.",
@@ -815,4 +846,13 @@ export const es: Translation<typeof en> = {
   "common.group.Theme": "Tema",
   "common.group.Checkout": "Pantalla de pago",
   "common.group.Notifications": "Notificaciones",
+  "common.engine.legal.deepl": "DeepL SE (Alemania)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centros de datos en la UE)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centros de datos en todo el mundo)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, centros de datos en la UE)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, centros de datos en todo el mundo)",
+  "common.engine.then": "{a}, luego {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Tratamiento no aplicado (otro servicio)",
+  "common.issue.SPACING_CHANGED": "Espaciado cambiado junto a un enlace o formato",
+  "common.issue.ENGINE_MARKUP": "El servicio de traducción no pudo mantener el formato",
 };

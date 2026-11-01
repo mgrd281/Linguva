@@ -17,6 +17,7 @@ describe("MockTranslationProvider", () => {
 
   it("produces results that pass the full validation pipeline", async () => {
     const { outcomes } = await translateFields({
+      engines: ["deepl"],
       provider: new MockTranslationProvider(),
       fields: [
         { key: "title", value: "Jacket 42 {{ size }}", type: "SINGLE_LINE_TEXT_FIELD" },

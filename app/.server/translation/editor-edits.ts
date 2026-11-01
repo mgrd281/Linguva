@@ -3,6 +3,15 @@ import type { TranslationEdit } from "./product-translation-service";
 
 type FormLike = Pick<FormData, "get">;
 
+/** Who wrote a draft, as stored on revisions: only these values, anything else a form posts is dropped. */
+const PROVIDERS = new Set(["deepl", "azure", "google", "mock", "memory"]);
+
+/** The field's own `provider:<key>` first (drafts of one form can come from different engines), then the form's. */
+function providerOf(form: FormLike, key: string): string | null {
+  const value = String(form.get(`provider:${key}`) ?? "") || String(form.get("provider") ?? "");
+  return PROVIDERS.has(value) ? value : null;
+}
+
 /**
  * Turns the editor form into edits. Only fields the merchant actually
  * changed are saved. An unchanged outdated translation is NOT re-saved
@@ -31,7 +40,7 @@ export function collectEditorEdits(resource: TranslatableResourceData, form: For
       digest,
       ...(typeof shown === "string" && /^([0-9a-f]{64}|none)$/.test(shown) ? { expectedCurrent: shown } : {}),
       origin: form.get(`origin:${field.key}`) === "AI" ? "AI" : "MANUAL",
-      provider: String(form.get("provider") ?? "") || null,
+      provider: providerOf(form, field.key),
       // Publishing from the editor means the merchant reviewed it.
       approved: true,
     });

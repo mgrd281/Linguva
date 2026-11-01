@@ -8,18 +8,26 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { AUTO_REQUESTED_BY } from "../jobs/bulk-jobs";
-import { getConfig } from "../lib/config";
+import { costRates, getConfig, type AppConfig } from "../lib/config";
 import { prisma as defaultClient } from "../lib/db";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { getTranslationProvider } from "../providers";
 import { withTenant } from "../tenancy/with-tenant";
-import { getDailyUsage, getMonthlyUsage, nextPeriodStart, periodKey } from "../usage/usage-ledger";
-import { planSelectionUrl } from "../../lib/plans";
+import { getDailyUsage, getMonthlyUsage, getMonthlyUsageByProvider, nextPeriodStart, periodKey } from "../usage/usage-ledger";
+import { effectiveRatePerMillion, planSelectionUrl } from "../../lib/plans";
 import type { ShopUse } from "../../lib/plan-view";
 import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { aiLimitsFor } from "./billing";
 import { allowedTargetLocales, type BillingStatus } from "./subscription";
 import { settleAll } from "../lib/settle";
+
+/**
+ * The month's provider rate for a complimentary store: exactly DeepL's rate while only DeepL
+ * translated (as before engines could be combined), else the blend of the engines' rates.
+ */
+async function complimentaryRate(shopId: string, period: string, config: AppConfig, client: PrismaClient): Promise<number> {
+  return effectiveRatePerMillion(await getMonthlyUsageByProvider(shopId, period, client), costRates(config));
+}
 
 /** The refresh button asks Shopify again, but reuses a check that succeeded this recently (a double click asks once). */
 export const REFRESH_MIN_INTERVAL_MS = 30_000;
@@ -114,7 +122,8 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
     // Not the platform cap: that is the operator's figure for all stores together.
     limits: { limit: limits.limit, dailyLimit: limits.dailyLimit },
     // The internal provider cost is for the owner's own stores only; no other shop receives it.
-    costPerMillion: billing.state === "COMPLIMENTARY" ? config.AI_COST_USD_PER_MILLION_CHARS : null,
+    // Several engines in the month: the blend of their rates (one engine: exactly its rate).
+    costPerMillion: billing.state === "COMPLIMENTARY" ? await complimentaryRate(input.shop.id, periodKey(now), config, client) : null,
     now: now.toISOString(),
     // The allowance renews with the UTC month, not with Shopify's billing cycle.
     resetsOn: nextPeriodStart(now).toISOString(),

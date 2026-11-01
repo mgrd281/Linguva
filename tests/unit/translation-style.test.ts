@@ -31,7 +31,7 @@ describe("writing system check", () => {
     };
     const fields = [{ key: "title", value: "Warm winter jacket for cold days", type: "SINGLE_LINE_TEXT_FIELD" }];
     const prepared = await prepareTranslation({ fields });
-    const result = await completeTranslation(prepared, { provider: echo, sourceLocale: "en", targetLocale: "ar" });
+    const result = await completeTranslation(prepared, { engines: ["deepl"], provider: echo, sourceLocale: "en", targetLocale: "ar" });
     expect(result.outcomes[0]).toMatchObject({ status: "translated", issues: expect.arrayContaining([expect.objectContaining({ code: "WRONG_SCRIPT", severity: "warning" })]) });
   });
 });

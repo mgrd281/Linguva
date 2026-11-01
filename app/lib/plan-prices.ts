@@ -6,7 +6,7 @@
  * button leads to Shopify's plan page, which shows the binding price.
  */
 import { INTL_LOCALE, type AppLocale, type I18n } from "../i18n/i18n";
-import { PLAN_PRICES, PLANS, TRIAL_DAYS, type PlanHandle } from "./plans";
+import { PLAN_PRICES, PLANS, planPrice, TRIAL_DAYS, type KnownPlanHandle, type PlanHandle } from "./plans";
 
 /**
  * "$29", "29 $", "29 $US", "29 US$" (U+00A0 before the symbol where the
@@ -27,10 +27,10 @@ export function priceLabel(i18n: Pick<I18n, "locale" | "t">, handle: PlanHandle)
 /**
  * Months free with the yearly price ("2 months free"): the only savings
  * claim on the page, and exact (yearly = 10 × monthly). Null without a
- * yearly price or when it isn't a whole number of months.
+ * yearly price (Own key is monthly only) or when it isn't a whole number of months.
  */
-export function monthsFree(handle: PlanHandle): number | null {
-  const { monthlyUsd, yearlyUsd } = PLAN_PRICES[handle];
+export function monthsFree(handle: KnownPlanHandle): number | null {
+  const { monthlyUsd, yearlyUsd } = planPrice(handle);
   if (yearlyUsd === null || monthlyUsd <= 0) return null;
   const months = (12 * monthlyUsd - yearlyUsd) / monthlyUsd;
   return Number.isInteger(months) && months >= 1 ? months : null;

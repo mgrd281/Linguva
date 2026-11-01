@@ -25,7 +25,7 @@ export function shopList(value: string | undefined): string[] {
  * A value as people paste it into a hosting dashboard: surrounding spaces,
  * line breaks and quotes are dropped; empty means not set.
  */
-function pasted(value: unknown): unknown {
+export function pasted(value: unknown): unknown {
   if (typeof value !== "string") return value;
   let v = value.trim();
   if (v.length >= 2 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))) v = v.slice(1, -1).trim();
@@ -54,7 +54,7 @@ function isHttps(value: string): boolean {
 }
 
 /** Azure's "Location/Region" as the portal shows it ("West Europe" → westeurope); "global" means none. */
-function azureRegion(value: unknown): unknown {
+export function azureRegion(value: unknown): unknown {
   const v = pasted(value);
   if (typeof v !== "string") return v;
   const region = v.toLowerCase().replace(/\s+/g, "");
@@ -201,6 +201,11 @@ const schema = z.object({
   SHOPIFY_PARTNER_API_VERSION: z.string().regex(/^\d{4}-\d{2}$|^unstable$/).default("2026-10"),
   // "true": shops without a subscription are sent to the plan selection page.
   BILLING_REQUIRED: z.enum(["true", "false"]).default("false"),
+  // The Own key plan's card on the Plan page and its texts on the website (PRICING_DECISION.md §9):
+  // "on" only after the owner created the plan in the Partner Dashboard. Never changes what a subscriber gets.
+  OWN_KEY_PLAN_VISIBLE: z.enum(["on", "off"]).default("off"),
+  // Own key plan: key checks per minute and staff member (the shop gets twice as many).
+  OWN_KEY_CHECKS_PER_MINUTE: z.coerce.number().int().positive().default(3),
   // The operator's own stores (*.myshopify.com, comma-separated): only they see operator details such as the translation engines' state.
   OPERATOR_SHOPS: z.string().optional(),
   // Owner complimentary access (BILLING_DESIGN §4): Shopify shop GIDs
@@ -297,6 +302,11 @@ const schema = z.object({
   // Production never shows a draft privacy policy.
   message: "PUBLIC_PAGES=on in production needs LEGAL_TEXTS_REVIEWED=yes (after the lawyer's review)",
   path: ["PUBLIC_PAGES"],
+}).refine((c) => c.LINGUVA_STAGE !== "production" || c.OWN_KEY_PLAN_VISIBLE === "off" || partnerApiConfigured(c), {
+  // With billing off every shop is unmetered on the operator's engines (subscription.ts): an Own key
+  // subscriber would cost Linguva money. The same rule as partnerApiSettings.
+  message: "OWN_KEY_PLAN_VISIBLE=on needs billing (SHOPIFY_PARTNER_*): without it an Own key subscriber would translate with Linguva's engines",
+  path: ["OWN_KEY_PLAN_VISIBLE"],
 });
 
 /**
@@ -384,6 +394,10 @@ export function configWarnings(config: AppConfig, env?: NodeJS.ProcessEnv | Reco
     warnings.push(
       "AI_PLATFORM_DAILY_CHAR_LIMIT is below 1,000,000 while BILLING_REQUIRED=true: one store's first pass can stop AI translation for every store (docs/PRICING_DECISION.md §8: 3,000,000 at launch)",
     );
+  }
+  if (config.OWN_KEY_PLAN_VISIBLE === "on" && !partnerApiConfigured(config)) {
+    // Production refuses this (the schema above); elsewhere it is advice.
+    warnings.push("OWN_KEY_PLAN_VISIBLE=on: the Own key plan is shown, but billing is off: no store can be on it");
   }
   warnings.push(...engineWarnings(config, env));
   return warnings;
@@ -585,4 +599,12 @@ export function partnerApiSettings(config: AppConfig) {
     appGid: config.SHOPIFY_APP_GID,
     version: config.SHOPIFY_PARTNER_API_VERSION,
   };
+}
+
+/**
+ * Billing is configured: partnerApiSettings would not be null (the same rule). Typed without
+ * AppConfig so the schema's own refinements can use it.
+ */
+function partnerApiConfigured(c: { SHOPIFY_PARTNER_ORG_ID?: string | undefined; SHOPIFY_PARTNER_API_TOKEN?: string | undefined; SHOPIFY_APP_GID?: string | undefined }): boolean {
+  return Boolean(c.SHOPIFY_PARTNER_ORG_ID && c.SHOPIFY_PARTNER_API_TOKEN && c.SHOPIFY_APP_GID);
 }

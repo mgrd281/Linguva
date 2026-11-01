@@ -7,6 +7,8 @@ import { statusFrom, type BillingDeps } from "../../app/.server/billing/subscrip
 import { getConfig } from "../../app/.server/lib/config";
 import { normaliseSmartSettings, type SmartSettingsInput } from "../../app/.server/smart/validate";
 import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
+import * as plans from "../../app/lib/plans";
+import { complimentaryEntitlements, DEFAULT_COMPLIMENTARY_CHARS } from "../../app/.server/billing/complimentary";
 
 const SHOP = "gid://shopify/Shop/5678";
 
@@ -153,5 +155,137 @@ describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
     expect(normaliseSmartSettings(form(String(TRIAL_AI_CHARS + 50_000)), context(trial))).toEqual({ ok: false, problem: "BUDGET" });
     expect(normaliseSmartSettings(form(String(TRIAL_AI_CHARS)), context(trial))).toMatchObject({ ok: true, value: { monthlyBudget: TRIAL_AI_CHARS } });
     expect(normaliseSmartSettings(form("150000"), context(PLANS.business))).toMatchObject({ ok: true, value: { monthlyBudget: 150_000 } });
+  });
+});
+
+describe("the Own key plan (outside the ladder of four)", () => {
+  const { OWN_KEY, OWN_KEY_HANDLES, OWN_KEY_PLAN } = plans;
+  const NOW = new Date("2026-10-30T09:00:00Z");
+  const deps: BillingDeps = { settings: PARTNER_SETTINGS, required: true, now: () => NOW };
+  const row = (planHandle: string | null, trialEndsAt: Date | null = null, pendingPlanHandle: string | null = null): ShopSubscription => ({
+    shopId: "00000000-0000-4000-8000-000000000002",
+    state: "ACTIVE",
+    planHandle,
+    pendingPlanHandle,
+    billingPeriod: "EVERY_30_DAYS",
+    trialEndsAt,
+    cancelAtEndOfCycle: false,
+    currentPeriodEnd: new Date("2026-11-29T00:00:00Z"),
+    checkedAt: NOW,
+    updatedAt: NOW,
+  });
+  const LADDER = Object.keys(PLANS) as Array<keyof typeof PLANS>;
+
+  it("pins the handles to exactly six (the handle, two spellings, the owner's test plan in the same three)", () => {
+    expect(OWN_KEY).toBe("own-key");
+    expect([...OWN_KEY_HANDLES]).toEqual(["own-key", "ownkey", "own_key", "own-key-test", "ownkeytest", "own_key_test"]);
+    // Not part of the ladder: PLANS, and with it every price, icon and recommendation, keeps its four plans.
+    expect(LADDER).toEqual(["free", "starter", "pro", "business"]);
+    for (const handle of OWN_KEY_HANDLES) expect(Object.hasOwn(PLANS, handle), handle).toBe(false);
+  });
+
+  it("pins its entitlements: Pro's features, 0 included characters, no Smart Auto-Translate, own keys", () => {
+    expect(OWN_KEY_PLAN).toEqual({
+      plan: "own-key",
+      monthlyChars: 0,
+      maxTargetLocales: 10,
+      bulk: true,
+      glossary: true,
+      autoPublish: true,
+      smartAuto: false,
+      ownKeys: true,
+    });
+    for (const feature of ["maxTargetLocales", "bulk", "glossary", "autoPublish", "smartAuto"] as const) {
+      expect(OWN_KEY_PLAN[feature], feature).toBe(PLANS.pro[feature]);
+    }
+  });
+
+  it("maps every own-key handle to the plan, known, and nothing else", () => {
+    for (const handle of OWN_KEY_HANDLES) {
+      expect(entitlementsFor(handle), handle).toEqual({ ...OWN_KEY_PLAN, known: true });
+      expect(plans.isOwnKeyHandle(handle), handle).toBe(true);
+      expect(plans.isKnownPlanHandle(handle), handle).toBe(true);
+      expect(plans.planEntitlements(handle), handle).toBe(OWN_KEY_PLAN);
+    }
+    // Exact and case-sensitive: anything else is Free and unknown (the caller logs it).
+    for (const handle of ["Own-Key", "OWN-KEY", "own-key ", " own-key", "ownkey-test", "own key", "own-keys", "own-key-test2", "own"]) {
+      expect(entitlementsFor(handle), JSON.stringify(handle)).toEqual({ ...PLANS.free, known: false });
+      expect(plans.isOwnKeyHandle(handle), JSON.stringify(handle)).toBe(false);
+      expect(plans.isKnownPlanHandle(handle), JSON.stringify(handle)).toBe(false);
+    }
+    for (const handle of [null, undefined, ""]) expect(plans.isOwnKeyHandle(handle)).toBe(false);
+  });
+
+  it("leaves the four plans' handles as they were", () => {
+    for (const handle of LADDER) {
+      expect(entitlementsFor(handle), handle).toEqual({ ...PLANS[handle], known: true });
+      expect(plans.isOwnKeyHandle(handle), handle).toBe(false);
+      expect(plans.isKnownPlanHandle(handle), handle).toBe(true);
+      expect(plans.planEntitlements(handle), handle).toBe(PLANS[handle]);
+    }
+    for (const handle of [null, undefined, "", "__proto__", "toString", "hasOwnProperty", "enterprise_custom"]) {
+      expect(plans.isKnownPlanHandle(handle), String(handle)).toBe(false);
+    }
+  });
+
+  it("copies ownKeys in statusFrom, for every spelling (the plan stays own-key)", () => {
+    for (const handle of OWN_KEY_HANDLES) {
+      const status = statusFrom(row(handle), deps, false);
+      expect(status, handle).toMatchObject({ configured: true, state: "ACTIVE", mustChoosePlan: false });
+      expect(status.entitlements, handle).toEqual(OWN_KEY_PLAN);
+      expect(status.trialEndsAt, handle).toBeUndefined();
+      expect(plans.usesOwnKeys(status.entitlements), handle).toBe(true);
+    }
+    // The last known state too (Partner API down).
+    expect(statusFrom(row("own-key"), deps, true)).toMatchObject({ stale: true, entitlements: { ownKeys: true, plan: "own-key" } });
+  });
+
+  it("keeps ownKeys and 0 characters while Shopify reports a trial (the trial only ever lowers an allowance)", () => {
+    const ends = new Date("2026-11-05T00:00:00Z");
+    const status = statusFrom(row("own-key", ends), deps, false);
+    expect(status.entitlements).toEqual(OWN_KEY_PLAN);
+    expect(status.entitlements.monthlyChars).toBe(0);
+    expect(status.trialEndsAt).toEqual(ends);
+    // After the trial: the same.
+    expect(statusFrom(row("own-key", ends), { ...deps, now: () => new Date("2026-11-06T00:00:00Z") }, false).entitlements).toEqual(OWN_KEY_PLAN);
+  });
+
+  it("never gives own keys to another plan, to Unmetered, to complimentary access or to a pending change", () => {
+    for (const handle of LADDER) expect(Object.hasOwn(PLANS[handle], "ownKeys"), handle).toBe(false);
+    expect(Object.hasOwn(UNMETERED, "ownKeys")).toBe(false);
+    const complimentary = complimentaryEntitlements({ monthlyCharLimit: DEFAULT_COMPLIMENTARY_CHARS });
+    expect(Object.hasOwn(complimentary, "ownKeys")).toBe(false);
+    expect(complimentary).toEqual({ ...PLANS.business, plan: "complimentary", monthlyChars: DEFAULT_COMPLIMENTARY_CHARS });
+    // statusFrom adds the field only when true: every other plan's entitlements have exactly today's keys.
+    for (const handle of [...LADDER, "mystery", null]) {
+      for (const trialEndsAt of [null, new Date("2026-11-05T00:00:00Z")]) {
+        const entitlements = statusFrom(row(handle, trialEndsAt), deps, false).entitlements;
+        expect(Object.hasOwn(entitlements, "ownKeys"), `${handle} ${String(trialEndsAt)}`).toBe(false);
+        expect(Object.keys(entitlements), String(handle)).toEqual(Object.keys(PLANS.free));
+      }
+    }
+    expect(Object.hasOwn(statusFrom(null, deps, false).entitlements, "ownKeys")).toBe(false);
+    expect(Object.hasOwn(statusFrom({ ...row("own-key"), state: "NONE" }, deps, false).entitlements, "ownKeys")).toBe(false);
+    // A pending change to Own key doesn't change today's plan (Shopify switches at the end of the cycle).
+    const pending = statusFrom(row("pro", null, "own-key"), deps, false);
+    expect(pending.entitlements).toEqual(PLANS.pro);
+    expect(plans.usesOwnKeys(pending.entitlements)).toBe(false);
+    // A handle that only looks like Own key is Free (and logged), never own keys.
+    expect(statusFrom(row("Own-Key"), deps, false).entitlements).toEqual(PLANS.free);
+  });
+
+  it("answers usesOwnKeys only for an explicit true", () => {
+    expect(plans.usesOwnKeys(OWN_KEY_PLAN)).toBe(true);
+    expect(plans.usesOwnKeys({ ownKeys: true })).toBe(true);
+    const others: Array<plans.Entitlements | { ownKeys?: boolean } | null | undefined> = [...LADDER.map((h) => PLANS[h]), UNMETERED, { ownKeys: false }, {}, null, undefined];
+    for (const entitlements of others) {
+      expect(plans.usesOwnKeys(entitlements), JSON.stringify(entitlements)).toBe(false);
+    }
+  });
+
+  it("is reached through the Partner API like any plan", async () => {
+    const sub = await fetchActiveSubscription(PARTNER_SETTINGS, SHOP, fakePartnerApi({ handle: "own-key" }).fetchImpl);
+    expect(sub).toMatchObject({ planHandle: "own-key", pendingPlanHandle: null });
+    expect(entitlementsFor(sub!.planHandle)).toMatchObject({ plan: "own-key", ownKeys: true, known: true });
   });
 });

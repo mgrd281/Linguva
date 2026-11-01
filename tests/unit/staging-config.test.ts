@@ -123,3 +123,39 @@ describe("which shops a deployment serves", () => {
     expect(isShopAllowed("linguva-test-lab.myshopify.com", c)).toBe(false);
   });
 });
+
+describe("the Own key plan in production", () => {
+  const production = { ...base, LINGUVA_STAGE: "production", LINGUVA_PRODUCTION_APPROVED: "yes" };
+  const partner = { SHOPIFY_PARTNER_ORG_ID: "7654321", SHOPIFY_PARTNER_API_TOKEN: "prtapi_test_token_not_real", SHOPIFY_APP_GID: "gid://shopify/App/42" };
+  const refusal = "OWN_KEY_PLAN_VISIBLE: OWN_KEY_PLAN_VISIBLE=on needs billing (SHOPIFY_PARTNER_*): without it an Own key subscriber would translate with Linguva's engines";
+  const messageOf = (env: Record<string, string>): string => {
+    try {
+      config(env);
+    } catch (error) {
+      return (error as Error).message;
+    }
+    return "";
+  };
+
+  it("refuses to start with the plan shown and billing off (a subscriber would use Linguva's engines)", () => {
+    expect(messageOf({ ...production, OWN_KEY_PLAN_VISIBLE: "on" })).toContain(refusal);
+    // Every Partner setting partnerApiSettings needs; one missing is billing off. Values are never echoed.
+    for (const missing of Object.keys(partner) as Array<keyof typeof partner>) {
+      const rest = Object.fromEntries(Object.entries(partner).filter(([name]) => name !== missing));
+      const message = messageOf({ ...production, ...rest, OWN_KEY_PLAN_VISIBLE: "on" });
+      expect(message, missing).toContain(refusal);
+      for (const value of Object.values(rest)) expect(message, missing).not.toContain(value);
+    }
+  });
+
+  it("starts with the plan shown once billing is configured, and with it hidden either way", () => {
+    expect(config({ ...production, ...partner, OWN_KEY_PLAN_VISIBLE: "on" }).OWN_KEY_PLAN_VISIBLE).toBe("on");
+    expect(config({ ...production }).OWN_KEY_PLAN_VISIBLE).toBe("off");
+    expect(config({ ...production, OWN_KEY_PLAN_VISIBLE: "off" }).OWN_KEY_PLAN_VISIBLE).toBe("off");
+  });
+
+  it("applies the guard to the production stage only (staging and development show the plan without billing)", () => {
+    expect(config({ ...staging, OWN_KEY_PLAN_VISIBLE: "on" }).OWN_KEY_PLAN_VISIBLE).toBe("on");
+    expect(config({ ...base, OWN_KEY_PLAN_VISIBLE: "on" }).OWN_KEY_PLAN_VISIBLE).toBe("on");
+  });
+});

@@ -204,6 +204,13 @@ export function checkTranslationEngines(env: NodeJS.ProcessEnv, pages: { privacy
   return results;
 }
 
+/** Whether the Own key plan's card and website texts are shown (OWN_KEY_PLAN_VISIBLE). Information only, never a failure. */
+export function checkOwnKeyPlan(config: Pick<AppConfig, "OWN_KEY_PLAN_VISIBLE">): CheckResult {
+  return config.OWN_KEY_PLAN_VISIBLE === "on"
+    ? { level: "ok", name: "Own key plan", detail: "shown (OWN_KEY_PLAN_VISIBLE=on)" }
+    : { level: "ok", name: "Own key plan", detail: "hidden (OWN_KEY_PLAN_VISIBLE=off; a subscriber still gets the plan)" };
+}
+
 export function checkNodeVersion(version: string = process.versions.node): CheckResult {
   const [major, minor] = version.split(".").map(Number);
   const ok = major! > 22 || (major === 22 && minor! >= 12);

@@ -7,6 +7,7 @@ import {
   checkAppConfig,
   checkEncryptionKeys,
   checkNodeVersion,
+  checkOwnKeyPlan,
   checkProviderCost,
   checkStoreTargets,
   checkTranslationEngines,
@@ -172,5 +173,12 @@ describe("translation engines", () => {
     const results = checkTranslationEngines({ ...BASE, GOOGLE_TRANSLATE_CREDENTIALS: credentials }, { privacy: PRIVACY });
     expect(results[0]!.detail).toContain("service account, project fictional-proj-1, EU endpoint");
     expect(JSON.stringify(results)).not.toContain("someone@");
+  });
+});
+
+describe("the Own key plan", () => {
+  it("says whether the plan is shown, and never fails or warns either way", () => {
+    expect(checkOwnKeyPlan({ OWN_KEY_PLAN_VISIBLE: "off" })).toEqual({ level: "ok", name: "Own key plan", detail: expect.stringMatching(/^hidden/) });
+    expect(checkOwnKeyPlan({ OWN_KEY_PLAN_VISIBLE: "on" })).toEqual({ level: "ok", name: "Own key plan", detail: expect.stringMatching(/^shown/) });
   });
 });

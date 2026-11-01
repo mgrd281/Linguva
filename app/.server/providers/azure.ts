@@ -355,4 +355,25 @@ export class AzureTranslatorProvider implements TranslationProvider {
       return "unreachable";
     }
   }
+
+  /**
+   * The same check as checkKey(), read the way a translation is (Own key plan's key check):
+   * 403001 (the free tier's characters are used up) is "quota", not "ok", so a key saved with
+   * it shows as used up rather than accepted. Everything else answers as checkKey() does.
+   */
+  async checkKeyDetailed(): Promise<"ok" | "quota" | "refused" | "unreachable"> {
+    try {
+      const { url, init } = azureTranslateRequest(this.options, [""], "plain", "en", "de");
+      const response = await engineFetch(this.fetchImpl, url, init, { engine: this.id, timeoutMs: KEY_CHECK_TIMEOUT_MS });
+      const status = response.status;
+      const code = status === 403 ? azureErrorCode(await errorJson(response), status) : undefined;
+      await response.body?.cancel().catch(() => undefined);
+      if (code === 403001) return "quota";
+      if (response.ok || status === 400) return "ok";
+      if (status === 401 || status === 403) return "refused";
+      return "unreachable";
+    } catch {
+      return "unreachable";
+    }
+  }
 }

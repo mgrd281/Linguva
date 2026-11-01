@@ -18,15 +18,35 @@
  * - The caller's stop signal and deadline are checked before each engine
  *   and never passed into one: aborting an engine mid-request would lose
  *   what its earlier batches billed.
+ * - Own key plan (`ownKeys` option): the members are the merchant's own keys.
+ *   Their state is kept under each member's `stateKey` ("own:<engine>:<fingerprint>"),
+ *   so one merchant's used-up or refused key never rests the operator's engine
+ *   or another merchant's key; one member is enough; only the engines the
+ *   stored consent covers are used; results and errors list the keys that
+ *   were used up or refused. Without the option nothing of this applies.
  */
 import { logger } from "../lib/logger";
 import type { EngineId } from "../../lib/engines";
-import { TranslationProviderError, isRateLimit, withProviderFields, type EngineCapabilities, type TranslationProvider, type TranslationRequest, type TranslationResult } from "./types";
+import {
+  TranslationProviderError,
+  isRateLimit,
+  withProviderFields,
+  type EngineCapabilities,
+  type OwnKeyFailure,
+  type TranslationProvider,
+  type TranslationRequest,
+  type TranslationResult,
+} from "./types";
 
 export interface RoutedEngine {
   id: EngineId;
   /** DeepLProvider | DeepLKeyPool (key failover first, then engine failover) | AzureTranslatorProvider | GoogleTranslateProvider. Capabilities come from provider.capabilities. */
   provider: TranslationProvider;
+  /**
+   * Key of this engine's rest, outage, refusal and list state in the process: the engine id
+   * (operator engines, as before) or "own:<engine>:<fingerprint>" for a merchant's key. Never a key.
+   */
+  stateKey?: string;
 }
 
 export type EngineRestKind = "quota" | "auth" | "outage";
@@ -62,19 +82,26 @@ export const LIST_FAILURE_MS = 5 * 60 * 1000;
 export const INTERACTIVE_DEADLINE_MS = 60_000;
 export const JOB_DEADLINE_MS = 180_000;
 
-// Shared by every router in the process, by engine id (never a key).
-const rests = new Map<EngineId, EngineRest>();
-const outages = new Map<EngineId, number>();
+/** Above this many entries in one state map, expired and then the oldest own-key entries are dropped. */
+export const MAX_OWN_STATE = 10_000;
+/** Own-key entries whose time ended longer ago than this are dropped first. */
+const OWN_STATE_STALE_MS = 60 * 60 * 1000;
+const OWN_PREFIX = "own:";
+
+// Shared by every router in the process, by state key: the engine id for the operator's engines,
+// "own:<engine>:<fingerprint>" for a merchant's key (never a key).
+const rests = new Map<string, EngineRest>();
+const outages = new Map<string, number>();
 const refusals = new Map<string, number>();
-const listFailures = new Map<EngineId, number>();
+const listFailures = new Map<string, number>();
 // Which rest is newer than an attempt: a counter, not the clock, so two events in the same
 // millisecond still have an order. restSeq holds the counter value when the engine's rest was set.
 let seq = 0;
-const restSeq = new Map<EngineId, number>();
+const restSeq = new Map<string, number>();
 
-/** The engine's current rest in this process, if any. */
-export function engineRest(id: EngineId, now = Date.now()): EngineRest | null {
-  const rest = rests.get(id);
+/** The current rest under a state key in this process (an engine id for the operator's engines), if any. */
+export function engineRest(key: string, now = Date.now()): EngineRest | null {
+  const rest = rests.get(key);
   return rest && rest.until > now ? rest : null;
 }
 
@@ -87,7 +114,40 @@ export function clearEngineRests(): void {
   restSeq.clear();
 }
 
-const refusalKey = (id: EngineId, source: string, target: string) => `${id}\u0000${source.toLowerCase()}\u0000${target.toLowerCase()}`;
+/** Tests only: how many entries each process-wide map holds. */
+export function engineStateSizes(): { rests: number; outages: number; refusals: number; listFailures: number; restSeq: number } {
+  return { rests: rests.size, outages: outages.size, refusals: refusals.size, listFailures: listFailures.size, restSeq: restSeq.size };
+}
+
+const refusalKey = (key: string, source: string, target: string) => `${key}\u0000${source.toLowerCase()}\u0000${target.toLowerCase()}`;
+
+const stateKeyOf = (member: RoutedEngine): string => member.stateKey ?? member.id;
+
+/**
+ * Before a new key goes into one of the maps: once the map holds MAX_OWN_STATE entries, own-key
+ * entries whose time ended over an hour ago go first, then the oldest own-key entries until half
+ * is left. Operator entries (engine ids) are never dropped. `forget` drops what belongs to a
+ * dropped key elsewhere (a rest's outage count and sequence number).
+ */
+function makeRoom<V>(map: Map<string, V>, key: string, until: (value: V) => number, now: () => number, forget?: (key: string) => void): void {
+  if (map.size < MAX_OWN_STATE || map.has(key)) return;
+  const drop = (k: string) => {
+    map.delete(k);
+    forget?.(k);
+  };
+  const stale = now() - OWN_STATE_STALE_MS;
+  for (const [k, value] of map) if (k.startsWith(OWN_PREFIX) && until(value) < stale) drop(k);
+  if (map.size < MAX_OWN_STATE) return;
+  for (const k of map.keys()) {
+    if (map.size <= MAX_OWN_STATE / 2) break;
+    if (k.startsWith(OWN_PREFIX)) drop(k);
+  }
+}
+
+const forgetRest = (key: string) => {
+  outages.delete(key);
+  restSeq.delete(key);
+};
 
 type Support = true | false | "unknown";
 
@@ -99,6 +159,16 @@ function routerError(kind: TranslationProviderError["kind"], message: string, ex
 }
 
 
+export interface EngineRouterOptions {
+  now?: () => number;
+  /**
+   * The merchant's own keys (Own key plan): one member is enough, and only the engines the
+   * shop's stored consent covers are ever used, whatever a request lists. Results and errors
+   * name the keys that were used up or refused (`failovers`, `ownKeyFailures`).
+   */
+  ownKeys?: { consented: readonly EngineId[] };
+}
+
 export class EngineRouter implements TranslationProvider {
   /** The first engine of the order: every existing provider.id use (memory-only results, fallbacks) stays a real engine id, never a composite. */
   readonly id: EngineId;
@@ -107,9 +177,11 @@ export class EngineRouter implements TranslationProvider {
   readonly engines: readonly EngineId[];
   private readonly members: readonly RoutedEngine[];
   private readonly now: () => number;
+  /** Own-key routers: the engines the stored consent covers. Null for the operator's router. */
+  private readonly consented: ReadonlySet<string> | null;
 
-  constructor(engines: readonly RoutedEngine[], options: { now?: () => number } = {}) {
-    if (engines.length < 2) throw new Error("A router needs at least two engines");
+  constructor(engines: readonly RoutedEngine[], options: EngineRouterOptions = {}) {
+    if (options.ownKeys ? engines.length < 1 : engines.length < 2) throw new Error(options.ownKeys ? "A router needs at least one engine" : "A router needs at least two engines");
     const ids = engines.map((e) => e.id);
     if (new Set(ids).size !== ids.length) throw new Error("Each engine can be routed once");
     if (ids.includes("deepl") && ids[0] !== "deepl") throw new Error("DeepL, when used, is the first engine");
@@ -118,16 +190,22 @@ export class EngineRouter implements TranslationProvider {
     this.id = ids[0]!;
     this.label = ids.join("+");
     this.now = options.now ?? Date.now;
+    this.consented = options.ownKeys ? new Set(options.ownKeys.consented) : null;
   }
 
   capabilitiesOf(id: EngineId): EngineCapabilities {
     return this.members.find((m) => m.id === id)?.provider.capabilities ?? { formality: true, context: true };
   }
 
-  /** Allowed members in routing order. */
+  /** Allowed members in routing order (own-key routers: also covered by the stored consent). */
   private allowed(engines: readonly string[] | undefined): RoutedEngine[] {
     const set = new Set(engines ?? []);
-    return this.members.filter((m) => set.has(m.id));
+    return this.members.filter((m) => set.has(m.id) && (this.consented === null || this.consented.has(m.id)));
+  }
+
+  /** Quota and auth failures of one request, as the keys they name (own-key routers only). */
+  private ownKeyFailures(failures: ReadonlyArray<{ id: EngineId; error: TranslationProviderError }>): OwnKeyFailure[] {
+    return failures.flatMap(({ id, error }) => (error.kind === "quota" || error.kind === "auth" ? [{ engine: id, kind: error.kind }] : []));
   }
 
   /**
@@ -137,13 +215,16 @@ export class EngineRouter implements TranslationProvider {
    */
   private async listOf(member: RoutedEngine, locales: readonly string[]): Promise<Map<string, boolean> | null> {
     if (!member.provider.targetSupport) return new Map(locales.map((l) => [l, true]));
-    if ((listFailures.get(member.id) ?? 0) > this.now()) return null;
+    const key = stateKeyOf(member);
+    if ((listFailures.get(key) ?? 0) > this.now()) return null;
     try {
       const list = await member.provider.targetSupport(locales);
-      listFailures.delete(member.id);
+      listFailures.delete(key);
       return list;
     } catch {
-      listFailures.set(member.id, this.now() + LIST_FAILURE_MS);
+      const at = this.now();
+      makeRoom(listFailures, key, (until) => until, () => at);
+      listFailures.set(key, at + LIST_FAILURE_MS);
       return null;
     }
   }
@@ -154,13 +235,14 @@ export class EngineRouter implements TranslationProvider {
     return list === null ? "unknown" : list.get(locale) === true;
   }
 
-  private setRest(id: EngineId, rest: EngineRest): void {
+  private setRest(id: string, rest: EngineRest): void {
+    makeRoom(rests, id, (r) => r.until, this.now, forgetRest);
     rests.set(id, rest);
     restSeq.set(id, ++seq);
   }
 
-  /** `startedAt`: when the failed attempt began, so failures of requests that were already running count as one outage. */
-  private rest(id: EngineId, error: TranslationProviderError, startedAt: number): void {
+  /** `id`: the member's state key. `startedAt`: when the failed attempt began, so failures of requests that were already running count as one outage. */
+  private rest(id: string, error: TranslationProviderError, startedAt: number): void {
     const at = this.now();
     if (error.kind === "quota") {
       this.setRest(id, { kind: "quota", until: at + QUOTA_REST_MS });
@@ -193,7 +275,7 @@ export class EngineRouter implements TranslationProvider {
     // 3. Engines that haven't refused this pair recently. Support is asked lazily, in order, so a
     // DeepL success never reads Google's list.
     const at = this.now();
-    const eligible = allowed.filter((m) => (refusals.get(refusalKey(m.id, request.sourceLocale, request.targetLocale)) ?? 0) <= at);
+    const eligible = allowed.filter((m) => (refusals.get(refusalKey(stateKeyOf(m), request.sourceLocale, request.targetLocale)) ?? 0) <= at);
     if (eligible.length === 0) throw routerError("invalid", "no engine for the target language", { reason: "UNSUPPORTED_LANGUAGE" });
     const supports = new Map<EngineId, Promise<Support>>();
     const support = (m: RoutedEngine) => {
@@ -202,7 +284,7 @@ export class EngineRouter implements TranslationProvider {
       return known;
     };
     // Rests as they were when the request came in (the passes below add new ones).
-    const restAtStart = new Map(eligible.map((m) => [m.id, engineRest(m.id, at)]));
+    const restAtStart = new Map(eligible.map((m) => [m.id, engineRest(stateKeyOf(m), at)]));
 
     const failures: Array<{ id: EngineId; error: TranslationProviderError }> = [];
     const billed: Record<string, number> = {};
@@ -212,16 +294,20 @@ export class EngineRouter implements TranslationProvider {
     // Billing and scope go on a copy: the engine's error may be shared with other requests.
     const fail = (error: TranslationProviderError, scope?: "language"): never => {
       const sum = Object.values(billed).reduce((n, c) => n + c, 0);
+      // Own-key routers: every key this request found used up or refused, not only the chosen one.
+      const ownKeyFailures = this.consented ? this.ownKeyFailures(failures) : [];
       throw withProviderFields(error, {
         ...(sum > 0 ? { billedCharacters: sum } : {}),
         ...(Object.keys(billed).length ? { billedByEngine: { ...billed } } : {}),
         ...(scope ? { scope } : {}),
+        ...(ownKeyFailures.length ? { ownKeyFailures } : {}),
       });
     };
 
     /** One engine: its result, or null after recording why it failed (and resting it). */
     const attempt = async (member: RoutedEngine, known: Support): Promise<TranslationResult | null> => {
       tried.add(member.id);
+      const key = stateKeyOf(member);
       const previous = failures.at(-1);
       if (previous) logger.info({ from: previous.id, to: member.id, kind: previous.error.kind, status: previous.error.status }, "translation engine switched");
       const startedAt = this.now();
@@ -232,26 +318,38 @@ export class EngineRouter implements TranslationProvider {
         // It answered: whatever it rested for (an outage, or a quota or auth limit that pass 2 found
         // lifted) is over, with its outage count. Unless another request rested it while this call
         // was running: that rest is newer than this answer.
-        if ((restSeq.get(member.id) ?? 0) <= seqAtStart) {
-          outages.delete(member.id);
-          rests.delete(member.id);
-          restSeq.delete(member.id);
+        if ((restSeq.get(key) ?? 0) <= seqAtStart) {
+          outages.delete(key);
+          rests.delete(key);
+          restSeq.delete(key);
         }
         const lost = Object.fromEntries(Object.entries(billed).filter(([, c]) => c > 0));
-        return { ...result, provider: member.id, ...(Object.keys(lost).length ? { lostByEngine: lost } : {}) };
+        // Own-key routers: the keys that were used up or refused before this one answered.
+        const failovers = this.consented ? this.ownKeyFailures(failures) : [];
+        return {
+          ...result,
+          provider: member.id,
+          ...(Object.keys(lost).length ? { lostByEngine: lost } : {}),
+          ...(failovers.length ? { failovers } : {}),
+        };
       } catch (error) {
         if (!(error instanceof TranslationProviderError)) throw error;
         if (error.billedCharacters) billed[member.id] = (billed[member.id] ?? 0) + error.billedCharacters;
         // A rate limit: wait, don't switch (the queue's rate-limited path), and no rest.
         if (isRateLimit(error)) fail(error);
         if (error.kind === "quota" || error.kind === "auth" || error.kind === "retryable") {
-          this.rest(member.id, error, startedAt);
+          this.rest(key, error, startedAt);
         } else if (error.reason === "REQUEST_TOO_LARGE") {
           // Another engine's limit is higher (DeepL's 128 KiB): next, no rest.
         } else if (error.reason === "UNSUPPORTED_LANGUAGE") {
           // The list said yes, the engine said no: not this pair again for a while. A guessed
           // code (list unreadable) proves nothing about the engine.
-          if (known === true) refusals.set(refusalKey(member.id, request.sourceLocale, request.targetLocale), this.now() + LANGUAGE_REFUSAL_MS);
+          if (known === true) {
+            const refusal = refusalKey(key, request.sourceLocale, request.targetLocale);
+            const now = this.now();
+            makeRoom(refusals, refusal, (until) => until, () => now);
+            refusals.set(refusal, now + LANGUAGE_REFUSAL_MS);
+          }
         } else if (known === true) {
           // Invalid input doesn't switch engines.
           fail(error);
@@ -336,7 +434,7 @@ export class EngineRouter implements TranslationProvider {
       // translation don't pause. Every consented engine resting for quota or auth: shop-wide, as before.
       const end = this.now();
       const working = allowed.some((m) => {
-        const kind = engineRest(m.id, end)?.kind;
+        const kind = engineRest(stateKeyOf(m), end)?.kind;
         return kind !== "quota" && kind !== "auth";
       });
       if (working) return fail(chosen, "language");
@@ -373,11 +471,13 @@ export class EngineRouter implements TranslationProvider {
    * recently, as translate() does (job items and plans name the engine that will answer).
    */
   async plan(locales: readonly string[], allowed: readonly string[], sourceLocale?: string): Promise<Map<string, EnginePlan>> {
-    const allowedSet = new Set(allowed);
+    // Own-key routers: what the stored consent doesn't cover is never a candidate, as in translate().
+    const allowedSet = new Set(allowed.filter((id) => this.consented === null || this.consented.has(id)));
     const at = this.now();
     const lists = new Map<EngineId, Map<string, boolean> | null>();
+    const keys = new Map<EngineId, string>(this.members.map((m) => [m.id, stateKeyOf(m)]));
     for (const member of this.members) lists.set(member.id, await this.listOf(member, locales));
-    const refused = (id: EngineId, locale: string) => sourceLocale !== undefined && (refusals.get(refusalKey(id, sourceLocale, locale)) ?? 0) > at;
+    const refused = (id: EngineId, locale: string) => sourceLocale !== undefined && (refusals.get(refusalKey(keys.get(id)!, sourceLocale, locale)) ?? 0) > at;
     const plans = new Map<string, EnginePlan>();
     for (const locale of locales) {
       const candidates: EngineId[] = [];
@@ -399,7 +499,7 @@ export class EngineRouter implements TranslationProvider {
         blocked,
         unknown,
         servedBy: candidates[0] ?? null,
-        next: candidates.find((id) => !engineRest(id, at) && !refused(id, locale)) ?? candidates[0] ?? null,
+        next: candidates.find((id) => !engineRest(keys.get(id)!, at) && !refused(id, locale)) ?? candidates[0] ?? null,
       });
     }
     return plans;

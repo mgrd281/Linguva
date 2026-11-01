@@ -51,3 +51,19 @@ describe("classifyError", () => {
     expect(classifyError(error)).toEqual(expected);
   });
 });
+
+describe("JobStopError scope", () => {
+  it("keeps a language scope through classifyError, and adds none without it", () => {
+    expect(classifyError(new JobStopError("OWN_KEY_QUOTA_DEEPL", "language"))).toEqual({ kind: "job-stop", code: "OWN_KEY_QUOTA_DEEPL", scope: "language" });
+    expect(classifyError(new JobStopError("OWN_KEY_AUTH_GOOGLE"))).toEqual({ kind: "job-stop", code: "OWN_KEY_AUTH_GOOGLE" });
+    expect(classifyError(new JobStopError("X"))).not.toHaveProperty("scope");
+  });
+
+  it("keeps the message the code only, and a stop without a scope has no scope property", () => {
+    const scoped = new JobStopError("OWN_KEY_AUTH_AZURE", "language");
+    expect(scoped.message).toBe("Job stopped: OWN_KEY_AUTH_AZURE");
+    expect(scoped.scope).toBe("language");
+    expect(scoped.name).toBe("JobStopError");
+    expect(new JobStopError("X")).not.toHaveProperty("scope");
+  });
+});

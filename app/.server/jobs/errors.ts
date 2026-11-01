@@ -11,11 +11,21 @@ import { TranslationProviderError } from "../providers/types";
 import { QUOTA_CODES, QuotaExceededError } from "../usage/usage-ledger";
 import { AiConsentRequiredError, EngineConsentRequiredError } from "../translation/product-translation-service";
 
-/** Stops the whole job (remaining items are cancelled), e.g. quota used up. */
+/**
+ * Stops the whole job (remaining items are cancelled), e.g. quota used up. `scope` "language":
+ * only this language's engines are used up or refused (no shop-wide pause), as the router says.
+ */
 export class JobStopError extends Error {
-  constructor(readonly code: string) {
+  /** Set only when given: a stop without it has no such property, as before. */
+  declare readonly scope?: "language";
+
+  constructor(
+    readonly code: string,
+    scope?: "language",
+  ) {
     super(`Job stopped: ${code}`);
     this.name = "JobStopError";
+    if (scope) this.scope = scope;
   }
 }
 
@@ -47,7 +57,7 @@ const DEFAULT_THROTTLE_WAIT_MS = 2_000;
 /** Maps any error raised while processing an item to how the queue reacts. */
 export function classifyError(error: unknown): ErrorClass {
   if (error instanceof RateLimitedError) return { kind: "rate-limited", waitMs: error.waitMs };
-  if (error instanceof JobStopError) return { kind: "job-stop", code: error.code };
+  if (error instanceof JobStopError) return { kind: "job-stop", code: error.code, ...(error.scope ? { scope: error.scope } : {}) };
   if (error instanceof ItemPermanentError) return { kind: "item-permanent", code: error.code };
   if (error instanceof AiConsentRequiredError) return { kind: "job-stop", code: "CONSENT_REQUIRED" };
   // Only this language waits for the merchant to allow its engine: no shop-wide pause.

@@ -12,8 +12,10 @@ import {
 } from "./types";
 
 export interface MockProviderOptions {
-  /** Fail the next N calls with this error kind (for failure tests). */
+  /** Fail the next N calls with this error kind (for failure tests). `Infinity`: every call. */
   failNext?: { count: number; kind: ProviderErrorKind };
+  /** The provider's id and the errors' provider; default "mock" (the Own key plan's mock members use the engine id). */
+  id?: string;
 }
 
 function serialize(nodes: MarkupNode[]): string {
@@ -33,11 +35,12 @@ function serialize(nodes: MarkupNode[]): string {
  * would. Refused in production by config validation.
  */
 export class MockTranslationProvider implements TranslationProvider {
-  readonly id = "mock";
+  readonly id: string;
   readonly requests: TranslationRequest[] = [];
   private failuresLeft: number;
 
   constructor(private readonly options: MockProviderOptions = {}) {
+    this.id = options.id ?? "mock";
     this.failuresLeft = options.failNext?.count ?? 0;
   }
 

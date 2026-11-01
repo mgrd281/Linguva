@@ -15,10 +15,12 @@ import {
   clearEngineRests,
   EngineRouter,
   engineRest,
+  engineStateSizes,
   isEngineRouter,
   LANGUAGE_REFUSAL_MS,
   LIST_FAILURE_MS,
   MAX_OUTAGE_REST_MS,
+  MAX_OWN_STATE,
   OUTAGE_REST_MS,
   QUOTA_REST_MS,
   TOKEN_GRANT_REST_MS,
@@ -690,5 +692,276 @@ describe("languages and plans", () => {
     expect((await r.plan(["de"], ALL)).get("de")).toMatchObject({ servedBy: "azure", next: "azure" });
     now += LANGUAGE_REFUSAL_MS + 1;
     expect((await r.plan(["de"], ALL, "en")).get("de")!.next).toBe("azure");
+  });
+});
+
+// ---------------------------------------------------------------- Own key plan: state keys and the ownKeys option
+
+/** A router over a merchant's keys: each member with its own state key. */
+const ownRouter = (members: Array<[FakeEngine, string]>, consented: readonly EngineId[] = ["deepl", "azure", "google"], now = () => 1_000_000) =>
+  new EngineRouter(
+    members.map(([m, stateKey]): RoutedEngine => ({ id: m.id, provider: m, stateKey })),
+    { now, ownKeys: { consented } },
+  );
+
+describe("own keys: state keys", () => {
+  it.each([
+    ["quota", { kind: "quota" as const, status: 456 }],
+    ["auth", { kind: "auth" as const, status: 403 }],
+    ["outage", { kind: "retryable" as const, status: 503 }],
+  ])("a %s of one merchant's key rests neither another merchant's key of the same engine nor the operator's engine", async (kind, step) => {
+    const result = await ownRouter([
+      [new FakeEngine("deepl", [step]), "own:deepl:a"],
+      [new FakeEngine("google"), "own:google:a"],
+    ]).translate(request());
+    expect(result.provider).toBe("google");
+    expect(engineRest("own:deepl:a", 1_000_000)?.kind).toBe(kind);
+    expect(engineRest("own:deepl:b", 1_000_000)).toBeNull();
+    expect(engineRest("deepl", 1_000_000)).toBeNull();
+
+    // Merchant B's DeepL key is asked first, as if nothing had happened.
+    const deeplB = new FakeEngine("deepl");
+    const googleB = new FakeEngine("google");
+    expect((await ownRouter([[deeplB, "own:deepl:b"], [googleB, "own:google:b"]]).translate(request())).provider).toBe("deepl");
+    expect(googleB.calls).toHaveLength(0);
+    // And so is the operator's DeepL.
+    const operatorDeepL = new FakeEngine("deepl");
+    expect((await router([operatorDeepL, new FakeEngine("google")]).translate(request())).provider).toBe("deepl");
+  });
+
+  it("an operator rest never makes a merchant's key of that engine wait", async () => {
+    await router([new FakeEngine("deepl", [{ kind: "quota" }]), new FakeEngine("azure")]).translate(request());
+    expect(engineRest("deepl", 1_000_000)?.kind).toBe("quota");
+    const ownDeepL = new FakeEngine("deepl");
+    const ownAzure = new FakeEngine("azure");
+    expect((await ownRouter([[ownDeepL, "own:deepl:x"], [ownAzure, "own:azure:x"]]).translate(request())).provider).toBe("deepl");
+    expect(ownAzure.calls).toHaveLength(0);
+    // The operator's rest is still there.
+    expect(engineRest("deepl", 1_000_000)?.kind).toBe("quota");
+  });
+
+  it("a success clears only its own key's rest", async () => {
+    for (const key of ["own:deepl:a", "own:deepl:b"]) {
+      await ownRouter([[new FakeEngine("deepl", [{ kind: "quota" }]), key], [new FakeEngine("google"), `own:google:${key.at(-1)}`]]).translate(request());
+    }
+    await router([new FakeEngine("deepl", [{ kind: "quota" }]), new FakeEngine("google")]).translate(request());
+    // A's key answers again (pass 2: its limit was lifted).
+    const result = await ownRouter([[new FakeEngine("deepl"), "own:deepl:a"], [new FakeEngine("google", [{ kind: "retryable", status: 503 }]), "own:google:a"]]).translate(request());
+    expect(result.provider).toBe("deepl");
+    expect(engineRest("own:deepl:a", 1_000_000)).toBeNull();
+    expect(engineRest("own:deepl:b", 1_000_000)?.kind).toBe("quota");
+    expect(engineRest("deepl", 1_000_000)?.kind).toBe("quota");
+  });
+
+  it("keeps language list failures and language refusals per key", async () => {
+    // A's DeepL list can't be read: remembered for A's key only.
+    const deeplA = new FakeEngine("deepl", ["ok"], "fail");
+    await ownRouter([[deeplA, "own:deepl:a"], [new FakeEngine("google"), "own:google:a"]]).plan(["de"], ALL);
+    const deeplB = new FakeEngine("deepl", ["ok"], ["de"]);
+    const planB = (await ownRouter([[deeplB, "own:deepl:b"], [new FakeEngine("google"), "own:google:b"]]).plan(["de"], ALL)).get("de")!;
+    expect(deeplB.supportCalls).toBe(1);
+    expect(planB).toMatchObject({ unknown: [], servedBy: "deepl" });
+    const operatorDeepL = new FakeEngine("deepl", ["ok"], ["de"]);
+    await router([operatorDeepL, new FakeEngine("google")]).plan(["de"], ALL);
+    expect(operatorDeepL.supportCalls).toBe(1);
+    // A's own key: still remembered, its list isn't asked again.
+    await ownRouter([[deeplA, "own:deepl:a"], [new FakeEngine("google"), "own:google:a"]]).plan(["de"], ALL);
+    expect(deeplA.supportCalls).toBe(1);
+
+    // A's Azure refused the pair although its list named it: only A's key skips the pair.
+    const azureA = new FakeEngine("azure", [{ kind: "invalid", reason: "UNSUPPORTED_LANGUAGE" }], ["de"]);
+    expect((await ownRouter([[azureA, "own:azure:a"], [new FakeEngine("google"), "own:google:a"]]).translate(request())).provider).toBe("google");
+    const azureB = new FakeEngine("azure", ["ok"], ["de"]);
+    expect((await ownRouter([[azureB, "own:azure:b"], [new FakeEngine("google"), "own:google:b"]]).translate(request())).provider).toBe("azure");
+    const operatorAzure = new FakeEngine("azure", ["ok"], ["de"]);
+    expect((await router([operatorAzure, new FakeEngine("google")]).translate(request())).provider).toBe("azure");
+    const azureAgain = new FakeEngine("azure", ["ok"], ["de"]);
+    expect((await ownRouter([[azureAgain, "own:azure:a"], [new FakeEngine("google"), "own:google:a"]]).translate(request())).provider).toBe("google");
+    expect(azureAgain.calls).toHaveLength(0);
+    expect(await plannedEngine(ownRouter([[new FakeEngine("azure", ["ok"], ["de"]), "own:azure:a"], [new FakeEngine("google"), "own:google:a"]]), "de", ALL, "en")).toBe("google");
+  });
+
+  it("decides the language scope from the merchant's own keys only", async () => {
+    // The operator's Google is refused (rests for auth) …
+    await router([new FakeEngine("deepl"), new FakeEngine("google", [{ kind: "auth" }])]).translate(request({ engines: ["google"] })).catch(() => undefined);
+    await router([new FakeEngine("deepl", [{ kind: "quota" }]), new FakeEngine("google", [{ kind: "auth" }])]).translate(request()).catch(() => undefined);
+    expect(engineRest("google", 1_000_000)?.kind).toBe("auth");
+    // … but the merchant's Google key works (it doesn't serve German): its used-up DeepL key stops only this language.
+    const error = await caught(ownRouter([[new FakeEngine("deepl", [{ kind: "quota" }]), "own:deepl:s"], [new FakeEngine("google", ["ok"], ["fr"]), "own:google:s"]]).translate(request()));
+    expect(error.kind).toBe("quota");
+    expect(error.scope).toBe("language");
+    // Every own key used up or refused: shop-wide, whatever the operator's engines do.
+    const all = await caught(ownRouter([[new FakeEngine("deepl", [{ kind: "quota" }]), "own:deepl:t"], [new FakeEngine("google", [{ kind: "auth" }]), "own:google:t"]]).translate(request()));
+    expect(all.scope).toBeUndefined();
+  });
+
+  it("names its state keys in plans: a resting own key isn't the next engine, an operator rest doesn't matter", async () => {
+    await router([new FakeEngine("deepl", [{ kind: "quota" }]), new FakeEngine("azure")]).translate(request());
+    const r = ownRouter([[new FakeEngine("deepl"), "own:deepl:p"], [new FakeEngine("azure"), "own:azure:p"]]);
+    expect((await r.plan(["de"], ALL)).get("de")!.next).toBe("deepl");
+    await ownRouter([[new FakeEngine("deepl", [{ kind: "quota" }]), "own:deepl:p"], [new FakeEngine("azure"), "own:azure:p"]]).translate(request());
+    expect((await r.plan(["de"], ALL)).get("de")!.next).toBe("azure");
+  });
+});
+
+describe("own keys: the ownKeys option", () => {
+  it("allows one member (and only then), keeping the other construction rules", () => {
+    const deepl = new FakeEngine("deepl");
+    const single = new EngineRouter([{ id: "deepl", provider: deepl, stateKey: "own:deepl:1" }], { ownKeys: { consented: ["deepl"] } });
+    expect(single.engines).toEqual(["deepl"]);
+    expect(single.label).toBe("deepl");
+    expect(isEngineRouter(single)).toBe(true);
+    expect(() => new EngineRouter([], { ownKeys: { consented: [] } })).toThrow(/one/);
+    expect(() => new EngineRouter([{ id: "deepl", provider: deepl }])).toThrow(/two/);
+    expect(() => ownRouter([[new FakeEngine("google"), "own:google:1"], [new FakeEngine("deepl"), "own:deepl:1"]])).toThrow(/DeepL/);
+    expect(() => ownRouter([[new FakeEngine("google"), "own:google:1"], [new FakeEngine("google"), "own:google:2"]])).toThrow(/once/);
+  });
+
+  it("translates through a single member exactly as that engine's call", async () => {
+    const google = new FakeEngine("google", [{ kind: "auth", status: 401 }]);
+    const r = new EngineRouter([{ id: "google", provider: google, stateKey: "own:google:1" }], { ownKeys: { consented: ["google"] } });
+    const error = await caught(r.translate(request()));
+    expect(error.provider).toBe("google");
+    expect(error.kind).toBe("auth");
+    expect(google.calls).toHaveLength(1);
+    expect(engineRest("own:google:1", 1_000_000)).toBeNull();
+  });
+
+  it("never uses an engine the stored consent doesn't cover, even when the request lists it", async () => {
+    const deepl = new FakeEngine("deepl", [{ kind: "quota" }]);
+    const google = new FakeEngine("google");
+    const r = ownRouter([[deepl, "own:deepl:c"], [google, "own:google:c"]], ["deepl"]);
+    const error = await caught(r.translate(request({ engines: ["deepl", "google"] })));
+    expect(error.kind).toBe("quota");
+    expect(google.calls).toHaveLength(0);
+    expect(google.supportCalls).toBe(0);
+    // Plans: the engine without consent is blocked, never a candidate.
+    expect((await r.plan(["de"], ["deepl", "google"])).get("de")).toMatchObject({ candidates: ["deepl"], blocked: ["google"], servedBy: "deepl" });
+    expect(await plannedEngine(r, "de", ["deepl", "google"])).toBe("deepl");
+  });
+
+  it("calls nothing when the request's engines cover no consented member", async () => {
+    const deepl = new FakeEngine("deepl");
+    const azure = new FakeEngine("azure");
+    for (const [consented, engines] of [
+      [[], ALL],
+      [["azure"], ["deepl"]],
+    ] as const) {
+      const error = await caught(ownRouter([[deepl, "own:deepl:n"], [azure, "own:azure:n"]], consented).translate(request({ engines })));
+      expect(error.provider).toBe("router");
+      expect(error.kind).toBe("invalid");
+      expect(error.reason).toBe("CONFIGURATION");
+      expect(error.message).toContain("no consented engine");
+    }
+    expect(deepl.calls.length + azure.calls.length).toBe(0);
+    expect(deepl.supportCalls + azure.supportCalls).toBe(0);
+  });
+
+  it("lists the keys used up or refused before the answer in `failovers`, never retryable or invalid failures", async () => {
+    const result = await ownRouter([
+      [new FakeEngine("deepl", [{ kind: "quota", status: 456 }]), "own:deepl:f"],
+      [new FakeEngine("azure", [{ kind: "retryable", status: 503 }]), "own:azure:f"],
+      [new FakeEngine("google"), "own:google:f"],
+    ]).translate(request());
+    expect(result.provider).toBe("google");
+    expect(result.failovers).toEqual([{ engine: "deepl", kind: "quota" }]);
+
+    const refused = await ownRouter([
+      [new FakeEngine("azure", [{ kind: "auth", status: 401 }]), "own:azure:g"],
+      [new FakeEngine("google"), "own:google:g"],
+    ]).translate(request());
+    expect(refused.failovers).toEqual([{ engine: "azure", kind: "auth" }]);
+
+    const tooLarge = await ownRouter([
+      [new FakeEngine("deepl", [{ kind: "invalid", reason: "REQUEST_TOO_LARGE" }]), "own:deepl:h"],
+      [new FakeEngine("google"), "own:google:h"],
+    ]).translate(request());
+    expect(tooLarge).not.toHaveProperty("failovers");
+    // No failure at all: no field.
+    expect(await ownRouter([[new FakeEngine("deepl"), "own:deepl:i"], [new FakeEngine("google"), "own:google:i"]]).translate(request())).not.toHaveProperty("failovers");
+  });
+
+  it("never adds `failovers` to an operator router's result", async () => {
+    clearEngineRests();
+    const result = await router([new FakeEngine("deepl", [{ kind: "quota" }]), new FakeEngine("azure", [{ kind: "auth" }]), new FakeEngine("google")]).translate(request());
+    expect(result.provider).toBe("google");
+    expect(result).not.toHaveProperty("failovers");
+    expect(Object.keys(result).sort()).toEqual(["billedCharacters", "provider", "translations"]);
+  });
+
+  it("on total failure attaches every used-up or refused key to the error (`ownKeyFailures`), and an operator router never does", async () => {
+    const error = await caught(
+      ownRouter([
+        [new FakeEngine("deepl", [{ kind: "quota", status: 456, billed: 3 }]), "own:deepl:t1"],
+        [new FakeEngine("google", [{ kind: "auth", status: 400 }]), "own:google:t1"],
+      ]).translate(request()),
+    );
+    expect(error.kind).toBe("quota");
+    expect(error.ownKeyFailures).toEqual([
+      { engine: "deepl", kind: "quota" },
+      { engine: "google", kind: "auth" },
+    ]);
+    expect(error.billedByEngine).toEqual({ deepl: 3 });
+    expect(classifyError(error)).toMatchObject({ kind: "job-stop", code: "PROVIDER_QUOTA" });
+
+    // A retryable winner still carries the refused key, so it can be marked.
+    const waiting = await caught(
+      ownRouter([
+        [new FakeEngine("deepl", [{ kind: "auth" }]), "own:deepl:t2"],
+        [new FakeEngine("azure", [{ kind: "retryable", status: 503 }]), "own:azure:t2"],
+      ]).translate(request()),
+    );
+    expect(waiting.kind).toBe("retryable");
+    expect(waiting.ownKeyFailures).toEqual([{ engine: "deepl", kind: "auth" }]);
+
+    const operator = await caught(router([new FakeEngine("deepl", [{ kind: "quota" }]), new FakeEngine("google", [{ kind: "auth" }])]).translate(request()));
+    expect(operator.kind).toBe("quota");
+    expect(operator.ownKeyFailures).toBeUndefined();
+    expect(operator).not.toHaveProperty("ownKeyFailures");
+  });
+});
+
+describe("own keys: bounded process state", () => {
+  const failing = new FakeEngine("deepl", [{ kind: "quota" }]);
+  const answering = new FakeEngine("google");
+  const restOwnKey = (n: number | string, now: () => number) => ownRouter([[failing, `own:deepl:${n}`], [answering, "own:google:always"]], ["deepl", "google"], now).translate(request());
+
+  it("drops the oldest own-key rests above MAX_OWN_STATE, never the operator's", async () => {
+    // The operator's rest is the oldest entry of the map.
+    await router([new FakeEngine("deepl", [{ kind: "auth" }]), new FakeEngine("google")]).translate(request());
+    for (let i = 0; i < MAX_OWN_STATE + 5; i++) await restOwnKey(i, () => 1_000_000);
+    const sizes = engineStateSizes();
+    expect(sizes.rests).toBeLessThanOrEqual(MAX_OWN_STATE);
+    expect(sizes.restSeq).toBeLessThanOrEqual(sizes.rests);
+    expect(sizes.outages).toBeLessThanOrEqual(sizes.rests);
+    expect(engineRest("deepl", 1_000_000)?.kind).toBe("auth");
+    // The newest own keys are still resting, the oldest were dropped.
+    expect(engineRest(`own:deepl:${MAX_OWN_STATE + 4}`, 1_000_000)?.kind).toBe("quota");
+    expect(engineRest("own:deepl:0", 1_000_000)).toBeNull();
+  });
+
+  it("drops own-key rests that ended over an hour ago first, keeping current ones", async () => {
+    const t0 = 1_000_000;
+    let now = t0;
+    for (let i = 0; i < MAX_OWN_STATE / 2; i++) await restOwnKey(`old-${i}`, () => now);
+    now = t0 + QUOTA_REST_MS + 60 * 60 * 1000 + 1;
+    for (let i = 0; i < MAX_OWN_STATE / 2; i++) await restOwnKey(`new-${i}`, () => now);
+    expect(engineStateSizes().rests).toBe(MAX_OWN_STATE);
+    await restOwnKey("last", () => now);
+    // Every expired entry went, every current one stayed.
+    expect(engineStateSizes().rests).toBe(MAX_OWN_STATE / 2 + 1);
+    expect(engineRest("own:deepl:new-0", now)?.kind).toBe("quota");
+    expect(engineRest("own:deepl:last", now)?.kind).toBe("quota");
+  });
+
+  it("bounds language list failures the same way, never dropping the operator's", async () => {
+    const operatorDeepL = new FakeEngine("deepl", ["ok"], "fail");
+    await router([operatorDeepL, new FakeEngine("google")]).plan(["de"], ALL);
+    const down = new FakeEngine("deepl", ["ok"], "fail");
+    for (let i = 0; i < MAX_OWN_STATE + 5; i++) await new EngineRouter([{ id: "deepl", provider: down, stateKey: `own:deepl:list-${i}` }], { now: () => 1_000_000, ownKeys: { consented: ["deepl"] } }).plan(["de"], ALL);
+    expect(engineStateSizes().listFailures).toBeLessThanOrEqual(MAX_OWN_STATE);
+    // The operator's failed list is still remembered: not asked again.
+    await router([operatorDeepL, new FakeEngine("google")]).plan(["de"], ALL);
+    expect(operatorDeepL.supportCalls).toBe(1);
   });
 });

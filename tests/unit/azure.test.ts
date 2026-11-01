@@ -523,3 +523,43 @@ describe("Azure key check", () => {
     expect(await provider(impl).checkKey()).toBe("unreachable");
   });
 });
+
+describe("Azure detailed key check (merchant keys)", () => {
+  it("sends the same empty translate call as checkKey(), through the chosen endpoint with the key and region", async () => {
+    const { impl, calls } = fakeFetch(() => Response.json([{ translations: [{ text: "", to: "de" }] }]));
+    expect(await provider(impl).checkKeyDetailed()).toBe("ok");
+    expect(await provider(impl, { endpoint: AZURE_GLOBAL_ENDPOINT, region: undefined }).checkKeyDetailed()).toBe("ok");
+    expect(calls.map((c) => [c.method, c.url])).toEqual([
+      ["POST", `${AZURE_EU_ENDPOINT}/translate?api-version=3.0&from=en&to=de&textType=plain`],
+      ["POST", `${AZURE_GLOBAL_ENDPOINT}/translate?api-version=3.0&from=en&to=de&textType=plain`],
+    ]);
+    expect(calls[0]!.headers).toMatchObject({ "Ocp-Apim-Subscription-Key": KEY, "Ocp-Apim-Subscription-Region": "westeurope" });
+    expect(calls[1]!.headers).not.toHaveProperty("Ocp-Apim-Subscription-Region");
+    expect(calls[0]!.body).toEqual([{ text: "" }]);
+  });
+
+  it.each([
+    [200, [{ translations: [{ text: "", to: "de" }] }], "ok", "ok"],
+    [400, { error: { code: 400000 } }, "ok", "ok"],
+    // The free tier's characters are used up: a valid key, but nothing translates until next month.
+    [403, { error: { code: 403001 } }, "quota", "ok"],
+    [401, { error: { code: 401000 } }, "refused", "refused"],
+    [401, { error: { code: 401015 } }, "refused", "refused"],
+    [403, { error: { code: 403000 } }, "refused", "refused"],
+    [403, null, "refused", "refused"],
+    [429, { error: { code: 429001 } }, "unreachable", "unreachable"],
+    [500, null, "unreachable", "unreachable"],
+    [404, null, "unreachable", "unreachable"],
+  ] as const)("HTTP %i %j → %s (checkKey() stays %s)", async (status, body, detailed, operator) => {
+    const { impl } = fakeFetch(() => (body ? Response.json(body, { status }) : new Response(null, { status })));
+    expect(await provider(impl).checkKeyDetailed()).toBe(detailed);
+    expect(await provider(impl).checkKey()).toBe(operator);
+  });
+
+  it("is unreachable on a network error", async () => {
+    const impl = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    expect(await provider(impl).checkKeyDetailed()).toBe("unreachable");
+  });
+});

@@ -473,6 +473,42 @@ export const UI_SHOPS = {
     plan: null,
     build: () => new FakeShopifyStore(2),
   },
+  engines: {
+    // The engines server (TRANSLATION_PROVIDER=engines): consent covers DeepL, Azure and Google.
+    domain: "ui-engines.myshopify.com",
+    gid: "gid://shopify/Shop/91050",
+    name: "Engines Store",
+    locales: [en, de, { locale: "th", name: "Thai", primary: false, published: true }],
+    plan: null,
+    build: () => new FakeShopifyStore(2),
+  },
+  enginesLegacy: {
+    // Consent from before Azure and Google were added: DeepL only.
+    domain: "ui-engines-legacy.myshopify.com",
+    gid: "gid://shopify/Shop/91051",
+    name: "Engines Legacy Store",
+    locales: [en, de, { locale: "th", name: "Thai", primary: false, published: true }],
+    plan: null,
+    build: () => new FakeShopifyStore(2),
+  },
+  enginesNoConsent: {
+    // Business, no AI permission yet: the smart schedule's page asks for it, naming the services.
+    domain: "ui-engines-no-consent.myshopify.com",
+    gid: "gid://shopify/Shop/91052",
+    name: "Engines Consent Store",
+    locales: [en, de, { locale: "th", name: "Thai", primary: false, published: true }],
+    plan: "business",
+    build: () => new FakeShopifyStore(2),
+  },
+  enginesExtend: {
+    // The DeepL-only consent, for the test that allows the other services too (enginesLegacy stays as it is).
+    domain: "ui-engines-extend.myshopify.com",
+    gid: "gid://shopify/Shop/91053",
+    name: "Engines Extend Store",
+    locales: [en, de, { locale: "th", name: "Thai", primary: false, published: true }],
+    plan: null,
+    build: () => new FakeShopifyStore(2),
+  },
 } satisfies Record<string, UiShop>;
 
 export type UiShopKey = keyof typeof UI_SHOPS;
@@ -490,4 +526,7 @@ export const UI_ENV = {
   apiSecret: "ui-test-api-secret-not-used-anywhere-else",
   appUrl: `http://localhost:${UI_PORT}`,
   port: UI_PORT,
+  // A second server with DeepL, Microsoft Azure and Google Cloud (fictional keys, faked in preload.ts).
+  enginesUrl: `http://localhost:${UI_PORT + 1}`,
+  enginesPort: UI_PORT + 1,
 } as const;

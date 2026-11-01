@@ -11,7 +11,7 @@ import { ensureDatabasePosture } from "../app/.server/lib/db-guard";
 import { billingDeps } from "../app/.server/billing/billing";
 import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
-import { getTranslationProvider } from "../app/.server/providers";
+import { getTranslationProvider, providerLabel } from "../app/.server/providers";
 import { createQueues, createWorkers, enqueueCoveragePage, requeueStalledDiscovery, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
 import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
@@ -45,6 +45,8 @@ async function main() {
   const prefix = keyPrefix(config.NODE_ENV);
   const queues = createQueues(connection, prefix);
   const limits = aiUsageLimits(config);
+  // A router (several engines) stops before its next engine once the worker shuts down.
+  const stopping = new AbortController();
   const deps: JobDependencies = {
     prisma,
     adminFor: async (shopDomain) =>
@@ -64,6 +66,7 @@ async function main() {
       capacity: config.SHOPIFY_JOB_BUCKET_SIZE,
       refillPerSecond: config.SHOPIFY_JOB_RESTORE_PER_SECOND,
     }),
+    shutdown: stopping.signal,
   };
   const workers = createWorkers(deps, queues, {
     connection,
@@ -146,16 +149,15 @@ async function main() {
       mode,
       pid: process.pid,
       commit: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
-      provider: deps.provider?.id ?? "none",
+      provider: providerLabel(deps.provider),
     },
   });
 
-  logger.info({ provider: deps.provider?.id ?? "none", concurrency: config.WORKER_CONCURRENCY, mode }, "worker started");
+  logger.info({ provider: providerLabel(deps.provider), concurrency: config.WORKER_CONCURRENCY, mode }, "worker started");
 
-  let stopping = false;
   const shutdown = async (signal: string) => {
-    if (stopping) return;
-    stopping = true;
+    if (stopping.signal.aborted) return;
+    stopping.abort();
     logger.info({ signal }, "worker shutting down");
     heartbeat.stop();
     clearInterval(timer);

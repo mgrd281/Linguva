@@ -1,15 +1,54 @@
-import { deeplApiKeys, getConfig } from "../lib/config";
-import { DeepLProvider } from "./deepl";
-import { DeepLKeyPool } from "./deepl-pool";
+import { getConfig } from "../lib/config";
+import { EngineRouter, isEngineRouter } from "./engine-router";
+import { routedEngines } from "./engines";
 import { MockTranslationProvider } from "./mock";
 import type { TranslationProvider } from "./types";
 
-/** The configured machine translation provider, or null if none is set up. */
+/**
+ * The configured machine translation provider, or null if none is set up.
+ * One engine (DeepL only, as in production today): exactly that engine's
+ * object, as before engines could be combined. Two or more: a router.
+ */
 export function getTranslationProvider(): TranslationProvider | null {
   const config = getConfig();
   if (config.TRANSLATION_PROVIDER === "mock") return new MockTranslationProvider();
-  const keys = deeplApiKeys(config);
-  if (keys.length === 0) return null;
-  if (keys.length === 1) return new DeepLProvider({ apiKey: keys[0]!, baseUrl: config.DEEPL_API_URL });
-  return new DeepLKeyPool(keys, { baseUrl: config.DEEPL_API_URL });
+  const engines = routedEngines(config);
+  if (engines.length === 0) return null;
+  if (engines.length === 1) return engines[0]!.provider;
+  return new EngineRouter(engines);
+}
+
+/**
+ * The engine a request for this language goes to first (the usage
+ * reservation's provider). No I/O for a non-router (its id) or a router with
+ * one allowed engine (that id), so DeepL-only never gets a /v2/languages call
+ * before reserveUsage. Otherwise the router's plan; its first engine when no
+ * allowed engine serves the language (the request then fails without a call).
+ * `sourceLocale`: the text's language, so an engine that recently refused the
+ * pair is skipped here as translate() skips it.
+ */
+export async function plannedEngine(provider: TranslationProvider, targetLocale: string, engines: readonly string[], sourceLocale?: string): Promise<string> {
+  if (!isEngineRouter(provider)) return provider.id;
+  const allowed = provider.engines.filter((id) => engines.includes(id));
+  if (allowed.length === 0) return provider.id;
+  if (allowed.length === 1) return allowed[0]!;
+  const plan = (await provider.plan([targetLocale], allowed, sourceLocale)).get(targetLocale);
+  return plan?.next ?? allowed[0]!;
+}
+
+/**
+ * The signal a caller passes to translate: its stop signal joined with the
+ * deadline, for a router only (it checks it between engines). A bare
+ * provider gets undefined, exactly as before.
+ */
+export function routerSignal(provider: TranslationProvider, stop: AbortSignal | undefined, deadlineMs: number): AbortSignal | undefined {
+  if (!isEngineRouter(provider)) return undefined;
+  const deadline = AbortSignal.timeout(deadlineMs);
+  return stop ? AbortSignal.any([stop, deadline]) : deadline;
+}
+
+/** For logs and the heartbeat: the router's label ("deepl+azure"), else the id, else "none". */
+export function providerLabel(provider: TranslationProvider | null | undefined): string {
+  if (!provider) return "none";
+  return isEngineRouter(provider) ? provider.label : provider.id;
 }

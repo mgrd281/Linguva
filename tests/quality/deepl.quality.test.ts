@@ -66,6 +66,7 @@ describe.skipIf(!KEY)("DeepL on the demo catalog (local measurement)", () => {
       for (const p of DEMO_PRODUCTS) {
         const prepared = await prepareTranslation({ fields: fieldsOf(p), protect: protectFor(locale) });
         const result = await completeTranslation(prepared, {
+          engines: ["deepl"],
           provider,
           sourceLocale: "en",
           targetLocale: locale,

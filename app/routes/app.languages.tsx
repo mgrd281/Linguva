@@ -6,16 +6,33 @@ import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { MAX_ENABLED_LOCALES } from "../lib/locale-limits";
 import { languagePath } from "../lib/language-categories";
 import { getTranslationProvider } from "../.server/providers";
-import { aiLanguageSupport } from "../.server/providers/language-support";
+import { isEngineRouter } from "../.server/providers/engine-router";
+import { aiLanguageCoverage } from "../.server/providers/language-support";
+import { getShopSettings, textConsentTokens } from "../.server/settings/shop-settings";
+import { ENGINE_NAMES, engineOfToken, type EngineId } from "../lib/engines";
 import { useI18n } from "../i18n/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
   const summary = await fetchAndSyncShopLocales(admin, shop.id);
-  // Read from the provider (DeepL's own list), never assumed.
-  const ai = await aiLanguageSupport(getTranslationProvider(), summary.locales.filter((l) => !l.primary).map((l) => l.locale));
-  return { ...summary, ai };
+  const provider = getTranslationProvider();
+  const router = isEngineRouter(provider);
+  // With several engines: what the shop's consent covers (before any consent, every engine in
+  // use), so a language only an engine it hasn't allowed serves says so.
+  const allowed = router ? textConsentTokens(await getShopSettings(shop.id)).map(engineOfToken) : [];
+  // Read from each engine's own list, never assumed.
+  const coverage = await aiLanguageCoverage(provider, summary.locales.filter((l) => !l.primary).map((l) => l.locale), allowed);
+  const ai = Object.fromEntries(Object.entries(coverage).map(([locale, c]) => [locale, c.state]));
+  const aiEngine = Object.fromEntries(Object.entries(coverage).map(([locale, c]) => [locale, c.engine]));
+  return { ...summary, ai, aiEngine, showEngine: router, singleEngine: router ? null : (provider?.id ?? null) };
 };
+
+/** "Not available …" for the engines in use: today's DeepL text, the one engine, or all of them. */
+function unsupportedText(t: ReturnType<typeof useI18n>["t"], showEngine: boolean, singleEngine: string | null): string {
+  if (showEngine) return t("languages.ai.unsupportedAny");
+  if (singleEngine === "azure" || singleEngine === "google") return t("languages.ai.unsupportedWith", { engine: ENGINE_NAMES[singleEngine] });
+  return t("languages.ai.unsupported");
+}
 
 export default function Languages() {
   const summary = useLoaderData<typeof loader>();
@@ -76,9 +93,22 @@ export default function Languages() {
                   {l.primary ? (
                     "—"
                   ) : summary.ai[l.locale] === "supported" ? (
-                    <s-badge tone="success">{t("languages.ai.supported")}</s-badge>
+                    <>
+                      <s-badge tone="success">{t("languages.ai.supported")}</s-badge>
+                      {summary.showEngine && summary.aiEngine[l.locale] ? (
+                        <s-text color="subdued"> {t("languages.ai.with", { engine: ENGINE_NAMES[summary.aiEngine[l.locale] as EngineId] })}</s-text>
+                      ) : null}
+                    </>
+                  ) : summary.ai[l.locale] === "needsConsent" && summary.aiEngine[l.locale] ? (
+                    // Only an engine the shop hasn't allowed serves it: every job item would wait for consent.
+                    <s-text color="subdued">
+                      {t("languages.ai.needsConsent", { engine: ENGINE_NAMES[summary.aiEngine[l.locale] as EngineId] })}{" "}
+                      <s-link href="/app/settings">{t("languages.ai.settingsLink")}</s-link>
+                    </s-text>
+                  ) : summary.ai[l.locale] === "unsupported" ? (
+                    <s-text color="subdued">{unsupportedText(t, summary.showEngine, summary.singleEngine)}</s-text>
                   ) : (
-                    <s-text color="subdued">{t(`languages.ai.${summary.ai[l.locale] ?? "unknown"}`)}</s-text>
+                    <s-text color="subdued">{t(`languages.ai.${summary.ai[l.locale] === "none" ? "none" : "unknown"}`)}</s-text>
                   )}
                 </s-table-cell>
               </s-table-row>

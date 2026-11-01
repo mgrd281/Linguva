@@ -45,7 +45,8 @@ import { processItem, runDiscoveryPage, type JobDependencies } from "../../app/.
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { setAiConsent, setBulkPublishMode } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
-import { getMonthlyUsage } from "../../app/.server/usage/usage-ledger";
+import { getMonthlyUsage, reserveUsage, settleUsage } from "../../app/.server/usage/usage-ledger";
+import { chargeForResult } from "../../app/.server/usage/engine-charge";
 import { resetConfigCache } from "../../app/.server/lib/config";
 import { PLANS } from "../../app/lib/plans";
 import { loader as planLoader } from "../../app/routes/app.plan";
@@ -176,6 +177,23 @@ describe("owner complimentary access", () => {
     expect(report).toEqual([
       expect.objectContaining({ shopifyShopGid: OWN, active: true, chars: used, estimatedCostUsd: Math.round((used / 1e6) * 25 * 100) / 100 }),
     ]);
+    expect(report[0]).not.toHaveProperty("byProvider");
+  });
+
+  it("reports characters and cost per engine when rates per engine are given (one engine: the same figure)", async () => {
+    const s = await shop("own-store.myshopify.com", OWN);
+    await grant(OWN);
+    const single = await reserveUsage({ shopId: s.id, key: "deepl-only", chars: 400_000, limit: 10_000_000, provider: "deepl" }, app);
+    await settleUsage(single, 400_000, app);
+    const rates = { deepl: 25, azure: 10, google: 20 };
+    const [deeplOnly] = await complimentaryUsageReport(ownerDb, { allowlist: [OWN], usdPerMillionChars: 25, ratesByProvider: rates });
+    const [plain] = await complimentaryUsageReport(ownerDb, { allowlist: [OWN], usdPerMillionChars: 25 });
+    expect(deeplOnly).toMatchObject({ chars: 400_000, byProvider: { deepl: 400_000 }, estimatedCostUsd: plain!.estimatedCostUsd });
+    // Azure answered a second request: its characters at its own rate.
+    const failover = await reserveUsage({ shopId: s.id, key: "azure", chars: 200_000, limit: 10_000_000, provider: "deepl" }, app);
+    await settleUsage(failover, 200_000, app, chargeForResult({ provider: "azure", billedCharacters: 200_000 }));
+    const [mixed] = await complimentaryUsageReport(ownerDb, { allowlist: [OWN], usdPerMillionChars: 25, ratesByProvider: rates });
+    expect(mixed).toMatchObject({ chars: 600_000, byProvider: { deepl: 400_000, azure: 200_000 }, estimatedCostUsd: 12 });
   });
 
   it("keeps the plan's entitlements for everyone else", async () => {

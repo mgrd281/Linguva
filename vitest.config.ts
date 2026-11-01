@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
 import { testEnv } from "./tests/support/env";
 
+// Refuses every translation engine host (tests/support/no-real-engines.ts).
+const setupFiles = ["tests/support/no-real-engines.ts"];
 
 export default defineConfig({
   test: {
@@ -12,6 +14,7 @@ export default defineConfig({
           name: "unit",
           include: ["tests/unit/**/*.test.ts"],
           env: testEnv,
+          setupFiles,
         },
       },
       {
@@ -19,6 +22,7 @@ export default defineConfig({
           name: "security",
           include: ["tests/security/**/*.test.ts"],
           env: testEnv,
+          setupFiles,
           globalSetup: ["tests/support/integration-global-setup.ts"],
           fileParallelism: false,
           hookTimeout: 60_000,
@@ -29,6 +33,7 @@ export default defineConfig({
           name: "performance",
           include: ["tests/performance/**/*.test.ts"],
           env: testEnv,
+          setupFiles,
           globalSetup: ["tests/support/integration-global-setup.ts"],
           fileParallelism: false,
           hookTimeout: 180_000,
@@ -40,6 +45,7 @@ export default defineConfig({
           name: "integration",
           include: ["tests/integration/**/*.test.ts"],
           env: testEnv,
+          setupFiles,
           globalSetup: ["tests/support/integration-global-setup.ts"],
           // Tests share one database; run files one at a time.
           fileParallelism: false,

@@ -43,8 +43,20 @@ export default async function globalSetup() {
       const { shop: row } = await upsertInstalledShop({ shopDomain: shop.domain, shopifyShopGid: shop.gid, name: shop.name }, app);
       ids[key] = row.id;
     }
-    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "businessSwitch", "smartDowngraded", "review", "reviewPhone", "coverageItems"]) {
+    for (const key of ["full", "owner", "emptyCatalog", "failing", "visual", "customFields", "demo", "catalog", "autoLimits", "downgraded", "business", "businessEdit", "businessPause", "businessSwitch", "smartDowngraded", "review", "reviewPhone", "coverageItems", "engines", "enginesLegacy", "enginesExtend"]) {
       await setAiConsent({ shopId: ids[key]!, granted: true, actorId: null }, app);
+    }
+    // The engines server's shops (tests/ui/engines.spec.ts), explicitly: one whose consent covers
+    // DeepL, Azure (EU) and Google (global), one with the DeepL-only consent from before.
+    await owner.$transaction([
+      owner.$executeRaw`SELECT set_config('app.shop_id', ${ids.engines!}, true)`,
+      owner.$executeRaw`UPDATE "ShopSettings" SET "consentVersion" = '2026-11-engines-v1:azure-eu,deepl,google-global' WHERE "shopId" = ${ids.engines!}::uuid`,
+    ]);
+    for (const key of ["enginesLegacy", "enginesExtend"] as const) {
+      await owner.$transaction([
+        owner.$executeRaw`SELECT set_config('app.shop_id', ${ids[key]!}, true)`,
+        owner.$executeRaw`UPDATE "ShopSettings" SET "consentVersion" = '2026-10-deepl-v1' WHERE "shopId" = ${ids[key]!}::uuid`,
+      ]);
     }
 
     // A finished review-mode job for German: drafts wait on the Review page.

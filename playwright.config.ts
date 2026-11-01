@@ -38,6 +38,18 @@ const serverEnv: Record<string, string> = {
   // The app's privacy policy and support page, as drafts (no LEGAL_TEXTS_REVIEWED).
   PUBLIC_PAGES: "on",
 };
+// A second server with DeepL, Microsoft Azure and Google Cloud (fictional keys that pass the
+// configuration's checks, so it really has three engines; preload.ts answers only their free
+// checks and language lists and refuses anything that would translate). Only engines.spec.ts uses it.
+const enginesEnv: Record<string, string> = {
+  ...serverEnv,
+  PORT: String(UI_ENV.enginesPort),
+  SHOPIFY_APP_URL: UI_ENV.enginesUrl,
+  TRANSLATION_PROVIDER: "engines",
+  AZURE_TRANSLATOR_KEY: "uiazurekey0004fictional0000000000",
+  AZURE_TRANSLATOR_REGION: "westeurope",
+  GOOGLE_TRANSLATE_API_KEY: "ui-google-key-0005-fictional0000",
+};
 // The global setup seeds the same database with the app's own modules.
 Object.assign(process.env, serverEnv);
 
@@ -68,17 +80,30 @@ export default defineConfig({
     launchOptions: proxy ? { proxy } : {},
   },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } } },
-    { name: "mobile", use: { ...devices["Pixel 7"] }, grep: /@responsive/ },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } }, testIgnore: /engines\.spec\.ts/ },
+    { name: "mobile", use: { ...devices["Pixel 7"] }, grep: /@responsive/, testIgnore: /engines\.spec\.ts/ },
+    // No screenshots: the engines server's pages are checked by their texts.
+    { name: "engines", testMatch: /engines\.spec\.ts/, use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, baseURL: UI_ENV.enginesUrl } },
   ],
-  webServer: {
-    command: "node --import ./build/ui-test/preload.js ./node_modules/@react-router/serve/bin.js ./build/server/index.js",
-    // The public landing route answers 200 once the server is up.
-    url: `${UI_ENV.appUrl}/`,
-    reuseExistingServer: false,
-    timeout: 60_000,
-    env: serverEnv,
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+  webServer: [
+    {
+      command: "node --import ./build/ui-test/preload.js ./node_modules/@react-router/serve/bin.js ./build/server/index.js",
+      // The public landing route answers 200 once the server is up.
+      url: `${UI_ENV.appUrl}/`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: serverEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      command: "node --import ./build/ui-test/preload.js ./node_modules/@react-router/serve/bin.js ./build/server/index.js",
+      url: `${UI_ENV.enginesUrl}/`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: enginesEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  ],
 });

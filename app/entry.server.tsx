@@ -8,7 +8,8 @@ import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 import { addSecurityHeaders } from "./.server/lib/security-headers";
 import { logger, logRequestError } from "./.server/lib/logger";
-import { dropMigrationDatabaseUrl, logConfigWarnings } from "./.server/lib/config";
+import { dropMigrationDatabaseUrl, getConfig, logConfigWarnings } from "./.server/lib/config";
+import { siteConfigWarnings } from "./.server/site/pages";
 import { startEmbeddedWorker } from "./.server/jobs/embedded-worker";
 
 export const streamTimeout = 5000;
@@ -19,6 +20,11 @@ dropMigrationDatabaseUrl();
 
 // Settings to fix before merchants pay (for example the platform cap); a warning, never a stop.
 logConfigWarnings((message) => logger.warn(message));
+try {
+  for (const warning of siteConfigWarnings(getConfig())) logger.warn(warning);
+} catch {
+  // An invalid configuration is reported where it is used.
+}
 
 // Background jobs inside this process's container when no worker service
 // exists (on by default in production only; docs/RAILWAY_STAGING.md §8b).

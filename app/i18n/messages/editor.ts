@@ -163,6 +163,9 @@ export const en = {
   "editor.structured.notTranslated": "Not translated yet",
 
   "editor.preview.empty": "The preview appears here once there is a translation.",
+  "editor.rejection.ENGINE_MARKUP": "The translation service couldn't keep the formatting, so the result was discarded.",
+  "editor.consent.body.multi": "To translate with AI, the {singular} text you choose is sent to our translation providers ({processors}) for processing. No customer data is sent. You can review every result before it is published.",
+  "editor.aiError.CONSENT_CHANGED": "The list of translation services has changed. Check it and allow again.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -333,6 +336,9 @@ export const de: Translation<typeof en> = {
   "editor.structured.notTranslated": "Noch nicht übersetzt",
 
   "editor.preview.empty": "Die Vorschau erscheint hier, sobald es eine Übersetzung gibt.",
+  "editor.rejection.ENGINE_MARKUP": "Der Übersetzungsdienst konnte die Formatierung nicht erhalten, daher wurde das Ergebnis verworfen.",
+  "editor.consent.body.multi": "Für die KI-Übersetzung wird der ausgewählte Text dieses Eintrags ({singular}) zur Verarbeitung an unsere Übersetzungsanbieter ({processors}) gesendet. Es werden keine Kundendaten gesendet. Du kannst jedes Ergebnis prüfen, bevor es veröffentlicht wird.",
+  "editor.aiError.CONSENT_CHANGED": "Die Liste der Übersetzungsdienste hat sich geändert. Prüfe sie und erlaube erneut.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -508,6 +514,9 @@ export const fr: Translation<typeof en> = {
   "editor.structured.notTranslated": "Pas encore traduit",
 
   "editor.preview.empty": "L'aperçu s'affiche ici dès qu'une traduction existe.",
+  "editor.rejection.ENGINE_MARKUP": "Le service de traduction n'a pas pu conserver la mise en forme ; le résultat a donc été rejeté.",
+  "editor.consent.body.multi": "Pour traduire avec l'IA, le texte que vous choisissez pour cet élément ({singular}) est envoyé à nos prestataires de traduction ({processors}) pour être traité. Aucune donnée client n'est envoyée. Vous pouvez réviser chaque résultat avant sa publication.",
+  "editor.aiError.CONSENT_CHANGED": "La liste des services de traduction a changé. Vérifiez-la et autorisez à nouveau.",
 };
 
 export const es: Translation<typeof en> = {
@@ -680,4 +689,7 @@ export const es: Translation<typeof en> = {
   "editor.structured.notTranslated": "Aún sin traducir",
 
   "editor.preview.empty": "La vista previa aparecerá aquí cuando haya una traducción.",
+  "editor.rejection.ENGINE_MARKUP": "El servicio de traducción no pudo mantener el formato, así que el resultado se descartó.",
+  "editor.consent.body.multi": "Para traducir con IA, el texto que elijas de este elemento ({singular}) se envía a nuestros proveedores de traducción ({processors}) para su procesamiento. No se envían datos de clientes. Puedes revisar cada resultado antes de que se publique.",
+  "editor.aiError.CONSENT_CHANGED": "La lista de servicios de traducción ha cambiado. Revísala y vuelve a permitirlo.",
 };

@@ -140,7 +140,7 @@ Generate the encryption key in your terminal: `echo "k1:$(openssl rand -base64 3
 | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
 | `LOG_SERVICE` | `linguva-worker` |
 
-Not set in staging: `DEEPL_API_KEY` (refused), `SHOPIFY_PARTNER_*` and `BILLING_REQUIRED` (billing off), `COMPLIMENTARY_SHOP_GIDS`, `LINGUVA_PRODUCTION_APPROVED`. `NODE_ENV=production` comes from the image.
+Not set in staging: `DEEPL_API_KEY` (refused), `AZURE_TRANSLATOR_KEY`, `GOOGLE_TRANSLATE_API_KEY` and `GOOGLE_TRANSLATE_CREDENTIALS` (refused, even a value that doesn't validate), `SHOPIFY_PARTNER_*` and `BILLING_REQUIRED` (billing off), `COMPLIMENTARY_SHOP_GIDS`, `LINGUVA_PRODUCTION_APPROVED`. `NODE_ENV=production` comes from the image.
 
 ### 5.4 Service settings
 
@@ -262,7 +262,7 @@ Production has no `worker` service. The `web` process starts the worker itself, 
 - **Cost:** one more Node process in the same service, about 100–150 MB of memory (roughly 1–2 USD a month at Railway's memory price); no new service.
 - **Emergency switch**, only if asked: web, Variables, `LINGUVA_EMBEDDED_WORKER` = `off`, deploy.
 - **Payloads stay compatible** across a deploy overlap (old and new worker run together for a few seconds; each job goes to one of them).
-- **The DeepL key** goes into the `web` service's variables only; the worker inherits them.
+- **The DeepL key** goes into the `web` service's variables only; the worker inherits them. The same for **Microsoft Azure and Google Cloud** (`AZURE_TRANSLATOR_KEY`, `AZURE_TRANSLATOR_REGION`, `GOOGLE_TRANSLATE_API_KEY` or `GOOGLE_TRANSLATE_CREDENTIALS`, docs/AI_ENGINES.md): only after the owner's decision and the lawyer's review of their privacy section (deployed first), never in staging; then redeploy and check the web start log for the line "PUBLIC_PAGES=on: the privacy page's <tag> section still has open points" (there must be none; `pnpm preflight` only checks a local `.env`, docs/AI_ENGINES.md "Owner setup per engine"). With only DeepL set, nothing changes.
 
 Clean-up still open (owner): Postgres-B0jH's public TCP proxy (only needed while creating the roles), the file with the production passwords on the owner's computer, and the client secret of "Linguva KARINEX" that was pasted into a chat (owner decided to keep it for now).
 
@@ -303,9 +303,14 @@ What I changed in the repository (this branch, nothing deployed): the Dockerfile
 | `LINGUVA_PRODUCTION_APPROVED` | `yes`, set by the owner when releasing | Owner |
 | `RAILWAY_ENVIRONMENT_NAME` | set by Railway: `production` | Railway |
 | `ALLOWED_SHOPS` | **not set**: the App Store app serves every store that installs it | — |
-| `TRANSLATION_PROVIDER` | default `deepl` (`mock` is refused in production) | — |
+| `TRANSLATION_PROVIDER` | default (`engines`; `deepl` is the older spelling of the same; `mock` is refused in production) | — |
 | `DEEPL_API_KEY`, `DEEPL_API_KEYS` | the DeepL key(s), only after approval of the cost | Owner |
 | `DEEPL_API_URL` | not set (chosen from the key) | — |
+| `AZURE_TRANSLATOR_KEY`, `AZURE_TRANSLATOR_REGION` | not set until the owner decides on Microsoft Azure as a further engine and the lawyer has resolved its privacy section (docs/AI_ENGINES.md); then Key 1 and `westeurope` | Owner |
+| `AZURE_TRANSLATOR_ENDPOINT` | not set (Microsoft's EU endpoint) | — |
+| `GOOGLE_TRANSLATE_API_KEY`, `GOOGLE_TRANSLATE_CREDENTIALS` | not set until the owner decides on Google Cloud (docs/AI_ENGINES.md); the service account's JSON key file keeps processing in the EU | Owner |
+| `TRANSLATION_ENGINES` | not set (default order DeepL → Microsoft Azure → Google Cloud, configured engines only) | — |
+| `AI_COST_USD_PER_MILLION_CHARS_AZURE`, `AI_COST_USD_PER_MILLION_CHARS_GOOGLE` | defaults (10 and 20), or the contracts' prices | Owner |
 | `AI_MONTHLY_CHAR_LIMIT` | not set once billing is on (each plan has its allowance) | — |
 | `AI_DAILY_CHAR_LIMIT` | `1000000` (PRICING_DECISION.md §9 step 6) | Owner |
 | `AI_PLATFORM_DAILY_CHAR_LIMIT` | `3000000` (PRICING_DECISION.md §9 step 6; the 100,000 default must not go live) | Owner |
@@ -314,7 +319,7 @@ What I changed in the repository (this branch, nothing deployed): the Dockerfile
 | `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE` | the public app's Partner organization and app | Owner (Partner Dashboard) |
 | `SHOPIFY_PARTNER_API_VERSION` | default | — |
 | `BILLING_REQUIRED` | `true`, set **last**, after the plans are checked on a dev store (PRICING_DECISION.md §9 steps 5–6) | Owner |
-| `OPERATOR_SHOPS` | the owner's own stores, if they install the public app (shows the DeepL quota card); else not set | Owner |
+| `OPERATOR_SHOPS` | the owner's own stores, if they install the public app (shows the DeepL quota card, or the translation services card with several engines); else not set | Owner |
 | `COMPLIMENTARY_SHOP_GIDS` | the owner's own stores' GIDs, if they should use it for free; else not set | Owner |
 | Job settings: `SHOPIFY_JOB_BUCKET_SIZE`, `SHOPIFY_JOB_RESTORE_PER_SECOND`, `WORKER_CONCURRENCY`, `SHOPIFY_TIMEOUT_MS` | defaults | — |
 | `LINGUVA_EMBEDDED_WORKER` | not set (on in production, §8b) | — |

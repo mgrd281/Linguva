@@ -203,6 +203,15 @@ export const en = {
   "common.group.Theme": "Theme",
   "common.group.Checkout": "Checkout",
   "common.group.Notifications": "Notifications",
+  "common.engine.legal.deepl": "DeepL SE (Germany)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, EU data centres)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, data centres worldwide)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, EU data centres)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, data centres worldwide)",
+  "common.engine.then": "{a}, then {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Form of address not applied (other service)",
+  "common.issue.SPACING_CHANGED": "Spacing next to a link or formatting changed",
+  "common.issue.ENGINE_MARKUP": "The translation service couldn't keep the formatting",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -407,6 +416,15 @@ export const de: Translation<typeof en> = {
   "common.group.Theme": "Theme",
   "common.group.Checkout": "Checkout",
   "common.group.Notifications": "Benachrichtigungen",
+  "common.engine.legal.deepl": "DeepL SE (Deutschland)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, Rechenzentren in der EU)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, Rechenzentren weltweit)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, Rechenzentren in der EU)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, Rechenzentren weltweit)",
+  "common.engine.then": "{a}, dann {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Anrede nicht übernommen (anderer Dienst)",
+  "common.issue.SPACING_CHANGED": "Abstand an einem Link oder einer Formatierung geändert",
+  "common.issue.ENGINE_MARKUP": "Der Übersetzungsdienst konnte die Formatierung nicht erhalten",
 };
 
 export const fr: Translation<typeof en> = {
@@ -611,6 +629,15 @@ export const fr: Translation<typeof en> = {
   "common.group.Theme": "Thème",
   "common.group.Checkout": "Paiement",
   "common.group.Notifications": "Notifications",
+  "common.engine.legal.deepl": "DeepL SE (Allemagne)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centres de données dans l'UE)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centres de données dans le monde entier)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, centres de données dans l'UE)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, centres de données dans le monde entier)",
+  "common.engine.then": "{a}, puis {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Forme de politesse non appliquée (autre service)",
+  "common.issue.SPACING_CHANGED": "Espacement modifié près d'un lien ou d'une mise en forme",
+  "common.issue.ENGINE_MARKUP": "Le service de traduction n'a pas pu conserver la mise en forme",
 };
 
 export const es: Translation<typeof en> = {
@@ -815,4 +842,13 @@ export const es: Translation<typeof en> = {
   "common.group.Theme": "Tema",
   "common.group.Checkout": "Pantalla de pago",
   "common.group.Notifications": "Notificaciones",
+  "common.engine.legal.deepl": "DeepL SE (Alemania)",
+  "common.engine.legal.azure-eu": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centros de datos en la UE)",
+  "common.engine.legal.azure-global": "Microsoft Ireland Operations Ltd. (Azure AI Translator, centros de datos en todo el mundo)",
+  "common.engine.legal.google-eu": "Google Cloud EMEA Ltd. (Cloud Translation, centros de datos en la UE)",
+  "common.engine.legal.google-global": "Google Cloud EMEA Ltd. (Cloud Translation, centros de datos en todo el mundo)",
+  "common.engine.then": "{a}, luego {b}",
+  "common.issue.FORMALITY_NOT_APPLIED": "Tratamiento no aplicado (otro servicio)",
+  "common.issue.SPACING_CHANGED": "Espaciado cambiado junto a un enlace o formato",
+  "common.issue.ENGINE_MARKUP": "El servicio de traducción no pudo mantener el formato",
 };

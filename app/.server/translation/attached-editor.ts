@@ -40,7 +40,7 @@ const EDITABLE_TYPES = new Set([
 export const MAX_ATTACHED_AI_RESOURCES = 25;
 
 /** Form field name of an attached resource's field, e.g. value:gid://shopify/MediaImage/1:alt. */
-export function attachedFieldName(part: "value" | "digest" | "origin" | "confirm" | "current", resourceId: string, key: string) {
+export function attachedFieldName(part: "value" | "digest" | "origin" | "confirm" | "current" | "provider", resourceId: string, key: string) {
   return `${part}:${resourceId}:${key}`;
 }
 
@@ -113,7 +113,7 @@ export function collectAttachedEdits(
   return resources.flatMap((resource) => {
     const scoped = {
       get(name: string) {
-        const match = /^(value|digest|origin|confirm|current):(.+)$/.exec(name);
+        const match = /^(value|digest|origin|confirm|current|provider):(.+)$/.exec(name);
         if (!match) return form.get(name);
         return form.get(attachedFieldName(match[1] as "value", resource.resourceId, match[2]!));
       },

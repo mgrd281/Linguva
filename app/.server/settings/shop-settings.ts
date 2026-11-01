@@ -2,13 +2,19 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "../tenancy/with-tenant";
 import { AUTO_REQUESTED_BY } from "../jobs/bulk-jobs";
+import { engineConsentTokens, getConfig } from "../lib/config";
+import { engineOfToken, type ConsentToken, type EngineId } from "../../lib/engines";
+import { consentTokens, consentVersionFor, LEGACY_DEEPL_CONSENT } from "./ai-consent";
 
 /**
- * Version of the AI data-processing notice the merchant accepted. Bump it
- * when the notice text or the list of subprocessors changes; merchants then
- * have to accept again.
+ * Version of the AI data-processing notice for DeepL alone (what every shop
+ * accepted before engines could be combined). Other engine sets get their
+ * own version (ai-consent.ts): a shop's consent records which engines it
+ * covers, and adding one never takes the others away.
  */
-export const AI_CONSENT_VERSION = "2026-10-deepl-v1";
+export const AI_CONSENT_VERSION = LEGACY_DEEPL_CONSENT;
+
+type ConsentState = { aiDataProcessingConsentAt: Date | null; consentVersion: string | null };
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -47,22 +53,71 @@ export async function getShopSettings(shopId: string, client: PrismaClient = def
   );
 }
 
-export function hasCurrentAiConsent(settings: {
-  aiDataProcessingConsentAt: Date | null;
-  consentVersion: string | null;
-}): boolean {
-  return Boolean(settings.aiDataProcessingConsentAt) && settings.consentVersion === AI_CONSENT_VERSION;
+/** The consent tokens a stored consent covers among the configured ones, in routing order (none without consent). Pure. */
+function coveredTokens(settings: ConsentState, configured: readonly ConsentToken[]): ConsentToken[] {
+  if (!settings.aiDataProcessingConsentAt) return [];
+  const covered = consentTokens(settings.consentVersion) ?? [];
+  return configured.filter((t) => covered.includes(t));
 }
 
+/** Consent given and covering at least one configured engine. Pure; with DeepL only or mock, today's rule. */
+export function hasAiConsentFor(settings: ConsentState, configured: readonly ConsentToken[]): boolean {
+  return coveredTokens(settings, configured).length > 0;
+}
+
+/**
+ * Whether AI translation may run for the shop: its consent covers at least
+ * one engine in use. `configured` is read from the environment (validated at
+ * start and cached); pure tests use hasAiConsentFor.
+ */
+export function hasCurrentAiConsent(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): boolean {
+  return hasAiConsentFor(settings, configured);
+}
+
+/** The engines a request may use: consented ∩ configured, in routing order. */
+export function consentedEngines(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): EngineId[] {
+  return coveredTokens(settings, configured).map(engineOfToken);
+}
+
+/**
+ * The consent tokens a page's texts and coverage are about: what a current
+ * consent covers among the engines in use, else every engine in use (before
+ * any consent the merchant reads about all of them). Routing order.
+ */
+export function textConsentTokens(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): ConsentToken[] {
+  const covered = coveredTokens(settings, configured);
+  return covered.length ? covered : [...configured];
+}
+
+/** Configured engines (with their data location) the shop's consent doesn't cover yet. */
+export function missingConsent(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): ConsentToken[] {
+  const covered = coveredTokens(settings, configured);
+  return configured.filter((t) => !covered.includes(t));
+}
+
+/**
+ * Records the merchant's decision. Granting stores consent for the engines
+ * the merchant was shown (`shown`, posted by the form), and only when they
+ * cover every engine in use: a page rendered before an engine was added
+ * returns "changed" and stores nothing (the page shows the new list). A post
+ * without the list is accepted only while DeepL is the only engine (forms
+ * rendered before this version).
+ */
 export async function setAiConsent(
-  input: { shopId: string; granted: boolean; actorId: string | null },
+  input: { shopId: string; granted: boolean; actorId: string | null; shown?: readonly string[] | null },
   client: PrismaClient = defaultClient,
-) {
+): Promise<"saved" | "changed"> {
+  const configured = engineConsentTokens(getConfig());
+  if (input.granted) {
+    const covered = input.shown ? configured.every((t) => input.shown!.includes(t)) : configured.length === 1 && configured[0] === "deepl";
+    if (!covered) return "changed";
+  }
+  const version = consentVersionFor(configured);
   await updateSettings(
     input.shopId,
     {
       aiDataProcessingConsentAt: input.granted ? new Date() : null,
-      consentVersion: input.granted ? AI_CONSENT_VERSION : null,
+      consentVersion: input.granted ? version : null,
     },
     client,
   );
@@ -73,9 +128,10 @@ export async function setAiConsent(
       actorType: "MERCHANT_USER",
       actorId: input.actorId,
       action: input.granted ? "ai_consent.granted" : "ai_consent.revoked",
-      metadata: { version: AI_CONSENT_VERSION },
+      metadata: { version },
     }],
   });
+  return "saved";
 }
 
 export class ConfirmationRequiredError extends Error {

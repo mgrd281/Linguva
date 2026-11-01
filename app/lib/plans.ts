@@ -87,3 +87,33 @@ export function planSelectionUrl(shopDomain: string, appHandle: string): string 
 export function estimatedCostUsd(chars: number, usdPerMillionChars: number): number {
   return Math.round((chars / 1_000_000) * usdPerMillionChars * 100) / 100;
 }
+
+/** Characters per rate: engines without a rate of their own (ledger rows without one, "mock") count at DeepL's. */
+function charsByRate(usage: Readonly<Record<string, number>>, rates: Readonly<Record<string, number>>): Map<number, number> {
+  const byRate = new Map<number, number>();
+  for (const [provider, chars] of Object.entries(usage)) {
+    if (chars <= 0) continue;
+    const rate = rates[provider] ?? rates.deepl ?? 0;
+    byRate.set(rate, (byRate.get(rate) ?? 0) + chars);
+  }
+  return byRate;
+}
+
+/**
+ * Estimated provider cost in USD of a month's characters per engine (ledger
+ * provider → characters) at each engine's rate. One engine: exactly
+ * estimatedCostUsd of its characters.
+ */
+export function estimatedCostByProvider(usage: Readonly<Record<string, number>>, rates: Readonly<Record<string, number>>): number {
+  const total = [...charsByRate(usage, rates)].reduce((sum, [rate, chars]) => sum + (chars / 1_000_000) * rate, 0);
+  return Math.round(total * 100) / 100;
+}
+
+/** The rate a month's characters were translated at: one engine's own rate, or the blend of several (USD per million). */
+export function effectiveRatePerMillion(usage: Readonly<Record<string, number>>, rates: Readonly<Record<string, number>>): number {
+  const byRate = charsByRate(usage, rates);
+  if (byRate.size === 0) return rates.deepl ?? 0;
+  if (byRate.size === 1) return [...byRate.keys()][0]!;
+  const chars = [...byRate.values()].reduce((a, b) => a + b, 0);
+  return [...byRate].reduce((sum, [rate, c]) => sum + rate * c, 0) / chars;
+}

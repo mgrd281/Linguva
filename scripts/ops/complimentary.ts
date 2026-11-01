@@ -18,6 +18,7 @@ import {
   grantComplimentaryAccess,
   revokeComplimentaryAccess,
 } from "../../app/.server/billing/complimentary";
+import { costRates, getConfig } from "../../app/.server/lib/config";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -63,8 +64,10 @@ async function main() {
     });
     console.log("Revoked. Also remove the GID from COMPLIMENTARY_SHOP_GIDS.");
   } else if (command === "report") {
-    const usd = Number(process.env.AI_COST_USD_PER_MILLION_CHARS ?? 25);
-    const rows = await complimentaryUsageReport(owner, { allowlist, usdPerMillionChars: usd, period: values.period });
+    // The rates as the app reads them (validated, with the same defaults).
+    const rates = costRates(getConfig());
+    const usd = rates.deepl;
+    const rows = await complimentaryUsageReport(owner, { allowlist, usdPerMillionChars: usd, period: values.period, ratesByProvider: rates });
     console.table(
       rows.map((r) => ({
         shop: r.shopDomain,
@@ -76,7 +79,9 @@ async function main() {
         "est. cost USD": r.estimatedCostUsd,
       })),
     );
-    console.log(`Estimate at ${usd} USD per million characters (AI_COST_USD_PER_MILLION_CHARS).`);
+    console.log(`Estimate at ${rates.deepl} USD per million characters for DeepL (AI_COST_USD_PER_MILLION_CHARS).`);
+    console.log(`Estimate at ${rates.azure} USD per million characters for Microsoft Azure (AI_COST_USD_PER_MILLION_CHARS_AZURE).`);
+    console.log(`Estimate at ${rates.google} USD per million characters for Google Cloud (AI_COST_USD_PER_MILLION_CHARS_GOOGLE).`);
   } else {
     console.error("Usage: grant | revoke | report (see the header of scripts/ops/complimentary.ts)");
     process.exitCode = 1;

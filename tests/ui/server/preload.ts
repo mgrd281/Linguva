@@ -27,7 +27,8 @@ const storeFor = (shop: UiShop) => {
   let store = stores.get(shop.domain);
   if (!store) {
     stores.set(shop.domain, (store = shop.build()));
-    store.imageOrigin = UI_ENV.appUrl;
+    // The server that serves the pictures: this one (the engines server has its own address).
+    store.imageOrigin = process.env.SHOPIFY_APP_URL ?? UI_ENV.appUrl;
   }
   return store;
 };
@@ -141,17 +142,58 @@ const DEEPL_USAGE: Record<string, { character_count: number; character_limit: nu
   "ui-key-pro-0003": { character_count: 7, character_limit: 1_000_000_000_000 },
 };
 
+/** DeepL's fictional target list: no Thai, so the engines server shows Thai served by Microsoft Azure. */
+const DEEPL_TARGETS = ["DE", "FR", "ES", "IT", "NL", "PL", "PT-PT", "PT-BR", "JA", "EN-US", "EN-GB"].map((language) => ({ language, name: language }));
+/** Azure's fictional language list (the documented global URL, no key). */
+const AZURE_LANGUAGES = { translation: Object.fromEntries(["en", "de", "fr", "es", "th", "ar", "ja"].map((code) => [code, { name: code, nativeName: code, dir: "ltr" }])) };
+/** The fictional engine keys the engines server is configured with (playwright.config.ts). */
+const UI_AZURE_KEY = "uiazurekey0004fictional0000000000";
+const UI_GOOGLE_KEY = "ui-google-key-0005-fictional0000";
+
+/**
+ * Microsoft Azure and Google Cloud, for the engines server (tests/ui/engines.spec.ts): only the
+ * free checks and language lists are answered; anything that would translate is refused.
+ */
+function engineFake(url: URL, init: RequestInit | undefined): Response | null {
+  const headers = new Headers(init?.headers);
+  if (/(^|\.)cognitive\.microsofttranslator\.com$/.test(url.hostname)) {
+    if ((init?.method ?? "GET") === "GET" && url.pathname === "/languages") return json(AZURE_LANGUAGES);
+    // The operator card's key check: one empty text (0 characters). Any real text is refused.
+    if (init?.method === "POST" && url.pathname === "/translate" && init.body === JSON.stringify([{ text: "" }])) {
+      return headers.get("ocp-apim-subscription-key") === UI_AZURE_KEY ? json([{ translations: [{ text: "", to: "de" }] }]) : json({ error: { code: 401000 } }, 401);
+    }
+    throw new Error(`[ui-fake-azure] refused ${url.hostname}${url.pathname}: UI tests never translate with Azure`);
+  }
+  if (/(^|\.)api\.cognitive\.microsoft\.com$/.test(url.hostname)) {
+    throw new Error(`[ui-fake-azure] refused ${url.hostname}${url.pathname}: the key check goes through the Translator endpoint`);
+  }
+  if (url.hostname === "translation.googleapis.com") {
+    if (url.pathname !== "/language/translate/v2/languages") throw new Error(`[ui-fake-google] refused ${url.pathname}: UI tests never translate with Google`);
+    // The fictional key is refused, so the operator's card shows a refused tile.
+    if (headers.get("x-goog-api-key") !== UI_GOOGLE_KEY) throw new Error("[ui-fake-google] refused an unknown key");
+    return json({ error: { code: 400, status: "INVALID_ARGUMENT", details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "API_KEY_INVALID" }] } }, 400);
+  }
+  if (["translate.googleapis.com", "translate-eu.googleapis.com", "oauth2.googleapis.com"].includes(url.hostname)) {
+    throw new Error(`[ui-fake-google] refused ${url.hostname}: UI tests never call Google`);
+  }
+  return null;
+}
+
 globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
   const read = async () => JSON.parse(String(init?.body ?? (input instanceof Request ? await input.text() : "{}")));
   if (url.hostname === "partners.shopify.com") return partnerApi(await read());
   if (/^api(-free)?\.deepl\.com$/.test(url.hostname)) {
-    // The DeepL keys' usage on the operator's Overview; the UI tests translate with the mock provider.
+    // The DeepL keys' usage on the operator's Overview, and the language list (engines server);
+    // the UI tests translate with the mock provider.
+    if (url.pathname === "/v2/languages" && url.searchParams.get("type") === "target") return json(DEEPL_TARGETS);
     if (url.pathname !== "/v2/usage") throw new Error(`[ui-fake-deepl] refused ${url.pathname}: UI tests never translate with DeepL`);
     const headers = new Headers(init?.headers);
     const key = (headers.get("authorization") ?? "").replace("DeepL-Auth-Key ", "");
     return json(DEEPL_USAGE[key] ?? { character_count: 0, character_limit: 500_000 });
   }
+  const engine = engineFake(url, init);
+  if (engine) return engine;
   const shop = shopByDomain(url.hostname);
   if (shop && url.pathname === "/admin/oauth/access_token") {
     return json({

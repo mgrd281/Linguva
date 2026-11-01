@@ -98,3 +98,29 @@ describe("request error log (entry.server handleError)", () => {
     expect(lines.map((line) => JSON.parse(line).err.message)).toEqual(["monthly character limit reached (19000 + 2000 > 20000)", "Job stopped: PLAN_BULK"]);
   });
 });
+
+describe("log redaction of translation engine credentials", () => {
+  it("never writes an Azure or Google key, a service account's key file, an assertion or a token", () => {
+    const { log, lines } = capture();
+    const values = {
+      azure: "uiazurekey0004fictional0000000000",
+      azureLower: "uiazurekey0005fictional0000000000",
+      google: "ui-google-key-0005-fictional0000",
+      googleLower: "ui-google-key-0006-fictional0000",
+      googleUpper: "ui-google-key-0007-fictional0000",
+      pem: "-----BEGIN PRIVATE KEY-----fictional0008",
+      pem2: "-----BEGIN PRIVATE KEY-----fictional0009",
+      assertion: "eyJ.fictional-assertion-0010.sig",
+      token: "ya29.fictional-access-token-0011",
+      json: '{"type":"service_account","fictional":"0012"}',
+    };
+    log.info({ headers: { "Ocp-Apim-Subscription-Key": values.azure } }, "azure request");
+    log.info({ request: { headers: { "ocp-apim-subscription-key": values.azureLower } } }, "azure request");
+    log.info({ headers: { "X-goog-api-key": values.google, "x-goog-api-key": values.googleLower, "X-Goog-Api-Key": values.googleUpper } }, "google request");
+    log.info({ credentials: { private_key: values.pem, privateKey: values.pem2 } }, "service account");
+    log.info({ body: { assertion: values.assertion, access_token: values.token } }, "token");
+    log.info({ credentials: values.json }, "config");
+    const output = lines.join("");
+    for (const [name, value] of Object.entries(values)) expect(output, name).not.toContain(value);
+  });
+});

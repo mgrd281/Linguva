@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { chargeForFailure, chargeForResult } from "../../app/.server/usage/engine-charge";
+import { TranslationProviderError } from "../../app/.server/providers/types";
 import {
   getMonthlyUsage,
+  getMonthlyUsageByProvider,
   getOriginUsageSince,
   periodKey,
   QuotaExceededError,
@@ -10,6 +13,7 @@ import {
   settleUsage,
 } from "../../app/.server/usage/usage-ledger";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
+import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { ownerDb, resetDatabase } from "../support/db";
 
 const app = new PrismaClient();
@@ -117,5 +121,69 @@ describe("usage ledger", () => {
     const s = await shop();
     await reserveUsage({ shopId: s.id, key: "x", chars: 10, limit: 50, provider: "deepl" }, app);
     await expect(app.$executeRawUnsafe(`DELETE FROM "UsageLedger"`)).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("usage per engine", () => {
+  async function platformToday(): Promise<number> {
+    const rows = await ownerDb.$queryRaw<Array<{ chars: bigint }>>`SELECT "chars" FROM "PlatformUsageDay" WHERE "day" = (now() AT TIME ZONE 'UTC')::date`;
+    return Number(rows[0]?.chars ?? 0);
+  }
+  // The ledger is a forced-RLS tenant table: read inside the tenant.
+  const rows = (shopId: string) =>
+    withTenant(
+      shopId,
+      (tx) => tx.usageLedger.findMany({ where: { shopId }, orderBy: [{ createdAt: "asc" }, { idempotencyKey: "asc" }], select: { kind: true, chars: true, provider: true, idempotencyKey: true } }),
+      app,
+    );
+
+  it("writes today's single settle row when the planned engine answered", async () => {
+    const s = await shop();
+    const r = await reserveUsage({ shopId: s.id, key: "one", chars: 1000, limit: 5000, provider: "deepl" }, app);
+    await settleUsage(r, 800, app, chargeForResult({ provider: "deepl", billedCharacters: 800 }));
+    expect((await rows(s.id)).map((row) => [row.kind, row.chars, row.provider, row.idempotencyKey])).toEqual([
+      ["RESERVE", 1000, "deepl", "one"],
+      ["ADJUST", -200, "deepl", "one:settle"],
+    ]);
+    expect(await platformToday()).toBe(800);
+  });
+
+  it("moves the charge to the engine that answered", async () => {
+    const s = await shop();
+    const r = await reserveUsage({ shopId: s.id, key: "fo", chars: 1000, limit: 5000, provider: "deepl" }, app);
+    await settleUsage(r, 900, app, chargeForResult({ provider: "azure", billedCharacters: 900 }));
+    expect((await rows(s.id)).map((row) => [row.kind, row.chars, row.provider, row.idempotencyKey])).toEqual([
+      ["RESERVE", 1000, "deepl", "fo"],
+      ["ADJUST", -1000, "deepl", "fo:settle"],
+      ["ADJUST", 900, "azure", "fo:settle:azure"],
+    ]);
+    expect(await getMonthlyUsage(s.id, undefined, app)).toBe(900);
+    expect(await getMonthlyUsageByProvider(s.id, undefined, app)).toEqual({ deepl: 0, azure: 900 });
+    // Settled: a later release changes nothing, and a second settle neither.
+    await releaseUsage(r, app);
+    await settleUsage(r, 900, app, chargeForResult({ provider: "azure", billedCharacters: 900 }));
+    expect(await getMonthlyUsage(s.id, undefined, app)).toBe(900);
+  });
+
+  it("charges the shop only Azure's count after DeepL's quota ran out mid-request; the platform counts DeepL's partial too", async () => {
+    const s = await shop();
+    const r = await reserveUsage({ shopId: s.id, key: "mid", chars: 1000, limit: 5000, provider: "deepl" }, app);
+    // DeepL billed 400 for its first batch, then its quota was used up; Azure translated everything (950).
+    await settleUsage(r, 950, app, chargeForResult({ provider: "azure", billedCharacters: 950, lostByEngine: { deepl: 400 } }));
+    expect(await getMonthlyUsage(s.id, undefined, app)).toBe(950);
+    expect(await platformToday()).toBe(1350);
+  });
+
+  it("charges at most the reservation when every engine failed", async () => {
+    const s = await shop();
+    const r = await reserveUsage({ shopId: s.id, key: "all", chars: 1000, limit: 5000, provider: "deepl" }, app);
+    const error = new TranslationProviderError("azure", "retryable", "fake");
+    error.billedCharacters = 1500;
+    error.billedByEngine = { deepl: 700, azure: 800 };
+    const charge = chargeForFailure(error, r.chars, r.provider);
+    await settleUsage(r, 1000, app, charge);
+    expect(await getMonthlyUsage(s.id, undefined, app)).toBe(1000);
+    expect(await getMonthlyUsageByProvider(s.id, undefined, app)).toEqual({ deepl: 700, azure: 300 });
+    expect(await platformToday()).toBe(1500);
   });
 });

@@ -55,7 +55,7 @@ Every scope in `shopify.app.toml` has a row here (`tests/unit/scopes-documented.
 - Rotation: `TOKEN_ENCRYPTION_KEYS=kid1:…,kid2:…`; the first key encrypts, all of them decrypt. There is no re-encryption job: a session is encrypted with the active key whenever the library stores it (token exchange, refresh of an expiring offline token). One whose key was removed is treated as missing, and the next app open exchanges a new token.
 - AI provider keys never reach the browser or the database. The internal AI cost rate reaches only the owner's complimentary stores (the Plan page's estimate; `tests/integration/complimentary.test.ts`).
 - The owner role's database URL (`MIGRATION_DATABASE_URL`) is used by the pre-deploy migration and the operator tools only; the web process drops it from its environment at start (§5n).
-- Logs: pino with a redaction list for credentials (access, refresh, id and session tokens, keys, secrets, passwords, `Authorization` and cookie headers in both spellings, Shopify's access token header), at the top level and up to two levels down (`tests/unit/logger.test.ts`). Unexpected request errors are logged with name and code; the message only for the app's own errors, whose messages are built from codes and numbers (a Prisma validation error repeats the failed call's arguments, merchant text included).
+- Logs: pino with a redaction list for credentials (access, refresh, id and session tokens, keys, secrets, passwords, `Authorization` and cookie headers in both spellings, Shopify's access token header, Azure's `Ocp-Apim-Subscription-Key` and Google's `X-goog-api-key` in their spellings, a Google service account's `private_key` / `privateKey`, `credentials`, the signed `assertion` and `access_token`), at the top level and up to two levels down (`tests/unit/logger.test.ts`). Unexpected request errors are logged with name and code; the message only for the app's own errors, whose messages are built from codes and numbers (a Prisma validation error repeats the failed call's arguments, merchant text included).
 - CI runs secret scanning (gitleaks) and `pnpm audit --prod --audit-level high` (§5f). There is no Dependabot configuration.
 
 ## 4. Output safety (XSS)
@@ -127,6 +127,17 @@ Grants of the runtime role on global tables: `AuditLog` insert only (no read); `
 - `AI_PLATFORM_DAILY_CHAR_LIMIT=3000000`: at most $82.50 a day across all shops. The code default stays 100,000 for development; with `BILLING_REQUIRED=true` and a platform cap below 1,000,000 the app logs a warning at start (`configWarnings` in `app/.server/lib/config.ts`), because one store's first pass would stop AI translation for every store.
 - **Raise rule:** raise the platform cap when any day in the last 7 reaches 70% of it, or when `PLATFORM_LIMIT` appears in a job. Target: max(3,000,000; 3 × the sum of paying shops' monthly allowances ÷ 30), rounded up to whole millions, and always at least 3× the per-shop cap, so one first pass never blocks other stores. Move from DeepL Growth to Enterprise when the monthly total nears 40,000,000 characters.
 - **Outer guard:** cost control in the DeepL account at €150 a month at launch, a backstop (DeepL then refuses every request until its billing period ends), not a throttle.
+- **Further engines** (docs/AI_ENGINES.md): the platform cap is engine-agnostic. It counts the text without markup (Azure and Google bill markup too, a few percent on rich text) and includes partials lost to a failover (they cost the platform; the shop is charged only the answering engine). Owner-side caps: Azure F0 is a hard cap (2,000,000 characters a month), S1 only a budget alert in Azure Cost Management; Google's "characters per day" quota in the console.
+
+### 4a. Translation engines (Microsoft Azure, Google Cloud)
+
+- Keys only in headers, never in a URL (proxies and fetch errors log URLs). Azure's key goes only to Microsoft's two documented hosts: `AZURE_TRANSLATOR_ENDPOINT` must be `https://api-eur.cognitive.microsofttranslator.com` or `https://api.cognitive.microsofttranslator.com` (https only); its language list is read from the documented global URL without a key; its key check is an empty translate call to the same endpoint with the same headers (one empty text, no merchant data); the region is validated (`^[a-z0-9]{2,32}$`) before it is put into a header. Google's token URL is fixed (`https://oauth2.googleapis.com/token`, never the key file's `token_uri`); the JWT is signed with `node:crypto`, the token cache is keyed by a hash of the client email and key id.
+- No body in errors or logs: adapter error messages carry the HTTP status, a numeric code or reason that passed a token check and the request id, never the body (it can echo input); `TranslationProviderError` stays in `PLAIN_MESSAGE_ERRORS`. The adapters log nothing.
+- Staging refuses `AZURE_TRANSLATOR_KEY`, `GOOGLE_TRANSLATE_API_KEY` and `GOOGLE_TRANSLATE_CREDENTIALS`, even a value that doesn't validate (the message names the variable, never the value).
+- A variable that doesn't validate turns its engine off with a warning and a preflight `fail` instead of refusing the start: a typo in a new variable must not take a production store down. With only DeepL configured, `getTranslationProvider()` returns today's DeepL object.
+- Consent is fail-closed: a router translates with none of its engines unless the request lists the engines the shop's consent covers (`request.engines`); an empty list calls nothing.
+- The worker heartbeat and logs show the engine label (`deepl+azure`) and ids only.
+- Tests can't reach a real engine: `tests/support/env.ts` blanks every engine credential and `tests/support/no-real-engines.ts` refuses DeepL, Microsoft and Google hosts in the unit, integration, security and performance suites; the UI test server answers only the engines' free checks and refuses anything that would translate.
 
 ## 5b. No unintended publishing (implemented, tested)
 
@@ -320,13 +331,13 @@ There is no admin UI. Operators use the command-line tools with the owner role o
 | T9 | Admin account takeover | Phishing / password reuse | No admin UI yet (§6): operator tools need the owner role's credentials on the operator's machine. Planned: MFA, separate domain, rate-limited login, alerts on login | High |
 | T10 | Worker processes job for uninstalled/redacted shop | Stale queue | Worker re-checks Shop.status. Uninstall cancels queued jobs | Medium |
 | T11 | Translation loop | Our write triggers `products/update`, which triggers re-translation | Compare source digest/hash, ignore if unchanged; ignore events attributable to translation-only changes; debounce | Medium |
-| T12 | Sensitive data sent to AI provider | Merchant content includes personal data | No customer scopes; consent recorded in ShopSettings; DPA per provider; EU-region endpoints where available | Medium (legal review) |
+| T12 | Sensitive data sent to AI provider | Merchant content includes personal data | No customer scopes; consent recorded in ShopSettings per engine and data location (`ai-consent.ts`), a router uses only consented engines; DPA per provider (DeepL, and Microsoft / Google before their keys are added); EU endpoints by default (Azure `api-eur`, Google v3 `translate-eu`) | Medium (legal review) |
 | T13 | Dependency compromise | Malicious npm package | Lockfile, pinned versions, audit in CI, minimal deps | Medium |
 | T14 | Log leakage | Logging translated text or tokens | Structured logger with a tested redaction list; request errors keep name and code, and the message only of the app's own errors (§3); call sites log ids and codes; no request bodies logged | Medium |
 
 ## 8. Items flagged for qualified review
 
-- GDPR basis for sending merchant content to AI providers (Art. 28 processor role, subprocessor list, SCCs for non-EU providers).
+- GDPR basis for sending merchant content to AI providers (Art. 28 processor role, subprocessor list, SCCs for non-EU providers), per engine: DeepL; Microsoft Ireland Operations Ltd. and Google Cloud EMEA Ltd. once set up, including the transfer mechanism for their global processing options (docs/LEGAL_FACTS.md, open question 4a).
 - Retention periods for billing records under German law (HGB §257 / AO §147).
 - Privacy policy and DPA wording.
 

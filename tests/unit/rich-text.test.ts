@@ -63,7 +63,7 @@ describe("rich text in the translation engine", () => {
     const prepared = await prepareTranslation({ fields: [field] });
     // Sentences only: no JSON keys, URLs or markup sent to the provider.
     expect(prepared.pending.join(" ")).not.toMatch(/"type"|https:|data-rt/);
-    const result = await completeTranslation(prepared, { provider: new MockTranslationProvider(), sourceLocale: "en", targetLocale: "de" });
+    const result = await completeTranslation(prepared, { engines: ["deepl"], provider: new MockTranslationProvider(), sourceLocale: "en", targetLocale: "de" });
     const outcome = result.outcomes[0]!;
     expect(outcome.status).toBe("translated");
     const value = JSON.parse((outcome as { value: string }).value);
@@ -82,7 +82,7 @@ describe("rich text in the translation engine", () => {
         return { translations: req.segments.map((s) => s.replace(/<[^>]+>/g, "")), billedCharacters: 0, provider: "lossy" };
       },
     } as TranslationProvider;
-    const result = await completeTranslation(prepared, { provider: lossy, sourceLocale: "en", targetLocale: "de" });
+    const result = await completeTranslation(prepared, { engines: ["deepl"], provider: lossy, sourceLocale: "en", targetLocale: "de" });
     expect(result.outcomes[0]).toMatchObject({ status: "rejected" });
   });
 
@@ -93,7 +93,7 @@ describe("rich text in the translation engine", () => {
         return { translations: req.segments.map((s) => s.replace(/[A-Za-z]+(?![^<]*>)/g, "نص")), billedCharacters: 0, provider: "ar" };
       },
     } as TranslationProvider;
-    const result = await completeTranslation(await prepareTranslation({ fields: [field] }), { provider: arabic, sourceLocale: "en", targetLocale: "ar" });
+    const result = await completeTranslation(await prepareTranslation({ fields: [field] }), { engines: ["deepl"], provider: arabic, sourceLocale: "en", targetLocale: "ar" });
     const outcome = result.outcomes[0]!;
     expect(outcome.status).toBe("translated");
     expect((outcome as { issues: Array<{ code: string }> }).issues.map((i) => i.code)).not.toContain("WRONG_SCRIPT");

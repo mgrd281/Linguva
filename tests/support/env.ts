@@ -17,4 +17,12 @@ export const testEnv: Record<string, string> = {
   MIGRATION_DATABASE_URL:
     process.env.TEST_MIGRATION_DATABASE_URL ??
     "postgresql://linguva_owner:linguva_owner_dev@localhost:5432/linguva_test",
+  // Translation engine credentials are blanked (empty = unset), so a key
+  // exported in the developer's shell never builds a real adapter in a test
+  // run. Tests that need an engine inject a fake fetch with a fictional key.
+  DEEPL_API_KEY: "",
+  DEEPL_API_KEYS: "",
+  AZURE_TRANSLATOR_KEY: "",
+  GOOGLE_TRANSLATE_API_KEY: "",
+  GOOGLE_TRANSLATE_CREDENTIALS: "",
 };

@@ -82,6 +82,8 @@ const SIMPLE: Readonly<Record<string, MessageKey>> = {
   UNTRANSLATED: "review.hint.UNTRANSLATED",
   WRONG_SCRIPT: "review.hint.WRONG_SCRIPT",
   FORMALITY_MISMATCH: "review.hint.FORMALITY_MISMATCH",
+  FORMALITY_NOT_APPLIED: "review.hint.FORMALITY_NOT_APPLIED",
+  SPACING_CHANGED: "review.hint.SPACING_CHANGED",
   SEO_SAME_AS_SOURCE: "review.hint.SEO_SAME_AS_SOURCE",
   EMPTY_TRANSLATION: "review.hint.EMPTY_TRANSLATION",
 };

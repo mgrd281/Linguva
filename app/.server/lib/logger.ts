@@ -2,8 +2,10 @@ import pino from "pino";
 
 /**
  * Keys that hold credentials: provider and Shopify headers (deepl.ts sends
- * `Authorization: DeepL-Auth-Key …`), session tokens, keys and cookies.
- * Header names in both spellings; hyphenated ones in brackets.
+ * `Authorization: DeepL-Auth-Key …`, azure.ts `Ocp-Apim-Subscription-Key`,
+ * google.ts `X-goog-api-key` or a Bearer token), a Google service account's
+ * key file and the assertion signed with it, session tokens, keys and
+ * cookies. Header names in their spellings; hyphenated ones in brackets.
  */
 const SECRET_KEYS = [
   "accessToken",
@@ -22,6 +24,16 @@ const SECRET_KEYS = [
   '["Set-Cookie"]',
   '["x-shopify-access-token"]',
   '["X-Shopify-Access-Token"]',
+  '["ocp-apim-subscription-key"]',
+  '["Ocp-Apim-Subscription-Key"]',
+  '["x-goog-api-key"]',
+  '["X-goog-api-key"]',
+  '["X-Goog-Api-Key"]',
+  "private_key",
+  "privateKey",
+  "assertion",
+  "access_token",
+  "credentials",
 ];
 
 /** Each key at the top level and up to two levels down: { headers: { Authorization } }, { ctx: { session: { accessToken } } }. */

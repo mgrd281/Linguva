@@ -4,7 +4,7 @@
  * local database and Redis, never to Shopify. Prints names, never values.
  * Exit code 1 when a check fails.
  */
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { Redis } from "ioredis";
 import { getConfig } from "../../app/.server/lib/config";
@@ -15,6 +15,7 @@ import {
   checkNodeVersion,
   checkProviderCost,
   checkStoreTargets,
+  checkTranslationEngines,
   type CheckResult,
 } from "./preflight-checks";
 
@@ -38,6 +39,8 @@ try {
   results.push({ level: "fail", name: "Environment", detail: error instanceof Error ? error.message : String(error) });
 }
 results.push(checkEncryptionKeys(process.env, `${root}/.env.example`), checkProviderCost(process.env));
+// The app's privacy policy as the server serves it (its engine sections).
+results.push(...checkTranslationEngines(process.env, { privacy: readFileSync(`${root}/site/privacy.html`, "utf8") }));
 
 async function databaseChecks() {
   if (!process.env.DATABASE_URL) return;

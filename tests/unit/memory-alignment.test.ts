@@ -70,6 +70,7 @@ describe("translation with memory", () => {
   it("uses memory for known segments and sends only the rest", async () => {
     const provider = counting();
     const result = await translateFields({
+      engines: ["deepl"],
       provider,
       fields: [{ key: "body_html", value: "<p>Free shipping</p><p>New text</p>", type: "HTML" }],
       sourceLocale: "en",
@@ -102,6 +103,7 @@ describe("translation with memory", () => {
   it("doesn't call the provider when memory covers everything", async () => {
     const provider = counting();
     const result = await translateFields({
+      engines: ["deepl"],
       provider,
       fields: [{ key: "title", value: "Free shipping", type: "SINGLE_LINE_TEXT_FIELD" }],
       sourceLocale: "en",
@@ -115,6 +117,7 @@ describe("translation with memory", () => {
 
   it("still validates memory results", async () => {
     const result = await translateFields({
+      engines: ["deepl"],
       provider: counting(),
       fields: [{ key: "title", value: "Pack of 12", type: "SINGLE_LINE_TEXT_FIELD" }],
       sourceLocale: "en",
@@ -127,6 +130,7 @@ describe("translation with memory", () => {
   it("enforces preferred glossary wording that the provider never sees", async () => {
     const provider = counting();
     const result = await translateFields({
+      engines: ["deepl"],
       provider,
       fields: [{ key: "title", value: "Warm hoodie", type: "SINGLE_LINE_TEXT_FIELD" }],
       sourceLocale: "en",

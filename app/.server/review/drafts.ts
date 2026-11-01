@@ -180,8 +180,14 @@ export async function pendingDraftDigests(
   resourceGids: readonly string[],
   locale: string,
   client: PrismaClient = defaultClient,
-  /** False: a field the checks refused is tried again (a translation the merchant started). */
-  options: { includeRefused?: boolean } = {},
+  /**
+   * includeRefused false: a field the checks refused is tried again (a translation the merchant
+   * started). engine: the engine planned for the language; a refusal because an engine couldn't
+   * keep the markup (ENGINE_MARKUP) holds the field only while that same engine is planned, so
+   * it is tried again once another engine serves the language. Without it, such a refusal holds
+   * the field like any other (a caller that can't tell the engine re-sends nothing).
+   */
+  options: { includeRefused?: boolean; engine?: string } = {},
 ): Promise<Map<string, string>> {
   if (resourceGids.length === 0) return new Map();
   const rows = await withTenant(
@@ -195,13 +201,27 @@ export async function pendingDraftDigests(
           resourceGid: { in: [...new Set(resourceGids)] },
           ...(options.includeRefused === false ? { NOT: { status: "REJECTED", reviewedBy: CHECKS_REVIEWER } } : {}),
         },
-        select: { resourceGid: true, key: true, sourceDigest: true, status: true, provider: true },
+        select: { resourceGid: true, key: true, sourceDigest: true, status: true, provider: true, reviewedBy: true, ...(options.engine ? { issues: true } : {}) },
       }),
     client,
   );
+  const engineRefusal = (r: (typeof rows)[number]) =>
+    options.engine !== undefined &&
+    r.status === "REJECTED" &&
+    r.reviewedBy === CHECKS_REVIEWER &&
+    firstIssueCode((r as { issues?: unknown }).issues) === "ENGINE_MARKUP" &&
+    r.provider !== options.engine;
   return new Map(
-    rows.map((r) => [`${r.resourceGid}|${r.key}`, r.status === "PENDING" && isHumanDraft(r.provider) ? ANY_SOURCE : r.sourceDigest]),
+    rows
+      .filter((r) => !engineRefusal(r))
+      .map((r) => [`${r.resourceGid}|${r.key}`, r.status === "PENDING" && isHumanDraft(r.provider) ? ANY_SOURCE : r.sourceDigest]),
   );
+}
+
+/** The code of a stored issue list's first entry (a checks refusal stores its reason there). */
+function firstIssueCode(issues: unknown): string | null {
+  const first = Array.isArray(issues) ? (issues[0] as { code?: unknown } | undefined) : undefined;
+  return typeof first?.code === "string" ? first.code : null;
 }
 
 export async function listPendingDrafts(

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
-import { billedBeforeFailure, type TranslationProvider } from "../providers/types";
+import { type TranslationProvider } from "../providers/types";
+import { isEngineRouter, JOB_DEADLINE_MS } from "../providers/engine-router";
+import { plannedEngine, routerSignal } from "../providers/index";
+import { chargedChars, chargeForFailure, chargeForResult, type EngineCharge } from "../usage/engine-charge";
+import { logger } from "../lib/logger";
 import { shopKey } from "../queue/redis";
 import {
   getTranslatableResource,
@@ -20,7 +24,7 @@ import { loadTranslationContext } from "../translation/translation-context";
 import { latestRevisions } from "../translation/revisions";
 import { recordMemoryUse } from "../memory/translation-memory";
 import { pendingDraftDigests, recordRejectedAttempts, saveDrafts } from "../review/drafts";
-import { formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
+import { consentedEngines, formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { releaseUsage, reserveUsage, settleUsage, type UsageBudget } from "../usage/usage-ledger";
 import { smartPaused } from "../smart/config";
 import { budgetWindows, SMART_REQUESTED_BY, smartCoverageTypes } from "../../lib/smart-auto";
@@ -62,6 +66,10 @@ export interface JobDependencies {
   billingFor?(shopId: string): Promise<{ configured: boolean; entitlements: Entitlements; trialEndsAt?: Date }>;
   keyPrefix: string;
   shopifyLimiter?: Limiter;
+  /** Aborted when the worker shuts down: a router stops before its next engine. */
+  shutdown?: AbortSignal;
+  /** How often a router's call checks whether its job was cancelled (default CANCEL_POLL_MS; tests). */
+  cancelPollMs?: number;
   /** Resources per discovery page (default DISCOVERY_PAGE_SIZE). */
   discoveryPageSize?: number;
 }
@@ -148,10 +156,19 @@ export async function runDiscoveryPage(
     first: deps.discoveryPageSize ?? DISCOVERY_PAGE_SIZE,
   });
   const pageGids = page.resources.map((r) => r.resourceId);
+  // A refusal for markup an engine couldn't keep is tried again once another engine serves the language.
+  const engine = isAutomaticJob(job) && isEngineRouter(deps.provider)
+    ? await plannedEngine(
+        deps.provider,
+        job.targetLocale,
+        consentedEngines(await getShopSettings(payload.shopId, deps.prisma)),
+        page.resources[0] ? sourceLocaleOf(page.resources[0]) : undefined,
+      )
+    : undefined;
   const [latest, pendingDrafts] = await Promise.all([
     latestRevisions(payload.shopId, pageGids, job.targetLocale, deps.prisma),
     // As for each item: a translation the merchant starts tries refused fields again.
-    pendingDraftDigests(payload.shopId, pageGids, job.targetLocale, deps.prisma, { includeRefused: isAutomaticJob(job) }),
+    pendingDraftDigests(payload.shopId, pageGids, job.targetLocale, deps.prisma, { includeRefused: isAutomaticJob(job), ...(engine ? { engine } : {}) }),
   ]);
   // With images and custom fields included, every item is checked: whether
   // they need work is only known after listing them (per item).
@@ -302,6 +319,9 @@ export async function processItem(
 
   const settings = await getShopSettings(payload.shopId, deps.prisma);
   if (!hasCurrentAiConsent(settings)) throw new JobStopError("CONSENT_REQUIRED");
+  // Only the engines the shop's consent covers (the engine planned for the language is read once
+  // the resource's own language is known, below).
+  const engines = consentedEngines(settings);
   // Plans can change while a job runs: check before every item (the smart schedule's own entitlement
   // first, so its jobs stop with the reason that pauses it).
   const billing = deps.billingFor ? await deps.billingFor(payload.shopId) : null;
@@ -398,6 +418,9 @@ export async function processItem(
   // Coverage follows what the job read: an original changed in Shopify (no webhook for pages and
   // blogs, or a refresh that didn't run) shows as outdated, and the job's drafts as drafts.
   await noteCoverageRead(payload.shopId, job.targetLocale, [resource], readAt, deps.prisma);
+  // The first engine planned for this pair is what the reservation names and what refused fields
+  // are compared with (no I/O unless several engines may be used).
+  const firstEngine = await plannedEngine(deps.provider, job.targetLocale, engines, sourceLocaleOf(resource));
   // Publishing needs automatic publishing on the job AND still on in the
   // shop's settings: switching back to review stops running jobs publishing.
   // Even then only results without quality warnings go live; flagged ones
@@ -426,6 +449,8 @@ export async function processItem(
     autoPublish,
     admin,
     itemId: item.id,
+    engines,
+    planned: firstEngine,
   };
 
   const parentTitle = isBulkResourceType(job.resourceType) ? resourceTitle(job.resourceType, resource.content) : null;
@@ -511,6 +536,39 @@ export async function processItem(
   return { status, ...(errorCode ? { errorCode } : {}) };
 }
 
+/** Partials lost to a failover: engine ids and numbers only. */
+function logLost(charge: EngineCharge): void {
+  for (const [engine, lostChars] of Object.entries(charge.lost)) logger.info({ engine, lostChars }, "translation engine partial lost to failover");
+}
+
+const CANCEL_POLL_MS = 10_000;
+
+/**
+ * Routers only: a signal aborted when the job is cancelled (polled while the
+ * call runs), the worker shuts down, or the job deadline passes, so the
+ * router doesn't walk its whole chain for a stopped job. A bare provider
+ * gets none and no poll starts (DeepL-only behaves as before).
+ */
+function stopSignal(run: RunContext): { signal: AbortSignal; dispose(): void } | null {
+  const { deps, payload } = run;
+  if (!isEngineRouter(deps.provider)) return null;
+  const controller = new AbortController();
+  const signal = routerSignal(deps.provider, deps.shutdown ? AbortSignal.any([controller.signal, deps.shutdown]) : controller.signal, JOB_DEADLINE_MS)!;
+  const timer = setInterval(() => {
+    withTenant(
+      payload.shopId,
+      (tx) => tx.translationJob.findFirst({ where: { id: run.jobId, shopId: payload.shopId }, select: { status: true, cancelRequestedAt: true } }),
+      deps.prisma,
+    )
+      .then((job) => {
+        if (!job || job.cancelRequestedAt || job.status === "CANCELLED" || job.status === "FAILED") controller.abort();
+      })
+      .catch(() => undefined);
+  }, deps.cancelPollMs ?? CANCEL_POLL_MS);
+  timer.unref?.();
+  return { signal, dispose: () => clearInterval(timer) };
+}
+
 interface RunContext {
   deps: JobDependencies;
   payload: ItemPayload;
@@ -533,6 +591,10 @@ interface RunContext {
   dailyLimit?: number;
   autoPublish: boolean;
   admin: Admin;
+  /** The engines the shop's consent covers (consentedEngines). */
+  engines: readonly string[];
+  /** The engine the run's requests go to first (the reservations' provider). */
+  planned: string;
 }
 
 interface ResourceRunResult {
@@ -573,8 +635,12 @@ async function translateOneResource(
   const [latest, pendingDrafts] = await Promise.all([
     latestRevisions(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma),
     // Automatic checks don't retry what the checks refused for the same original; a translation
-    // the merchant starts does (they may have changed the glossary meanwhile).
-    pendingDraftDigests(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma, { includeRefused: run.automatic }),
+    // the merchant starts does (they may have changed the glossary meanwhile). Markup an engine
+    // couldn't keep is tried again once another engine is planned for the language.
+    pendingDraftDigests(payload.shopId, [resource.resourceId], run.targetLocale, deps.prisma, {
+      includeRefused: run.automatic,
+      ...(isEngineRouter(deps.provider) ? { engine: run.planned } : {}),
+    }),
   ]);
   const { fields, protectedKeys } = planResourceWork(resource, {
     latest,
@@ -600,7 +666,8 @@ async function translateOneResource(
 
   // One reservation per resource and run, for what the provider will
   // actually be sent: every run is billed separately and a failed call
-  // released (what earlier DeepL batches billed stays counted).
+  // released (what earlier batches billed stays counted; partials lost to a
+  // failover count for the platform only).
   const reservation = prepared.providerChars
     ? await reserveUsage(
         {
@@ -612,7 +679,7 @@ async function translateOneResource(
           limit: run.monthlyLimit,
           dailyLimit: run.dailyLimit,
           platformDailyLimit: deps.platformDailyLimit,
-          provider: deps.provider!.id,
+          provider: run.planned,
           ...(run.budget ? { budget: run.budget } : {}),
         },
         deps.prisma,
@@ -620,31 +687,40 @@ async function translateOneResource(
     : null;
 
   let result: Awaited<ReturnType<typeof completeTranslation>>;
+  const stop = stopSignal(run);
   try {
     result = await completeTranslation(prepared, {
       provider: deps.provider!,
+      engines: run.engines,
       sourceLocale,
       targetLocale: run.targetLocale,
       glossary: context.glossary.rules,
       context: translationContext(run.settings.aiStoreContext, target.context),
       formality: formalityFor(run.settings, run.targetLocale),
+      ...(stop ? { signal: stop.signal } : {}),
     });
   } catch (error) {
     if (reservation) {
-      const billed = billedBeforeFailure(error);
-      if (billed > 0) {
-        await settleUsage(reservation, billed, deps.prisma);
-        await recordBilled(payload.shopId, run.itemId, run.jobId, billed, deps.prisma);
+      const charge = chargeForFailure(error, reservation.chars, reservation.provider);
+      const billed = chargedChars(charge);
+      logLost(charge);
+      if (billed > 0 || Object.keys(charge.lost).length > 0) {
+        await settleUsage(reservation, billed, deps.prisma, charge);
+        if (billed > 0) await recordBilled(payload.shopId, run.itemId, run.jobId, billed, deps.prisma);
       } else {
         await releaseUsage(reservation, deps.prisma);
       }
     }
     throw error;
+  } finally {
+    stop?.dispose();
   }
-  if (reservation) await settleUsage(reservation, result.billedCharacters, deps.prisma);
+  const charge = chargeForResult(result);
+  logLost(charge);
+  if (reservation) await settleUsage(reservation, result.billedCharacters, deps.prisma, charge);
   // Counted on the item and job as soon as the provider billed it: their totals match the
   // ledger also when publishing fails afterwards and the item runs again.
-  await recordBilled(payload.shopId, run.itemId, run.jobId, result.billedCharacters, deps.prisma);
+  await recordBilled(payload.shopId, run.itemId, run.jobId, chargedChars(charge), deps.prisma);
   await recordMemoryUse(payload.shopId, result.memoryEntryIds, deps.prisma);
 
   const fieldByKey = new Map(fields.map((f) => [f.key, f]));

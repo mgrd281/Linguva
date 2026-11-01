@@ -134,6 +134,7 @@ describe("segments made only of glossary terms", () => {
     const { translateFields } = await import("../../app/.server/translation/translate-fields");
     const sent: string[][] = [];
     const result = await translateFields({
+      engines: ["deepl"],
       provider: {
         id: "t",
         translate: async (r) => {

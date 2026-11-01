@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import type { EngineCharge } from "./engine-charge";
 
 /**
  * monthly: the shop's monthly allowance; daily: the shop's daily cap;
@@ -121,6 +122,29 @@ export async function getMonthlyUsage(
   client: PrismaClient = defaultClient,
 ): Promise<number> {
   return withTenant(shopId, (tx) => sumChars(tx, shopId, period), client);
+}
+
+/**
+ * The shop's characters this month per engine (rows without one count as
+ * DeepL's, the only engine before others existed). Charged characters only:
+ * partials lost to failover aren't in a shop's ledger. Inside the tenant.
+ */
+export async function getMonthlyUsageByProvider(
+  shopId: string,
+  period: string = periodKey(),
+  client: PrismaClient = defaultClient,
+): Promise<Record<string, number>> {
+  const rows = await withTenant(
+    shopId,
+    (tx) => tx.usageLedger.groupBy({ by: ["provider"], where: { shopId, periodKey: period }, _sum: { chars: true } }),
+    client,
+  );
+  const usage: Record<string, number> = {};
+  for (const row of rows) {
+    const provider = row.provider ?? "deepl";
+    usage[provider] = (usage[provider] ?? 0) + (row._sum.chars ?? 0);
+  }
+  return usage;
 }
 
 export interface Reservation {
@@ -251,12 +275,22 @@ export async function reserveUsage(
  * Records actual usage: the difference to the reservation is adjusted. The
  * settle row is written even without a difference, so a later release of the
  * same reservation (an error after the provider call) can't undo billed usage.
+ *
+ * `charge` (engine-charge.ts) says which engines answered: when another engine
+ * than the planned one was charged, or failover lost partials, the planned
+ * engine's `:settle` row is followed by one `:settle:<engine>` row per other
+ * engine, and lost partials go to the platform counter only. Without it, or
+ * naming only the planned engine, today's single row.
  */
 export async function settleUsage(
   reservation: Reservation,
   actualChars: number,
   client: PrismaClient = defaultClient,
+  charge?: EngineCharge,
 ): Promise<void> {
+  const others = charge ? Object.entries(charge.byEngine).filter(([engine]) => engine !== reservation.provider) : [];
+  const lost = charge ? Object.values(charge.lost).reduce((sum, chars) => sum + chars, 0) : 0;
+  if (charge && (others.length > 0 || lost > 0)) return settleByEngine(reservation, charge, others, lost, client);
   const delta = actualChars - reservation.chars;
   await withTenant(
     reservation.shopId,
@@ -272,6 +306,40 @@ export async function settleUsage(
         createdAt: reservation.at,
       });
       if (inserted && delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
+    },
+    client,
+  );
+}
+
+async function settleByEngine(
+  reservation: Reservation,
+  charge: EngineCharge,
+  others: Array<[string, number]>,
+  lost: number,
+  client: PrismaClient,
+): Promise<void> {
+  const planned = charge.byEngine[reservation.provider] ?? 0;
+  const charged = Object.values(charge.byEngine).reduce((sum, chars) => sum + chars, 0);
+  await withTenant(
+    reservation.shopId,
+    async (tx) => {
+      const row = (chars: number, provider: string, idempotencyKey: string) => ({
+        shopId: reservation.shopId,
+        periodKey: reservation.period,
+        kind: "ADJUST" as const,
+        chars,
+        provider,
+        idempotencyKey,
+        origin: reservation.origin ?? null,
+        createdAt: reservation.at,
+      });
+      // `:settle` first: releaseUsage looks for it, so the reservation can't be released afterwards.
+      const inserted = await insertOnce(tx, row(planned - reservation.chars, reservation.provider, `${reservation.key}:settle`));
+      if (!inserted) return;
+      for (const [engine, chars] of others) await insertOnce(tx, row(chars, engine, `${reservation.key}:settle:${engine}`));
+      // The platform counts what every engine billed, the lost partials too (they cost the platform).
+      const delta = charged - reservation.chars + lost;
+      if (delta !== 0) await addPlatformChars(tx, reservation.day, delta, null);
     },
     client,
   );

@@ -72,6 +72,7 @@ describe("links", () => {
 describe("through the translation engine", () => {
   it("lists and links are machine-translated; malformed values are left alone", async () => {
     const { outcomes } = await translateFields({
+      engines: ["deepl"],
       provider: german,
       sourceLocale: "en",
       targetLocale: "de",

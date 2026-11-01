@@ -12,7 +12,7 @@ const placeholders = (m: Message) =>
   [...new Set((typeof m === "string" ? [m] : [m.one, m.other]).flatMap((s) => [...s.matchAll(/\{(\w+)\}/g)].map((x) => x[1])))].sort();
 
 // Words that are the same in English and German, French or Spanish.
-const SAME_IN_BOTH = new Set(["Original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—"]);
+const SAME_IN_BOTH = new Set(["Original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—", "Region {region}"]);
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
@@ -86,6 +86,11 @@ describe("interface language", () => {
         expect(JSON.stringify(message), `${locale} ${key}`).not.toMatch(/[\u00A0\u2000-\u200B\u202F\uFEFF\t]/);
       }
     }
+  });
+
+  it("calls the Settings page by its navigation name in Spanish (Configuración, never Ajustes)", () => {
+    expect(MESSAGES.es["common.nav.settings"]).toBe("Configuración");
+    for (const [key, message] of Object.entries(MESSAGES.es)) expect(JSON.stringify(message), key).not.toMatch(/\bAjustes\b/);
   });
 
   it("keeps keys in their area and defines each key once", () => {

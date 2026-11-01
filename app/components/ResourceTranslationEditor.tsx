@@ -12,6 +12,7 @@ import { HtmlPreview } from "./HtmlPreview";
 import { StructuredEditor, StructuredView } from "./StructuredValue";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
 import { isSeoKey } from "../lib/seo";
+import { isDeepLOnly, processorsText } from "../lib/engine-texts";
 import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
 import { useI18n } from "../i18n/react";
@@ -198,9 +199,18 @@ export function ResourceTranslationEditor() {
 
       {data.ai.available && !data.ai.consent ? (
         <s-banner tone="info" heading={t("editor.consent.heading")}>
-          <s-paragraph>{t("editor.consent.body", { singular })}</s-paragraph>
+          <s-paragraph>
+            {isDeepLOnly(data.ai.consentTokens)
+              ? t("editor.consent.body", { singular })
+              : t("editor.consent.body.multi", { singular, processors: processorsText(i18n, data.ai.consentTokens) })}
+          </s-paragraph>
+          {/* The page showed an older list of services: nothing was stored, the list above is the current one. */}
+          {consentFetcher.data?.kind === "error" && consentFetcher.data.code === "CONSENT_CHANGED" ? (
+            <s-paragraph>{t("editor.aiError.CONSENT_CHANGED")}</s-paragraph>
+          ) : null}
           <consentFetcher.Form method="post">
             <input type="hidden" name="intent" value="grant-consent" />
+            <input type="hidden" name="consentTokens" value={data.ai.consentTokens.join(",")} />
             <s-button type="submit" {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
               {t("editor.consent.allow")}
             </s-button>
@@ -386,6 +396,8 @@ export function ResourceTranslationEditor() {
       <saveFetcher.Form ref={saveFormRef} method="post" onInput={onFormInput} onChange={onFormInput}>
         <input type="hidden" name="intent" value="save" />
         {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
+        {/* Each draft's own engine (the server reads it before the form-wide one). */}
+        {ai ? Object.keys(ai.drafts).map((key) => <input key={key} type="hidden" name={`provider:${key}`} value={ai.provider} />) : null}
         {data.fields.filter((f) => !data.seoPreview || !isSeoKey(f.key)).map((field) => renderField(field))}
         {data.seoPreview ? (
           <s-section heading={t("editor.seo.heading")}>

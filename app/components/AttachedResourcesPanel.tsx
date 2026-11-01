@@ -101,6 +101,8 @@ export function AttachedResourcesPanel({
         <saveFetcher.Form method="post">
           <input type="hidden" name="intent" value="save-attached" />
           {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
+          {/* Each draft's own engine: items can be translated by different engines. */}
+          {ai ? Object.keys(ai.drafts).map((ref) => <input key={ref} type="hidden" name={`provider:${ref}`} value={ai.providers?.[ref] ?? ai.provider} />) : null}
           <s-stack direction="block" gap="base">
             {attached.items.map((item) => (
               <s-box key={item.id} padding="base" borderWidth="base" borderRadius="base">

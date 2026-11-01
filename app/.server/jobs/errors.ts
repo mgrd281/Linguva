@@ -39,7 +39,8 @@ export type ErrorClass =
   | { kind: "rate-limited"; waitMs: number }
   | { kind: "retryable"; code: string }
   | { kind: "item-permanent"; code: string }
-  | { kind: "job-stop"; code: string };
+  /** scope "language": only this language's engines are used up or refused (the router); no shop-wide pause. */
+  | { kind: "job-stop"; code: string; scope?: "language" };
 
 const DEFAULT_THROTTLE_WAIT_MS = 2_000;
 
@@ -62,9 +63,9 @@ export function classifyError(error: unknown): ErrorClass {
           ? { kind: "rate-limited", waitMs: error.retryAfterMs }
           : { kind: "retryable", code: "PROVIDER_UNAVAILABLE" };
       case "quota":
-        return { kind: "job-stop", code: "PROVIDER_QUOTA" };
+        return { kind: "job-stop", code: "PROVIDER_QUOTA", ...(error.scope ? { scope: error.scope } : {}) };
       case "auth":
-        return { kind: "job-stop", code: "PROVIDER_AUTH" };
+        return { kind: "job-stop", code: "PROVIDER_AUTH", ...(error.scope ? { scope: error.scope } : {}) };
       default:
         return { kind: "item-permanent", code: "PROVIDER_REJECTED" };
     }

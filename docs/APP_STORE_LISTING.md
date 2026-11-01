@@ -75,6 +75,12 @@ Under the plans:
 - **EN:** AI characters are the characters DeepL translates for you, spaces included. Text reused from your translation memory doesn't count. New allowance on the 1st of every month (UTC).
 - **DE:** KI-Zeichen sind die Zeichen, die DeepL für dich übersetzt, Leerzeichen inklusive. Text aus deinem Übersetzungsspeicher zählt nicht. Neues Kontingent am 1. jedes Monats (UTC).
 
+**Ready for when Microsoft Azure or Google Cloud is live** (use once Azure or Google is live; until then the DeepL wording above stays, as production is DeepL-only; docs/AI_ENGINES.md):
+
+- Plan rows: "AI characters a month (DeepL, Microsoft Azure or Google Cloud)" / "KI-Zeichen pro Monat (DeepL, Microsoft Azure oder Google Cloud)" instead of "(DeepL)".
+- **EN:** AI characters are the characters our translation services translate for you, spaces included. Text reused from your translation memory doesn't count. New allowance on the 1st of every month (UTC).
+- **DE:** KI-Zeichen sind die Zeichen, die unsere Übersetzungsdienste für dich übersetzen, Leerzeichen inklusive. Text aus deinem Übersetzungsspeicher zählt nicht. Neues Kontingent am 1. jedes Monats (UTC).
+
 Rules: the trial feature goes in only once the trial allowance has been checked on the dev store (DEV_STORE_TEST_PLAN.md §L); with 0 trial days, no trial text anywhere. No price in any image, the icon or the logo (requirements 4.2.2 / 4.2.3): no listing screenshot shows the Plan page. No "popular" or "best value" claims (4.3.3).
 
 ## Screenshots

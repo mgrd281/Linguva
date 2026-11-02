@@ -77,3 +77,50 @@ describe("what a shop may use", () => {
     expect(hasAiConsentFor(consent("2026-09-engines-v0:azure-eu"), ["deepl", "azure-eu"])).toBe(false);
   });
 });
+
+describe("own-key consent versions (Own key plan)", () => {
+  /** The own-key notice's version, pinned. */
+  const OWN_KEY_NOTICE = "2026-11-ownkey-v1";
+
+  it("records the own-key notice with the sorted tokens, also for DeepL alone", async () => {
+    expect((await import("../../app/.server/settings/ai-consent")).OWN_KEY_NOTICE).toBe(OWN_KEY_NOTICE);
+    expect(consentVersionFor(["deepl"], "merchant")).toBe("2026-11-ownkey-v1:deepl");
+    expect(consentVersionFor(["google-global", "deepl", "deepl"], "merchant")).toBe("2026-11-ownkey-v1:deepl,google-global");
+    expect(consentVersionFor(["azure-eu"], "merchant")).toBe("2026-11-ownkey-v1:azure-eu");
+  });
+
+  it("keeps the operator's versions exactly as before, with the default and with payer linguva", () => {
+    for (const payer of [undefined, "linguva"] as const) {
+      expect(consentVersionFor(["deepl"], payer)).toBe(LEGACY_DEEPL_CONSENT);
+      expect(consentVersionFor(["google-global", "deepl", "azure-eu"], payer)).toBe(`${ENGINES_NOTICE}:azure-eu,deepl,google-global`);
+      expect(consentTokens(LEGACY_DEEPL_CONSENT, payer)).toEqual(["deepl"]);
+      expect(consentTokens(`${ENGINES_NOTICE}:azure-eu,deepl`, payer)).toEqual(["deepl", "azure-eu"]);
+      expect(consentTokens("2026-09-engines-v0:azure-eu,deepl", payer)).toEqual(["deepl"]);
+    }
+  });
+
+  it("counts a version only for its own payer", () => {
+    const own = consentVersionFor(["deepl", "google-global"], "merchant");
+    expect(consentTokens(own, "merchant")).toEqual(["deepl", "google-global"]);
+    expect(consentTokens(own)).toBeNull();
+    expect(consentTokens(own, "linguva")).toBeNull();
+    expect(consentTokens("2026-11-ownkey-v1:deepl")).toBeNull();
+    // Linguva's notices cover nothing for the own-key notice.
+    expect(consentTokens(LEGACY_DEEPL_CONSENT, "merchant")).toBeNull();
+    expect(consentTokens(`${ENGINES_NOTICE}:azure-eu,deepl`, "merchant")).toBeNull();
+    expect(consentTokens("2026-09-engines-v0:azure-eu,deepl", "merchant")).toBeNull();
+  });
+
+  it("covers nothing for an outdated, unknown or malformed own-key version", () => {
+    for (const version of [null, "", "2026-10-ownkey-v0:deepl", "2026-10-ownkey-v0:azure-eu,deepl", `${OWN_KEY_NOTICE}:bing`, `${OWN_KEY_NOTICE}:`, `${OWN_KEY_NOTICE}:deepl,,azure-eu`, `${OWN_KEY_NOTICE}`, "random"]) {
+      expect(consentTokens(version, "merchant"), String(version)).toBeNull();
+    }
+  });
+
+  it("keeps the operator's checks unchanged for a shop that stored an own-key version", () => {
+    const own = consent(consentVersionFor(["deepl"], "merchant"));
+    expect(hasAiConsentFor(own, ["deepl"])).toBe(false);
+    expect(consentedEngines(own, ["deepl", "azure-eu"])).toEqual([]);
+    expect(missingConsent(own, ["deepl", "azure-eu"])).toEqual(["deepl", "azure-eu"]);
+  });
+});

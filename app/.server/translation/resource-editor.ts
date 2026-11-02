@@ -4,17 +4,18 @@
  */
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { data } from "react-router";
-import { aiUsageLimits, engineConsentTokens, getConfig } from "../lib/config";
+import { aiUsageLimits, getConfig } from "../lib/config";
 import { sanitizeHtml } from "../lib/sanitize-html";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
-import { getTranslationProvider } from "../providers";
+import { openShopTranslation, shopTranslationFacts, type OwnKeyOptions, type ShopTranslation, type ShopTranslationFacts } from "../providers/shop-translation";
 import { TranslationProviderError } from "../providers/types";
+import { OwnKeyUnavailableError } from "../credentials/errors";
 import { getShopSettings, hasCurrentAiConsent, setAiConsent } from "../settings/shop-settings";
 import { requireShop } from "../shopify/require-shop";
 import { getTranslatableResource } from "../shopify/translations-api";
 import { fuzzyMatches } from "../memory/translation-memory";
 import { resolveGlossary } from "../glossary/glossary";
-import { getDailyUsage, getMonthlyUsage, QUOTA_CODES, QuotaExceededError } from "../usage/usage-ledger";
+import { getDailyUsage, getMonthlyUsage, getOwnKeyUsage, QUOTA_CODES, QuotaExceededError } from "../usage/usage-ledger";
 import { getRequestLimiter, RequestRateLimitedError } from "../usage/request-limits";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { allowedTargetLocales, type BillingStatus } from "../billing/subscription";
@@ -40,7 +41,8 @@ import {
   translationDigest,
 } from "./product-translation-service";
 import { collectEditorEdits } from "./editor-edits";
-import type { EngineId } from "../../lib/engines";
+import { isEngineId, type EngineId } from "../../lib/engines";
+import { parseOwnKeyCode } from "../../lib/own-keys";
 import { isMachineTranslatable, segmentField } from "./translate-fields";
 import { listRevisions } from "./revisions";
 import { removeTranslation, restoreRevision } from "./history";
@@ -74,6 +76,14 @@ export interface EditorContext {
   sourceName: string | null;
   /** Billing status (absent: billing not checked, as in tests). */
   billing?: BillingStatus;
+  /**
+   * Who translates for the shop, without decrypting anything (shop-translation.ts): the
+   * operator's engines, or the shop's own keys on the Own key plan. Absent (tests): read from
+   * `billing` when needed (no billing: the operator's).
+   */
+  translation?: ShopTranslationFacts;
+  /** Tests only: live own-key members with a fake fetch (never through env; shop-translation.ts). */
+  ownKeyOptions?: Pick<OwnKeyOptions, "mode" | "fetch">;
   /** The shop's additional languages in Shopify's order (for plan limits). */
   targetLocales?: string[];
   /** The request's signal: with several engines, AI translation stops before its next engine once the merchant leaves. */
@@ -88,6 +98,8 @@ export async function resolveEditorContext(
 ): Promise<EditorContext> {
   const { admin, shop, actorId } = await requireShop(request);
   const billing = await shopBilling(admin, shop);
+  // Facts only: no editor loader or other action decrypts a key (the AI actions open the provider).
+  const translation = await shopTranslationFacts(shop.id, billing);
   // Content types are addressed by an encoded GID, validated here; Shopify
   // only returns resources of the authenticated shop.
   const resourceId = isContentType(kind) ? contentGid(id ?? "") : resourceGid(kind, id ?? "");
@@ -109,6 +121,7 @@ export async function resolveEditorContext(
     target: { locale: target.locale, name: target.name, rtl: target.rtl },
     sourceName: locales.primary?.name ?? null,
     billing,
+    translation,
     targetLocales: locales.locales.filter((l) => !l.primary).map((l) => l.locale),
     view: {
       query: (url.searchParams.get("q") ?? "").slice(0, 100),
@@ -131,6 +144,29 @@ function smartExclusionAllowed(ctx: EditorContext): boolean {
   return Object.hasOwn(RESOURCE_KINDS, ctx.kind) && (!ctx.billing || ctx.billing.entitlements.smartAuto);
 }
 
+/** Who translates for the shop (facts only, never a decryption). */
+async function editorFacts(ctx: EditorContext): Promise<ShopTranslationFacts> {
+  return ctx.translation ?? shopTranslationFacts(ctx.shopId, ctx.billing);
+}
+
+/**
+ * The editor's answer when the shop has no provider: the operator's "not set up"; on the Own key
+ * plan no usable key, a refused one (with its engine), or a key this process can't read now ("try
+ * again", never a stop).
+ */
+function unavailableResult(t: Pick<ShopTranslation, "payer" | "unavailable">) {
+  if (t.payer === "linguva") return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
+  if (t.unavailable === "OWN_KEY_UNAVAILABLE") return { kind: "error", code: "PROVIDER_UNAVAILABLE" } satisfies EditorActionResult;
+  const own = parseOwnKeyCode(t.unavailable);
+  if (own && own.kind !== "MISSING") return { kind: "error", code: `OWN_KEY_${own.kind}`, engine: own.engine } satisfies EditorActionResult;
+  return { kind: "error", code: "OWN_KEY_MISSING" } satisfies EditorActionResult;
+}
+
+/** What the own-key provider's request is passed (absent for the operator's: today's defaults). */
+function ownKeyInput(t: ShopTranslation) {
+  return t.payer === "merchant" ? { payer: "merchant" as const, configured: t.configured, used: t.used } : {};
+}
+
 /** Plan limits for this editor request (config limits when billing isn't checked). */
 function editorLimits(ctx: EditorContext) {
   const config = getConfig();
@@ -143,6 +179,8 @@ export async function loadEditorData(ctx: EditorContext) {
   if (!resource) throw new Response("Not found", { status: 404 });
 
   const settings = await getShopSettings(shopId);
+  const facts = await editorFacts(ctx);
+  const own = facts.payer === "merchant";
   const translations = new Map(resource.translations.map((t) => [t.key, t]));
   const digests = new Map(resource.content.map((c) => [c.key, c.digest]));
   const revisions = await listRevisions(shopId, resourceId, target.locale);
@@ -213,14 +251,17 @@ export async function loadEditorData(ctx: EditorContext) {
     seoPreview: !isContentType(ctx.kind),
     smart: smartExclusionAllowed(ctx) ? { excluded: await isSmartExcluded(shopId, resourceId) } : null,
     ai: {
-      available: getTranslationProvider() !== null,
-      consent: hasCurrentAiConsent(settings),
-      // The translation services the consent banner names and posts (DeepL only: today's text).
-      consentTokens: engineConsentTokens(getConfig()),
+      available: facts.available,
+      consent: hasCurrentAiConsent(settings, facts.configured, facts.payer),
+      // The translation services the consent banner names and posts (DeepL only: today's text;
+      // Own key plan: the shop's usable keys).
+      consentTokens: facts.configured,
       used: await getMonthlyUsage(shopId),
-      limit: editorLimits(ctx).limit,
+      // Own key plan: no Linguva allowance (the toolbar shows the characters through the own keys).
+      limit: own ? null : editorLimits(ctx).limit,
       usedToday: await getDailyUsage(shopId),
-      dailyLimit: editorLimits(ctx).dailyLimit,
+      dailyLimit: own ? null : editorLimits(ctx).dailyLimit,
+      ownKey: own ? { chars: (await getOwnKeyUsage(shopId)).total, unavailable: facts.unavailable } : null,
     },
   };
 }
@@ -247,6 +288,8 @@ export type EditorActionResult =
       providers: Record<string, string>;
       /** Set when translation stopped early (drafts so far are kept). */
       stopped?: string;
+      /** With an own-key stop (OWN_KEY_QUOTA / OWN_KEY_AUTH): the engine of the key. */
+      engine?: EngineId;
     }
   | { kind: "attached-saved"; outcomes: Array<{ ref: string; status: string; message?: string; code?: string }> }
   | { kind: "restored"; status: string }
@@ -264,15 +307,36 @@ function rateLimited(error: RequestRateLimitedError) {
   } satisfies EditorActionResult;
 }
 
-/** Error code for a failed AI translation, or undefined if the error is unexpected. */
-function aiErrorCode(error: unknown): string | undefined {
+/**
+ * Error code for a failed AI translation, or undefined if the error is unexpected. On the shop's
+ * own keys a used-up or refused key names the merchant's key (OWN_KEY_QUOTA / OWN_KEY_AUTH);
+ * outages, rate limits and rejected requests keep today's codes.
+ */
+function aiErrorCode(error: unknown, payer: "linguva" | "merchant" = "linguva"): string | undefined {
   if (error instanceof AiConsentRequiredError) return "CONSENT_REQUIRED";
+  if (error instanceof OwnKeyUnavailableError) return "PROVIDER_UNAVAILABLE";
+  if (payer === "merchant" && error instanceof TranslationProviderError && (error.kind === "quota" || error.kind === "auth")) {
+    return error.kind === "quota" ? "OWN_KEY_QUOTA" : "OWN_KEY_AUTH";
+  }
   if (error instanceof EngineConsentRequiredError) return "ENGINE_CONSENT";
   if (error instanceof AiRequestTooLargeError) return "REQUEST_TOO_LARGE";
   if (error instanceof QuotaExceededError) {
     return QUOTA_CODES[error.scope];
   }
   if (error instanceof TranslationProviderError) return `PROVIDER_${error.kind.toUpperCase()}`;
+  return undefined;
+}
+
+/** The engine an own-key stop names: the error's engine, else the engine the request went to first. */
+function ownKeyEngineOf(error: unknown, provider: { id: string }): EngineId | undefined {
+  if (error instanceof TranslationProviderError && isEngineId(error.provider)) return error.provider;
+  return isEngineId(provider.id) ? provider.id : undefined;
+}
+
+/** The engine a coded error names, if any: the engine to allow, or an own key's engine. */
+function errorEngine(code: string, error: unknown, provider: { id: string }): EngineId | undefined {
+  if (error instanceof EngineConsentRequiredError) return error.engine;
+  if (code === "OWN_KEY_QUOTA" || code === "OWN_KEY_AUTH") return ownKeyEngineOf(error, provider);
   return undefined;
 }
 
@@ -323,7 +387,15 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
 
   if (intent === "grant-consent") {
     const shown = form.get("consentTokens");
-    const saved = await setAiConsent({ shopId, granted: true, actorId, shown: typeof shown === "string" ? shown.split(",").filter(Boolean) : null });
+    // The services the page named: the operator's engines, or the shop's own keys under the own-key notice.
+    const facts = await editorFacts(ctx);
+    const saved = await setAiConsent({
+      shopId,
+      granted: true,
+      actorId,
+      shown: typeof shown === "string" ? shown.split(",").filter(Boolean) : null,
+      consent: { configured: facts.configured, payer: facts.payer },
+    });
     // The page showed an older list of translation services: nothing stored, it shows the current one.
     if (saved === "changed") return { kind: "error", code: "CONSENT_CHANGED" } satisfies EditorActionResult;
     // The smart schedule waits for consent no longer than needed.
@@ -333,11 +405,16 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
 
   if (intent === "ai-translate") {
     if (!planAllowsTarget(ctx)) return { kind: "error", code: "PLAN_LANGUAGE" } satisfies EditorActionResult;
-    const provider = getTranslationProvider();
-    if (!provider) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
+    const facts = await editorFacts(ctx);
+    if (facts.payer === "linguva" && !facts.available) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
     const keys = form.getAll("key").map(String).slice(0, 100);
+    let t: ShopTranslation | null = null;
     try {
       await getRequestLimiter().consume(shopId, actorId, "ai-translate");
+      // Opened after the plan and rate-limit checks: the own keys are decrypted only for a request that may run.
+      t = await openShopTranslation(shopId, ctx.billing, ctx.ownKeyOptions);
+      if (!t.provider) return unavailableResult(t);
+      const provider = t.provider;
       const config = getConfig();
       const limits = editorLimits(ctx);
       const result = await aiTranslateResource({
@@ -353,6 +430,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
         platformDailyLimit: limits.platformDailyLimit,
         maxRequestChars: config.AI_MAX_CHARS_PER_REQUEST,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
+        ...ownKeyInput(t),
       });
       const drafts: Record<string, string> = {};
       const rejected: Record<string, string> = {};
@@ -376,9 +454,10 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
     } catch (error) {
       if (error instanceof RequestRateLimitedError) return rateLimited(error);
       if (error instanceof ResourceNotFoundError) throw new Response("Not found", { status: 404 });
-      const code = aiErrorCode(error);
-      // The engine to allow is named (a language only it serves).
-      if (code) return { kind: "error", code, ...(error instanceof EngineConsentRequiredError ? { engine: error.engine } : {}) } satisfies EditorActionResult;
+      const code = aiErrorCode(error, t?.payer);
+      // The engine to allow is named (a language only it serves), or the own key's engine.
+      const engine = code && t?.provider ? errorEngine(code, error, t.provider) : error instanceof EngineConsentRequiredError ? error.engine : undefined;
+      if (code) return { kind: "error", code, ...(engine ? { engine } : {}) } satisfies EditorActionResult;
       throw error;
     }
   }
@@ -387,14 +466,18 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
     // Which images and metafields to translate is decided here, from
     // Shopify's list for this parent: the form carries no resource ids.
     if (!planAllowsTarget(ctx)) return { kind: "error", code: "PLAN_LANGUAGE" } satisfies EditorActionResult;
-    const provider = getTranslationProvider();
-    if (!provider) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
+    const facts = await editorFacts(ctx);
+    if (facts.payer === "linguva" && !facts.available) return { kind: "error", code: "AI_NOT_CONFIGURED" } satisfies EditorActionResult;
     try {
       await getRequestLimiter().consume(shopId, actorId, "ai-translate");
     } catch (error) {
       if (error instanceof RequestRateLimitedError) return rateLimited(error);
       throw error;
     }
+    // Opened after the plan and rate-limit checks: the own keys are decrypted only for a request that may run.
+    const t = await openShopTranslation(shopId, ctx.billing, ctx.ownKeyOptions);
+    if (!t.provider) return unavailableResult(t);
+    const provider = t.provider;
     const resources = await listEditorAttachments(admin, ctx.kind, resourceId, target.locale);
     const config = getConfig();
     const limits = editorLimits(ctx);
@@ -403,6 +486,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
     const warnings: Record<string, string[]> = {};
     const providers: Record<string, string> = {};
     let stopped: string | undefined;
+    let stoppedEngine: EngineId | undefined;
     for (const item of attachedAiTargets(resources)) {
       try {
         const result = await aiTranslateResource({
@@ -417,6 +501,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
           platformDailyLimit: limits.platformDailyLimit,
           maxRequestChars: config.AI_MAX_CHARS_PER_REQUEST,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
+          ...ownKeyInput(t),
         });
         for (const o of result.outcomes) {
           const ref = attachedRef(item.resourceId, o.key);
@@ -431,8 +516,9 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
         }
       } catch (error) {
         if (error instanceof ResourceNotFoundError) continue;
-        stopped = aiErrorCode(error);
+        stopped = aiErrorCode(error, t.payer);
         if (!stopped) throw error;
+        if (stopped === "OWN_KEY_QUOTA" || stopped === "OWN_KEY_AUTH") stoppedEngine = ownKeyEngineOf(error, provider);
         break;
       }
     }
@@ -444,6 +530,7 @@ export async function runEditorAction(ctx: EditorContext, form: FormData) {
       provider: Object.values(providers)[0] ?? provider.id,
       providers,
       ...(stopped ? { stopped } : {}),
+      ...(stoppedEngine ? { engine: stoppedEngine } : {}),
     } satisfies EditorActionResult;
   }
 

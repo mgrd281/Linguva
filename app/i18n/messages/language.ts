@@ -251,6 +251,11 @@ export const en = {
   "language.error.ENGINE_CONSENT": "Only a translation service your store hasn't allowed yet translates this language. Allow it in the settings first.",
   "language.error.AI_NOT_CONFIGURED": "AI translation isn't set up for this app yet.",
   "language.error.UNKNOWN_INTENT": "This action isn't available.",
+  // The Own key plan (docs/AI_ENGINES.md).
+  "language.error.OWN_KEY_MISSING": "Add your translation key in Settings first.",
+  "language.error.OWN_KEY_REFUSED": "Your translation key was refused. Replace it in Settings first.",
+  "language.confirm.ownKey": "Up to {chars} characters go through your own key; Linguva counts no AI characters. Your translation service bills you for them.",
+  "language.confirm.ownKeyUnknown": "The characters go through your own key; Linguva counts no AI characters. Your translation service bills you for them.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -503,6 +508,10 @@ export const de: Translation<typeof en> = {
   "language.error.ENGINE_CONSENT": "Diese Sprache übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat. Erlaube ihn zuerst in den Einstellungen.",
   "language.error.AI_NOT_CONFIGURED": "Die KI-Übersetzung ist für diese App noch nicht eingerichtet.",
   "language.error.UNKNOWN_INTENT": "Diese Aktion ist nicht verfügbar.",
+  "language.error.OWN_KEY_MISSING": "Füge zuerst in den Einstellungen deinen Übersetzungsschlüssel hinzu.",
+  "language.error.OWN_KEY_REFUSED": "Dein Übersetzungsschlüssel wurde abgelehnt. Ersetze ihn zuerst in den Einstellungen.",
+  "language.confirm.ownKey": "Bis zu {chars} Zeichen laufen über deinen eigenen Schlüssel; Linguva zählt keine KI-Zeichen. Dein Übersetzungsdienst berechnet sie dir.",
+  "language.confirm.ownKeyUnknown": "Die Zeichen laufen über deinen eigenen Schlüssel; Linguva zählt keine KI-Zeichen. Dein Übersetzungsdienst berechnet sie dir.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -755,6 +764,10 @@ export const fr: Translation<typeof en> = {
   "language.error.ENGINE_CONSENT": "Seul un service de traduction que votre boutique n'a pas encore autorisé traduit cette langue. Autorisez-le d'abord dans les paramètres.",
   "language.error.AI_NOT_CONFIGURED": "La traduction par IA n'est pas encore configurée pour cette application.",
   "language.error.UNKNOWN_INTENT": "Cette action n'est pas disponible.",
+  "language.error.OWN_KEY_MISSING": "Ajoutez d'abord votre clé de traduction dans les paramètres.",
+  "language.error.OWN_KEY_REFUSED": "Votre clé de traduction a été refusée. Remplacez-la d'abord dans les paramètres.",
+  "language.confirm.ownKey": "Jusqu'à {chars} caractères passent par votre propre clé ; Linguva ne compte aucun caractère IA. Votre service de traduction vous les facture.",
+  "language.confirm.ownKeyUnknown": "Les caractères passent par votre propre clé ; Linguva ne compte aucun caractère IA. Votre service de traduction vous les facture.",
 };
 
 export const es: Translation<typeof en> = {
@@ -1007,4 +1020,8 @@ export const es: Translation<typeof en> = {
   "language.error.ENGINE_CONSENT": "Solo un servicio de traducción que tu tienda aún no ha permitido traduce este idioma. Primero permítelo en la configuración.",
   "language.error.AI_NOT_CONFIGURED": "La traducción con IA aún no está configurada para esta aplicación.",
   "language.error.UNKNOWN_INTENT": "Esta acción no está disponible.",
+  "language.error.OWN_KEY_MISSING": "Añade primero tu clave de traducción en Configuración.",
+  "language.error.OWN_KEY_REFUSED": "Tu clave de traducción fue rechazada. Sustitúyela primero en Configuración.",
+  "language.confirm.ownKey": "Hasta {chars} caracteres pasan por tu propia clave; Linguva no cuenta caracteres de IA. Tu servicio de traducción te los cobra.",
+  "language.confirm.ownKeyUnknown": "Los caracteres pasan por tu propia clave; Linguva no cuenta caracteres de IA. Tu servicio de traducción te los cobra.",
 };

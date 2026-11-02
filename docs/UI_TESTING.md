@@ -34,6 +34,7 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `ui-plan-*` | The Plan page's billing states (`plan.spec.ts`): a running trial (`ui-plan-trial`), a change at the end of the cycle, a cancellation, Shopify not answering (never checked, or last checked as Pro seven hours ago), four languages on Starter, automatic publishing switched on under Starter, Free used up |
 | `ui-slow` | Shopify answers translation queries only after 20 s (longer than the app's time limit, 3 s in these tests) |
 | `ui-fresh` | Not seeded: installs during the test |
+| `ui-ownkey*` | The Own key plan (`own-keys.spec.ts`; the server's mock mode accepts only `mock-…` test keys, seeded through the app's own save): `ui-ownkey` subscribed without a key or permission (read only), `ui-ownkey-ready` with a DeepL key (`mock-deepl-0061:fx`) and its own-key permission, `ui-ownkey-refused` with an Azure key the service refused since, `ui-ownkey-pending` on Pro changing to Own key at the cycle's end, `ui-ownkey-edit` for adding, replacing, checking and removing keys (each test starts by removing them). `OWN_KEY_PLAN_VISIBLE` stays unset, so every other shop's Plan page has its four cards |
 
 ## Suites
 

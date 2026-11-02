@@ -3,8 +3,9 @@ import { prisma as defaultClient } from "../lib/db";
 import { withTenant } from "../tenancy/with-tenant";
 import { AUTO_REQUESTED_BY } from "../jobs/bulk-jobs";
 import { engineConsentTokens, getConfig } from "../lib/config";
-import { engineOfToken, type ConsentToken, type EngineId } from "../../lib/engines";
-import { consentTokens, consentVersionFor, LEGACY_DEEPL_CONSENT } from "./ai-consent";
+import { ENGINE_IDS, engineOfToken, type ConsentToken, type EngineId } from "../../lib/engines";
+import { isOwnKeyCode, ownKeyStopCode } from "../../lib/own-keys";
+import { consentTokens, consentVersionFor, LEGACY_DEEPL_CONSENT, type ConsentPayer } from "./ai-consent";
 
 /**
  * Version of the AI data-processing notice for DeepL alone (what every shop
@@ -14,7 +15,7 @@ import { consentTokens, consentVersionFor, LEGACY_DEEPL_CONSENT } from "./ai-con
  */
 export const AI_CONSENT_VERSION = LEGACY_DEEPL_CONSENT;
 
-type ConsentState = { aiDataProcessingConsentAt: Date | null; consentVersion: string | null };
+export type ConsentState = { aiDataProcessingConsentAt: Date | null; consentVersion: string | null };
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -53,30 +54,42 @@ export async function getShopSettings(shopId: string, client: PrismaClient = def
   );
 }
 
-/** The consent tokens a stored consent covers among the configured ones, in routing order (none without consent). Pure. */
-function coveredTokens(settings: ConsentState, configured: readonly ConsentToken[]): ConsentToken[] {
+/**
+ * The consent tokens a stored consent covers among the configured ones, in routing order (none
+ * without consent). Only a version of the same payer counts (ai-consent.ts). Pure.
+ */
+function coveredTokens(settings: ConsentState, configured: readonly ConsentToken[], payer: ConsentPayer = "linguva"): ConsentToken[] {
   if (!settings.aiDataProcessingConsentAt) return [];
-  const covered = consentTokens(settings.consentVersion) ?? [];
+  const covered = consentTokens(settings.consentVersion, payer) ?? [];
   return configured.filter((t) => covered.includes(t));
 }
 
 /** Consent given and covering at least one configured engine. Pure; with DeepL only or mock, today's rule. */
-export function hasAiConsentFor(settings: ConsentState, configured: readonly ConsentToken[]): boolean {
-  return coveredTokens(settings, configured).length > 0;
+export function hasAiConsentFor(settings: ConsentState, configured: readonly ConsentToken[], payer: ConsentPayer = "linguva"): boolean {
+  return coveredTokens(settings, configured, payer).length > 0;
 }
 
 /**
  * Whether AI translation may run for the shop: its consent covers at least
  * one engine in use. `configured` is read from the environment (validated at
- * start and cached); pure tests use hasAiConsentFor.
+ * start and cached); pure tests use hasAiConsentFor. Own key plan: the tokens
+ * of the shop's usable keys with payer "merchant" (shop-translation.ts).
  */
-export function hasCurrentAiConsent(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): boolean {
-  return hasAiConsentFor(settings, configured);
+export function hasCurrentAiConsent(
+  settings: ConsentState,
+  configured: readonly ConsentToken[] = engineConsentTokens(getConfig()),
+  payer: ConsentPayer = "linguva",
+): boolean {
+  return hasAiConsentFor(settings, configured, payer);
 }
 
 /** The engines a request may use: consented ∩ configured, in routing order. */
-export function consentedEngines(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): EngineId[] {
-  return coveredTokens(settings, configured).map(engineOfToken);
+export function consentedEngines(
+  settings: ConsentState,
+  configured: readonly ConsentToken[] = engineConsentTokens(getConfig()),
+  payer: ConsentPayer = "linguva",
+): EngineId[] {
+  return coveredTokens(settings, configured, payer).map(engineOfToken);
 }
 
 /**
@@ -84,14 +97,22 @@ export function consentedEngines(settings: ConsentState, configured: readonly Co
  * consent covers among the engines in use, else every engine in use (before
  * any consent the merchant reads about all of them). Routing order.
  */
-export function textConsentTokens(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): ConsentToken[] {
-  const covered = coveredTokens(settings, configured);
+export function textConsentTokens(
+  settings: ConsentState,
+  configured: readonly ConsentToken[] = engineConsentTokens(getConfig()),
+  payer: ConsentPayer = "linguva",
+): ConsentToken[] {
+  const covered = coveredTokens(settings, configured, payer);
   return covered.length ? covered : [...configured];
 }
 
 /** Configured engines (with their data location) the shop's consent doesn't cover yet. */
-export function missingConsent(settings: ConsentState, configured: readonly ConsentToken[] = engineConsentTokens(getConfig())): ConsentToken[] {
-  const covered = coveredTokens(settings, configured);
+export function missingConsent(
+  settings: ConsentState,
+  configured: readonly ConsentToken[] = engineConsentTokens(getConfig()),
+  payer: ConsentPayer = "linguva",
+): ConsentToken[] {
+  const covered = coveredTokens(settings, configured, payer);
   return configured.filter((t) => !covered.includes(t));
 }
 
@@ -104,14 +125,32 @@ export function missingConsent(settings: ConsentState, configured: readonly Cons
  * rendered before this version). What a current consent already covers is
  * kept: an engine that is off for a moment doesn't lose its consent when the
  * merchant allows another one. Withdrawing clears everything.
+ *
+ * `consent`: the services in use and who they are used under (shop-translation.ts
+ * consentForShop / facts). Absent: Linguva's engines from the environment, as
+ * before (tests that grant consent directly); every caller in app/ and worker/
+ * passes it. Own key plan: the tokens of the shop's usable keys, stored as the
+ * own-key notice's version; "already covered" counts only a version of the same
+ * payer, and with no usable key there is nothing to allow ("changed").
  */
 export async function setAiConsent(
-  input: { shopId: string; granted: boolean; actorId: string | null; shown?: readonly string[] | null },
+  input: {
+    shopId: string;
+    granted: boolean;
+    actorId: string | null;
+    shown?: readonly string[] | null;
+    consent?: { configured: readonly ConsentToken[]; payer: ConsentPayer };
+  },
   client: PrismaClient = defaultClient,
 ): Promise<"saved" | "changed"> {
-  const configured = engineConsentTokens(getConfig());
+  const configured = [...(input.consent?.configured ?? engineConsentTokens(getConfig()))];
+  const payer = input.consent?.payer ?? "linguva";
   if (input.granted) {
-    const covered = input.shown ? configured.every((t) => input.shown!.includes(t)) : configured.length === 1 && configured[0] === "deepl";
+    // Own key plan before the first usable key: nothing to allow.
+    if (configured.length === 0) return "changed";
+    const covered = input.shown
+      ? configured.every((t) => input.shown!.includes(t))
+      : payer === "linguva" && configured.length === 1 && configured[0] === "deepl";
     if (!covered) return "changed";
   }
   const version = await withTenant(
@@ -119,14 +158,15 @@ export async function setAiConsent(
     async (tx) => {
       await ensureSettingsRow(tx, input.shopId);
       // Allowing adds to what the shop already allowed: an engine that is off for a moment (a typo
-      // in its variables) keeps its consent. consentTokens reduces an outdated notice to DeepL's.
+      // in its variables) keeps its consent. consentTokens reduces an outdated notice to DeepL's,
+      // and counts only a version of the same payer (a consent to the other notice adds nothing).
       let tokens: ConsentToken[] = [...configured];
       if (input.granted) {
         const current = await tx.shopSettings.findUnique({ where: { shopId: input.shopId }, select: { aiDataProcessingConsentAt: true, consentVersion: true } });
-        const earlier = current?.aiDataProcessingConsentAt ? (consentTokens(current.consentVersion) ?? []) : [];
+        const earlier = current?.aiDataProcessingConsentAt ? (consentTokens(current.consentVersion, payer) ?? []) : [];
         tokens = [...new Set([...configured, ...earlier])];
       }
-      const stored = consentVersionFor(tokens);
+      const stored = consentVersionFor(tokens, payer);
       await tx.shopSettings.update({
         where: { shopId: input.shopId },
         data: {
@@ -286,6 +326,8 @@ export async function setAutoTranslate(
   return { enabled, locales: enabled ? locales : [] };
 }
 
+const HOUR_MS = 60 * 60_000;
+
 /** Stops that pause automatic translation, and how long. */
 const PAUSE_FOR: Record<string, (now: Date) => Date> = {
   // The daily caps reset at midnight UTC, the allowance with the next month.
@@ -293,10 +335,24 @@ const PAUSE_FOR: Record<string, (now: Date) => Date> = {
   PLATFORM_LIMIT: (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)),
   QUOTA_EXCEEDED: (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
   // The provider is missing or refuses: try again in an hour.
-  AI_NOT_CONFIGURED: (now) => new Date(now.getTime() + 60 * 60_000),
-  PROVIDER_AUTH: (now) => new Date(now.getTime() + 60 * 60_000),
-  PROVIDER_QUOTA: (now) => new Date(now.getTime() + 60 * 60_000),
+  AI_NOT_CONFIGURED: (now) => new Date(now.getTime() + HOUR_MS),
+  PROVIDER_AUTH: (now) => new Date(now.getTime() + HOUR_MS),
+  PROVIDER_QUOTA: (now) => new Date(now.getTime() + HOUR_MS),
+  // Own key plan: a refused key waits for the merchant (a saved key or a successful "Check again"
+  // lifts it, liftOwnKeyPause); a used-up quota may reset any time, and the retry costs nothing.
+  // OWN_KEY_MISSING never pauses: without a usable key no consent covers anything, so automatic
+  // translation creates no items anyway (and a replayed app/uninstalled, which deletes the keys,
+  // pauses nothing).
+  ...Object.fromEntries(
+    ENGINE_IDS.flatMap((engine) => [
+      [ownKeyStopCode("auth", engine), (now: Date) => new Date(now.getTime() + 30 * 24 * HOUR_MS)],
+      [ownKeyStopCode("quota", engine), (now: Date) => new Date(now.getTime() + HOUR_MS)],
+    ]),
+  ),
 };
+
+/** Tests only: the stop codes that pause automatic translation. */
+export const AUTO_PAUSE_CODES: readonly string[] = Object.keys(PAUSE_FOR);
 
 /** Whether automatic translation waits for a limit or the provider (autoPauseAfterStop). */
 export function autoTranslatePaused(settings: { autoPausedUntil: Date | null }, now = new Date()): boolean {
@@ -332,4 +388,42 @@ export async function autoPauseAfterStop(
     client,
   );
   return until;
+}
+
+/**
+ * The pause counts for this shop's current plan: a pause for one of the merchant's keys (OWN_KEY_*)
+ * only on Own key, every other reason (Linguva's limits and engines) only on the other plans. So a
+ * shop that changed plan isn't held by a pause that was about the other payer.
+ */
+export function autoPauseApplies(
+  settings: { autoPausedUntil: Date | null; autoPauseReason: string | null },
+  ownKeys: boolean,
+  now = new Date(),
+): boolean {
+  return autoTranslatePaused(settings, now) && isOwnKeyCode(settings.autoPauseReason) === ownKeys;
+}
+
+/** Clears a pause of automatic translation that no longer applies (the plan changed: autoPauseApplies). */
+export async function clearAutoPause(shopId: string, client: PrismaClient = defaultClient): Promise<void> {
+  await withTenant(
+    shopId,
+    (tx) => tx.shopSettings.updateMany({ where: { shopId, autoPausedUntil: { not: null } }, data: { autoPausedUntil: null, autoPauseReason: null } }),
+    client,
+  );
+}
+
+/**
+ * Own key plan: a saved key, or a "Check again" that accepted the key, ends a pause for one of the
+ * merchant's keys (OWN_KEY_*). Other pauses (Linguva's limits, the merchant's own) stay.
+ */
+export async function liftOwnKeyPause(shopId: string, client: PrismaClient = defaultClient): Promise<void> {
+  await withTenant(
+    shopId,
+    (tx) =>
+      tx.shopSettings.updateMany({
+        where: { shopId, autoPauseReason: { startsWith: "OWN_KEY_" } },
+        data: { autoPausedUntil: null, autoPauseReason: null },
+      }),
+    client,
+  );
 }

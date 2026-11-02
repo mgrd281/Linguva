@@ -4,8 +4,9 @@
  * hosts the plan page and creates the subscription); the app maps the
  * subscribed plan handle to entitlements and shows a hand-kept copy of the
  * prices (PLAN_PRICES), which must equal the Partner Dashboard. Handles must
- * match the plans configured there (docs/BILLING_DESIGN.md,
- * docs/PRICING_DECISION.md).
+ * match the plans configured there: free, starter, pro and business (PLANS,
+ * the ladder), and own-key with its aliases (OWN_KEY_HANDLES, the Own key
+ * plan: OWN_KEY_PLAN) (docs/BILLING_DESIGN.md, docs/PRICING_DECISION.md).
  */
 
 export interface Entitlements {
@@ -22,6 +23,12 @@ export interface Entitlements {
   autoPublish: boolean;
   /** Smart Auto-Translate: scheduled full checks with scope, budgets and activity (Business). */
   smartAuto: boolean;
+  /**
+   * The Own key plan: AI translation only with the merchant's own engine keys
+   * (ShopEngineCredential), never Linguva's; no Linguva character limit applies to
+   * those calls (usage-ledger payer "merchant"). Absent on every other plan.
+   */
+  ownKeys?: boolean;
 }
 
 export const PLANS = {
@@ -40,6 +47,7 @@ export type PlanHandle = keyof typeof PLANS;
  * monthly only). docs/BILLING_DESIGN.md §2 has the table; a change touches
  * the Partner Dashboard, both listing languages and
  * tests/unit/plan-prices.test.ts on the same day (docs/PRICING_DECISION.md §9).
+ * Own key: OWN_KEY_PRICE.
  */
 export const PLAN_PRICES = {
   free: { monthlyUsd: 0, yearlyUsd: null },
@@ -65,11 +73,60 @@ export const TRIAL_AI_CHARS = 100_000;
  */
 export const UNMETERED: Entitlements = { ...PLANS.business, plan: "unmetered" };
 
+/** Shopify App Pricing handle of the Own key plan (Partner Dashboard, docs/PRICING_DECISION.md §9). */
+export const OWN_KEY = "own-key" as const;
+/**
+ * Every handle that means Own key: the handle, two spellings in case the Partner Dashboard refuses
+ * the hyphen (so no redeploy is needed), and the owner's private test plan in the same three
+ * spellings. Exact and case-sensitive; pinned in tests/unit/billing.test.ts.
+ */
+export const OWN_KEY_HANDLES = ["own-key", "ownkey", "own_key", "own-key-test", "ownkeytest", "own_key_test"] as const;
+export type OwnKeyHandle = (typeof OWN_KEY_HANDLES)[number];
+export function isOwnKeyHandle(handle: string | null | undefined): handle is OwnKeyHandle {
+  return typeof handle === "string" && (OWN_KEY_HANDLES as readonly string[]).includes(handle);
+}
+/** Every handle the app maps: the four plans of the ladder, then Own key. */
+export type KnownPlanHandle = PlanHandle | OwnKeyHandle;
+
+/** Pro's features with the merchant's own keys instead of Linguva's AI characters. Not part of the ladder (PLANS). */
+export const OWN_KEY_PLAN = {
+  plan: OWN_KEY,
+  monthlyChars: 0,
+  maxTargetLocales: 10,
+  bulk: true,
+  glossary: true,
+  autoPublish: true,
+  smartAuto: false,
+  ownKeys: true,
+} as const satisfies Entitlements;
+
+/** $49 a month, monthly only (must equal the Partner Dashboard). */
+export const OWN_KEY_PRICE = { monthlyUsd: 49, yearlyUsd: null } as const;
+
+export function isKnownPlanHandle(handle: string | null | undefined): handle is KnownPlanHandle {
+  return isOwnKeyHandle(handle) || (typeof handle === "string" && handle !== "" && Object.hasOwn(PLANS, handle));
+}
+export function planEntitlements(handle: KnownPlanHandle): Entitlements {
+  return isOwnKeyHandle(handle) ? OWN_KEY_PLAN : PLANS[handle];
+}
+export function planPrice(handle: KnownPlanHandle): { monthlyUsd: number; yearlyUsd: number | null } {
+  return isOwnKeyHandle(handle) ? OWN_KEY_PRICE : PLAN_PRICES[handle];
+}
+/** Free trial days per plan (Partner Dashboard "Free trial duration"): none on Own key. */
+export function trialDaysFor(handle: KnownPlanHandle): number {
+  return isOwnKeyHandle(handle) ? 0 : TRIAL_DAYS;
+}
+/** The plan uses only the merchant's own keys. */
+export function usesOwnKeys(entitlements: Pick<Entitlements, "ownKeys"> | null | undefined): boolean {
+  return entitlements?.ownKeys === true;
+}
+
 /**
  * Entitlements for a subscribed plan handle. Unknown handles get the free
  * plan (never more than paid for); the caller logs them.
  */
 export function entitlementsFor(handle: string | null | undefined): Entitlements & { known: boolean } {
+  if (isOwnKeyHandle(handle)) return { ...OWN_KEY_PLAN, known: true };
   const plan = handle && Object.hasOwn(PLANS, handle) ? PLANS[handle as PlanHandle] : null;
   return plan ? { ...plan, known: true } : { ...PLANS.free, known: !handle };
 }

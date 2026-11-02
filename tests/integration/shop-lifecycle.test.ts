@@ -7,6 +7,10 @@ import {
 import { syncShopLocales } from "../../app/.server/locales/shop-locales";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { ownerDb, resetDatabase } from "../support/db";
+import { saveEngineKey } from "../../app/.server/credentials/service";
+import type { KeyChecker } from "../../app/.server/credentials/checker";
+import { ownDeepLKey, ownGoogleKey } from "../support/engine-fixtures";
+import { generousLimits, OWN_KEY_BILLING, seedOwnKey } from "../support/own-keys";
 
 const app = new PrismaClient();
 const DOMAIN = "lifecycle.myshopify.com";
@@ -124,5 +128,106 @@ describe("concurrent installs", () => {
     expect(results.filter((r) => r.event === "REINSTALLED")).toHaveLength(1);
     expect(await withTenant(shop.id, (tx) => tx.shopInstallation.count({ where: { event: "REINSTALLED" } }), app)).toBe(1);
     expect((await app.shop.findUniqueOrThrow({ where: { id: shop.id } })).status).toBe("ACTIVE");
+  });
+});
+
+describe("the store's own engine keys (Own key plan) follow the installation", () => {
+  const keyCount = (shopId: string) => withTenant(shopId, (tx) => tx.shopEngineCredential.count(), ownerDb);
+  const removedAudit = () => ownerDb.auditLog.findMany({ where: { action: "engine_key.removed", actorType: "SYSTEM" } });
+
+  it("uninstall marks the shop UNINSTALLED, then deletes its keys, with one SYSTEM audit row", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    const other = (await upsertInstalledShop({ shopDomain: "keep-keys.myshopify.com" }, app)).shop;
+    await seedOwnKey(shop.id, { engine: "deepl", apiKey: ownDeepLKey(1) }, { client: app });
+    await seedOwnKey(shop.id, { engine: "google", apiKey: ownGoogleKey(1) }, { client: app });
+    await seedOwnKey(other.id, { engine: "deepl", apiKey: ownDeepLKey(2) }, { client: app });
+    await markShopUninstalled(DOMAIN, app);
+    expect((await app.shop.findUniqueOrThrow({ where: { id: shop.id } })).status).toBe("UNINSTALLED");
+    expect(await keyCount(shop.id)).toBe(0);
+    expect(await keyCount(other.id)).toBe(1);
+    const audit = await removedAudit();
+    expect(audit.map((a) => [a.shopId, a.actorId, a.targetType, a.targetId, a.metadata])).toEqual([[shop.id, null, "shop", null, { engines: ["deepl", "google"], reason: "SHOP_UNINSTALLED" }]]);
+    // A repeated uninstall without keys writes no second audit row.
+    await markShopUninstalled(DOMAIN, app);
+    expect(await removedAudit()).toHaveLength(1);
+  });
+
+  it("a replayed uninstall of an already uninstalled shop still deletes keys left behind", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    await markShopUninstalled(DOMAIN, app);
+    // A save can't add one any more; a key that outlived the uninstall (written by the owner role, as a leftover would be).
+    await expect(seedOwnKey(shop.id, { engine: "deepl", apiKey: ownDeepLKey(3) }, { client: app })).rejects.toThrow(/SHOP_INACTIVE/);
+    expect(await keyCount(shop.id)).toBe(0);
+    await withTenant(
+      shop.id,
+      (tx) =>
+        tx.shopEngineCredential.create({
+          data: { shopId: shop.id, engine: "deepl", secret: "v1.test.aaaa.bbbb.cccc", hint: "abcd", dataLocation: "eu", deeplPlan: "free", verifiedAt: new Date() },
+        }),
+      ownerDb,
+    );
+    await markShopUninstalled(DOMAIN, app);
+    expect(await keyCount(shop.id)).toBe(0);
+    expect((await app.shop.findUniqueOrThrow({ where: { id: shop.id } })).status).toBe("UNINSTALLED");
+  });
+
+  it("a reinstall starts without keys and deletes any left over", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    await seedOwnKey(shop.id, { engine: "deepl", apiKey: ownDeepLKey(4) }, { client: app });
+    await markShopUninstalled(DOMAIN, app);
+    await withTenant(
+      shop.id,
+      (tx) =>
+        tx.shopEngineCredential.create({
+          data: { shopId: shop.id, engine: "google", secret: "v1.test.aaaa.bbbb.cccc", hint: "abcd", dataLocation: "global", verifiedAt: new Date() },
+        }),
+      ownerDb,
+    );
+    const re = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    expect(re.event).toBe("REINSTALLED");
+    expect(await keyCount(shop.id)).toBe(0);
+  });
+
+  it("a save whose check is still running when the uninstall happens writes nothing (SHOP_INACTIVE), also after a reinstall", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const entered = new Promise<void>((r) => (started = r));
+    const checker: KeyChecker = async () => {
+      started();
+      await gate;
+      return { state: "ok" };
+    };
+    const saving = saveEngineKey({ shopId: shop.id, actorId: "staff-1", billing: OWN_KEY_BILLING, form: { engine: "deepl", apiKey: ownDeepLKey(5) } }, { client: app, mode: "live", checker, ...generousLimits() });
+    await entered;
+    await markShopUninstalled(DOMAIN, app);
+    release();
+    expect(await saving).toEqual({ ok: false, error: "SHOP_INACTIVE" });
+    expect(await keyCount(shop.id)).toBe(0);
+    await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    expect(await keyCount(shop.id)).toBe(0);
+    expect(await ownerDb.auditLog.count({ where: { action: { in: ["engine_key.saved", "engine_key.replaced"] } } })).toBe(0);
+  });
+
+  it("a save that finished before the uninstall is deleted by it", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    const results = await Promise.all([
+      seedOwnKey(shop.id, { engine: "deepl", apiKey: ownDeepLKey(6) }, { client: app }).then(() => "saved").catch(() => "refused"),
+      markShopUninstalled(DOMAIN, app).then(() => "uninstalled"),
+    ]);
+    expect(results[1]).toBe("uninstalled");
+    // Whichever came first: no key outlives the uninstall.
+    expect(await keyCount(shop.id)).toBe(0);
+  });
+
+  it("a replayed uninstall of an installed own-key shop deletes its keys and pauses nothing", async () => {
+    const { shop } = await upsertInstalledShop({ shopDomain: DOMAIN }, app);
+    await withTenant(shop.id, (tx) => tx.shopSettings.update({ where: { shopId: shop.id }, data: { autoTranslateNew: true } }), app);
+    await seedOwnKey(shop.id, { engine: "deepl", apiKey: ownDeepLKey(7) }, { client: app });
+    await markShopUninstalled(DOMAIN, app);
+    const settings = await withTenant(shop.id, (tx) => tx.shopSettings.findUniqueOrThrow({ where: { shopId: shop.id } }), app);
+    expect(settings).toMatchObject({ autoPausedUntil: null, autoPauseReason: null });
+    expect(await keyCount(shop.id)).toBe(0);
   });
 });

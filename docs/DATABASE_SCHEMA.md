@@ -1,6 +1,6 @@
 # Database Schema
 
-Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop, ShopInstallation, ShopSettings, ShopLocale, WebhookEvent, AuditLog, PrivacyRequest, TranslationRevision, UsageLedger, TranslationJob, TranslationJobItem, TranslationMemory, Glossary, GlossaryTerm, TranslationDraft, CoverageReport, CoverageStat, CoverageGap, CoverageTitleHash), all tenant tables under fail-closed RLS, plus the non-tenant `PlatformUsageDay` (a date and a character count, for the platform cost cap). Coverage tables hold only counts, resource ids and hashes. Entities below that are not in the schema yet (Subscription, Entitlement, ProviderUsage, AdminUser, FeatureFlag, ShopMarket) are still proposals.
+Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop, ShopInstallation, ShopSettings, ShopLocale, WebhookEvent, AuditLog, PrivacyRequest, TranslationRevision, UsageLedger, TranslationJob, TranslationJobItem, TranslationMemory, Glossary, GlossaryTerm, TranslationDraft, CoverageReport, CoverageStat, CoverageGap, CoverageTitleHash), all tenant tables under fail-closed RLS, plus the non-tenant `PlatformUsageDay` (a date and a character count, for the platform cost cap). The Own key plan adds `ShopEngineCredential` (a store's own engine keys, encrypted) and `UsageLedger.payer` (migration `20261106090000`, SECURITY_MODEL §5r). Coverage tables hold only counts, resource ids and hashes. Entities below that are not in the schema yet (Subscription, Entitlement, ProviderUsage, AdminUser, FeatureFlag, ShopMarket) are still proposals.
 
 ## 1. Conventions
 
@@ -32,8 +32,9 @@ Status: implemented tables are defined in `prisma/schema.prisma` (Session, Shop,
 | **Subscription** | id, shopId, source (APP_PRICING/MANUAL/NONE), planHandle, status (ACTIVE/PENDING/CANCELLED/FROZEN/TRIAL), trialEndsAt, currentPeriodStart/End, lastReconciledAt, rawSnapshot jsonb | Local **cache** of Partner API `activeSubscription`. Never the sole authority |
 | **ComplimentaryAccess** (implemented) | shopId (PK), shopifyShopGid, reason, grantedBy, monthlyCharLimit, grantedAt, expiresAt, revokedAt, revokedBy, revokeReason | Owner complimentary access (BILLING_DESIGN §4). RLS + FORCE; runtime role SELECT only, written by the operator tool with the owner role; CHECK constraints on the GID format and the limit |
 | **ShopSubscription** (implemented) | shopId (PK), state, planHandle, pendingPlanHandle, trialEndsAt, cancelAtEndOfCycle, currentPeriodEnd, checkedAt | Cache of the Partner API `activeSubscription` (6 h TTL) |
+| **ShopEngineCredential** (implemented) | id, shopId, engine (deepl/azure/google), secret, hint, dataLocation (eu/global), region (Azure), deeplPlan (free/pro, DeepL), status (OK/QUOTA/REFUSED/UNREADABLE/RECHECK), keyVersion, verifiedAt, lastErrorCode, lastErrorAt | The Own key plan's own engine keys, one row per shop and engine (unique(shopId, engine)). `secret` is a TokenCipher envelope bound by AAD to shop, engine, data location and region (CHECK: envelope format only, never plaintext); `hint` is exactly the key's last four characters (CHECK). `keyVersion` (+1 on every save or replace) guards every write about a used or checked key. RLS + FORCE; runtime role SELECT, INSERT, UPDATE, DELETE. CHECK constraints on every code column (SECURITY_MODEL §5r) |
 | **Entitlement** (planned) | id, shopId, kind (PLAN/ENTERPRISE_CONTRACT), features jsonb, monthlyCharLimit, validFrom, validUntil, revokedAt, reason | For negotiated enterprise contracts |
-| **UsageLedger** | id, shopId, periodKey (YYYY-MM), kind (RESERVE/COMMIT/RELEASE/ADJUST/REFUND), chars, costMicros, provider, jobId, idempotencyKey, createdAt | **Append-only.** unique(shopId, idempotencyKey). Balance = SUM per period |
+| **UsageLedger** | id, shopId, periodKey (YYYY-MM), kind (RESERVE/COMMIT/RELEASE/ADJUST/REFUND), chars, costMicros, provider, jobId, idempotencyKey, origin, payer, createdAt | **Append-only.** unique(shopId, idempotencyKey). Balance = SUM per period. `payer`: NULL = Linguva's engines, `merchant` = the Own key plan's own keys (CHECK: never with `origin`). Allowance, daily cap and cost sums count only `payer IS NULL`; merchant rows never touch `PlatformUsageDay` |
 | **UsageReservation** | id, shopId, jobId, reservedChars, committedChars, status (OPEN/COMMITTED/RELEASED/EXPIRED), expiresAt | unique(shopId, jobId). An expiry sweeper releases stale reservations |
 | **ProviderUsage** | id, shopId, provider, model, requestId, chars, inputTokens, outputTokens, costMicros, latencyMs, outcome | Feeds the cost/margin dashboards. No text content |
 
@@ -85,9 +86,32 @@ CREATE POLICY tenant_isolation ON "TranslationEntry"
 | Data | Retention | Trigger |
 |---|---|---|
 | Sessions / tokens | Deleted on `app/uninstalled` | webhook |
+| Own engine keys (`ShopEngineCredential`, Own key plan) | Deleted on `app/uninstalled` (also a replayed one) and on reinstall; shop/redact cascades; removed or replaced by the merchant at any time | webhook, Settings |
 | Translations, memory, glossary, jobs | Kept 30 days after uninstall (allows reinstall), then hard-deleted | `shop/redact` (Shopify sends it ~48h after uninstall — **ASSUMPTION, verify**) or 30-day sweeper, whichever comes first |
 | UsageLedger, Subscription, billing-relevant AuditLog | Retained for legal/tax periods (German HGB/AO up to 10 years — **legal review required**) with shop content removed | — |
 | WebhookEvent payloads | 14 days | sweeper |
 | ProviderUsage | 13 months, aggregated afterwards | sweeper |
 
 Backups: managed PostgreSQL daily snapshots plus PITR in production. A restore drill is mandatory before launch (Definition of Done #12).
+
+After any restore, before the app serves traffic, run this with the owner role (`MIGRATION_DATABASE_URL`). Backups keep encrypted copies of own engine keys (Own key plan) that were removed, replaced or uninstalled after the restore point; the block deletes the keys of every shop that isn't active and marks the rest RECHECK, which isn't used until the merchant's "Check again" succeeds, so a key removed or replaced after the restore point is never used again unnoticed. `ShopEngineCredential` is under FORCE row-level security, which binds the owner role too, so the block enters each shop's tenant (a plain `DELETE`/`UPDATE` without `app.shop_id` changes nothing). `tests/security/engine-credentials-security.test.ts` runs this exact block.
+
+<!-- restore-runbook:start -->
+```sql
+DO $$
+DECLARE s record;
+BEGIN
+  FOR s IN SELECT "id", "status" FROM "Shop" LOOP
+    PERFORM set_config('app.shop_id', s."id"::text, true);
+    IF s."status" <> 'ACTIVE' THEN
+      DELETE FROM "ShopEngineCredential" WHERE "shopId" = s."id";
+    ELSE
+      UPDATE "ShopEngineCredential" SET "status" = 'RECHECK', "lastErrorCode" = 'OWN_KEY_RECHECK', "lastErrorAt" = now()
+      WHERE "shopId" = s."id";
+    END IF;
+  END LOOP;
+  PERFORM set_config('app.shop_id', '', true);
+END
+$$;
+```
+<!-- restore-runbook:end -->

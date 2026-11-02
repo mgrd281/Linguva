@@ -20,7 +20,7 @@ import { PlanHero } from "../components/plan/PlanHero";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { showTrial } from "../lib/plan-prices";
-import { planName, planView, recommendPlan, type HeroView } from "../lib/plan-view";
+import { planName, planView, recommendPlan, usableEngines, type HeroView } from "../lib/plan-view";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -48,6 +48,12 @@ type Refresh = ReturnType<typeof useFetcher<typeof action>>;
 function HeroActions({ i18n, hero, choosePlanUrl, refresh }: { i18n: I18n; hero: HeroView; choosePlanUrl: string | null; refresh: Refresh }) {
   const { t } = i18n;
   const busy = refresh.state !== "idle";
+  // Own key plan without a usable key: the key comes first (Settings › Your translation keys).
+  const addKey = (
+    <s-button variant="primary" href="/app/settings#settings-keys">
+      {t("plan.hero.addKey")}
+    </s-button>
+  );
   const link = (kind: "change" | "choose", variant: "primary" | "secondary") =>
     choosePlanUrl ? (
       <s-button variant={variant} href={choosePlanUrl} target="_top">
@@ -62,6 +68,11 @@ function HeroActions({ i18n, hero, choosePlanUrl, refresh }: { i18n: I18n; hero:
             {t("plan.action.retry")}
           </s-button>
         </refresh.Form>
+        {hero.secondary ? link(hero.secondary, "secondary") : null}
+      </s-stack>
+    ) : hero.primary === "addKey" ? (
+      <s-stack direction="inline" gap="small-200">
+        {addKey}
         {hero.secondary ? link(hero.secondary, "secondary") : null}
       </s-stack>
     ) : hero.primary ? (
@@ -93,7 +104,10 @@ export default function Plan() {
   const refresh = useFetcher<typeof action>();
   const i18n = useI18n();
   const { t } = i18n;
-  const hero = planView(data);
+  const ownKeyEngines = data.ownKeys ? usableEngines(data.ownKeys.keys) : [];
+  const hero = planView({ ...data, ownKeys: data.ownKeys ? { engines: ownKeyEngines } : null });
+  // Subscribed to Own key, but no key works yet: "You can start translating now" would be false.
+  const ownKeyMissing = data.ownKeyPlan.current && ownKeyEngines.length === 0;
   const complimentary = data.state === "COMPLIMENTARY";
   // Plan buttons only where a plan can be chosen here: billing on, the app's handle known, not the owner's store.
   const choosePlanUrl = complimentary ? null : data.choosePlanUrl;
@@ -123,7 +137,13 @@ export default function Plan() {
         </s-stack>
         {data.welcome && data.state === "ACTIVE" ? (
           <s-banner tone="success" heading={t("plan.welcome.heading")}>
-            <s-paragraph>{t("plan.welcome.body")}</s-paragraph>
+            {ownKeyMissing ? (
+              <s-paragraph>
+                {t("plan.welcome.body.ownKey")} <s-link href="/app/settings#settings-keys">{t("plan.welcome.action.ownKey")}</s-link>
+              </s-paragraph>
+            ) : (
+              <s-paragraph>{t("plan.welcome.body")}</s-paragraph>
+            )}
           </s-banner>
         ) : null}
         <PlanHero
@@ -138,6 +158,7 @@ export default function Plan() {
           languages={data.languages}
           costPerMillion={data.costPerMillion}
           actions={<HeroActions i18n={i18n} hero={hero} choosePlanUrl={choosePlanUrl} refresh={refresh} />}
+          ownKeys={data.ownKeys}
         />
         <PlanCards
           i18n={i18n}
@@ -148,9 +169,10 @@ export default function Plan() {
           trial={showTrial({ state: data.state, stale: data.stale, choosePlanUrl })}
           recommendation={recommendation}
           use={data.use}
+          ownKeyPlan={data.ownKeyPlan}
         />
-        <PlanFeatureTable i18n={i18n} current={hero.current} />
-        <PlanFaq i18n={i18n} canChange={choosePlanUrl !== null} />
+        <PlanFeatureTable i18n={i18n} current={hero.current} ownKeyPlan={data.ownKeyPlan} />
+        <PlanFaq i18n={i18n} canChange={choosePlanUrl !== null} ownKeyPlan={data.ownKeyPlan} />
       </s-stack>
     </s-page>
   );

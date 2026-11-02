@@ -12,6 +12,7 @@ import { billingDeps } from "../app/.server/billing/billing";
 import { getBillingStatus } from "../app/.server/billing/subscription";
 import { logger } from "../app/.server/lib/logger";
 import { getTranslationProvider, providerLabel } from "../app/.server/providers";
+import { ownKeyTranslation } from "../app/.server/providers/shop-translation";
 import { createQueues, createWorkers, enqueueCoveragePage, requeueStalledDiscovery, requeueStalledItems, requeueStalledReports } from "../app/.server/jobs/queues";
 import { AUTO_SWEEP_INTERVAL_MS, sweepChangedContent } from "../app/.server/jobs/auto-sweep";
 import type { JobDependencies } from "../app/.server/jobs/processors";
@@ -22,6 +23,7 @@ import { withShopifyTimeout } from "../app/.server/shopify/admin-timeout";
 import { purgeWebhookLog } from "../app/.server/webhooks/process-webhook";
 import { repairAllSmartRuns } from "../app/.server/smart/plan";
 import { smartTick } from "../app/.server/smart/runs";
+import { maintainEngineKeys } from "../app/.server/credentials/maintenance";
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 /** Smart Auto-Translate: schedules are checked every minute (times are in whole minutes). */
@@ -52,6 +54,8 @@ async function main() {
     adminFor: async (shopDomain) =>
       withShopifyTimeout((await unauthenticated.admin(shopDomain)).admin, config.SHOPIFY_TIMEOUT_MS, "worker"),
     provider: getTranslationProvider(),
+    // Own key plan: the shop's own keys, built per item (never the provider above for such a shop).
+    ownKeyTranslation: (shopId, settings) => ownKeyTranslation(shopId, { settings, client: prisma }),
     monthlyLimit: limits.limit,
     // Per shop the daily cap is never above its plan's monthly allowance (processItem), as on every page.
     dailyLimit: config.AI_DAILY_CHAR_LIMIT,
@@ -88,6 +92,13 @@ async function main() {
         if (reports) logger.warn({ reports }, "continued stalled coverage reports");
         const runs = await repairAllSmartRuns(prisma);
         if (runs) logger.warn({ runs }, "finished smart runs whose measurement had ended");
+        // Own key plan: merchant keys move to the active key id, and are counted per key id.
+        try {
+          const keys = await maintainEngineKeys({ prisma, redis: connection, prefix });
+          if (keys.reencrypted || keys.healed) logger.info({ reencrypted: keys.reencrypted, healed: keys.healed }, "engine keys maintained");
+        } catch (error) {
+          logger.error({ err: (error as Error).name }, "engine key maintenance failed");
+        }
       }
       const purged = await purgeWebhookLog(prisma);
       if (purged) logger.info({ purged }, "old webhook log entries deleted");

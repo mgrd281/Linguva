@@ -7,9 +7,12 @@ import { logger } from "../lib/logger";
 import { alignDocuments, type SegmentPair } from "../memory/alignment";
 import { recordMemoryUse, storeMemory } from "../memory/translation-memory";
 import type { TranslationProvider } from "../providers/types";
+import { noteOwnKeyResult } from "../credentials/service";
+import type { OwnCredential } from "../credentials/store";
+import { OwnKeyUnavailableError, ownKeyFailure } from "../credentials/errors";
 import { INTERACTIVE_DEADLINE_MS } from "../providers/engine-router";
 import { consentGap, plannedEngine, routerSignal } from "../providers/index";
-import type { EngineId } from "../../lib/engines";
+import type { ConsentToken, EngineId } from "../../lib/engines";
 import { consentedEngines, formalityFor, getShopSettings, hasCurrentAiConsent, translationContext } from "../settings/shop-settings";
 import { chargedChars, chargeForFailure, chargeForResult } from "../usage/engine-charge";
 import {
@@ -101,12 +104,22 @@ export async function aiTranslateResource(
     maxRequestChars?: number;
     /** The request's own signal (the merchant left the page): a router stops before its next engine. */
     signal?: AbortSignal;
+    /**
+     * The services the consent is about (shop-translation.ts): absent, the environment's engines,
+     * as before. Own key plan: the tokens of the keys the provider was built from.
+     */
+    configured?: ConsentToken[];
+    /** "merchant": the shop's own keys (Own key plan): no Linguva limit, results noted per key. */
+    payer?: "merchant";
+    /** Own key plan: the credentials the provider was built from (keyVersion guard). */
+    used?: readonly OwnCredential[];
   },
   client: PrismaClient = defaultClient,
 ) {
+  const payer = input.payer ?? "linguva";
   const settings = await getShopSettings(input.shopId, client);
-  if (!hasCurrentAiConsent(settings)) throw new AiConsentRequiredError();
-  const engines = consentedEngines(settings);
+  if (!hasCurrentAiConsent(settings, input.configured, payer)) throw new AiConsentRequiredError();
+  const engines = consentedEngines(settings, input.configured, payer);
 
   const resource = await loadResource(input.admin, input.resourceId, input.targetLocale);
   const wanted = new Set(input.keys);
@@ -141,6 +154,8 @@ export async function aiTranslateResource(
           dailyLimit: input.dailyLimit,
           platformDailyLimit: input.platformDailyLimit,
           provider: await plannedEngine(input.provider, input.targetLocale, engines, sourceLocaleOf(resource)),
+          // The shop's own keys: no Linguva limit, no Linguva cost (usage-ledger.ts).
+          ...(input.payer ? { payer: input.payer } : {}),
         },
         client,
       )
@@ -166,9 +181,20 @@ export async function aiTranslateResource(
       const billed = chargedChars(charge);
       await (billed > 0 || Object.keys(charge.lost).length > 0 ? settleUsage(reservation, billed, client, charge) : releaseUsage(reservation, client));
     }
+    if (input.payer === "merchant") {
+      // Every key the request found used up or refused is marked, guarded by its keyVersion. A key
+      // replaced or removed meanwhile: the result was the old key's, so "try again" (never its error).
+      const { stale } = await noteOwnKeyResult(input.shopId, input.used ?? [], { failed: ownKeyFailure(error) }, client);
+      if (stale) throw new OwnKeyUnavailableError("changed");
+    }
     throw error;
   }
   if (reservation) await settleUsage(reservation, result.billedCharacters, client, chargeForResult(result));
+  // Own keys: one that answered after its quota was used up is usable again; keys passed over for
+  // quota or auth are marked. Only when texts were really sent (memory alone calls nothing).
+  if (input.payer === "merchant") {
+    await noteOwnKeyResult(input.shopId, input.used ?? [], { ...(reservation ? { answeredBy: result.provider } : {}), failed: result.failovers ?? [] }, client);
+  }
   await recordMemoryUse(input.shopId, result.memoryEntryIds, client);
   return {
     outcomes: result.outcomes,

@@ -5,10 +5,12 @@
  * the store's own use. Every state is an icon and words.
  */
 import type { MessageKey, MessageVars } from "../i18n/i18n";
+import { ENGINE_IDS, type EngineId } from "./engines";
 import type { IconType } from "./icons";
-import { PLAN_ICON, STATE_ICON } from "./plan-features";
+import { usableOwnKey, type OwnKeySummary } from "./own-keys";
+import { OWN_KEY_ICON, PLAN_ICON, STATE_ICON } from "./plan-features";
 import { inTrial } from "./plan-prices";
-import { PLANS, TRIAL_AI_CHARS, type Entitlements, type PlanHandle } from "./plans";
+import { isKnownPlanHandle, isOwnKeyHandle, planEntitlements, PLANS, TRIAL_AI_CHARS, type Entitlements, type KnownPlanHandle, type PlanHandle } from "./plans";
 
 export const PLAN_ORDER = Object.keys(PLANS) as PlanHandle[];
 
@@ -16,8 +18,15 @@ export function isPlanHandle(handle: string | null | undefined): handle is PlanH
   return Boolean(handle) && Object.hasOwn(PLANS, handle!);
 }
 
-/** A plan's name as the app shows it: the brand name from the handle ("Pro"), also for a handle the app doesn't know. */
+/** The Own key plan's name in every language (plan names are brand names). */
+export const OWN_KEY_NAME = "Own key";
+
+/**
+ * A plan's name as the app shows it: the brand name from the handle ("Pro"), also for a handle the
+ * app doesn't know; "Own key" for every Own key handle (its aliases and test plan too).
+ */
 export function planName(handle: string): string {
+  if (isOwnKeyHandle(handle)) return OWN_KEY_NAME;
   return handle.charAt(0).toUpperCase() + handle.slice(1);
 }
 
@@ -38,6 +47,8 @@ export interface PlanViewInput {
   choosePlanUrl: string | null;
   /** The loader's time (ISO). */
   now: string;
+  /** Own key plan: the engines of the shop's usable keys (none yet: an empty list). Absent on other plans. */
+  ownKeys?: { engines: EngineId[] } | null;
 }
 
 /** A text as a message key with its values; dates are passed as ISO strings and formatted by the page. */
@@ -50,6 +61,8 @@ export interface Words {
   dateTimes?: Record<string, string>;
   /** Values that are plan handles, shown as plan names. */
   plans?: Record<string, string>;
+  /** Values that are lists of engines, shown as their names ("DeepL and Google Cloud"). */
+  engines?: Record<string, EngineId[]>;
 }
 
 export type Tone = "success" | "info" | "caution";
@@ -61,20 +74,23 @@ export interface HeroView {
   icon: IconType;
   badge: { tone: Tone; icon: IconType; words: Words } | null;
   lines: Array<{ icon: IconType | null; words: Words }>;
-  /** The main action: change or choose a plan (a link to Shopify's page), or try the check again. */
-  primary: "change" | "choose" | "retry" | null;
+  /**
+   * The main action: change or choose a plan (a link to Shopify's page), try the check again, or
+   * (Own key plan without a usable key) add a key in Settings.
+   */
+  primary: "change" | "choose" | "retry" | "addKey" | null;
   /** A second link to Shopify's page next to "Try again". */
   secondary: "change" | "choose" | null;
   /** "As of …" with the quiet refresh. */
   checkedAt: string | null;
   /** The refresh form exists (as the primary "Try again" or the quiet "Refresh"). */
   refresh: boolean;
-  /** The plan card marked "Your plan". */
-  current: PlanHandle | null;
+  /** The plan card marked "Your plan" (Own key: its own card). */
+  current: KnownPlanHandle | null;
   /** Free's card says "Applies now": the store has no (known) plan. */
   freeAppliesNow: boolean;
   /** The plan the store changes to, with its date (card badge "from …"). */
-  pending: { handle: PlanHandle; date: string | null } | null;
+  pending: { handle: KnownPlanHandle; date: string | null } | null;
   /** A Shopify trial runs (its end, ISO). */
   trialEndsAt: string | null;
   /** The trial's end when the plan's own allowance is bigger than the trial's (ISO): more AI characters from then on. */
@@ -136,13 +152,13 @@ export function planView(input: PlanViewInput): HeroView {
     };
   }
   const handle = input.state === "ACTIVE" ? (sub?.planHandle ?? null) : null;
-  const known = isPlanHandle(handle) ? handle : null;
+  const known = isKnownPlanHandle(handle) ? handle : null;
   if (input.stale) {
     return {
       ...base,
       kind: "stale",
       name: handle ? { handle } : { key: "plan.hero.name.none" },
-      icon: known ? PLAN_ICON[known] : STATE_ICON.none,
+      icon: known ? planIcon(known) : STATE_ICON.none,
       badge: { tone: "caution", icon: "alert-triangle", words: { key: "plan.status.stale" } },
       // No trial or pending lines: they may be out of date.
       lines: [{ icon: null, words: { key: "plan.hero.line.stale", dateTimes: sub ? { date: sub.checkedAt } : {} } }],
@@ -177,9 +193,20 @@ export function planView(input: PlanViewInput): HeroView {
       : { tone: "success", icon: "check-circle", words: { key: "plan.status.active" } };
   const lines: HeroView["lines"] = [];
   // The trial's allowance is lower than the plan's: the plan's applies when the trial ends.
-  const rises = trial && known !== null && PLANS[known].monthlyChars > TRIAL_AI_CHARS;
+  // Never on Own key: it has no Linguva allowance (0 characters) that a trial's could be below.
+  const rises = trial && known !== null && planEntitlements(known).monthlyChars > TRIAL_AI_CHARS;
   if (rises) {
-    lines.push({ icon: null, words: { key: "plan.current.trialAllowance", vars: { trial: TRIAL_AI_CHARS, limit: PLANS[known!].monthlyChars } } });
+    lines.push({ icon: null, words: { key: "plan.current.trialAllowance", vars: { trial: TRIAL_AI_CHARS, limit: planEntitlements(known!).monthlyChars } } });
+  }
+  // Own key: which of the shop's keys translate, or that a key is needed first.
+  const ownKey = isOwnKeyHandle(known);
+  const ready = ownKey && Boolean(input.ownKeys?.engines.length);
+  if (ownKey) {
+    lines.push(
+      ready
+        ? { icon: "connect", words: { key: "plan.hero.line.ownKey.ready", engines: { engines: input.ownKeys!.engines } } }
+        : { icon: "info", words: { key: "plan.hero.line.ownKey.missing" } },
+    );
   }
   const pendingHandle = sub?.pendingPlanHandle ?? null;
   if (pendingHandle) {
@@ -195,19 +222,51 @@ export function planView(input: PlanViewInput): HeroView {
   return {
     kind: "active",
     name: { handle: handle ?? "free" },
-    icon: known ? PLAN_ICON[known] : STATE_ICON.unknown,
+    icon: known ? planIcon(known) : STATE_ICON.unknown,
     badge,
     lines,
-    primary: canChoose ? "change" : null,
-    secondary: null,
+    // Own key without a usable key: adding one comes first; changing the plan stays beside it.
+    primary: ownKey && !ready ? "addKey" : canChoose ? "change" : null,
+    secondary: ownKey && !ready && canChoose ? "change" : null,
     checkedAt: sub?.checkedAt ?? null,
     refresh: true,
     current: known,
     freeAppliesNow: !known,
-    pending: isPlanHandle(pendingHandle) ? { handle: pendingHandle, date: sub?.currentPeriodEnd ?? null } : null,
+    pending: isKnownPlanHandle(pendingHandle) ? { handle: pendingHandle, date: sub?.currentPeriodEnd ?? null } : null,
     trialEndsAt: trial ? sub!.trialEndsAt : null,
     allowanceRisesAt: rises ? sub!.trialEndsAt : null,
   };
+}
+
+/**
+ * The Own key plan on the Plan page (outside the ladder of four): its card, table note and question
+ * show while OWN_KEY_PLAN_VISIBLE is on, and always to a subscriber or a store changing to it.
+ */
+export interface OwnKeyPlanView {
+  visible: boolean;
+  /** ACTIVE on an Own key handle. */
+  current: boolean;
+  /** A change to Own key waits for the end of the billing cycle. */
+  pending: boolean;
+  /** Shopify's plan page (the card's button), null when no plan can be chosen here. */
+  choosePlanUrl: string | null;
+  price: { monthlyUsd: number; yearlyUsd: number | null };
+}
+
+/** The Own key plan's keys (summaries: hints only) and usage for the Plan page (a subscriber only). */
+export interface PlanOwnKeys {
+  keys: OwnKeySummary[];
+  usage: { total: number; byEngine: Partial<Record<EngineId, number>> };
+}
+
+/** The engines of the usable keys, in routing order (the hero's "Translates with your keys: …"). */
+export function usableEngines(keys: readonly Pick<OwnKeySummary, "engine" | "status">[]): EngineId[] {
+  return ENGINE_IDS.filter((engine) => keys.some((k) => k.engine === engine && usableOwnKey(k)));
+}
+
+/** A plan's sign: the ladder's own, or Own key's. */
+export function planIcon(handle: KnownPlanHandle): IconType {
+  return isOwnKeyHandle(handle) ? OWN_KEY_ICON : PLAN_ICON[handle];
 }
 
 /**

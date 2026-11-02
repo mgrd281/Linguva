@@ -6,7 +6,9 @@ import {
   clearGoogleLanguageCache,
   googleEndpoints,
   googleLanguageCandidates,
+  googleLanguageStateSizes,
   GoogleTranslateProvider,
+  MAX_SCOPED_FAILURES,
   googleTranslateRequest,
   resolveGoogleLanguage,
   type GoogleAuth,
@@ -545,5 +547,171 @@ describe("Google credential check", () => {
     clearGoogleTokens();
     const down = fakeFetch(echo, { token: () => new Response(null, { status: 503 }) });
     expect(await provider(V3, down.impl).checkCredentials()).toBe("unreachable");
+  });
+});
+
+// ---------------------------------------------------------------- Own key plan: scoped list state and the detailed check
+
+describe("Google language list scopes (merchant keys)", () => {
+  // Fictional keys built at runtime: one Google refuses, one it accepts.
+  const REFUSED = `refused-${"r".repeat(24)}`;
+  const ACCEPTED = `accepted-${"a".repeat(24)}`;
+  const keyOf = (call: Call) => call.headers["X-goog-api-key"];
+  const refusedList = googleError(400, { status: "INVALID_ARGUMENT", details: [errorInfo("API_KEY_INVALID")] });
+  const byKey = (call: Call) => (keyOf(call) === REFUSED ? refusedList() : languageList(call.url));
+  const listCalls = (calls: Call[]) => calls.filter((c) => c.url.includes("/languages")).length;
+  const scoped = (apiKey: string, scope: string, impl: typeof fetch, now?: () => number) =>
+    provider({ kind: "apiKey", apiKey }, impl, { cacheScope: scope, ...(now ? { now } : {}) });
+
+  it("a refused merchant key fails only its own scope: other merchants and the operator still read the list", async () => {
+    const { impl, calls } = fakeFetch(echo, { languages: byKey });
+    await expect(scoped(REFUSED, "own:google:a", impl).targetSupport(["de"])).rejects.toMatchObject({ kind: "auth" });
+    // Remembered for that scope: not asked again for 5 minutes.
+    await expect(scoped(REFUSED, "own:google:a", impl).targetSupport(["de"])).rejects.toMatchObject({ kind: "auth" });
+    expect(listCalls(calls)).toBe(1);
+    // The operator (no scope) isn't affected and fetches the list itself.
+    expect(await provider(V2, impl).targetSupport(["de"])).toEqual(new Map([["de", true]]));
+    expect(listCalls(calls)).toBe(2);
+    // Another merchant gets the shared list.
+    expect(await scoped(ACCEPTED, "own:google:b", impl).targetSupport(["de"])).toEqual(new Map([["de", true]]));
+    expect(listCalls(calls)).toBe(2);
+  });
+
+  it("an operator list failure doesn't make a merchant's list fail either", async () => {
+    const { impl, calls } = fakeFetch(echo, { languages: (call) => (keyOf(call) === API_KEY ? new Response(null, { status: 503 }) : languageList(call.url)) });
+    await expect(provider(V2, impl).targetSupport(["de"])).rejects.toMatchObject({ kind: "retryable" });
+    expect(await scoped(ACCEPTED, "own:google:c", impl).targetSupport(["de"])).toEqual(new Map([["de", true]]));
+    expect(listCalls(calls)).toBe(2);
+  });
+
+  it("never lets one scope await another scope's request; one scope shares its own", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { impl, calls } = fakeFetch(echo, {
+      languages: async (call) => {
+        await gate;
+        return byKey(call);
+      },
+    });
+    const a1 = scoped(REFUSED, "own:google:d", impl).targetSupport(["de"]);
+    const a2 = scoped(REFUSED, "own:google:d", impl).targetSupport(["de"]);
+    const b = scoped(ACCEPTED, "own:google:e", impl).targetSupport(["de"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(listCalls(calls)).toBe(2);
+    expect(googleLanguageStateSizes().pending).toBe(2);
+    release();
+    await expect(a1).rejects.toMatchObject({ kind: "auth" });
+    await expect(a2).rejects.toMatchObject({ kind: "auth" });
+    expect(await b).toEqual(new Map([["de", true]]));
+    expect(googleLanguageStateSizes().pending).toBe(0);
+  });
+
+  it("keeps one shared list entry, served to every scope and to the operator", async () => {
+    const { impl, calls } = fakeFetch();
+    await scoped(ACCEPTED, "own:google:f", impl).targetSupport(["de"]);
+    await scoped(ACCEPTED, "own:google:g", impl).targetSupport(["fr"]);
+    await provider(V2, impl).targetSupport(["ja"]);
+    expect(listCalls(calls)).toBe(1);
+    expect(googleLanguageStateSizes()).toEqual({ cache: 1, failures: 0, pending: 0 });
+    expect(googleEndpoints({ kind: "apiKey", apiKey: ACCEPTED }).cacheKey).toBe("google:v2");
+  });
+
+  it("drops an expired scoped failure when it is read", async () => {
+    let now = 1_000_000;
+    let release!: () => void;
+    let gate: Promise<void> = Promise.resolve();
+    const { impl } = fakeFetch(echo, {
+      languages: async (call) => {
+        await gate;
+        return byKey(call);
+      },
+    });
+    await expect(scoped(REFUSED, "own:google:h", impl, () => now).targetSupport(["de"])).rejects.toMatchObject({ kind: "auth" });
+    expect(googleLanguageStateSizes().failures).toBe(1);
+    now += 5 * 60 * 1000 + 1;
+    gate = new Promise<void>((resolve) => (release = resolve));
+    const again = scoped(REFUSED, "own:google:h", impl, () => now).targetSupport(["de"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(googleLanguageStateSizes()).toMatchObject({ failures: 0, pending: 1 });
+    release();
+    await expect(again).rejects.toMatchObject({ kind: "auth" });
+    expect(googleLanguageStateSizes().failures).toBe(1);
+  });
+
+  it("stays at most MAX_SCOPED_FAILURES entries after 2,000 refused scopes, and never drops the operator's", async () => {
+    const operatorDown = fakeFetch(echo, { languages: () => new Response(null, { status: 503 }) });
+    await expect(provider(V2, operatorDown.impl).targetSupport(["de"])).rejects.toMatchObject({ kind: "retryable" });
+    const { impl, calls } = fakeFetch(echo, { languages: byKey });
+    for (let i = 0; i < 2_000; i++) {
+      await expect(scoped(REFUSED, `own:google:${i}`, impl).targetSupport(["de"])).rejects.toMatchObject({ kind: "auth" });
+      expect(googleLanguageStateSizes().failures).toBeLessThanOrEqual(MAX_SCOPED_FAILURES);
+    }
+    expect(listCalls(calls)).toBe(2_000);
+    // The newest scopes are still remembered; the operator's failure too (no new request for it).
+    await expect(scoped(REFUSED, "own:google:1999", impl).targetSupport(["de"])).rejects.toMatchObject({ kind: "auth" });
+    expect(listCalls(calls)).toBe(2_000);
+    await expect(provider(V2, impl).targetSupport(["de"])).rejects.toMatchObject({ kind: "retryable" });
+    expect(listCalls(calls)).toBe(2_000);
+    expect(googleLanguageStateSizes().cache).toBe(0);
+  });
+});
+
+describe("Google detailed credential check (merchant keys)", () => {
+  it.each([
+    [200, null, "ok"],
+    [400, { status: "INVALID_ARGUMENT", details: [errorInfo("API_KEY_INVALID")] }, "refused"],
+    [401, { status: "UNAUTHENTICATED" }, "refused"],
+    [403, { errors: [{ reason: "userRateLimitExceeded" }] }, "unreachable"],
+    [403, { errors: [{ reason: "rateLimitExceeded" }] }, "unreachable"],
+    [403, { errors: [{ reason: "dailyLimitExceeded" }] }, "quota"],
+    [403, { status: "PERMISSION_DENIED", details: [quotaInfo("DefaultPerDayPerProject")] }, "quota"],
+    [403, { status: "PERMISSION_DENIED", details: [errorInfo("SERVICE_DISABLED")] }, "refused"],
+    [403, { status: "PERMISSION_DENIED", details: [errorInfo("BILLING_DISABLED")] }, "refused"],
+    [403, { status: "PERMISSION_DENIED" }, "refused"],
+    [404, { status: "NOT_FOUND" }, "refused"],
+    [408, {}, "unreachable"],
+    [409, { status: "ABORTED" }, "refused"],
+    [429, { status: "RESOURCE_EXHAUSTED", details: [errorInfo("RATE_LIMIT_EXCEEDED")] }, "unreachable"],
+    [429, { errors: [{ reason: "dailyLimitExceeded" }] }, "quota"],
+    [500, { status: "INTERNAL" }, "unreachable"],
+    [503, null, "unreachable"],
+  ] as const)("v2 languages HTTP %i %j → %s", async (status, error, outcome) => {
+    const { impl, calls } = fakeFetch(echo, {
+      languages: (call) => (status === 200 ? languageList(call.url) : error ? googleError(status, error)() : new Response(null, { status })),
+    });
+    expect(await provider(V2, impl).checkCredentialsDetailed()).toBe(outcome);
+    // The same request as the operator check: the v2 list with the key in a header, no token call.
+    expect(calls.map((c) => [c.method, c.url, c.headers])).toEqual([["GET", `${V2_URL}/languages?model=nmt`, { "X-goog-api-key": API_KEY }]]);
+    // A check never fills or fails the language list.
+    expect(googleLanguageStateSizes()).toEqual({ cache: 0, failures: 0, pending: 0 });
+  });
+
+  it("is unreachable on a network error", async () => {
+    const impl = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    expect(await provider(V2, impl).checkCredentialsDetailed()).toBe("unreachable");
+  });
+
+  it("leaves the operator's checkCredentials() as it was (a rate limit or a used-up day is still refused there)", async () => {
+    for (const [error, detailed] of [
+      [{ errors: [{ reason: "userRateLimitExceeded" }] }, "unreachable"],
+      [{ errors: [{ reason: "dailyLimitExceeded" }] }, "quota"],
+    ] as const) {
+      const { impl } = fakeFetch(echo, { languages: googleError(403, error) });
+      expect(await provider(V2, impl).checkCredentials()).toBe("refused");
+      expect(await provider(V2, impl).checkCredentialsDetailed()).toBe(detailed);
+    }
+  });
+
+  it("v3: a refused token grant is refused, an unreachable token endpoint unreachable", async () => {
+    const ok = fakeFetch();
+    expect(await provider(V3, ok.impl).checkCredentialsDetailed()).toBe("ok");
+    clearGoogleTokens();
+    const grant = fakeFetch(echo, { token: () => Response.json({ error: "invalid_grant" }, { status: 400 }) });
+    expect(await provider(V3, grant.impl).checkCredentialsDetailed()).toBe("refused");
+    clearGoogleTokens();
+    const down = fakeFetch(echo, { token: () => new Response(null, { status: 503 }) });
+    expect(await provider(V3, down.impl).checkCredentialsDetailed()).toBe("unreachable");
   });
 });

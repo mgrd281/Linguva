@@ -42,6 +42,13 @@ export type GoogleAuth =
 
 export interface GoogleOptions {
   auth: GoogleAuth;
+  /**
+   * A merchant's own key (Own key plan): its state key ("own:google:<fingerprint>", never the key).
+   * A failed language list read and an in-flight one are kept per scope, so one merchant's refused
+   * key never makes another shop's (or the operator's) list fail, and no shop awaits another
+   * shop's request. A successful list is public and stays shared. Absent: the operator, as before.
+   */
+  cacheScope?: string;
   fetch?: typeof fetch;
   /** Default 30_000. */
   timeoutMs?: number;
@@ -65,6 +72,8 @@ const CHECK_TIMEOUT_MS = 5_000;
 
 const LANGUAGE_CACHE_MS = 24 * 60 * 60 * 1000;
 const LANGUAGE_FAILURE_MS = 5 * 60 * 1000;
+/** Scoped (own-key) failure entries above this are dropped, expired ones first, then the oldest down to half. */
+export const MAX_SCOPED_FAILURES = 1_000;
 
 interface LanguageLists {
   /** Lower-cased code → the code as Google writes it. */
@@ -72,7 +81,10 @@ interface LanguageLists {
   sources: ReadonlyMap<string, string>;
 }
 
-/** By googleEndpoints().cacheKey: never a key or a token. */
+/**
+ * By googleEndpoints().cacheKey: never a key or a token. Failures and in-flight requests of a
+ * scoped provider (a merchant's key) are kept under `${cacheKey}#${cacheScope}` instead.
+ */
 const languageCache = new Map<string, { at: number; lists: LanguageLists }>();
 const languageFailures = new Map<string, { at: number; error: TranslationProviderError }>();
 const languagePending = new Map<string, Promise<LanguageLists>>();
@@ -81,6 +93,25 @@ export function clearGoogleLanguageCache(): void {
   languageCache.clear();
   languageFailures.clear();
   languagePending.clear();
+}
+
+/** Tests only: how many entries the process-wide language maps hold. */
+export function googleLanguageStateSizes(): { cache: number; failures: number; pending: number } {
+  return { cache: languageCache.size, failures: languageFailures.size, pending: languagePending.size };
+}
+
+const isScoped = (key: string) => key.includes("#");
+
+/** Records a failed list read. A new scoped entry first makes room; unscoped (operator) entries are never dropped. */
+function noteLanguageFailure(key: string, error: TranslationProviderError, now: number): void {
+  if (isScoped(key) && !languageFailures.has(key) && languageFailures.size >= MAX_SCOPED_FAILURES) {
+    for (const [k, failure] of languageFailures) if (isScoped(k) && now - failure.at >= LANGUAGE_FAILURE_MS) languageFailures.delete(k);
+    for (const k of languageFailures.keys()) {
+      if (languageFailures.size <= MAX_SCOPED_FAILURES / 2) break;
+      if (isScoped(k)) languageFailures.delete(k);
+    }
+  }
+  languageFailures.set(key, { at: now, error });
 }
 
 /** Where each auth path goes. Pure. */
@@ -353,21 +384,25 @@ export class GoogleTranslateProvider implements TranslationProvider {
 
   private async languageLists(now = this.now()): Promise<LanguageLists> {
     const { cacheKey } = googleEndpoints(this.options.auth);
+    // The list itself is public and the same for every key: shared. What one key's read did isn't.
+    const scoped = this.options.cacheScope ? `${cacheKey}#${this.options.cacheScope}` : cacheKey;
     const cached = languageCache.get(cacheKey);
     if (cached && now - cached.at < LANGUAGE_CACHE_MS) return cached.lists;
-    const failed = languageFailures.get(cacheKey);
+    const failed = languageFailures.get(scoped);
     if (failed && now - failed.at < LANGUAGE_FAILURE_MS) {
       throw providerError(this.id, failed.error.kind, "language list unavailable", { status: failed.error.status, reason: failed.error.reason });
     }
-    let pending = languagePending.get(cacheKey);
+    if (failed && scoped !== cacheKey) languageFailures.delete(scoped);
+    let pending = languagePending.get(scoped);
     if (!pending) {
-      pending = this.fetchLanguages(cacheKey, now).finally(() => languagePending.delete(cacheKey));
-      languagePending.set(cacheKey, pending);
+      pending = this.fetchLanguages(cacheKey, scoped, now).finally(() => languagePending.delete(scoped));
+      languagePending.set(scoped, pending);
     }
     return pending;
   }
 
-  private async fetchLanguages(cacheKey: string, now: number): Promise<LanguageLists> {
+  /** `scoped`: where this read's failure is kept (the cache key, or the key with this provider's scope). */
+  private async fetchLanguages(cacheKey: string, scoped: string, now: number): Promise<LanguageLists> {
     try {
       const { languages } = googleEndpoints(this.options.auth);
       const response = await this.authorised(languages, (token) => ({ headers: this.authHeader(token) }), this.timeoutMs);
@@ -392,10 +427,10 @@ export class GoogleTranslateProvider implements TranslationProvider {
       }
       if (lists.targets.size === 0) throw providerError(this.id, "retryable", "malformed language list", { status: response.status });
       languageCache.set(cacheKey, { at: now, lists });
-      languageFailures.delete(cacheKey);
+      languageFailures.delete(scoped);
       return lists;
     } catch (error) {
-      if (error instanceof TranslationProviderError) languageFailures.set(cacheKey, { at: now, error });
+      if (error instanceof TranslationProviderError) noteLanguageFailure(scoped, error, now);
       throw error;
     }
   }
@@ -468,6 +503,29 @@ export class GoogleTranslateProvider implements TranslationProvider {
       await response.body?.cancel().catch(() => undefined);
       if (response.ok) return "ok";
       return [400, 401, 403, 404].includes(response.status) ? "refused" : "unreachable";
+    } catch (error) {
+      // The token endpoint refused the service account.
+      return error instanceof TranslationProviderError && error.kind === "auth" ? "refused" : "unreachable";
+    }
+  }
+
+  /**
+   * The same request as checkCredentials(), read the way a translation is (Own key plan's key
+   * check): a used-up quota (403 dailyLimitExceeded, a per-day limit) is "quota", a rate limit,
+   * timeout or outage "unreachable", and only a refusal (400 API_KEY_INVALID, 401, other 403
+   * incl. SERVICE_DISABLED and BILLING_DISABLED, 404) or an invalid request "refused".
+   */
+  async checkCredentialsDetailed(): Promise<"ok" | "quota" | "refused" | "unreachable"> {
+    try {
+      const response = await this.authorised(googleEndpoints(this.options.auth).languages, (token) => ({ headers: this.authHeader(token) }), CHECK_TIMEOUT_MS);
+      if (response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        return "ok";
+      }
+      const { kind } = classifyGoogleError(response.status, await errorJson(response));
+      if (kind === "quota") return "quota";
+      if (kind === "retryable") return "unreachable";
+      return "refused";
     } catch (error) {
       // The token endpoint refused the service account.
       return error instanceof TranslationProviderError && error.kind === "auth" ? "refused" : "unreachable";

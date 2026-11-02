@@ -169,6 +169,12 @@ export const en = {
   "editor.consent.body.multi": "To translate with AI, the {singular} text you choose is sent to our translation providers ({processors}) for processing. No customer data is sent. You can review every result before it is published.",
   "editor.consent.order": "Texts go to {first} first; only if it can't translate them are they sent to {next}.",
   "editor.aiError.CONSENT_CHANGED": "The list of translation services has changed. Check it and allow again.",
+  // The Own key plan (docs/AI_ENGINES.md).
+  "editor.aiError.OWN_KEY_QUOTA": "Your {engine} key's quota is used up. Check your {engine} account or add another key in Settings.",
+  "editor.aiError.OWN_KEY_AUTH": "{engine} refused your key, or the service isn't set up for it. Fix it in your {engine} account and click Check again in Settings, or replace the key.",
+  "editor.aiError.OWN_KEY_MISSING": "Add your translation key in Settings to translate with AI.",
+  "editor.ai.ownKey": "Your own key · {chars} characters this calendar month (UTC)",
+  "editor.consent.body.ownKey": "To translate with AI, the {singular} text you choose is sent with your own keys to {processors}, under your contract with them. No customer data is sent. You can review every result before it is published.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -345,6 +351,11 @@ export const de: Translation<typeof en> = {
   "editor.consent.body.multi": "Für die KI-Übersetzung wird der ausgewählte Text dieses Eintrags ({singular}) zur Verarbeitung an unsere Übersetzungsanbieter ({processors}) gesendet. Es werden keine Kundendaten gesendet. Du kannst jedes Ergebnis prüfen, bevor es veröffentlicht wird.",
   "editor.consent.order": "Texte gehen zuerst an {first}; nur wenn dieser Dienst sie nicht übersetzen kann, gehen sie an {next}.",
   "editor.aiError.CONSENT_CHANGED": "Die Liste der Übersetzungsdienste hat sich geändert. Prüfe sie und erlaube erneut.",
+  "editor.aiError.OWN_KEY_QUOTA": "Das Kontingent deines {engine}-Schlüssels ist aufgebraucht. Prüfe dein {engine}-Konto oder füge in den Einstellungen einen weiteren Schlüssel hinzu.",
+  "editor.aiError.OWN_KEY_AUTH": "{engine} hat deinen Schlüssel abgelehnt, oder der Dienst ist dafür nicht eingerichtet. Behebe es in deinem {engine}-Konto und klicke in den Einstellungen auf „Erneut prüfen“, oder ersetze den Schlüssel.",
+  "editor.aiError.OWN_KEY_MISSING": "Füge in den Einstellungen deinen Übersetzungsschlüssel hinzu, um mit KI zu übersetzen.",
+  "editor.ai.ownKey": "Eigener Schlüssel · {chars} Zeichen in diesem Kalendermonat (UTC)",
+  "editor.consent.body.ownKey": "Für die KI-Übersetzung wird der ausgewählte Text dieses Eintrags ({singular}) mit deinen eigenen Schlüsseln an {processors} gesendet, im Rahmen deines Vertrags mit ihnen. Es werden keine Kundendaten gesendet. Du kannst jedes Ergebnis prüfen, bevor es veröffentlicht wird.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -526,6 +537,11 @@ export const fr: Translation<typeof en> = {
   "editor.consent.body.multi": "Pour traduire avec l'IA, le texte que vous choisissez pour cet élément ({singular}) est envoyé à nos prestataires de traduction ({processors}) pour être traité. Aucune donnée client n'est envoyée. Vous pouvez réviser chaque résultat avant sa publication.",
   "editor.consent.order": "Les textes vont d'abord à {first} ; seulement s'il ne peut pas les traduire, ils sont envoyés à {next}.",
   "editor.aiError.CONSENT_CHANGED": "La liste des services de traduction a changé. Vérifiez-la et autorisez à nouveau.",
+  "editor.aiError.OWN_KEY_QUOTA": "Le quota de votre clé {engine} est épuisé. Vérifiez votre compte {engine} ou ajoutez une autre clé dans les paramètres.",
+  "editor.aiError.OWN_KEY_AUTH": "{engine} a refusé votre clé, ou le service n'est pas configuré pour elle. Corrigez-le dans votre compte {engine} et cliquez sur « Vérifier à nouveau » dans les paramètres, ou remplacez la clé.",
+  "editor.aiError.OWN_KEY_MISSING": "Ajoutez votre clé de traduction dans les paramètres pour traduire par IA.",
+  "editor.ai.ownKey": "Votre propre clé · {chars} caractères ce mois civil (UTC)",
+  "editor.consent.body.ownKey": "Pour traduire par IA, le texte de cet élément ({singular}) que vous choisissez est envoyé avec vos propres clés à {processors}, dans le cadre de votre contrat avec eux. Aucune donnée client n'est envoyée. Vous pouvez vérifier chaque résultat avant sa publication.",
 };
 
 export const es: Translation<typeof en> = {
@@ -704,4 +720,9 @@ export const es: Translation<typeof en> = {
   "editor.consent.body.multi": "Para traducir con IA, el texto que elijas de este elemento ({singular}) se envía a nuestros proveedores de traducción ({processors}) para su procesamiento. No se envían datos de clientes. Puedes revisar cada resultado antes de que se publique.",
   "editor.consent.order": "Los textos van primero a {first}; solo si no puede traducirlos se envían a {next}.",
   "editor.aiError.CONSENT_CHANGED": "La lista de servicios de traducción ha cambiado. Revísala y vuelve a permitirlo.",
+  "editor.aiError.OWN_KEY_QUOTA": "La cuota de tu clave de {engine} está agotada. Revisa tu cuenta de {engine} o añade otra clave en Configuración.",
+  "editor.aiError.OWN_KEY_AUTH": "{engine} rechazó tu clave, o el servicio no está configurado para ella. Corrígelo en tu cuenta de {engine} y haz clic en «Comprobar de nuevo» en Configuración, o sustituye la clave.",
+  "editor.aiError.OWN_KEY_MISSING": "Añade tu clave de traducción en Configuración para traducir con IA.",
+  "editor.ai.ownKey": "Tu propia clave · {chars} caracteres en este mes natural (UTC)",
+  "editor.consent.body.ownKey": "Para traducir con IA, el texto de este elemento ({singular}) que elijas se envía con tus propias claves a {processors}, según tu contrato con ellos. No se envían datos de clientes. Puedes revisar cada resultado antes de que se publique.",
 };

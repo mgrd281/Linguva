@@ -208,3 +208,34 @@ describe("results from engines on the HTML transport (Microsoft Azure, Google Cl
     expect(Object.keys(requests[0]!).sort()).toEqual(["context", "formality", "segments", "sourceLocale", "targetLocale"]);
   });
 });
+
+describe("completeTranslation failovers (Own key plan)", () => {
+  /** A provider whose result names the keys that failed before it answered, as an own-key router does. */
+  function withFailovers(failovers?: TranslationResult["failovers"]): TranslationProvider {
+    return {
+      id: "deepl",
+      async translate(request: TranslationRequest): Promise<TranslationResult> {
+        return {
+          translations: request.segments.map((s) => `[de] ${s}`),
+          billedCharacters: request.segments.join("").length,
+          provider: "google",
+          ...(failovers ? { failovers } : {}),
+        };
+      },
+    };
+  }
+  const input = (p: TranslationProvider) => ({ engines: ["deepl", "google"], provider: p, fields: [fields[0]!], sourceLocale: "en", targetLocale: "de" });
+
+  it("passes the provider result's failovers through", async () => {
+    const result = await translateFields(input(withFailovers([{ engine: "deepl", kind: "quota" }])));
+    expect(result.provider).toBe("google");
+    expect(result.failovers).toEqual([{ engine: "deepl", kind: "quota" }]);
+  });
+
+  it("adds no field when the provider reports none (operator results unchanged)", async () => {
+    const result = await translateFields(input(withFailovers()));
+    expect(result).not.toHaveProperty("failovers");
+    const plain = await translateFields(input(provider(german)));
+    expect(plain).not.toHaveProperty("failovers");
+  });
+});

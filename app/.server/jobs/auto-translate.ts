@@ -28,7 +28,8 @@ import { prisma as defaultClient } from "../lib/db";
 import { logger } from "../lib/logger";
 import { allowedTargetLocales } from "../billing/subscription";
 import type { CurrentLocales } from "../locales/current-locales";
-import { autoTranslatePaused, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { autoPauseApplies, autoTranslatePaused, getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
+import { consentForShop } from "../providers/shop-translation";
 import { smartPaused } from "../smart/config";
 import { withTenant } from "../tenancy/with-tenant";
 import { startOfLocalDay } from "../../lib/schedule";
@@ -162,6 +163,8 @@ async function autoProfile(
   payload: AutoTranslatePayload,
   settings: Awaited<ReturnType<typeof getShopSettings>>,
   billing: Awaited<ReturnType<NonNullable<JobDependencies["billingFor"]>>> | null,
+  /** The shop is on the Own key plan: only a pause for one of its keys holds it (autoPauseApplies). */
+  ownKeys = false,
 ): Promise<AutoProfile | null> {
   const smart = await withTenant(
     payload.shopId,
@@ -188,7 +191,7 @@ async function autoProfile(
       timeZone: c.timeZone,
     };
   }
-  if (!settings.autoTranslateNew || autoTranslatePaused(settings)) return null;
+  if (!settings.autoTranslateNew || autoPauseApplies(settings, ownKeys)) return null;
   return {
     requestedBy: AUTO_REQUESTED_BY,
     locales: settings.autoTranslateLocales,
@@ -211,12 +214,14 @@ export async function createAutoItems(
   const none = { itemIds: [], reused: [], busy: false };
   const shop = await client.shop.findUnique({ where: { id: payload.shopId } });
   if (!shop || shop.status !== "ACTIVE") return none;
-  // Settings, consent and plan are read again: they may have changed since the webhook.
+  // Settings, consent and plan are read again: they may have changed since the webhook. The plan
+  // first: on the Own key plan the consent is about the shop's own keys (none: no item).
   const settings = await getShopSettings(payload.shopId, client);
-  if (!hasCurrentAiConsent(settings)) return none;
   const billing = billingFor ? await billingFor(payload.shopId) : null;
+  const consent = await consentForShop(payload.shopId, billing, client);
+  if (!hasCurrentAiConsent(settings, consent.configured, consent.payer)) return none;
   if (billing?.configured && !billing.entitlements.bulk) return none;
-  const profile = await autoProfile(client, payload, settings, billing);
+  const profile = await autoProfile(client, payload, settings, billing, consent.payer === "merchant");
   if (!profile) return none;
 
   // Only languages the shop still has (not one that became primary), within the plan's limit.

@@ -130,3 +130,37 @@ describe("configuration warnings at start", () => {
     expect(logged).toHaveLength(1);
   });
 });
+
+describe("getConfig: the Own key plan", () => {
+  const billing = { SHOPIFY_PARTNER_ORG_ID: "1", SHOPIFY_PARTNER_API_TOKEN: "prtapi_test_token", SHOPIFY_APP_GID: "gid://shopify/App/1", SHOPIFY_APP_HANDLE: "linguva" };
+
+  it("hides the plan by default and accepts only on or off", () => {
+    expect(getConfig({ ...valid } as NodeJS.ProcessEnv).OWN_KEY_PLAN_VISIBLE).toBe("off");
+    expect(getConfig({ ...valid, OWN_KEY_PLAN_VISIBLE: "on" } as NodeJS.ProcessEnv).OWN_KEY_PLAN_VISIBLE).toBe("on");
+    expect(getConfig({ ...valid, OWN_KEY_PLAN_VISIBLE: "off" } as NodeJS.ProcessEnv).OWN_KEY_PLAN_VISIBLE).toBe("off");
+    for (const value of ["yes", "true", "ON", "1"]) {
+      expect(() => getConfig({ ...valid, OWN_KEY_PLAN_VISIBLE: value } as NodeJS.ProcessEnv), value).toThrow(/OWN_KEY_PLAN_VISIBLE/);
+    }
+  });
+
+  it("allows 3 key checks a minute per staff member by default", () => {
+    expect(getConfig({ ...valid } as NodeJS.ProcessEnv).OWN_KEY_CHECKS_PER_MINUTE).toBe(3);
+    expect(getConfig({ ...valid, OWN_KEY_CHECKS_PER_MINUTE: "5" } as NodeJS.ProcessEnv).OWN_KEY_CHECKS_PER_MINUTE).toBe(5);
+    for (const value of ["0", "-1", "1.5", "many"]) {
+      expect(() => getConfig({ ...valid, OWN_KEY_CHECKS_PER_MINUTE: value } as NodeJS.ProcessEnv), value).toThrow(/OWN_KEY_CHECKS_PER_MINUTE/);
+    }
+  });
+
+  it("warns (never stops the start) when the plan is shown while billing is off outside production", () => {
+    const warning = "OWN_KEY_PLAN_VISIBLE=on: the Own key plan is shown, but billing is off: no store can be on it";
+    expect(configWarnings(getConfig({ ...valid, OWN_KEY_PLAN_VISIBLE: "on" } as NodeJS.ProcessEnv))).toEqual([warning]);
+    expect(configWarnings(getConfig({ ...valid, ...billing, OWN_KEY_PLAN_VISIBLE: "on" } as NodeJS.ProcessEnv))).toEqual([]);
+    expect(configWarnings(getConfig({ ...valid, OWN_KEY_PLAN_VISIBLE: "off" } as NodeJS.ProcessEnv))).toEqual([]);
+    // Billing is on only with every Partner setting partnerApiSettings needs.
+    const withoutToken = Object.fromEntries(Object.entries(billing).filter(([name]) => name !== "SHOPIFY_PARTNER_API_TOKEN"));
+    expect(configWarnings(getConfig({ ...valid, ...withoutToken, OWN_KEY_PLAN_VISIBLE: "on" } as NodeJS.ProcessEnv))).toEqual([warning]);
+    const logged: string[] = [];
+    logConfigWarnings((message) => logged.push(message), { ...valid, OWN_KEY_PLAN_VISIBLE: "on" } as NodeJS.ProcessEnv);
+    expect(logged).toEqual([warning]);
+  });
+});

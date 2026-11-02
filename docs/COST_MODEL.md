@@ -24,8 +24,11 @@ Shopify takes 17.9% (15% + 2.9%), DeepL costs $27.50 per 1M characters, and each
 | Pro, monthly | $99.00 | $81.28 | 1,200,000 × $27.50/1M = $33.00 | $0.50 | $47.78 | **48.3%** |
 | Pro, yearly ($990 ÷ 12) | $82.50 | $67.73 | $33.00 | $0.50 | $34.23 | **41.5%** |
 | Business, monthly | $299.00 | $245.48 | 4,000,000 × $27.50/1M = $110.00 | $0.50 | $134.98 | **45.1%** |
+| Own key, monthly | $49.00 | $40.23 | $0 (the merchant pays the engine) | $0.50 | $39.73 | **81.1%** |
 | Free | $0 | — | 20,000 × $27.50/1M = $0.55 | — | −$0.55 | — |
 | Overage | not offered | — | $27.50 per 1M | — | — | $40 per 1M would earn 13.3%; the floor is $65.32, so $69 if ever |
+
+Own key: no translation cost for Linguva; the fixed share is kept for comparison. A large own-key store uses worker and database capacity without a character limit; hosting is not in these figures.
 
 Sensitivity (each cell: the monthly price, then the yearly price ÷ 12; PRICING_DECISION.md §6.2):
 
@@ -87,3 +90,4 @@ Set up only after the owner's decision (docs/AI_ENGINES.md). DeepL stays first, 
 - **Failover partials:** when an engine billed earlier batches and then failed (quota, outage), and another engine translated the request, the shop is charged only the answering engine's count; the failed engine's partial is counted in the platform counter (`PlatformUsageDay`) only, not in a shop's cost or allowance. A request where every engine failed charges the shop at most its reservation.
 - **Not metered at all** (DeepL today too): a timeout or 5xx that the engine had already processed, then retried (3 retries), is billed by the engine again on each attempt.
 - The Plan page's internal rate for the owner's complimentary stores is the month's effective rate: exactly DeepL's while only DeepL translated, else the blend of the engines' rates.
+- Own key stores never count toward `PlatformUsageDay` or the DeepL budget: their ledger rows have `payer = 'merchant'`, and every allowance and cost sum counts only `payer IS NULL` (docs/AI_ENGINES.md, "Merchant's own keys").

@@ -23,8 +23,12 @@ function Question({ question, children }: { question: string; children: ReactNod
   );
 }
 
-/** `canChange`: the page has a plan button (else the question how to change is left out). */
-export function PlanFaq({ i18n, canChange }: { i18n: I18n; canChange: boolean }) {
+/**
+ * `canChange`: the page has a plan button (else the question how to change is left out).
+ * `ownKeyPlan`: the Own key plan's question when it is shown; a subscriber's downgrade answer says
+ * that characters through its own keys don't count toward the new plan.
+ */
+export function PlanFaq({ i18n, canChange, ownKeyPlan }: { i18n: I18n; canChange: boolean; ownKeyPlan?: { visible: boolean; current: boolean } | null }) {
   const { t } = i18n;
   const yearly = yearlyHandles();
   return (
@@ -47,7 +51,7 @@ export function PlanFaq({ i18n, canChange }: { i18n: I18n; canChange: boolean })
               <s-text>{t("plan.faq.downgrade.stopSmart")}</s-text>
             </li>
           </ul>
-          <s-paragraph>{t("plan.faq.downgrade.allowance")}</s-paragraph>
+          <s-paragraph>{ownKeyPlan?.current ? t("plan.faq.downgrade.allowance.ownKey") : t("plan.faq.downgrade.allowance")}</s-paragraph>
           <s-paragraph>{t("plan.faq.downgrade.glossary")}</s-paragraph>
         </Question>
         <s-divider />
@@ -58,6 +62,14 @@ export function PlanFaq({ i18n, canChange }: { i18n: I18n; canChange: boolean })
         <Question question={t("plan.faq.reset.q")}>
           <s-paragraph>{t("plan.faq.reset.a")}</s-paragraph>
         </Question>
+        {ownKeyPlan?.visible ? (
+          <>
+            <s-divider />
+            <Question question={t("plan.faq.ownKey.q")}>
+              <s-paragraph>{t("plan.faq.ownKey.a")}</s-paragraph>
+            </Question>
+          </>
+        ) : null}
         {canChange ? (
           <>
             <s-divider />

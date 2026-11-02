@@ -18,9 +18,12 @@ import { addCounts, coveragePercent, emptyCounts, HEADLINE_EXCLUDED_TYPES, total
 import { reviewPayoff } from "../../lib/language-categories";
 import { CONTENT_TYPES, isContentType } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
-import { getDailyUsage, getMonthlyUsage, nextPeriodStart } from "../usage/usage-ledger";
+import { getDailyUsage, getMonthlyUsage, getOwnKeyUsage, nextPeriodStart } from "../usage/usage-ledger";
 import { aiLimitsFor, shopBilling } from "../billing/billing";
 import type { BillingStatus } from "../billing/subscription";
+import type { ConsentToken } from "../../lib/engines";
+import { usableOwnKey, type OwnKeySummary } from "../../lib/own-keys";
+import { usesOwnKeys } from "../../lib/plans";
 import { MAX_ENABLED_LOCALES } from "../../lib/locale-limits";
 import { usageLevel } from "../../lib/usage";
 import { analyzeCountries, countByStatus, missingLanguages } from "../../lib/country-coverage";
@@ -56,8 +59,15 @@ export interface OverviewOptions {
   markets?: () => Promise<MarketCountriesResult>;
   /** Tests only: the time the measurement state is judged at. */
   now?: number;
-  /** Tests only: the store's billing state instead of asking Shopify. */
+  /** The store's billing state when the caller read it already (tests: instead of asking Shopify). */
   billing?: BillingStatus;
+  /**
+   * The services the AI consent is about and who they are used under (shop-translation.ts facts):
+   * absent, the environment's engines, as before. Own key plan: the shop's usable keys.
+   */
+  consent?: { configured: ConsentToken[]; payer: "linguva" | "merchant" };
+  /** Own key plan (or a pending change to it): its keys and, when pending, when it starts (ownKeysForOverview). */
+  ownKeys?: { access: "plan" | "pending"; keys: OwnKeySummary[]; startsOn: string | null } | null;
 }
 
 export async function loadOverview(
@@ -108,7 +118,7 @@ export async function loadOverview(
     options.markets ? options.markets() : Promise.resolve(null),
   ]);
   const targets = locales.locales.filter((l) => !l.primary);
-  const consent = hasCurrentAiConsent(settings);
+  const consent = hasCurrentAiConsent(settings, options.consent?.configured, options.consent?.payer);
   const firstTarget = targets[0]?.locale;
 
   // Percentages only from the newest completed measurement, for the languages it covered and
@@ -247,6 +257,8 @@ export async function loadOverview(
     unreadable,
     countries: countries && "rows" in countries ? countries : null,
     remainingLocales: locales.remainingEnabled,
+    // Own key plan: a key comes before the permission (which covers the keys' services).
+    ...(options.ownKeys?.access === "plan" && !options.ownKeys.keys.some(usableOwnKey) ? { ownKeyMissing: true } : {}),
   };
   const next = nextStep(stepInput);
   const now = new Date(options.now ?? Date.now());
@@ -267,9 +279,11 @@ export async function loadOverview(
   });
 
   const limits = aiLimitsFor(getConfig(), billing);
+  // Own key plan: no Linguva allowance to use up (its characters go through the shop's own keys).
+  const ownKey = usesOwnKeys(billing.entitlements) ? { total: (await getOwnKeyUsage(shop.id, undefined, client)).total } : null;
   // A trial's allowance ends with the trial: when that comes before the
   // month's renewal, AI translation resumes then, not on the 1st.
-  const trialEndsAt = billing.trialEndsAt && billing.trialEndsAt < nextPeriodStart(now) ? billing.trialEndsAt.toISOString() : null;
+  const trialEndsAt = !ownKey && billing.trialEndsAt && billing.trialEndsAt < nextPeriodStart(now) ? billing.trialEndsAt.toISOString() : null;
   return {
     shopName: shop.name,
     // The store's additional languages (the operator's translation services card counts them per engine).
@@ -291,6 +305,16 @@ export async function loadOverview(
     pendingDrafts,
     activeJobs,
     jobs,
-    usage: { used, limit: limits.limit, usedToday, dailyLimit: limits.dailyLimit, level: usageLevel(used, limits.limit), trialEndsAt },
+    /** The Own key plan or a pending change to it (its keys' summaries: hints only), else null. */
+    ownKeys: options.ownKeys ?? null,
+    usage: {
+      used,
+      limit: limits.limit,
+      usedToday,
+      dailyLimit: limits.dailyLimit,
+      level: ownKey ? ("ok" as const) : usageLevel(used, limits.limit),
+      trialEndsAt,
+      ...(ownKey ? { ownKey } : {}),
+    },
   };
 }

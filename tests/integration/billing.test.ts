@@ -18,6 +18,7 @@ import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
 import { periodKey, QuotaExceededError } from "../../app/.server/usage/usage-ledger";
 import { PLANS, TRIAL_AI_CHARS, type Entitlements } from "../../app/lib/plans";
+import * as plans from "../../app/lib/plans";
 import { ownerDb, resetDatabase } from "../support/db";
 import { fakePartnerApi, PARTNER_SETTINGS } from "../support/fake-partner-api";
 import { FakeShopifyStore } from "../support/fake-store";
@@ -384,5 +385,46 @@ describe("trial allowance (docs/PRICING_DECISION.md §10.2)", () => {
     later();
     expect(await processItem(jobs, { shopId: s.id, itemId: page.itemIds[0]! }, 1)).toMatchObject({ status: "SUCCEEDED" });
     expect((await listPendingDrafts(s.id, {}, app)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("the Own key plan's subscription", () => {
+  it("gives the Own key entitlements through the Partner API and the cache (with OWN_KEY_PLAN_VISIBLE unset: it never decides them)", async () => {
+    const s = await shop("ownkey-billing.myshopify.com");
+    const api = fakePartnerApi({ handle: "own-key" });
+    let now = new Date("2026-10-28T10:00:00Z");
+    const d = deps(api, { now: () => now });
+    const fresh = await getBillingStatus(d, s);
+    expect(fresh).toMatchObject({ configured: true, state: "ACTIVE", mustChoosePlan: false, subscription: { planHandle: "own-key" } });
+    expect(fresh.entitlements).toEqual(plans.OWN_KEY_PLAN);
+    // From the cache (no second call), and as the last known state when the Partner API fails.
+    expect((await getBillingStatus(d, s)).entitlements).toEqual(plans.OWN_KEY_PLAN);
+    expect(api.calls).toHaveLength(1);
+    api.set({ status: 503 });
+    now = new Date(now.getTime() + SUBSCRIPTION_TTL_MS + 1);
+    expect(await getBillingStatus(d, s)).toMatchObject({ stale: true, entitlements: { plan: "own-key", ownKeys: true } });
+    // An alias handle is the same plan.
+    api.set({ handle: "own_key" });
+    expect((await getBillingStatus(d, s, { force: true })).entitlements).toEqual(plans.OWN_KEY_PLAN);
+  });
+
+  it("keeps today's plan during a pending change to Own key, and Free for a look-alike handle", async () => {
+    const s = await shop("ownkey-pending.myshopify.com");
+    const pending = await getBillingStatus(deps(fakePartnerApi({ handle: "pro", pendingHandle: "own-key" })), s);
+    expect(pending.entitlements).toEqual(PLANS.pro);
+    expect(pending.subscription).toMatchObject({ planHandle: "pro", pendingPlanHandle: "own-key" });
+    expect(plans.usesOwnKeys(pending.entitlements)).toBe(false);
+    expect((await getBillingStatus(deps(fakePartnerApi({ handle: "Own-Key" })), s, { force: true })).entitlements).toEqual(PLANS.free);
+  });
+
+  it("never reaches own keys with billing off or with complimentary access (which wins over any plan)", async () => {
+    const s = await shop("ownkey-comp.myshopify.com");
+    const off = await getBillingStatus({ prisma: app, settings: null, required: true }, s);
+    expect(off.entitlements).toMatchObject({ plan: "unmetered" });
+    expect(Object.hasOwn(off.entitlements, "ownKeys")).toBe(false);
+    await grantComplimentaryAccess(ownerDb, { shopifyShopGid: s.shopifyShopGid!, reason: "Own store", operator: "owner" });
+    const complimentary = await getBillingStatus(deps(fakePartnerApi({ handle: "own-key" }), { complimentaryGids: [s.shopifyShopGid!] }), s);
+    expect(complimentary.state).toBe("COMPLIMENTARY");
+    expect(Object.hasOwn(complimentary.entitlements, "ownKeys")).toBe(false);
   });
 });

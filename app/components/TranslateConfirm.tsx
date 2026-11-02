@@ -3,7 +3,7 @@
  * gets translated, counted honestly in items and texts; whether the
  * results wait for approval or go live; that the merchant's own and
  * approved translations stay; and the AI characters it uses of what is
- * left this month. Open it with a button that has `commandFor={id}` and
+ * left this month (Own key plan: that the merchant's own service bills them). Open it with a button that has `commandFor={id}` and
  * `command="--show"`.
  */
 import { useRef } from "react";
@@ -25,8 +25,8 @@ export interface TranslateConfirmProps {
   target: { category: CategoryId; estimate: BulkEstimate } | null;
   languageName: string;
   publishMode: "DRAFT" | "AUTO_PUBLISH";
-  /** AI characters left this month. */
-  aiRemaining: number;
+  /** AI characters left this month; null on the Own key plan (no Linguva allowance). */
+  aiRemaining: number | null;
   i18n: I18n;
   onConfirm: (input: { category: CategoryId; includeAttached: boolean }) => void;
 }
@@ -68,12 +68,19 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
             <s-text color="subdued">{t("language.confirm.keepDetail")}</s-text>
           </Point>
           {/* AI characters have one icon in the whole app (gauge, as on the Plan page); wand means "translate with AI". */}
-          <Point icon="gauge" title={t("language.confirm.chars")}>
-            <s-text color="subdued">
-              {estimate.chars !== null ? t("language.confirm.charsDetail", { chars: estimate.chars, remaining: aiRemaining }) : t("language.confirm.charsUnknown", { remaining: aiRemaining })}
-            </s-text>
-            {estimate.chars !== null && estimate.chars > aiRemaining ? <s-text tone="caution">{t("language.confirm.charsOver")}</s-text> : null}
-          </Point>
+          {aiRemaining !== null ? (
+            <Point icon="gauge" title={t("language.confirm.chars")}>
+              <s-text color="subdued">
+                {estimate.chars !== null ? t("language.confirm.charsDetail", { chars: estimate.chars, remaining: aiRemaining }) : t("language.confirm.charsUnknown", { remaining: aiRemaining })}
+              </s-text>
+              {estimate.chars !== null && estimate.chars > aiRemaining ? <s-text tone="caution">{t("language.confirm.charsOver")}</s-text> : null}
+            </Point>
+          ) : (
+            // Own key plan: no Linguva allowance; the merchant's own service bills these characters.
+            <Point icon="gauge" title={t("language.confirm.chars")}>
+              <s-text color="subdued">{estimate.chars !== null ? t("language.confirm.ownKey", { chars: estimate.chars }) : t("language.confirm.ownKeyUnknown")}</s-text>
+            </Point>
+          )}
           {estimate.attached ? <s-checkbox ref={attached} label={t("language.confirm.attached")} details={t("language.confirm.attachedDetails")} /> : null}
         </s-stack>
       ) : null}

@@ -25,3 +25,26 @@ export const BASE_ENV = {
   DATABASE_URL: "postgresql://u:p@localhost:5432/db",
   TOKEN_ENCRYPTION_KEYS: `k1:${Buffer.alloc(32, 1).toString("base64")}`,
 };
+
+/**
+ * Own key plan: fictional merchant keys in each engine's live format, numbered so tests can tell
+ * them apart. Low-entropy on purpose and built at runtime (no key-shaped literal in the source).
+ */
+export function ownDeepLKey(n: number, free = true): string {
+  return `${"d".repeat(8)}-${String(n).padStart(4, "0")}-${"e".repeat(4)}-${"f".repeat(12)}${free ? ":fx" : ""}`;
+}
+
+export function ownAzureKey(n: number): string {
+  return `${"a".repeat(24)}${String(n).padStart(8, "0")}`;
+}
+
+export function ownGoogleKey(n: number): string {
+  return `${"g".repeat(24)}-${String(n).padStart(6, "0")}`;
+}
+
+/** Fictional operator keys (env): the Own key plan's tests prove they are never sent. */
+export const OPERATOR_ENV = {
+  DEEPL_API_KEY: `${"o".repeat(8)}-${"p".repeat(4)}-${"q".repeat(12)}:fx`,
+  AZURE_TRANSLATOR_KEY: `${"o".repeat(24)}00000000`,
+  GOOGLE_TRANSLATE_API_KEY: `${"o".repeat(24)}-000000`,
+} as const;

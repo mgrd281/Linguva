@@ -6,6 +6,7 @@ import {
   GoogleTokenSource,
   parseServiceAccount,
   signedAssertion,
+  tokenSlot,
   TRANSLATION_SCOPE,
   type ServiceAccountCredentials,
 } from "../../app/.server/providers/google-auth";
@@ -275,5 +276,30 @@ describe("GoogleTokenSource", () => {
     const odd = fakeFetch(() => Response.json({ access_token: "has spaces\nand lines", expires_in: 3600 }));
     const failure = (await new GoogleTokenSource(CREDENTIALS, { fetch: odd.impl, now: () => NOW }).token().catch((e: unknown) => e)) as Error;
     expect(failure.message).toBe("google retryable: malformed token response");
+  });
+});
+
+describe("token slots (hardening)", () => {
+  // Another throwaway key: a key file that copies the account's email and key id with another key.
+  const OTHER_PEM = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const FORGED: ServiceAccountCredentials = { ...CREDENTIALS, privateKey: OTHER_PEM };
+
+  it("differs for the same email and key id with another private key, and is stable for one account", () => {
+    expect(tokenSlot(FORGED)).not.toBe(tokenSlot(CREDENTIALS));
+    expect(tokenSlot({ ...CREDENTIALS })).toBe(tokenSlot(CREDENTIALS));
+    expect(tokenSlot(CREDENTIALS)).toMatch(/^[0-9a-f]{16}$/);
+    // Never the key or the account in it.
+    expect(PEM).not.toContain(tokenSlot(CREDENTIALS));
+    expect(tokenSlot({ ...CREDENTIALS, privateKeyId: undefined })).not.toBe(tokenSlot(CREDENTIALS));
+  });
+
+  it("never hands a cached token to a key file that copies another account's email and key id", async () => {
+    const { impl, calls } = fakeFetch((_call, n) => grant(n));
+    expect(await new GoogleTokenSource(CREDENTIALS, { fetch: impl, now: () => NOW }).token()).toBe("ya29.fictional-token-1");
+    expect(await new GoogleTokenSource(FORGED, { fetch: impl, now: () => NOW }).token()).toBe("ya29.fictional-token-2");
+    expect(calls).toHaveLength(2);
+    // The real account still shares its own token.
+    expect(await new GoogleTokenSource(CREDENTIALS, { fetch: impl, now: () => NOW }).token()).toBe("ya29.fictional-token-1");
+    expect(calls).toHaveLength(2);
   });
 });

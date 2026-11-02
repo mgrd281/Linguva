@@ -332,10 +332,10 @@ export function FactList({ label, facts }: { label: string; facts: Array<{ icon:
   );
 }
 
-/** More words on demand, closed at first (a native disclosure, 44 px high, like the Plan page's questions). */
-export function More({ summary, children }: { summary: string; children: ReactNode }) {
+/** More words on demand, closed at first (a native disclosure, 44 px high, like the Plan page's questions); `open`: open at first. */
+export function More({ summary, children, open }: { summary: string; children: ReactNode; open?: boolean }) {
   return (
-    <details>
+    <details {...(open ? { open: true } : {})}>
       <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", fontWeight: 600 }}>{summary}</summary>
       <div style={{ padding: "0 0 8px 18px" }}>
         <s-stack direction="block" gap="small-200">

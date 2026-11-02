@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { translator, type AppLocale } from "../../app/i18n/i18n";
 import { formatCostUsd, formatUsd, inTrial, monthsFree, priceLabel, showTrial, yearlyHandles } from "../../app/lib/plan-prices";
 import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type PlanHandle } from "../../app/lib/plans";
+import * as plans from "../../app/lib/plans";
 
 // The worst case behind the 40 % margin floor (docs/PRICING_DECISION.md §3.1 and §6.1,
 // docs/COST_MODEL.md §2): Shopify keeps 17.9 % (15 % revenue share after the first
@@ -120,5 +121,35 @@ describe("prices on the page", () => {
     expect(formatCostUsd("de", 27.5)).toBe("27,50 $");
     expect(formatCostUsd("de", 25)).toBe("25 $");
     expect(formatCostUsd("en", 0)).toBe("$0");
+  });
+});
+
+describe("the Own key plan's price (outside PLAN_PRICES, the ladder of four)", () => {
+  const { OWN_KEY_HANDLES, OWN_KEY_PLAN, OWN_KEY_PRICE } = plans;
+
+  it("pins $49 a month, monthly only (change the Partner Dashboard and the listing on the same day)", () => {
+    expect(OWN_KEY_PRICE).toEqual({ monthlyUsd: 49, yearlyUsd: null });
+    for (const handle of OWN_KEY_HANDLES) {
+      expect(plans.planPrice(handle), handle).toBe(OWN_KEY_PRICE);
+      expect(Object.hasOwn(PLAN_PRICES, handle), handle).toBe(false);
+    }
+    // The four plans' prices come from PLAN_PRICES, unchanged.
+    for (const handle of HANDLES) expect(plans.planPrice(handle), handle).toBe(PLAN_PRICES[handle]);
+  });
+
+  it("keeps at least 40 % margin with the same worst-case formula (0 included characters: only the fixed share)", () => {
+    const cost = (OWN_KEY_PLAN.monthlyChars * DEEPL_USD_PER_MILLION_CHARS) / 1_000_000 + FIXED_SHARE_USD;
+    const margin = (OWN_KEY_PRICE.monthlyUsd * KEPT_AFTER_SHOPIFY - cost) / OWN_KEY_PRICE.monthlyUsd;
+    expect(margin).toBeGreaterThanOrEqual(MARGIN_FLOOR);
+  });
+
+  it("has no trial and no months-free claim; the four plans keep theirs", () => {
+    expect(plans.trialDaysFor("own-key")).toBe(0);
+    for (const handle of OWN_KEY_HANDLES) {
+      expect(plans.trialDaysFor(handle), handle).toBe(0);
+      expect(monthsFree(handle), handle).toBeNull();
+    }
+    for (const handle of HANDLES) expect(plans.trialDaysFor(handle), handle).toBe(TRIAL_DAYS);
+    expect(yearlyHandles()).toEqual(["starter", "pro"]);
   });
 });

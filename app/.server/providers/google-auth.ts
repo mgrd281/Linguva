@@ -93,15 +93,22 @@ interface CachedToken {
   pending?: Promise<string>;
 }
 
-/** Tokens by a hash of the account and key id (never the key itself). Shared by every provider in the process. */
+/**
+ * Tokens by a hash of the account, the key id and a hash of the private key (never the key
+ * itself). Shared by every provider in the process. The private key's hash is part of the slot:
+ * neither the account's email nor the key id is secret, so a key file that copies another
+ * account's email and key id with any other key must never get that account's token.
+ */
 const tokens = new Map<string, CachedToken>();
 
 export function clearGoogleTokens(): void {
   tokens.clear();
 }
 
-function slot(credentials: ServiceAccountCredentials): string {
-  return createHash("sha256").update(`${credentials.clientEmail}:${credentials.privateKeyId ?? ""}`).digest("hex").slice(0, 16);
+/** Exported for tests only. */
+export function tokenSlot(credentials: ServiceAccountCredentials): string {
+  const keyHash = createHash("sha256").update(credentials.privateKey).digest("hex");
+  return createHash("sha256").update(`${credentials.clientEmail}:${credentials.privateKeyId ?? ""}:${keyHash}`).digest("hex").slice(0, 16);
 }
 
 export class GoogleTokenSource {
@@ -112,7 +119,7 @@ export class GoogleTokenSource {
     private readonly credentials: ServiceAccountCredentials,
     private readonly options: { fetch?: typeof fetch; now?: () => number; timeoutMs?: number } = {},
   ) {
-    this.slot = slot(credentials);
+    this.slot = tokenSlot(credentials);
     this.now = options.now ?? Date.now;
   }
 

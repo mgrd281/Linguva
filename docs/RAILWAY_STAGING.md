@@ -319,6 +319,8 @@ What I changed in the repository (this branch, nothing deployed): the Dockerfile
 | `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE` | the public app's Partner organization and app | Owner (Partner Dashboard) |
 | `SHOPIFY_PARTNER_API_VERSION` | default | — |
 | `BILLING_REQUIRED` | `true`, set **last**, after the plans are checked on a dev store (PRICING_DECISION.md §9 steps 5–6) | Owner |
+| `OWN_KEY_PLAN_VISIBLE` | not set (`off`) until the Own key plan exists in the Partner Dashboard; `on` in the same sitting as its pricing content (PRICING_DECISION.md §9 step 11). Production refuses `on` without the `SHOPIFY_PARTNER_*` settings. It only shows texts: a subscriber gets the plan either way | Owner |
+| `OWN_KEY_CHECKS_PER_MINUTE` | default (3 key checks a minute per staff member, 6 per shop) | — |
 | `OPERATOR_SHOPS` | the owner's own stores, if they install the public app (shows the DeepL quota card, or the translation services card with several engines); else not set | Owner |
 | `COMPLIMENTARY_SHOP_GIDS` | the owner's own stores' GIDs, if they should use it for free; else not set | Owner |
 | Job settings: `SHOPIFY_JOB_BUCKET_SIZE`, `SHOPIFY_JOB_RESTORE_PER_SECOND`, `WORKER_CONCURRENCY`, `SHOPIFY_TIMEOUT_MS` | defaults | — |

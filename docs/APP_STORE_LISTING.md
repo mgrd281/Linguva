@@ -83,6 +83,21 @@ Under the plans:
 
 Rules: the trial feature goes in only once the trial allowance has been checked on the dev store (DEV_STORE_TEST_PLAN.md §L); with 0 trial days, no trial text anywhere. No price in any image, the icon or the logo (requirements 4.2.2 / 4.2.3): no listing screenshot shows the Plan page. No "popular" or "best value" claims (4.3.3).
 
+### Own key plan (entered in the same sitting as OWN_KEY_PLAN_VISIBLE=on, PRICING_DECISION.md §9 step 11)
+
+Prices line addition: "; Own key $49 a month only".
+
+| Plan | Top features (EN) | Top features (DE) |
+|---|---|---|
+| Own key | Translate with your own DeepL, Azure or Google Cloud key · No Linguva character limit; you pay your service · AI translation into 10 languages · Glossary, automatic publishing, whole areas · Stops with a clear message if your key runs out | Mit deinem Schlüssel für DeepL, Azure oder Google Cloud · Kein Zeichenlimit von Linguva; du zahlst deinen Dienst · KI-Übersetzung in 10 Sprachen · Glossar, automatisch veröffentlichen, ganze Bereiche · Hält mit klarer Meldung an, wenn dein Schlüssel leer ist |
+
+Additional charges (the pricing editor's per-plan field for charges billed outside Shopify; its exact label is to be confirmed in the editor):
+- EN: "Translation is billed by DeepL, Microsoft or Google under your own account with them. Linguva sets no limit; set a budget with your service."
+- DE: "Die Übersetzung rechnen DeepL, Microsoft oder Google über dein eigenes Konto bei ihnen ab. Linguva setzt kein Limit; lege bei deinem Dienst ein Budget fest."
+If the editor offers a link for charges billed outside Shopify, use the public support FAQ `/support#faq` (only once `PUBLIC_PAGES=on`).
+
+Each feature stays within 80 characters. Until step 11's sitting this plan has no pricing content at all, so merchants can't see it; this block is its whole pricing content (there is no separate listing row to add).
+
 ## Screenshots
 
 Generated from the real app on the production build with a fictional demo catalog (`APP_STORE_SCREENSHOTS=1 pnpm test:ui tests/ui/app-store-screenshots.spec.ts`). Files: [app-store/screenshots/](app-store/screenshots/). Before submission, regenerate them inside the real admin on the dev store if the embedded frame looks different.
@@ -136,4 +151,4 @@ Read again on shopify.dev ("App Store requirements" §4.5, "Pass app review", "B
 
 ## Still needed from the owner
 
-App icon upload (`docs/brand/linguva-icon-1200.png`), the public app's domain for the privacy policy and FAQ URLs (and the lawyer's review of those pages), the support mailbox, the review store. The full list with O-steps: docs/APP_STORE_SUBMISSION.md. Pricing is decided (PRICING_DECISION.md, 2026-10-30): the owner enters exactly these plans and the pricing details above in the Partner Dashboard (PRICING_DECISION.md §9). See OWNER_DECISIONS.md.
+App icon upload (`docs/brand/linguva-icon-1200.png`), the public app's domain for the privacy policy and FAQ URLs (and the lawyer's review of those pages), the support mailbox, the review store. The full list with O-steps: docs/APP_STORE_SUBMISSION.md. Pricing is decided (PRICING_DECISION.md, 2026-10-30): the owner enters exactly these plans and the pricing details above in the Partner Dashboard (PRICING_DECISION.md §9). Own key plan pricing content (entered with the flag, PRICING_DECISION.md §9 step 11). See OWNER_DECISIONS.md.

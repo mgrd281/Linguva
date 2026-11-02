@@ -1,3 +1,11 @@
+import type { EngineId } from "../../lib/engines";
+
+/** One of the merchant's own keys that was used up (quota) or refused (auth) during a request. Own-key routers only. */
+export interface OwnKeyFailure {
+  engine: EngineId;
+  kind: "quota" | "auth";
+}
+
 export interface TranslationRequest {
   /** Segment markup (see translation/segment-markup.ts). */
   segments: readonly string[];
@@ -48,6 +56,12 @@ export interface TranslationResult {
   dropped?: ReadonlyArray<"formality" | "context">;
   /** HTML-transport engines: segments (by index) the decoder refused or flagged. */
   notes?: ReadonlyArray<{ index: number; code: SegmentNoteCode }>;
+  /**
+   * Own-key routers only: members that failed earlier in this request with quota or auth
+   * before the answering one (retryable and invalid failures say nothing about a key and
+   * aren't listed). Absent on every operator result.
+   */
+  failovers?: OwnKeyFailure[];
 }
 
 /** What an engine applies from a request. */
@@ -99,6 +113,12 @@ export class TranslationProviderError extends Error {
    * engine is left (a single engine's quota, as with DeepL alone).
    */
   scope?: "language";
+  /**
+   * Own-key routers only: every member of the failed request that was used up or refused
+   * (not only the one this error is about), so each of those keys can be marked. Declared
+   * only: an operator error has no such property at all.
+   */
+  declare ownKeyFailures?: OwnKeyFailure[];
 
   constructor(
     readonly provider: string,
@@ -122,7 +142,7 @@ export function copyProviderError(error: TranslationProviderError): TranslationP
 }
 
 /**
- * A copy of a provider error (its billing and scope too) with `fields` set on
+ * A copy of a provider error (its billing, scope and own-key failures too) with `fields` set on
  * the copy. Callers attach their request's billing or scope to a copy, never
  * to an error they didn't create: one error object can reach several requests
  * at once (a shared token refresh), and one request's bill would otherwise be
@@ -130,15 +150,17 @@ export function copyProviderError(error: TranslationProviderError): TranslationP
  */
 export function withProviderFields(
   error: TranslationProviderError,
-  fields: Partial<Pick<TranslationProviderError, "billedCharacters" | "billedByEngine" | "scope">>,
+  fields: Partial<Pick<TranslationProviderError, "billedCharacters" | "billedByEngine" | "scope" | "ownKeyFailures">>,
 ): TranslationProviderError {
   const copy = copyProviderError(error);
   const billedCharacters = fields.billedCharacters ?? error.billedCharacters;
   const billedByEngine = fields.billedByEngine ?? error.billedByEngine;
   const scope = fields.scope ?? error.scope;
+  const ownKeyFailures = fields.ownKeyFailures ?? error.ownKeyFailures;
   if (billedCharacters !== undefined) copy.billedCharacters = billedCharacters;
   if (billedByEngine) copy.billedByEngine = { ...billedByEngine };
   if (scope) copy.scope = scope;
+  if (ownKeyFailures) copy.ownKeyFailures = ownKeyFailures.map((f) => ({ ...f }));
   return copy;
 }
 

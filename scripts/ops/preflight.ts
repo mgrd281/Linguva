@@ -13,6 +13,7 @@ import {
   checkAppConfig,
   checkEncryptionKeys,
   checkNodeVersion,
+  checkOwnKeyPlan,
   checkProviderCost,
   checkStoreTargets,
   checkTranslationEngines,
@@ -33,6 +34,7 @@ try {
   results.push({ level: "ok", name: "Environment", detail: `valid (NODE_ENV=${config.NODE_ENV})` });
   if (config.NODE_ENV === "production") results.push({ level: "fail", name: "Environment", detail: "NODE_ENV=production: preflight is for development" });
   if (config.BILLING_REQUIRED === "true") results.push({ level: "warn", name: "Billing", detail: "BILLING_REQUIRED=true: shops without a plan are sent to Shopify's plan page" });
+  results.push(checkOwnKeyPlan(config));
   const gids = (config.COMPLIMENTARY_SHOP_GIDS ?? "").split(",").filter(Boolean);
   if (gids.length) results.push({ level: "ok", name: "Complimentary access", detail: `${gids.length} shop GID(s) configured` });
 } catch (error) {

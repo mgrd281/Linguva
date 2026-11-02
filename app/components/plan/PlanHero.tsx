@@ -8,11 +8,12 @@
 import type { ReactNode } from "react";
 import type { I18n, MessageVars } from "../../i18n/i18n";
 import { INTL_LOCALE } from "../../i18n/i18n";
+import { ENGINE_IDS, ENGINE_NAMES } from "../../lib/engines";
 import { localeCountry } from "../../lib/flags";
-import { languageList } from "../../lib/name-lists";
+import { engineList, languageList } from "../../lib/name-lists";
 import { formatCostUsd } from "../../lib/plan-prices";
-import { languageRoom, nextCharsOn, planName, smallestPlanForLanguages, splitLanguages, usagePercent, type HeroView, type Words } from "../../lib/plan-view";
-import { estimatedCostUsd, type Entitlements } from "../../lib/plans";
+import { languageRoom, nextCharsOn, planName, smallestPlanForLanguages, splitLanguages, usagePercent, type HeroView, type PlanOwnKeys, type Words } from "../../lib/plan-view";
+import { estimatedCostUsd, isOwnKeyHandle, type Entitlements } from "../../lib/plans";
 import { usageLevel } from "../../lib/usage";
 import { IconTile } from "../CategoryCard";
 import { STATE_COLOURS, TRACK_COLOUR } from "../Coverage";
@@ -27,6 +28,7 @@ export function wordsText(i18n: I18n, words: Words, now: string): string {
   for (const [name, iso] of Object.entries(words.dates ?? {})) vars[name] = i18n.dayMonth(iso, now);
   for (const [name, iso] of Object.entries(words.dateTimes ?? {})) vars[name] = i18n.dateTime(iso);
   for (const [name, handle] of Object.entries(words.plans ?? {})) vars[name] = planName(handle);
+  for (const [name, engines] of Object.entries(words.engines ?? {})) vars[name] = engineList(i18n, engines.map((e) => ENGINE_NAMES[e]));
   return i18n.t(words.key, vars);
 }
 
@@ -50,9 +52,11 @@ export interface PlanHeroProps {
   costPerMillion: number | null;
   /** The main action and the refresh, built by the page (links to Shopify's page, the refresh form). */
   actions: ReactNode;
+  /** Own key plan (a subscriber): the characters through its own keys instead of an allowance meter. */
+  ownKeys?: PlanOwnKeys | null;
 }
 
-export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limits, aiAvailable, languages, costPerMillion, actions }: PlanHeroProps) {
+export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limits, aiAvailable, languages, costPerMillion, actions, ownKeys }: PlanHeroProps) {
   const { t } = i18n;
   const name = "handle" in hero.name ? planName(hero.name.handle) : t(hero.name.key);
   // The section has no accessibilityLabel: Polaris would add a hidden "Your plan" heading right before the
@@ -95,7 +99,11 @@ export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limit
         <s-query-container>
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="large-200">
             {/* During a trial the plan's bigger allowance may come before the month renews. */}
-            <PlanUsage i18n={i18n} now={now} resetsOn={nextCharsOn(hero, resetsOn)} usage={usage} limits={limits} aiAvailable={aiAvailable} />
+            {isOwnKeyHandle(hero.current) && ownKeys ? (
+              <OwnKeyUsage i18n={i18n} usage={ownKeys.usage} />
+            ) : (
+              <PlanUsage i18n={i18n} now={now} resetsOn={nextCharsOn(hero, resetsOn)} usage={usage} limits={limits} aiAvailable={aiAvailable} />
+            )}
             <PlanLanguages i18n={i18n} entitlements={entitlements} languages={languages} aiAvailable={aiAvailable} />
           </s-grid>
         </s-query-container>
@@ -180,6 +188,27 @@ function PlanUsage({ i18n, now, resetsOn, usage, limits, aiAvailable }: Pick<Pla
           <s-text color="subdued">{t("plan.usage.resets", { date })}</s-text>
         </s-stack>
       </s-stack>
+    </s-stack>
+  );
+}
+
+/** Own key plan: no Linguva allowance to meter, only what went through the shop's own keys this month (per engine). */
+function OwnKeyUsage({ i18n, usage }: { i18n: I18n; usage: PlanOwnKeys["usage"] }) {
+  const { t } = i18n;
+  const engines = ENGINE_IDS.filter((engine) => (usage.byEngine[engine] ?? 0) > 0);
+  return (
+    <s-stack direction="block" gap="small-200">
+      <MeterHead icon="gauge" label={t("plan.usage.label")} aside={null} />
+      <s-text color="subdued">{t("plan.usage.ownKey", { chars: usage.total })}</s-text>
+      {engines.length ? (
+        <ul style={{ ...PLAIN_LIST, display: "grid", gap: 4 }}>
+          {engines.map((engine) => (
+            <li key={engine}>
+              <s-text color="subdued">{t("plan.usage.ownKey.engine", { engine: ENGINE_NAMES[engine], chars: usage.byEngine[engine] ?? 0 })}</s-text>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </s-stack>
   );
 }

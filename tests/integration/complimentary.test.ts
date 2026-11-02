@@ -201,6 +201,18 @@ describe("owner complimentary access", () => {
     expect(mixed).toMatchObject({ chars: 600_000, byProvider: { deepl: 400_000, azure: 200_000 }, estimatedCostUsd: 12 });
   });
 
+  it("leaves characters paid by the merchant (own keys, payer 'merchant') out of the cost report", async () => {
+    const s = await shop("own-store.myshopify.com", OWN);
+    await grant(OWN);
+    const linguva = await reserveUsage({ shopId: s.id, key: "linguva", chars: 100_000, limit: 10_000_000, provider: "deepl" }, app);
+    await settleUsage(linguva, 100_000, app);
+    const own = await reserveUsage({ shopId: s.id, key: "own-key", chars: 900_000, limit: 0, provider: "azure", payer: "merchant" }, app);
+    await settleUsage(own, 900_000, app);
+    const rates = { deepl: 25, azure: 10, google: 20 };
+    const [report] = await complimentaryUsageReport(ownerDb, { allowlist: [OWN], usdPerMillionChars: 25, ratesByProvider: rates });
+    expect(report).toMatchObject({ chars: 100_000, byProvider: { deepl: 100_000 }, estimatedCostUsd: 2.5 });
+  });
+
   it("prints the report with only MIGRATION_DATABASE_URL set, as documented (no other app variable)", async () => {
     const s = await shop("own-store.myshopify.com", OWN);
     await grant(OWN);

@@ -6,7 +6,9 @@
 import { fieldLabel } from "../lib/field-labels";
 import { upperFirst } from "../lib/name-lists";
 import { issueLabel } from "../lib/issue-labels";
-import { ITEM_ERROR_MESSAGES, JOB_ERROR_MESSAGES, JOB_STATUS_LABELS } from "../lib/job-display";
+import { ENGINE_NAMES } from "../lib/engines";
+import { ITEM_ERROR_MESSAGES, JOB_ERROR_MESSAGES, JOB_STATUS_LABELS, ownKeyJobError } from "../lib/job-display";
+import { parseOwnKeyCode } from "../lib/own-keys";
 import { coverageTypeLabel, isContentType, kindMeta, RESOURCE_KINDS, type TranslatableKind } from "../lib/resource-kinds";
 import type { I18n } from "./i18n";
 import { MESSAGES, type MessageKey } from "./messages";
@@ -62,7 +64,14 @@ export function jobStatus(i18n: I18n, status: string) {
 
 export function jobErrorMessage(i18n: I18n, code: string): string | null {
   if (!code) return null;
-  return hasMessage(`common.jobError.${code}`) ? i18n.t(`common.jobError.${code}` as MessageKey) : (JOB_ERROR_MESSAGES[code] ?? null);
+  if (hasMessage(`common.jobError.${code}`)) return i18n.t(`common.jobError.${code}` as MessageKey);
+  // An own key's stop names its engine: OWN_KEY_QUOTA_AZURE → "Your Microsoft Azure key's quota …".
+  const own = parseOwnKeyCode(code);
+  if (own && own.kind !== "MISSING") {
+    const key = own.kind === "QUOTA" ? "common.jobError.OWN_KEY_QUOTA" : "common.jobError.OWN_KEY_AUTH";
+    return hasMessage(key) ? i18n.t(key, { engine: ENGINE_NAMES[own.engine] }) : ownKeyJobError(code);
+  }
+  return JOB_ERROR_MESSAGES[code] ?? ownKeyJobError(code);
 }
 
 export function itemErrorMessage(i18n: I18n, code: string): string | null {

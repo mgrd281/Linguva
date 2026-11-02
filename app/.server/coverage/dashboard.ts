@@ -10,7 +10,7 @@ import { requireShop } from "../shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { fetchMarkets, MARKETS_SCOPE, MarketsAccessError } from "../markets/markets";
 import { getQueues } from "../queue/client";
-import { getTranslationProvider } from "../providers";
+import { shopTranslationFacts } from "../providers/shop-translation";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
 import { shopBilling } from "../billing/billing";
 import { allowedTargetLocales } from "../billing/subscription";
@@ -119,7 +119,10 @@ export async function loadCoverageDashboard(request: Request) {
   const stalled = Boolean(report && active && Date.now() - Date.parse(report.updatedAt) >= STALE_REPORT_MS);
   const current = report && active ? segmentOf(report, report.segmentIndex) : null;
 
-  const smartState = await smartContext(await shopBilling(admin, shop), settings, allTargets.map((l) => l.locale));
+  const billing = await shopBilling(admin, shop);
+  const smartState = await smartContext(billing, settings, allTargets.map((l) => l.locale));
+  // Who translates for the shop (the operator's engines or its own keys), without decrypting.
+  const facts = await shopTranslationFacts(shop.id, billing);
   const [jobs, smart] = await Promise.all([
     withTenant(shop.id, (tx) =>
       tx.translationJob.findMany({ where: { shopId: shop.id, status: { in: [...ACTIVE_JOBS] } }, orderBy: { createdAt: "desc" }, take: 10 }),
@@ -152,7 +155,7 @@ export async function loadCoverageDashboard(request: Request) {
     markets: { available: markets.available, list: markets.markets.map((m) => ({ id: m.id, name: m.name })), selected: market?.id ?? null },
     idempotencyKey: randomUUID(),
     jobsAvailable: getQueues() !== null,
-    canTranslate: getTranslationProvider() !== null && hasCurrentAiConsent(settings),
+    canTranslate: facts.available && hasCurrentAiConsent(settings, facts.configured, facts.payer),
     coverageTypes: COVERAGE_TYPES,
     /** The newest completed measurement (a failed or stuck newer one has no full scan to show). */
     lastFullScan: summary.lastCompleted?.finishedAt ?? null,
@@ -315,7 +318,9 @@ export async function loadCoverageItemsPage(request: Request) {
   }
   const settings = await getShopSettings(shop.id);
   // What the smart schedule does with the listed items: translating now, left alone, or waiting for its next check (only while on).
-  const smart = await loadSmartCoverageNote(shop.id, await smartContext(await shopBilling(admin, shop), settings, targets.map((l) => l.locale)));
+  const billing = await shopBilling(admin, shop);
+  const smart = await loadSmartCoverageNote(shop.id, await smartContext(billing, settings, targets.map((l) => l.locale)));
+  const facts = await shopTranslationFacts(shop.id, billing);
   const work = smart ? await smartWorkOn(shop.id, locale, page.items) : null;
   const titleOf = (gid: string, kind: string) => {
     const c = content.get(gid);
@@ -324,7 +329,7 @@ export async function loadCoverageItemsPage(request: Request) {
   };
   return {
     ...base,
-    canTranslate: getTranslationProvider() !== null && hasCurrentAiConsent(settings),
+    canTranslate: facts.available && hasCurrentAiConsent(settings, facts.configured, facts.payer),
     searchUnavailable,
     nextCursor: page.nextCursor,
     items: page.items.map((i) => {

@@ -1,6 +1,6 @@
 import { isWrongScript } from "../../lib/scripts";
 import { isEngineRouter } from "../providers/engine-router";
-import type { TranslationProvider } from "../providers/types";
+import type { OwnKeyFailure, TranslationProvider } from "../providers/types";
 import type { SegmentPair } from "../memory/alignment";
 import {
   segmentHtml,
@@ -250,6 +250,8 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
   let billedCharacters = 0;
   let provider = input.provider.id;
   let lostByEngine: Readonly<Record<string, number>> | undefined;
+  /** Own-key routers only: the merchant's keys that were used up or refused before the answer. */
+  let failovers: OwnKeyFailure[] | undefined;
   /** What the engine reported per source: a refused or flagged segment, a dropped form of address. */
   const notes = new Map<string, "ENGINE_MARKUP" | "SPACING_CHANGED">();
   let formalityDropped = false;
@@ -274,6 +276,7 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
     billedCharacters = result.billedCharacters;
     provider = result.provider;
     lostByEngine = result.lostByEngine;
+    failovers = result.failovers;
     for (const note of result.notes ?? []) {
       const source = prepared.pending[note.index];
       // A refusal wins over a warning for the same source.
@@ -364,6 +367,7 @@ export async function completeTranslation(prepared: PreparedTranslation, input: 
     billedCharacters,
     provider,
     ...(lostByEngine ? { lostByEngine } : {}),
+    ...(failovers ? { failovers } : {}),
     memoryHits: prepared.fromMemory.size,
     charsSaved: prepared.charsSaved,
     memoryEntryIds: prepared.memoryEntryIds,

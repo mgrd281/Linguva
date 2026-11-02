@@ -39,3 +39,22 @@ describe("MockTranslationProvider", () => {
     await expect(provider.translate(request)).resolves.toMatchObject({ translations: ["[de] a b"] });
   });
 });
+
+describe("MockTranslationProvider options (Own key plan's mock members)", () => {
+  const request = { segments: ["a b"], sourceLocale: "en", targetLocale: "de" };
+
+  it("keeps the id 'mock' by default and takes an engine id when given", async () => {
+    expect(new MockTranslationProvider().id).toBe("mock");
+    const deepl = new MockTranslationProvider({ id: "deepl" });
+    expect(deepl.id).toBe("deepl");
+    await expect(deepl.translate(request)).resolves.toMatchObject({ provider: "deepl", translations: ["[de] a b"] });
+  });
+
+  it("fails every call with failNext.count Infinity, naming its id", async () => {
+    const provider = new MockTranslationProvider({ id: "azure", failNext: { count: Infinity, kind: "quota" } });
+    for (let i = 0; i < 5; i++) {
+      await expect(provider.translate(request)).rejects.toMatchObject({ provider: "azure", kind: "quota" });
+    }
+    expect(provider.requests).toHaveLength(5);
+  });
+});

@@ -104,6 +104,8 @@ export function statusFrom(row: ShopSubscription | null, deps: BillingDeps, stal
     glossary: resolved.glossary,
     autoPublish: resolved.autoPublish,
     smartAuto: resolved.smartAuto,
+    // Only the Own key plan sets it: every other plan's entitlements keep exactly their fields.
+    ...(resolved.ownKeys ? { ownKeys: true } : {}),
   };
   return { configured: true, state: "ACTIVE", entitlements, subscription: row, stale, mustChoosePlan: false, ...(trialEndsAt ? { trialEndsAt } : {}) };
 }

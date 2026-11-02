@@ -1,0 +1,4 @@
+/* The Own key plan's card on preise.html spans the whole .plans grid (the four columns stay as
+   they are). Linked only inside the page's <!--ownkey--> block, so style.css and every page's link
+   to it stay unchanged while OWN_KEY_PLAN_VISIBLE is off. */
+.plan-wide{grid-column:1 / -1}

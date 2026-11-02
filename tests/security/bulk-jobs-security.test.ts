@@ -5,9 +5,16 @@ import {
   cancelJob,
   createBulkJob,
   getJobForShop,
+  jobCounts,
+  jobPendingDrafts,
+  latestJobTitles,
+  listActiveJobs,
+  listJobsPage,
   listProblemItems,
   retryJobItems,
+  rowOutcomesByJob,
 } from "../../app/.server/jobs/bulk-jobs";
+import { searchJobIds } from "../../app/.server/jobs/job-search";
 import {
   createItemProcessor,
   createQueues,
@@ -109,6 +116,32 @@ describe("tenant isolation of bulk jobs", () => {
     expect(await retryJobItems(a.shop.id, b.job.id, app)).toEqual({ itemIds: [], rediscover: false });
     const jobOfB = await getJobForShop(b.shop.id, b.job.id, app);
     expect(jobOfB?.status).toBe("PENDING");
+  });
+
+  it("never reads another shop's jobs through ids passed in (the Jobs list, its rows, a job's drafts, the search)", async () => {
+    const a = await tenant("a.myshopify.com");
+    const b = await tenant("b.myshopify.com");
+    const deps = depsFor({ "a.myshopify.com": a.store, "b.myshopify.com": b.store });
+    await runDiscoveryPage(deps, { shopId: b.shop.id, jobId: b.job.id });
+    await withTenant(
+      b.shop.id,
+      (tx) =>
+        tx.translationDraft.create({
+          data: { shopId: b.shop.id, jobId: b.job.id, resourceGid: "gid://shopify/Product/1", locale: "de", key: "title", sourceDigest: "d", sourceValue: "Jacket", value: "Jacke" },
+        }),
+      app,
+    );
+    const foreign = [b.job.id];
+    expect((await listJobsPage(a.shop.id, { ids: foreign, take: 100 }, app)).jobs).toEqual([]);
+    expect((await listJobsPage(a.shop.id, { cursor: b.job.id, take: 100 }, app)).jobs.map((j) => j.shopId)).toEqual([a.shop.id]);
+    expect((await jobCounts(a.shop.id, { ids: foreign }, new Date(), app)).all).toBe(0);
+    expect(await listActiveJobs(a.shop.id, { ids: foreign }, 21, app)).toEqual([]);
+    expect(await rowOutcomesByJob(a.shop.id, foreign, app)).toEqual({ [b.job.id]: { waiting: 0, partial: 0, rejected: 0, sourceChanged: 0, cancelled: 0, retryable: 0 } });
+    expect(await jobPendingDrafts(a.shop.id, b.job.id, app)).toEqual({ translations: 0, items: 0 });
+    expect(await latestJobTitles(a.shop.id, b.job.id, app)).toEqual([]);
+    expect(await searchJobIds(a.store.asAdmin(), a.shop.id, b.job.id.slice(0, 8), app)).toMatchObject({ ids: [] });
+    // The other shop sees its own.
+    expect(await jobPendingDrafts(b.shop.id, b.job.id, app)).toEqual({ translations: 1, items: 0 });
   });
 
   it("rejects malformed job ids instead of querying with them", async () => {

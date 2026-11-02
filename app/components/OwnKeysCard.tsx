@@ -102,7 +102,7 @@ export function keyResult(data: unknown): KeyActionResult | null {
 /** "DeepL and Google Cloud bill you …": the saved keys' services, or all three before any is saved. */
 export function ownKeyCostNote(i18n: I18n, keys: readonly Pick<OwnKeySummary, "engine">[]): string {
   const engines = keys.length ? ENGINE_IDS.filter((e) => keys.some((k) => k.engine === e)) : ENGINE_IDS;
-  return i18n.t("settings.keys.costNote", { engines: engineList(i18n, engines.map((e) => ENGINE_NAMES[e])) });
+  return i18n.t("settings.keys.costNote", { engines: engineList(i18n, engines.map((e) => ENGINE_NAMES[e])), count: engines.length });
 }
 
 /** A key's state in words: its icon and its sentence ("Refused by DeepL"). */
@@ -213,6 +213,12 @@ export function OwnKeysCard({ data, i18n, fetchers, primary }: OwnKeysCardProps)
                 : t("settings.keys.deeplUsage.unlimited", { used: data.deepl.used })}
             </s-text>
           ) : null}
+          {/* On the plan this card replaces the AI characters tile, Settings' way to the Plan page. */}
+          {data.access === "plan" ? (
+            <s-text>
+              <s-link href="/app/plan">{t("common.action.changePlan")}</s-link>
+            </s-text>
+          ) : null}
         </s-stack>
       ) : null}
     </SettingCard>
@@ -239,16 +245,19 @@ function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyR
   const removeForm = useRef<HTMLFormElement>(null);
   const result = keyResult(fetcher.data);
   useResultToast(fetcher.data, keyToast(i18n, result));
-  useFreshResult(fetcher, (data) => {
+  useFreshResult(fetcher, () => {
     setFormKey((k) => k + 1);
-    if (keyResult(data)?.ok) focusById(keyRowId(engine));
+    // Every result, a refusal included: the rebuilt form drops the button that had focus.
+    focusById(keyRowId(engine));
   });
   const busy = fetcher.state !== "idle";
   const intent = fetcher.formData?.get("intent");
   const error = result && !result.ok ? (
-    <InlineNotice icon="alert-circle" heading={name}>
-      {keyErrorText(i18n, result, engine)}
-    </InlineNotice>
+    <div role="alert">
+      <InlineNotice icon="alert-circle" heading={name}>
+        {keyErrorText(i18n, result, engine)}
+      </InlineNotice>
+    </div>
   ) : null;
   const form = (
     <KeyForm key={formKey} i18n={i18n} engine={engine} saved={saved} fetcher={fetcher} primary={primary} loading={busy && intent === "save-key"} />

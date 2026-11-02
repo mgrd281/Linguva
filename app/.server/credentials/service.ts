@@ -7,7 +7,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { isEngineId, type EngineId } from "../../lib/engines";
-import { ownKeyStopCode, usableOwnKey, type OwnKeySummary } from "../../lib/own-keys";
+import { ownKeyStopCode, usableOwnKey, type OwnKeyStatus, type OwnKeySummary } from "../../lib/own-keys";
 import { isOwnKeyHandle, usesOwnKeys } from "../../lib/plans";
 import type { BillingStatus } from "../billing/subscription";
 import { getConfig, type AppConfig } from "../lib/config";
@@ -230,7 +230,12 @@ export async function checkEngineKey(
     return { ok: false, error: "KEY_UNREACHABLE" };
   }
   if (opened.kind === "unreadable") {
-    await markEngineKey(ref, { status: "UNREADABLE", lastErrorCode: "OWN_KEY_UNREADABLE", lastErrorAt: r.now() }, r.client);
+    // Only a usable row (OK/QUOTA) is marked, as loadEngineKeys does: maintenance heals UNREADABLE
+    // rows straight to OK, so marking a RECHECK or REFUSED row would make it usable without a
+    // successful check once the keyring is fixed.
+    if (usableOwnKey({ status: row.status as OwnKeyStatus })) {
+      await markEngineKey(ref, { status: "UNREADABLE", lastErrorCode: "OWN_KEY_UNREADABLE", lastErrorAt: r.now() }, r.client);
+    }
     logger.warn({ engine }, "own engine key unreadable");
     await checked("unreadable");
     return { ok: false, error: "KEY_UNREADABLE" };

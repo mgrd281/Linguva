@@ -123,17 +123,21 @@ describe("Your translation keys", () => {
     const saved = text(
       render(view({ keys: [key("deepl")], usage: { total: 4_200, byEngine: { deepl: 4_200 } }, deepl: { plan: "free", used: 1_234, limit: 500_000 } })),
     );
-    expect(saved).toContain("DeepL bill you for every character");
+    expect(saved).toContain("DeepL bills you for every character");
     expect(saved).toContain("Through your keys this calendar month (UTC), as counted by Linguva: 4,200 characters.");
     expect(saved).toContain("DeepL: 4,200 characters");
     expect(saved).toContain("DeepL: 1,234 of 500,000 characters used in this billing period");
+    // The card takes the AI characters tile's place, so it leads to the Plan page.
+    expect(html).toContain('href="/app/plan"');
+    expect(words).toContain("Change plan");
+    expect(text(render(view({ keys: [key("deepl"), key("google")] })))).toContain("DeepL and Google Cloud bill you for every character");
   });
 
   it("with a pending change: the date, the cost note and working add and check forms", () => {
     const html = render(view({ access: "pending", plan: false, startsOn: "2026-11-28T00:00:00.000Z", keys: [key("deepl")] }));
     const words = text(html);
     expect(words).toContain("Your plan changes to Own key on November 28, 2026.");
-    expect(words).toContain("bill you for every character");
+    expect(words).toContain("DeepL bills you for every character");
     expect(html).toContain('value="check-key"');
     expect(html.match(/<s-password-field/g)).toHaveLength(3);
     expect(text(render(view({ access: "pending", plan: false })))).toContain("Your plan changes to Own key at the end of the billing cycle.");
@@ -148,10 +152,11 @@ describe("Your translation keys", () => {
     expect(words).toContain("Remove");
     expect(words).not.toContain("Check again");
     expect(words).not.toContain("Check and save");
-    expect(words).not.toContain("bill you for every character");
+    expect(words).not.toContain("for every character");
     expect(html).not.toContain("<s-password-field");
     expect(html).not.toContain('value="check-key"');
     expect(html).toContain('value="remove-key"');
+    expect(html).not.toContain('href="/app/plan"');
     // Only the saved key's row: no DeepL or Azure row to add one.
     expect(words).not.toContain("Add a DeepL key");
     expect(html).toContain('id="settings-key-remove-google"');

@@ -194,8 +194,8 @@ describe("the website's own-key blocks", () => {
     expect(visible(on)).toContain("Can I translate with my own DeepL, Microsoft Azure or Google Cloud key?");
     expect(visible(on)).toContain("Kann ich mit meinem eigenen Schlüssel für DeepL, Microsoft Azure oder Google Cloud übersetzen?");
     expect(visible(on)).toContain("set a cost limit or budget in your account with the service");
-    expect(visible(on)).toContain("Settings › Your translation keys shows what went through your keys.");
-    expect(visible(on)).toContain("Einstellungen › Deine Übersetzungsschlüssel zeigt, was über deine Schlüssel lief.");
+    expect(visible(on)).toContain("On the Own key plan, Settings › Your translation keys takes the place of AI characters: it shows what went through your keys, and its Change plan link takes you to the plan page.");
+    expect(visible(on)).toContain("Im Tarif Own key tritt Einstellungen › Deine Übersetzungsschlüssel an die Stelle von KI-Zeichen: Dort siehst du, was über deine Schlüssel lief, und „Tarif wechseln“ bringt dich zur Tarifseite.");
     // The FAQ still names no prices.
     expect(on).not.toMatch(/\$\s?\d/);
   });

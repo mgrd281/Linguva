@@ -367,6 +367,21 @@ describe("check again", () => {
     expect(await checkEngineKey({ shopId: shop.id, actorId: null, billing: OWN_KEY_BILLING, engine: "deepl" }, live(fixedChecker("ok")))).toEqual({ ok: false, error: "KEY_UNREADABLE" });
     expect((await rows(shop.id))[0]).toMatchObject({ status: "UNREADABLE", lastErrorCode: "OWN_KEY_UNREADABLE" });
   });
+
+  it("a RECHECK or REFUSED row that doesn't decrypt keeps its status, so maintenance can't heal it to OK", async () => {
+    const shop = await newShop();
+    const other = await newShop("other.myshopify.com");
+    await seedOwnKey(shop.id, { engine: "deepl", apiKey: ownDeepLKey(20) }, { client: app });
+    await seedOwnKey(other.id, { engine: "deepl", apiKey: ownDeepLKey(21) }, { client: app });
+    const [foreign] = await rows(other.id);
+    for (const status of ["RECHECK", "REFUSED"]) {
+      const code = status === "RECHECK" ? "OWN_KEY_RECHECK" : "OWN_KEY_AUTH_DEEPL";
+      await withTenant(shop.id, (tx) => tx.shopEngineCredential.updateMany({ data: { secret: foreign!.secret, status, lastErrorCode: code, lastErrorAt: new Date() } }), ownerDb);
+      expect(await checkEngineKey({ shopId: shop.id, actorId: null, billing: OWN_KEY_BILLING, engine: "deepl" }, live(fixedChecker("ok")))).toEqual({ ok: false, error: "KEY_UNREADABLE" });
+      expect((await rows(shop.id))[0]).toMatchObject({ status, lastErrorCode: code });
+      expect((await loadEngineKeys(shop.id, app)).credentials).toEqual([]);
+    }
+  });
 });
 
 describe("rate limits and the daily budget (live mode)", () => {

@@ -120,6 +120,9 @@ test.describe("adding and managing keys", () => {
     await deepl.getByRole("button", { name: "Check and save" }).click();
     await expect(deepl).toContainText("DeepL refused this key, or the service isn't set up for it yet");
     await expect(deepl).toContainText("Add a DeepL key");
+    // The refusal is announced and focus stays in the row (the rebuilt form dropped the button).
+    await expect(deepl.getByRole("alert")).toContainText("DeepL refused this key");
+    await expect(page.locator("#settings-keys-deepl")).toBeFocused();
     const realLooking = ["sk", "real", "looking", "key", "1234567890"].join("-");
     await keyField(deepl).fill(realLooking);
     await deepl.getByRole("button", { name: "Check and save" }).click();
@@ -134,7 +137,7 @@ test.describe("adding and managing keys", () => {
     await expect(deepl).toContainText("Key accepted");
     // The form was rebuilt: no typed key stays on the page.
     await expect(keyField(deepl)).toHaveValue("");
-    await expect(page.locator("#settings-keys")).toContainText("DeepL bill you for every character");
+    await expect(page.locator("#settings-keys")).toContainText("DeepL bills you for every character");
 
     // Now the permission is the next step, with the own-key notice.
     expect(await primaries(page)).toEqual(["Allow AI translation"]);

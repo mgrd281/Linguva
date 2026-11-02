@@ -95,6 +95,10 @@ export const en = {
   "jobs.detail.failed.reason": "Reason",
   "jobs.detail.failed.attempts": "Attempts",
   "jobs.detail.failed.unknown": "Unknown",
+  "jobs.attention.resumable": "{name} can go on",
+  "jobs.back.text": "On its page, you resume the job with one click.",
+  "jobs.back.action": "Back to the job",
+  "jobs.back.label": "Back to the job {name}",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -190,6 +194,10 @@ export const de: Translation<typeof en> = {
   "jobs.detail.failed.reason": "Grund",
   "jobs.detail.failed.attempts": "Versuche",
   "jobs.detail.failed.unknown": "Unbekannt",
+  "jobs.attention.resumable": "{name} kann weiterlaufen",
+  "jobs.back.text": "Auf seiner Seite setzt du den Auftrag mit einem Klick fort.",
+  "jobs.back.action": "Zurück zum Auftrag",
+  "jobs.back.label": "Zurück zum Auftrag {name}",
 };
 
 export const fr: Translation<typeof en> = {
@@ -285,6 +293,10 @@ export const fr: Translation<typeof en> = {
   "jobs.detail.failed.reason": "Motif",
   "jobs.detail.failed.attempts": "Tentatives",
   "jobs.detail.failed.unknown": "Inconnu",
+  "jobs.attention.resumable": "{name} peut reprendre",
+  "jobs.back.text": "Sur sa page, vous reprenez la tâche en un clic.",
+  "jobs.back.action": "Retour à la tâche",
+  "jobs.back.label": "Retour à la tâche {name}",
 };
 
 export const es: Translation<typeof en> = {
@@ -380,4 +392,8 @@ export const es: Translation<typeof en> = {
   "jobs.detail.failed.reason": "Motivo",
   "jobs.detail.failed.attempts": "Intentos",
   "jobs.detail.failed.unknown": "Desconocido",
+  "jobs.attention.resumable": "{name} puede continuar",
+  "jobs.back.text": "En su página, reanudas la tarea con un clic.",
+  "jobs.back.action": "Volver a la tarea",
+  "jobs.back.label": "Volver a la tarea {name}",
 };

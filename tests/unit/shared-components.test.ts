@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import { ConfirmModal } from "../../app/components/ConfirmModal";
 import { KEPT_COLOUR, percentLabel, STATE_COLOURS, TRACK_COLOUR } from "../../app/components/Coverage";
 import { CoverageRing, ringFigureSize, type RingSegment } from "../../app/components/CoverageRing";
+import { BackToJob } from "../../app/components/jobs/BackToJob";
+import { TintMark, tintMarkScale } from "../../app/components/jobs/TintMark";
 import { Breadcrumbs, NumberedSteps } from "../../app/components/LanguageLayout";
 import { InlineNotice } from "../../app/components/SettingsParts";
 import { APP_LOCALES, translator, type AppLocale } from "../../app/i18n/i18n";
@@ -222,6 +224,65 @@ describe("NumberedSteps titles (Jobs SPEC §5.2)", () => {
     expect(markup).toContain('<strong style="font-weight:600">Try 1 product again</strong>');
     // Only the step numbers still use s-text type="strong".
     expect(markup.match(/<s-text type="strong">([^<]*)<\/s-text>/g)).toEqual(['<s-text type="strong">1</s-text>', '<s-text type="strong">2</s-text>']);
+  });
+});
+
+describe("BackToJob (Jobs SPEC §5.5, the way back)", () => {
+  const ID = "7f3a2c10-0000-4000-8000-000000000010";
+  const NAMES: Record<AppLocale, string> = { en: "Italian · Collections", de: "Italienisch · Kollektionen", fr: "Italien · Collections", es: "Italiano · Colecciones" };
+  const back = (locale: AppLocale) => html(createElement(BackToJob, { jobId: ID, name: NAMES[locale] }), locale);
+
+  it("starts the button's accessible name with its visible label (WCAG 2.5.3): 'Back to the job Italian · Collections'", () => {
+    const button = tags(back("en"), "s-button");
+    expect(button).toEqual([`<s-button variant="primary" href="/app/jobs/${ID}" accessibilityLabel="Back to the job Italian · Collections">`]);
+    expect(back("en")).toContain(">Back to the job</s-button>");
+  });
+
+  it("is a primary link to the job in every language, its name first in the button's accessible name", () => {
+    for (const locale of APP_LOCALES) {
+      const markup = back(locale);
+      const [button] = tags(markup, "s-button");
+      const visible = markup.match(/<s-button[^>]*>([^<]*)<\/s-button>/)![1]!;
+      expect(tags(markup, "s-button"), locale).toHaveLength(1);
+      expect(attr(button!, "variant"), locale).toBe("primary");
+      expect(attr(button!, "href"), locale).toBe(`/app/jobs/${ID}`);
+      expect(visible, locale).toBe(translator(locale).t("jobs.back.action"));
+      expect(attr(button!, "accessibilityLabel"), locale).toBe(`${visible} ${NAMES[locale]}`);
+    }
+  });
+
+  it("names the job in its line and says how it goes on, with a success mark", () => {
+    const en = back("en");
+    expect(en).toContain('<s-icon type="check-circle" tone="success"></s-icon>');
+    expect(en).toContain('<strong style="font-weight:600">Italian · Collections can go on</strong><s-text color="subdued">On its page, you resume the job with one click.</s-text>');
+    const de = back("de");
+    expect(de).toContain(">Italienisch · Kollektionen kann weiterlaufen</strong>");
+    expect(de).toContain(">Auf seiner Seite setzt du den Auftrag mit einem Klick fort.</s-text>");
+    expect(de).toContain(">Zurück zum Auftrag</s-button>");
+  });
+
+  it("is a framed card whose button sits beside the line when the card is wide enough and under it on a phone", () => {
+    const markup = back("en");
+    expect(markup.startsWith('<s-box background="base" border="base" borderRadius="large-100" padding="base"><s-query-container>')).toBe(true);
+    expect(tags(markup, "s-grid").map((g) => attr(g, "gridTemplateColumns"))).toEqual(["auto minmax(0, 1fr)", "@container (inline-size &gt; 560px) 1fr auto, 1fr"]);
+  });
+});
+
+describe("TintMark (Jobs SPEC §3.4, §4.3)", () => {
+  it("scales its icon with the circle: 40, 56, 96 and 112 px", () => {
+    expect([40, 56, 96, 112].map(tintMarkScale)).toEqual([1.25, 1.5, 2.2, 2.5]);
+    for (const [size, scale] of [[40, 1.25], [56, 1.5], [96, 2.2], [112, 2.5]] as const) {
+      const markup = html(createElement(TintMark, { icon: "clock", tone: "info", colour: STATE_COLOURS.draft, size }));
+      expect(markup).toContain(`width:${size}px;height:${size}px;border-radius:${size / 2}px`);
+      expect(markup).toContain(`transform:scale(${scale})`);
+    }
+  });
+
+  it("is decorative, its icon in the tone on a circle tinted with the colour, exactly its size with the border", () => {
+    const markup = html(createElement(TintMark, { icon: "pause-circle", tone: "critical", colour: STATE_COLOURS.failed }));
+    expect(markup.startsWith('<span aria-hidden="true" style="display:flex;flex:none;box-sizing:border-box;width:40px;height:40px;border-radius:20px;')).toBe(true);
+    expect(markup).toContain(`background:${STATE_COLOURS.failed}14;border:1px solid ${STATE_COLOURS.failed}40`);
+    expect(markup).toContain('<s-icon type="pause-circle" tone="critical"></s-icon>');
   });
 });
 

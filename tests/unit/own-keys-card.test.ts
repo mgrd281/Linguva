@@ -105,7 +105,8 @@ describe("Your translation keys", () => {
     ];
     for (const [status, words] of states) expect(text(render(view({ keys: [key("deepl", { status })] }))), status).toContain(words);
     const refused = text(render(view({ keys: [key("azure", { status: "REFUSED", lastErrorCode: "OWN_KEY_AUTH_AZURE", lastErrorAt: VERIFIED })] })));
-    expect(refused).toContain("Microsoft Azure refused your key, or the service isn't set up for it");
+    // The refused key's own engine text (common.jobError.OWN_KEY_AUTH_AZURE): Azure's set-up only.
+    expect(refused).toContain("Microsoft Azure refused your key. Translation stopped; Linguva didn't switch to its own services. In the Azure portal under Keys and Endpoint");
     expect(refused).toContain("Microsoft Azure reported this on October 30, 2026.");
   });
 

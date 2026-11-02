@@ -7,6 +7,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { allowedTargetLocales } from "../billing/subscription";
+import { ROW_OUTCOME_JOBS_MAX, rowOutcomesByJob, type RowOutcomes } from "../jobs/bulk-jobs";
 import { prisma as defaultClient } from "../lib/db";
 import { getTranslationProvider } from "../providers";
 import { backgroundJobsRunning, getQueues } from "../queue/client";
@@ -52,6 +53,13 @@ export async function smartContext(
 }
 
 export const RECENT_RUNS = 20;
+
+/** The row outcomes of the jobs with failures, as many calls as their number needs. */
+async function retryableOf(shopId: string, jobIds: string[], client: PrismaClient): Promise<Record<string, RowOutcomes>> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < jobIds.length; i += ROW_OUTCOME_JOBS_MAX) chunks.push(jobIds.slice(i, i + ROW_OUTCOME_JOBS_MAX));
+  return Object.assign({}, ...(await Promise.all(chunks.map((ids) => rowOutcomesByJob(shopId, ids, client)))));
+}
 
 export async function loadSmartPanel(shopId: string, context: SmartPanelContext, client: PrismaClient = defaultClient) {
   const now = context.now ?? new Date();
@@ -112,10 +120,12 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
   const zone = config?.timeZone ?? context.shopTimeZone ?? "UTC";
   const spec = config ? checkSpec(config) : null;
   const windows = budgetWindows(now.getTime(), zone);
-  const [usedToday, usedMonth, exclusions] = await Promise.all([
+  const [usedToday, usedMonth, exclusions, outcomes] = await Promise.all([
     getOriginUsageSince(shopId, "smart", new Date(windows.daySince), client),
     getOriginUsageSince(shopId, "smart", new Date(windows.monthSince), client),
     listSmartExclusions(shopId, client, 100),
+    // Of the failed items, those Retry sends again (retryHelps: a permanent failure only the editor fixes).
+    retryableOf(shopId, data.jobs.filter((j) => j.failedItems > 0).map((j) => j.id), client),
   ]);
   const status: SmartStatus = smartStatus({
     enabled: config?.enabled ?? false,
@@ -178,7 +188,9 @@ export async function loadSmartPanel(shopId: string, context: SmartPanelContext,
         billed: runJobs.reduce((n, j) => n + j.charsBilled, 0),
         fromMemory: runJobs.reduce((n, j) => n + j.charsSaved, 0),
         failed: runJobs.reduce((n, j) => n + j.failedItems, 0),
-        jobs: runJobs.map((j) => ({ id: j.id, resourceType: j.resourceType, locale: j.targetLocale, failed: j.failedItems })),
+        /** What "Retry failed" sends again: failed items a new try can fix. */
+        retryable: runJobs.reduce((n, j) => n + (outcomes[j.id]?.retryable ?? 0), 0),
+        jobs: runJobs.map((j) => ({ id: j.id, resourceType: j.resourceType, locale: j.targetLocale, failed: j.failedItems, retryable: outcomes[j.id]?.retryable ?? 0 })),
       };
     }),
     translating: data.translating,

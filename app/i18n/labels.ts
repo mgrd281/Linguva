@@ -8,6 +8,7 @@ import { upperFirst } from "../lib/name-lists";
 import { issueLabel } from "../lib/issue-labels";
 import { ENGINE_NAMES } from "../lib/engines";
 import { ITEM_ERROR_MESSAGES, JOB_ERROR_MESSAGES, JOB_STATUS_LABELS, ownKeyJobError } from "../lib/job-display";
+import { isItemPermanentCode, stopGroup } from "../lib/job-view";
 import { parseOwnKeyCode } from "../lib/own-keys";
 import { coverageTypeLabel, isContentType, kindMeta, RESOURCE_KINDS, type TranslatableKind } from "../lib/resource-kinds";
 import type { I18n } from "./i18n";
@@ -79,9 +80,19 @@ export function itemErrorMessage(i18n: I18n, code: string): string | null {
   return hasMessage(`common.itemError.${code}`) ? i18n.t(`common.itemError.${code}` as MessageKey) : (ITEM_ERROR_MESSAGES[code] ?? null);
 }
 
-/** Why an item of a job ended as it did ("Already up to date", an error, …). */
+/**
+ * Why an item of a job ended as it did ("Already up to date", an error, …).
+ * An item that waits or runs again carries its last try's error: it is tried
+ * again, so its words say that, not the error. The items a stopped job didn't
+ * reach say so in a few words; the job's page says why it stopped.
+ */
 export function itemOutcome(i18n: I18n, status: string, code: string | null): string {
+  if (code && !isItemPermanentCode(code)) {
+    if (status === "PENDING") return i18n.t("jobs.outcome.RETRYING");
+    if (status === "RUNNING") return i18n.t("jobs.outcome.RUNNING");
+  }
   if (code && hasMessage(`jobs.outcome.${code}`)) return i18n.t(`jobs.outcome.${code}` as MessageKey);
+  if (code && status === "CANCELLED" && stopGroup(code) !== "UNKNOWN") return i18n.t("jobs.outcome.STOPPED");
   if (code) return itemErrorMessage(i18n, code) ?? jobErrorMessage(i18n, code) ?? code;
   if (hasMessage(`jobs.outcome.${status}`)) return i18n.t(`jobs.outcome.${status}` as MessageKey);
   return jobStatus(i18n, status).label;

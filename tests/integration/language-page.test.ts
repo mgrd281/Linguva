@@ -588,7 +588,8 @@ describe("translating a category", () => {
     const { shop, store } = await ready();
     const navigation = (await translateCategoryAction(store.asAdmin(), shop, { locale: "de", form: form({ category: "navigation" }), requestedBy: "7" }, app)) as Response;
     expect(navigation.status).toBe(302);
-    expect(navigation.headers.get("Location")).toBe("/app/jobs");
+    // Several jobs: the running ones, which say once how many started.
+    expect(navigation.headers.get("Location")).toBe("/app/jobs?status=active&started=2");
     // The link is translated already: menus and filters only.
     expect((await jobs(shop.id)).map((j) => [j.resourceType, j.targetLocale, j.requestedBy, j.idempotencyKey])).toEqual([
       ["FILTER", "de", "7", "0b8a3c2e-5d41-4c1e-9a7f-2f6d8e1b3c4a:FILTER"],

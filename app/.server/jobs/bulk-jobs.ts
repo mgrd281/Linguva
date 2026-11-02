@@ -1,12 +1,16 @@
-import type {
-  PrismaClient,
-  TranslationJob,
-  TranslationJobItemStatus,
+import {
+  Prisma,
+  type PrismaClient,
+  type TranslationJob,
+  type TranslationJobItemStatus,
 } from "@prisma/client";
 import { prisma as defaultClient } from "../lib/db";
 import { refreshCoverageOverlays } from "../coverage/items";
 import { finishSmartRunIfDone } from "../smart/finish";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { ITEM_PERMANENT_CODES, retryHelps } from "../../lib/job-view";
+import { ATTACHED_TYPES } from "../../lib/review-areas";
+import { wallClock, zonedInstant } from "../../lib/schedule";
 import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 
 export const ACTIVE_JOB_STATUSES = ["PENDING", "DISCOVERING", "RUNNING"] as const;
@@ -176,50 +180,506 @@ export async function getJobForShop(
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DAY_MS = 24 * 60 * 60_000;
 
-export const JOB_STATUS_FILTERS = {
-  active: ["PENDING", "DISCOVERING", "RUNNING"],
-  completed: ["COMPLETED"],
-  failed: ["FAILED"],
-  cancelled: ["CANCELLED"],
-} as const satisfies Record<string, readonly TranslationJob["status"][]>;
-export type JobStatusFilter = keyof typeof JOB_STATUS_FILTERS;
+/** The Jobs list's tabs (`all` = no status filter) and the legacy `failed` (stopped jobs only). */
+export const JOB_LIST_STATUSES = ["all", "active", "history", "problems", "completed", "cancelled", "failed"] as const;
+export type JobListStatus = (typeof JOB_LIST_STATUSES)[number];
+export const JOB_ORIGINS = ["you", "auto", "smart"] as const;
+export type JobOrigin = (typeof JOB_ORIGINS)[number];
+export const JOB_SINCE = ["today", "7d", "30d", "older"] as const;
+export type JobSince = (typeof JOB_SINCE)[number];
 
-export interface JobPageFilter {
+/** A job's type: a bulk type, or one of the image and custom-field types a smart check translates on their own. */
+export function isJobResourceType(value: string): boolean {
+  return isBulkResourceType(value) || ATTACHED_TYPES.includes(value);
+}
+
+/** How long a stop or a completed job's failures call for attention (the Problems tab, its count and the attention card). */
+export const PROBLEM_WINDOW_DAYS = 14;
+/** At most this many ids narrow the list (a name search's jobs). */
+export const JOB_IDS_MAX = 500;
+
+/**
+ * What the Jobs list shows, every filter optional; unknown values are
+ * ignored, never passed to the database.
+ */
+export interface JobListFilter {
+  /** One of JOB_LIST_STATUSES. */
   status?: string | null;
   locale?: string | null;
+  /** Legacy: one exact type (a bulk type or an attached one). */
   resourceType?: string | null;
-  /** Id of the last job of the previous page. */
+  /** The types of an area (CATEGORIES[area].types), or one exact type; wins over resourceType. */
+  types?: readonly string[] | null;
+  /** you: the merchant or the team (also legacy jobs without a starter); auto; smart. */
+  origin?: string | null;
+  /** today, 7d, 30d (since the start of that store-zone day) or older (before the 30 days). */
+  since?: string | null;
+  /** The store's time zone for `since` (default UTC). */
+  timeZone?: string | null;
+  /** Only these jobs (a search's, at most JOB_IDS_MAX); an empty list matches nothing. */
+  ids?: readonly string[] | null;
+  /** The time `since` and the problem window are counted from (default: now). */
+  now?: Date;
+}
+
+export interface JobPageFilter extends JobListFilter {
+  /** Id of the last job of the previous page (the URL's `after`). */
   cursor?: string | null;
+  /** Id of the first job of the next page (the URL's `before`): the page before it. */
+  before?: string | null;
   take?: number;
 }
 
+export interface JobsPage {
+  jobs: TranslationJob[];
+  /** The last job's id when older jobs follow (`after`). */
+  nextCursor: string | null;
+  /** The first job's id when newer jobs come before (`before`). */
+  prevCursor: string | null;
+}
+
+const isUuid = (value: unknown): value is string => typeof value === "string" && UUID_RE.test(value);
+const uuidOrNull = (value: string | null | undefined) => (isUuid(value) ? value : null);
+/** Distinct well-formed ids, at most `max`: anything else can't reach the database. */
+const validIds = (ids: readonly string[], max: number) => [...new Set(ids.filter(isUuid).map((id) => id.toLowerCase()))].slice(0, max);
+const clampTake = (take: number | undefined, fallback: number) => (Number.isFinite(take) ? Math.min(Math.max(Math.floor(take!), 1), 100) : fallback);
+
+const ACTIVE_SQL = Prisma.sql`j."status" IN ('PENDING', 'DISCOVERING', 'RUNNING')`;
+
 /**
- * One page of a shop's jobs, newest first, with optional filters. Keyset
- * pagination (cursor = last job id), so pages stay fast and stable while
- * new jobs are added.
+ * The one problem rule (the Problems tab, its count and the attention card):
+ * a stop (not for an uninstalled app) or a completed job with failed items,
+ * finished in the last PROBLEM_WINDOW_DAYS days, that no newer active or
+ * completed job of the same type and language has superseded. A statement
+ * that uses it starts with problemWith(shopId): the newest active or
+ * completed job per type and language, read once per statement (a newer
+ * such job exists exactly when that newest one is newer), so the rule costs
+ * one pass over the shop's jobs instead of one per problem.
  */
-export async function listJobsPage(shopId: string, filter: JobPageFilter = {}, client: PrismaClient = defaultClient) {
-  const take = Math.min(Math.max(filter.take ?? 25, 1), 100);
-  const status = filter.status && filter.status in JOB_STATUS_FILTERS ? JOB_STATUS_FILTERS[filter.status as JobStatusFilter] : null;
-  const cursor = filter.cursor && UUID_RE.test(filter.cursor) ? filter.cursor : null;
+function problemSql(now: Date): Prisma.Sql {
+  const windowStart = new Date(now.getTime() - PROBLEM_WINDOW_DAYS * DAY_MS).toISOString();
+  return Prisma.sql`(
+    ((j."status" = 'FAILED' AND j."errorCode" IS DISTINCT FROM 'SHOP_INACTIVE') OR (j."status" = 'COMPLETED' AND j."failedItems" > 0))
+    AND COALESCE(j."finishedAt", j."updatedAt") >= ${windowStart}::timestamptz
+    AND NOT EXISTS (
+      SELECT 1 FROM "superseding" n
+      WHERE n."resourceType" = j."resourceType" AND n."targetLocale" = j."targetLocale" AND n."newest" > j."createdAt"
+    ))`;
+}
+
+/** The WITH clause problemSql reads: materialized, so it is read once and never folded back into a subquery per row. */
+function problemWith(shopId: string): Prisma.Sql {
+  return Prisma.sql`WITH "superseding" AS MATERIALIZED (
+    SELECT "resourceType", "targetLocale", max("createdAt") AS "newest"
+    FROM "TranslationJob"
+    WHERE "shopId" = ${shopId}::uuid AND "status" IN ('PENDING', 'DISCOVERING', 'RUNNING', 'COMPLETED')
+    GROUP BY 1, 2
+  )`;
+}
+
+function statusSql(status: string | null | undefined, now: Date): Prisma.Sql | null {
+  switch (status) {
+    case "active":
+      return ACTIVE_SQL;
+    case "history":
+      return Prisma.sql`j."status" IN ('COMPLETED', 'CANCELLED', 'FAILED')`;
+    case "problems":
+      return problemSql(now);
+    case "completed":
+      return Prisma.sql`j."status" = 'COMPLETED'`;
+    case "cancelled":
+      return Prisma.sql`j."status" = 'CANCELLED'`;
+    // Old links (?status=failed) and the first Jobs list: stopped jobs only.
+    case "failed":
+      return Prisma.sql`j."status" = 'FAILED'`;
+    default:
+      return null;
+  }
+}
+
+const ORIGIN_SQL: Record<JobOrigin, Prisma.Sql> = {
+  // Started in Linguva: the merchant, a team member, or a job from before starters were recorded.
+  you: Prisma.sql`(j."requestedBy" IS NULL OR j."requestedBy" NOT LIKE 'system:%')`,
+  auto: Prisma.sql`j."requestedBy" = ${AUTO_REQUESTED_BY}`,
+  smart: Prisma.sql`j."requestedBy" = ${SMART_REQUESTED_BY}`,
+};
+
+function validZone(timeZone: string | null | undefined): string {
+  if (!timeZone) return "UTC";
+  try {
+    wallClock(0, timeZone);
+    return timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
+/** Midnight in the zone that starts the local day `daysBack` days before `now`'s. */
+export function localDayStart(now: Date, timeZone: string, daysBack = 0): Date {
+  const zone = validZone(timeZone);
+  const today = wallClock(now.getTime(), zone);
+  const day = new Date(Date.UTC(today.year, today.month - 1, today.day - daysBack));
+  return new Date(zonedInstant(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 0, zone));
+}
+
+const SINCE_DAYS: Record<Exclude<JobSince, "older">, number> = { today: 0, "7d": 7, "30d": 30 };
+
+function sinceSql(since: string | null | undefined, now: Date, timeZone: string | null | undefined): Prisma.Sql | null {
+  if (since === "older") return Prisma.sql`j."createdAt" < ${localDayStart(now, validZone(timeZone), SINCE_DAYS["30d"]).toISOString()}::timestamptz`;
+  if (since !== "today" && since !== "7d" && since !== "30d") return null;
+  return Prisma.sql`j."createdAt" >= ${localDayStart(now, validZone(timeZone), SINCE_DAYS[since]).toISOString()}::timestamptz`;
+}
+
+/** The types to filter by: an area's (or one exact type), only types a job can have; null: no type filter. */
+function typesOf(filter: JobListFilter): string[] | null {
+  const asked = filter.types?.length ? filter.types : filter.resourceType ? [filter.resourceType] : [];
+  const types = [...new Set(asked.filter(isJobResourceType))];
+  return types.length ? types : null;
+}
+
+/** Every filter but the status, for a job row `j` of this shop. */
+function filterConditions(shopId: string, filter: JobListFilter, now: Date): Prisma.Sql[] {
+  const conditions = [Prisma.sql`j."shopId" = ${shopId}::uuid`];
+  if (filter.locale) conditions.push(Prisma.sql`j."targetLocale" = ${filter.locale}`);
+  const types = typesOf(filter);
+  if (types) conditions.push(Prisma.sql`j."resourceType" = ANY(${types}::text[])`);
+  if (filter.origin && (JOB_ORIGINS as readonly string[]).includes(filter.origin)) conditions.push(ORIGIN_SQL[filter.origin as JobOrigin]);
+  const since = sinceSql(filter.since, now, filter.timeZone);
+  if (since) conditions.push(since);
+  if (filter.ids) {
+    // Ids from a search: another shop's never match (shopId above, and row-level security).
+    const ids = validIds(filter.ids, JOB_IDS_MAX);
+    conditions.push(ids.length ? Prisma.sql`j."id" = ANY(${ids}::uuid[])` : Prisma.sql`FALSE`);
+  }
+  return conditions;
+}
+
+/** A page's anchor (any job of this shop, whatever the filter says of it now); null when it isn't one. */
+async function jobAnchor(tx: TenantTx, shopId: string, id: string) {
+  const [row] = await tx.$queryRaw<Array<{ createdAt: Date; id: string }>>`
+    SELECT "createdAt", "id" FROM "TranslationJob" WHERE "shopId" = ${shopId}::uuid AND "id" = ${id}::uuid`;
+  return row ? { at: row.createdAt.toISOString(), id: row.id } : null;
+}
+
+/** Whether a job matching `where` comes after (older) or before (newer) the row in the list's order. */
+async function anyBeyond(tx: TenantTx, query: { with: Prisma.Sql; where: Prisma.Sql }, row: Pick<TranslationJob, "createdAt" | "id">, side: "older" | "newer") {
+  const anchor = Prisma.sql`(${row.createdAt.toISOString()}::timestamptz, ${row.id}::uuid)`;
+  const beyond = side === "older" ? Prisma.sql`(j."createdAt", j."id") < ${anchor}` : Prisma.sql`(j."createdAt", j."id") > ${anchor}`;
+  const [found] = await tx.$queryRaw<Array<{ found: boolean }>>`
+    ${query.with} SELECT EXISTS (SELECT 1 FROM "TranslationJob" j WHERE ${query.where} AND ${beyond}) AS "found"`;
+  return Boolean(found?.found);
+}
+
+/**
+ * One page of a shop's jobs, newest first (createdAt, then id), with optional
+ * filters. Keyset pagination both ways: `cursor` (after) pages to older jobs,
+ * `before` to newer ones (read oldest first, then reversed), so pages stay
+ * fast and stable while jobs are added, and nothing is skipped or shown twice.
+ * A cursor that isn't one of the shop's jobs is ignored (the first page).
+ */
+export async function listJobsPage(shopId: string, filter: JobPageFilter = {}, client: PrismaClient = defaultClient): Promise<JobsPage> {
+  const take = clampTake(filter.take, 25);
+  const now = filter.now ?? new Date();
+  const after = uuidOrNull(filter.cursor);
+  const before = after ? null : uuidOrNull(filter.before);
+  return withTenant(
+    shopId,
+    async (tx) => {
+      const conditions = filterConditions(shopId, filter, now);
+      const status = statusSql(filter.status, now);
+      if (status) conditions.push(status);
+      const where = Prisma.join(conditions, " AND ");
+      const query = { with: filter.status === "problems" ? problemWith(shopId) : Prisma.empty, where };
+      const anchor = after || before ? await jobAnchor(tx, shopId, (after ?? before)!) : null;
+      const at = anchor ? Prisma.sql`(${anchor.at}::timestamptz, ${anchor.id}::uuid)` : null;
+      if (before && at) {
+        const rows = await tx.$queryRaw<TranslationJob[]>`
+          ${query.with} SELECT j.* FROM "TranslationJob" j
+          WHERE ${where} AND (j."createdAt", j."id") > ${at}
+          ORDER BY j."createdAt" ASC, j."id" ASC
+          LIMIT ${take + 1}`;
+        const jobs = rows.slice(0, take).reverse();
+        const last = jobs.at(-1);
+        return {
+          jobs,
+          prevCursor: rows.length > take ? jobs[0]!.id : null,
+          nextCursor: last && (await anyBeyond(tx, query, last, "older")) ? last.id : null,
+        };
+      }
+      const rows = await tx.$queryRaw<TranslationJob[]>`
+        ${query.with} SELECT j.* FROM "TranslationJob" j
+        WHERE ${where} ${at ? Prisma.sql`AND (j."createdAt", j."id") < ${at}` : Prisma.empty}
+        ORDER BY j."createdAt" DESC, j."id" DESC
+        LIMIT ${take + 1}`;
+      const jobs = rows.slice(0, take);
+      const first = jobs[0];
+      return {
+        jobs,
+        nextCursor: rows.length > take ? jobs[take - 1]!.id : null,
+        prevCursor: at && first && (await anyBeyond(tx, query, first, "newer")) ? first.id : null,
+      };
+    },
+    client,
+  );
+}
+
+/** The figures of the tabs (with the filters, without a status): history = everything not active (tab All's pages). */
+export interface JobCounts {
+  all: number;
+  active: number;
+  queued: number;
+  history: number;
+  problems: number;
+  completed: number;
+  cancelled: number;
+}
+
+/** Every tab's count in one statement, with the list's filters (status left out). */
+export async function jobCounts(shopId: string, filter: JobListFilter = {}, now: Date = filter.now ?? new Date(), client: PrismaClient = defaultClient): Promise<JobCounts> {
+  const where = Prisma.join(filterConditions(shopId, filter, now), " AND ");
+  const [row] = await withTenant(
+    shopId,
+    (tx) =>
+      tx.$queryRaw<Array<Omit<JobCounts, "history">>>`
+        ${problemWith(shopId)}
+        SELECT count(*)::int AS "all",
+               count(*) FILTER (WHERE ${ACTIVE_SQL})::int AS "active",
+               count(*) FILTER (WHERE j."status" = 'PENDING')::int AS "queued",
+               count(*) FILTER (WHERE j."status" = 'COMPLETED')::int AS "completed",
+               count(*) FILTER (WHERE j."status" = 'CANCELLED')::int AS "cancelled",
+               count(*) FILTER (WHERE ${problemSql(now)})::int AS "problems"
+        FROM "TranslationJob" j
+        WHERE ${where}`,
+    client,
+  );
+  const counts = row ?? { all: 0, active: 0, queued: 0, completed: 0, cancelled: 0, problems: 0 };
+  return { ...counts, history: counts.all - counts.active };
+}
+
+/** The live group: active jobs with the list's filters, running first, then finding, then queued; newest first within each. */
+export async function listActiveJobs(shopId: string, filter: JobListFilter = {}, take = 21, client: PrismaClient = defaultClient): Promise<TranslationJob[]> {
+  const limit = clampTake(take, 21);
+  const now = filter.now ?? new Date();
+  const where = Prisma.join([...filterConditions(shopId, filter, now), ACTIVE_SQL], " AND ");
+  return withTenant(
+    shopId,
+    (tx) =>
+      tx.$queryRaw<TranslationJob[]>`
+        SELECT j.* FROM "TranslationJob" j
+        WHERE ${where}
+        ORDER BY CASE WHEN j."status" = 'RUNNING' AND j."discoveryDone" THEN 0 WHEN j."status" IN ('DISCOVERING', 'RUNNING') THEN 1 ELSE 2 END,
+                 j."createdAt" DESC, j."id" DESC
+        LIMIT ${limit}`,
+    client,
+  );
+}
+
+/**
+ * What a job row needs beyond its counters: items waiting for approval
+ * (succeeded, not partly, with a pending draft of the job: its own fields or
+ * its images' and custom fields'), partly translated, refused by the checks,
+ * changed originals, cancelled, and failed items a new try can fix
+ * (retryHelps).
+ */
+export interface RowOutcomes {
+  waiting: number;
+  partial: number;
+  rejected: number;
+  sourceChanged: number;
+  cancelled: number;
+  retryable: number;
+}
+
+/** At most this many jobs per call (a page of 25 and the live group's 21). */
+export const ROW_OUTCOME_JOBS_MAX = 100;
+
+/** A failed item a new try can fix, in SQL (retryHelps): DEAD, or FAILED without a permanent code. */
+const RETRYABLE_SQL = Prisma.sql`(i."status" = 'DEAD' OR (i."status" = 'FAILED' AND (i."errorCode" IS NULL OR i."errorCode" <> ALL(${[...ITEM_PERMANENT_CODES]}::text[]))))`;
+
+/**
+ * Per job of `ids`: its items with at least one pending draft of the job (the
+ * waiting rule of RowOutcomes), through the item's own drafts or those of its
+ * images and custom fields (parentGid). Two joins on (jobId, resourceGid), each
+ * driven by the jobs' pending drafts: never one join with an OR.
+ */
+function waitingSql(shopId: string, ids: readonly string[]): Prisma.Sql {
+  const drafts = Prisma.sql`d."shopId" = ${shopId}::uuid AND d."jobId" = ANY(${[...ids]}::uuid[]) AND d."status" = 'PENDING'`;
+  const items = Prisma.sql`i."shopId" = ${shopId}::uuid AND i."status" = 'SUCCEEDED' AND i."errorCode" IS DISTINCT FROM 'PARTIAL'`;
+  return Prisma.sql`
+    SELECT x."jobId", count(DISTINCT x."itemId")::int AS "waiting"
+    FROM (
+      SELECT i."jobId", i."id" AS "itemId" FROM "TranslationDraft" d
+      JOIN "TranslationJobItem" i ON i."jobId" = d."jobId" AND i."resourceGid" = d."resourceGid"
+      WHERE ${drafts} AND ${items}
+      UNION ALL
+      SELECT i."jobId", i."id" AS "itemId" FROM "TranslationDraft" d
+      JOIN "TranslationJobItem" i ON i."jobId" = d."jobId" AND i."resourceGid" = d."parentGid"
+      WHERE ${drafts} AND d."parentGid" IS NOT NULL AND ${items}
+    ) x
+    GROUP BY 1`;
+}
+
+/**
+ * RowOutcomes for each of `jobIds` (zeros for a job without such items, and
+ * for an id that isn't one of the shop's jobs). One statement; it reads only
+ * the items with a problem code, a cancel or a failure, and the pending
+ * drafts' items.
+ */
+export async function rowOutcomesByJob(shopId: string, jobIds: readonly string[], client: PrismaClient = defaultClient): Promise<Record<string, RowOutcomes>> {
+  const ids = validIds(jobIds, ROW_OUTCOME_JOBS_MAX);
+  if (!ids.length) return {};
   const rows = await withTenant(
     shopId,
     (tx) =>
-      tx.translationJob.findMany({
-        where: {
-          shopId,
-          ...(status ? { status: { in: [...status] } } : {}),
-          ...(filter.locale ? { targetLocale: filter.locale } : {}),
-          ...(filter.resourceType && isBulkResourceType(filter.resourceType) ? { resourceType: filter.resourceType } : {}),
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: take + 1,
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      }),
+      tx.$queryRaw<Array<RowOutcomes & { jobId: string }>>`
+        WITH w AS (${waitingSql(shopId, ids)}),
+        o AS (
+          SELECT i."jobId",
+                 count(*) FILTER (WHERE i."status" = 'SUCCEEDED' AND i."errorCode" = 'PARTIAL')::int AS "partial",
+                 count(*) FILTER (WHERE i."status" = 'SKIPPED' AND i."errorCode" = 'ALL_FIELDS_REJECTED')::int AS "rejected",
+                 count(*) FILTER (WHERE i."status" = 'SKIPPED' AND i."errorCode" = 'SOURCE_CHANGED')::int AS "sourceChanged",
+                 count(*) FILTER (WHERE i."status" = 'CANCELLED')::int AS "cancelled",
+                 count(*) FILTER (WHERE ${RETRYABLE_SQL})::int AS "retryable"
+          FROM "TranslationJobItem" i
+          WHERE i."shopId" = ${shopId}::uuid AND i."jobId" = ANY(${ids}::uuid[])
+            AND (i."status" IN ('FAILED', 'DEAD', 'CANCELLED') OR i."errorCode" IN ('PARTIAL', 'ALL_FIELDS_REJECTED', 'SOURCE_CHANGED'))
+          GROUP BY 1
+        )
+        SELECT x."id"::text AS "jobId",
+               COALESCE(w."waiting", 0)::int AS "waiting",
+               COALESCE(o."partial", 0)::int AS "partial",
+               COALESCE(o."rejected", 0)::int AS "rejected",
+               COALESCE(o."sourceChanged", 0)::int AS "sourceChanged",
+               COALESCE(o."cancelled", 0)::int AS "cancelled",
+               COALESCE(o."retryable", 0)::int AS "retryable"
+        FROM unnest(${ids}::uuid[]) AS x("id")
+        LEFT JOIN w ON w."jobId" = x."id"
+        LEFT JOIN o ON o."jobId" = x."id"`,
     client,
   );
-  return { jobs: rows.slice(0, take), nextCursor: rows.length > take ? rows[take - 1]!.id : null };
+  return Object.fromEntries(rows.map(({ jobId, ...outcomes }) => [jobId, outcomes]));
+}
+
+/**
+ * A job's review step: its pending drafts (what Review shows for the job) and
+ * the items they belong to (the waiting figure of its legend).
+ */
+export async function jobPendingDrafts(shopId: string, jobId: string, client: PrismaClient = defaultClient): Promise<{ translations: number; items: number }> {
+  if (!isUuid(jobId)) return { translations: 0, items: 0 };
+  const [row] = await withTenant(
+    shopId,
+    (tx) =>
+      tx.$queryRaw<Array<{ translations: number; items: number }>>`
+        SELECT (SELECT count(*)::int FROM "TranslationDraft" d
+                WHERE d."shopId" = ${shopId}::uuid AND d."jobId" = ${jobId}::uuid AND d."status" = 'PENDING') AS "translations",
+               COALESCE((SELECT w."waiting" FROM (${waitingSql(shopId, [jobId])}) w), 0)::int AS "items"`,
+    client,
+  );
+  return row ?? { translations: 0, items: 0 };
+}
+
+export interface LatestTitle {
+  resourceGid: string;
+  /** The original's title when the job drafted it (null: the page reads names live). */
+  title: string | null;
+  /** Its translation. */
+  translated: string | null;
+}
+
+/**
+ * What a running job translated last (at most five): its newest title drafts
+ * (waiting or published, never a refused attempt) with the original and the
+ * translation; without any (automatic publishing, or a kind without titles)
+ * its newest finished items, whose names the page reads live.
+ */
+export async function latestJobTitles(shopId: string, jobId: string, client: PrismaClient = defaultClient): Promise<LatestTitle[]> {
+  if (!isUuid(jobId)) return [];
+  return withTenant(
+    shopId,
+    async (tx) => {
+      const job = await tx.translationJob.findFirst({ where: { id: jobId, shopId }, select: { id: true } });
+      if (!job) return [];
+      const drafts = await tx.translationDraft.findMany({
+        where: { shopId, jobId, key: "title", status: { in: ["PENDING", "PUBLISHED"] } },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: 5,
+        select: { resourceGid: true, resourceTitle: true, value: true },
+      });
+      if (drafts.length) return drafts.map((d) => ({ resourceGid: d.resourceGid, title: d.resourceTitle, translated: d.value }));
+      const items = await tx.translationJobItem.findMany({
+        where: { shopId, jobId, status: "SUCCEEDED" },
+        orderBy: [{ finishedAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+        take: 5,
+        select: { resourceGid: true },
+      });
+      return items.map((i) => ({ resourceGid: i.resourceGid, title: null, translated: null }));
+    },
+    client,
+  );
+}
+
+/** What calls for the merchant on the Jobs list (the attention card), by the one problem rule. */
+export interface JobsAttention {
+  /** Stops: how many, and the newest (by when they stopped) up to ATTENTION_STOPS. */
+  stops: { count: number; jobs: TranslationJob[] };
+  /**
+   * Failed items of completed jobs only (an active job shows its own on its
+   * row and page): their sum, how many of them a new try can fix (over the
+   * newest ATTENTION_FAILED_JOBS jobs; fewer than `count` means some can't,
+   * or weren't looked at), the number of jobs, the two newest, and whether
+   * all of them are of one kind.
+   */
+  failed: { count: number; retryable: number; jobCount: number; jobs: TranslationJob[]; sameKind: boolean };
+}
+
+export const ATTENTION_STOPS = 4;
+export const ATTENTION_FAILED_JOBS = 20;
+
+export async function jobsAttention(shopId: string, now: Date = new Date(), client: PrismaClient = defaultClient): Promise<JobsAttention> {
+  const where = Prisma.sql`j."shopId" = ${shopId}::uuid AND ${problemSql(now)}`;
+  const latest = Prisma.sql`COALESCE(j."finishedAt", j."updatedAt") DESC, j."id" DESC`;
+  return withTenant(
+    shopId,
+    async (tx) => {
+      const [totals] = await tx.$queryRaw<Array<{ stops: number; failedJobs: number; failedItems: number; kinds: number }>>`
+        ${problemWith(shopId)}
+        SELECT count(*) FILTER (WHERE j."status" = 'FAILED')::int AS "stops",
+               count(*) FILTER (WHERE j."status" = 'COMPLETED')::int AS "failedJobs",
+               COALESCE(sum(j."failedItems") FILTER (WHERE j."status" = 'COMPLETED'), 0)::int AS "failedItems",
+               count(DISTINCT j."resourceType") FILTER (WHERE j."status" = 'COMPLETED')::int AS "kinds"
+        FROM "TranslationJob" j
+        WHERE ${where}`;
+      const stops = totals?.stops
+        ? await tx.$queryRaw<TranslationJob[]>`
+            ${problemWith(shopId)} SELECT j.* FROM "TranslationJob" j WHERE ${where} AND j."status" = 'FAILED' ORDER BY ${latest} LIMIT ${ATTENTION_STOPS}`
+        : [];
+      const failedJobs = totals?.failedJobs
+        ? await tx.$queryRaw<TranslationJob[]>`
+            ${problemWith(shopId)} SELECT j.* FROM "TranslationJob" j WHERE ${where} AND j."status" = 'COMPLETED' ORDER BY ${latest} LIMIT ${ATTENTION_FAILED_JOBS}`
+        : [];
+      let retryable = 0;
+      if (failedJobs.length) {
+        const [row] = await tx.$queryRaw<Array<{ retryable: number }>>`
+          SELECT count(*)::int AS "retryable" FROM "TranslationJobItem" i
+          WHERE i."shopId" = ${shopId}::uuid AND i."jobId" = ANY(${failedJobs.map((j) => j.id)}::uuid[])
+            AND i."status" IN ('FAILED', 'DEAD') AND ${RETRYABLE_SQL}`;
+        retryable = row?.retryable ?? 0;
+      }
+      return {
+        stops: { count: totals?.stops ?? 0, jobs: stops },
+        failed: {
+          count: totals?.failedItems ?? 0,
+          retryable,
+          jobCount: totals?.failedJobs ?? 0,
+          jobs: failedJobs.slice(0, 2),
+          sameKind: totals?.kinds === 1,
+        },
+      };
+    },
+    client,
+  );
 }
 
 /** Item outcomes that need the merchant's attention although the item didn't fail. */
@@ -456,14 +916,19 @@ export async function cancelActiveJobsForShop(shopId: string, client: PrismaClie
 }
 
 /**
- * Puts failed (and, for a stopped job, cancelled) items back to PENDING and
- * reopens the job. Returns the item ids to enqueue again.
+ * Puts the failed items a new try can fix (retryHelps: DEAD, and FAILED
+ * without a permanent code) and, for a stopped job, its cancelled items back
+ * to PENDING and reopens the job. A permanent failure stays failed (and
+ * counted): only the editor finishes it. Returns the item ids to enqueue
+ * again; busy, with the blocking job's id, while another job of the same type
+ * and language is active. The Jobs pages and the smart page's "retry failed"
+ * (retrySmartRun) both go through here.
  */
 export async function retryJobItems(
   shopId: string,
   jobId: string,
   client: PrismaClient = defaultClient,
-): Promise<{ itemIds: string[]; rediscover: boolean; busy?: true }> {
+): Promise<{ itemIds: string[]; rediscover: boolean; busy?: true; busyJobId?: string }> {
   return withTenant(
     shopId,
     async (tx) => {
@@ -477,13 +942,16 @@ export async function retryJobItems(
         where: { shopId, resourceType: job.resourceType, targetLocale: job.targetLocale, status: { in: [...ACTIVE_JOB_STATUSES] }, id: { not: job.id } },
         select: { id: true },
       });
-      if (other) return { itemIds: [], rediscover: false, busy: true as const };
+      if (other) return { itemIds: [], rediscover: false, busy: true as const, busyJobId: other.id };
       const statuses: TranslationJobItemStatus[] =
         job.status === "FAILED" ? ["FAILED", "DEAD", "CANCELLED"] : ["FAILED", "DEAD"];
-      const items = await tx.translationJobItem.findMany({
+      const found = await tx.translationJobItem.findMany({
         where: { jobId, shopId, status: { in: statuses } },
-        select: { id: true, status: true },
+        select: { id: true, status: true, errorCode: true },
       });
+      // A permanent failure (the service refused the content, Shopify refused the request, too big
+      // for the limit) would only fail again: it stays as it is.
+      const items = found.filter((i) => i.status === "CANCELLED" || retryHelps(i.status, i.errorCode));
       // A smart check's job is filled by its run's measurement, never by a discovery of its own.
       const rediscover = job.status === "FAILED" && !job.discoveryDone && !job.smartRunId;
       if (items.length === 0 && !rediscover) return { itemIds: [], rediscover: false };

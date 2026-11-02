@@ -216,6 +216,10 @@ export const en = {
   // The Own key plan (docs/AI_ENGINES.md).
   "common.jobError.OWN_KEY_QUOTA": "Your {engine} key's quota is used up. Translation stopped; Linguva didn't switch to its own services. Check your {engine} account, then resume.",
   "common.jobError.OWN_KEY_AUTH": "{engine} refused your key, or the service isn't set up for it (Google: Cloud Translation API enabled and billing on; Azure: the right region). Translation stopped. Fix it in your {engine} account and click Check again in Settings, or replace the key; then resume.",
+  // One text per engine: each names only its own service's set-up (the generic one is the fallback).
+  "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL refused your key. Translation stopped; Linguva didn't switch to its own services. Check in your DeepL account under API Keys that the key is still valid, then click Check again in Settings or replace it; then resume.",
+  "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure refused your key. Translation stopped; Linguva didn't switch to its own services. In the Azure portal under Keys and Endpoint, check Key 1 and the resource's region, then click Check again in Settings or replace the key; then resume.",
+  "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud refused your key. Translation stopped; Linguva didn't switch to its own services. In the Google Cloud console, check that the Cloud Translation API is enabled and billing is on, then click Check again in Settings or replace the key; then resume.",
   "common.jobError.OWN_KEY_MISSING": "No working translation key. Add one in Settings, then resume.",
 } as const satisfies Record<string, Message>;
 
@@ -433,6 +437,9 @@ export const de: Translation<typeof en> = {
   "common.issue.ENGINE_MARKUP": "Der Übersetzungsdienst konnte die Formatierung nicht erhalten",
   "common.jobError.OWN_KEY_QUOTA": "Das Kontingent deines {engine}-Schlüssels ist aufgebraucht. Die Übersetzung wurde angehalten; Linguva hat nicht zu eigenen Diensten gewechselt. Prüfe dein {engine}-Konto und setze dann fort.",
   "common.jobError.OWN_KEY_AUTH": "{engine} hat deinen Schlüssel abgelehnt, oder der Dienst ist dafür nicht eingerichtet (Google: Cloud Translation API aktiviert und Abrechnung an; Azure: die richtige Region). Die Übersetzung wurde angehalten. Behebe es in deinem {engine}-Konto und klicke in den Einstellungen auf „Erneut prüfen“, oder ersetze den Schlüssel; setze dann fort.",
+  "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL hat deinen Schlüssel abgelehnt. Die Übersetzung wurde angehalten; Linguva ist nicht zu eigenen Diensten gewechselt. Prüfe in deinem DeepL-Konto unter „API-Schlüssel“, ob der Schlüssel noch gilt, klicke dann in den Einstellungen auf „Erneut prüfen“ oder ersetze ihn; setze danach fort.",
+  "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure hat deinen Schlüssel abgelehnt. Die Übersetzung wurde angehalten; Linguva ist nicht zu eigenen Diensten gewechselt. Prüfe im Azure-Portal unter „Schlüssel und Endpunkt“ Schlüssel 1 und die Region der Ressource, klicke dann in den Einstellungen auf „Erneut prüfen“ oder ersetze den Schlüssel; setze danach fort.",
+  "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud hat deinen Schlüssel abgelehnt. Die Übersetzung wurde angehalten; Linguva ist nicht zu eigenen Diensten gewechselt. Prüfe in der Google Cloud Console, ob die Cloud Translation API aktiviert und die Abrechnung an ist, klicke dann in den Einstellungen auf „Erneut prüfen“ oder ersetze den Schlüssel; setze danach fort.",
   "common.jobError.OWN_KEY_MISSING": "Kein funktionierender Übersetzungsschlüssel. Füge in den Einstellungen einen hinzu und setze dann fort.",
 };
 
@@ -650,6 +657,9 @@ export const fr: Translation<typeof en> = {
   "common.issue.ENGINE_MARKUP": "Le service de traduction n'a pas pu conserver la mise en forme",
   "common.jobError.OWN_KEY_QUOTA": "Le quota de votre clé {engine} est épuisé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Vérifiez votre compte {engine}, puis reprenez.",
   "common.jobError.OWN_KEY_AUTH": "{engine} a refusé votre clé, ou le service n'est pas configuré pour elle (Google : API Cloud Translation activée et facturation active ; Azure : la bonne région). La traduction s'est arrêtée. Corrigez-le dans votre compte {engine} et cliquez sur « Vérifier à nouveau » dans les paramètres, ou remplacez la clé ; puis reprenez.",
+  "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL a refusé votre clé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Vérifiez dans votre compte DeepL, sous « Clés API », que la clé est toujours valide, puis cliquez sur « Vérifier à nouveau » dans les paramètres ou remplacez-la ; reprenez ensuite.",
+  "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure a refusé votre clé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Dans le portail Azure, sous « Clés et point de terminaison », vérifiez la Clé 1 et la région de la ressource, puis cliquez sur « Vérifier à nouveau » dans les paramètres ou remplacez la clé ; reprenez ensuite.",
+  "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud a refusé votre clé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Dans la console Google Cloud, vérifiez que l'API Cloud Translation est activée et la facturation active, puis cliquez sur « Vérifier à nouveau » dans les paramètres ou remplacez la clé ; reprenez ensuite.",
   "common.jobError.OWN_KEY_MISSING": "Aucune clé de traduction valide. Ajoutez-en une dans les paramètres, puis reprenez.",
 };
 
@@ -867,5 +877,8 @@ export const es: Translation<typeof en> = {
   "common.issue.ENGINE_MARKUP": "El servicio de traducción no pudo mantener el formato",
   "common.jobError.OWN_KEY_QUOTA": "La cuota de tu clave de {engine} está agotada. La traducción se detuvo; Linguva no cambió a sus propios servicios. Revisa tu cuenta de {engine} y luego reanuda.",
   "common.jobError.OWN_KEY_AUTH": "{engine} rechazó tu clave, o el servicio no está configurado para ella (Google: API Cloud Translation activada y facturación activa; Azure: la región correcta). La traducción se detuvo. Corrígelo en tu cuenta de {engine} y haz clic en «Comprobar de nuevo» en Configuración, o sustituye la clave; luego reanuda.",
+  "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL rechazó tu clave. La traducción se detuvo; Linguva no cambió a sus propios servicios. Comprueba en tu cuenta de DeepL, en «Claves de API», que la clave sigue siendo válida; luego haz clic en «Comprobar de nuevo» en la configuración o sustitúyela, y reanuda.",
+  "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure rechazó tu clave. La traducción se detuvo; Linguva no cambió a sus propios servicios. En el portal de Azure, en «Claves y punto de conexión», comprueba la Clave 1 y la región del recurso; luego haz clic en «Comprobar de nuevo» en la configuración o sustituye la clave, y reanuda.",
+  "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud rechazó tu clave. La traducción se detuvo; Linguva no cambió a sus propios servicios. En la consola de Google Cloud, comprueba que la API Cloud Translation esté activada y la facturación activa; luego haz clic en «Comprobar de nuevo» en la configuración o sustituye la clave, y reanuda.",
   "common.jobError.OWN_KEY_MISSING": "No hay ninguna clave de traducción válida. Añade una en Configuración y luego reanuda.",
 };

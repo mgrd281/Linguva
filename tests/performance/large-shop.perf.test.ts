@@ -3,10 +3,14 @@
  * descriptions whose owner only the coverage scan knows), 5,000 jobs and a
  * catalog of 5,000 products, next to a second shop. Measures the pages
  * merchants open most (Review, Jobs) and how a bulk job walks a large catalog.
+ * A third shop holds the Jobs list's worst case: 5,000 jobs (a quarter of
+ * them stops no newer job supersedes) and 20 jobs of 2,000 items each on the
+ * first page, for the list's loader data, the Problems tab, both page
+ * directions and the live data.
  */
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createBulkJob, listJobsPage } from "../../app/.server/jobs/bulk-jobs";
+import { createBulkJob, jobCounts, jobsAttention, listActiveJobs, listJobsPage, rowOutcomesByJob } from "../../app/.server/jobs/bulk-jobs";
 import { runDiscoveryPage, type JobDependencies } from "../../app/.server/jobs/processors";
 import { MockTranslationProvider } from "../../app/.server/providers/mock";
 import { countPendingDrafts, searchPendingDrafts } from "../../app/.server/review/drafts";
@@ -22,6 +26,10 @@ const JOBS = 5_000;
 const PRODUCTS = 5_000;
 let shopA: string;
 let shopB: string;
+let shopC: string;
+/** Jobs with 2,000 items each on the Jobs list's first page (5 of them running). */
+const BIG_JOBS = 20;
+const BIG_ITEMS = 2_000;
 
 async function asTenant(shopId: string, sql: string, ...params: unknown[]) {
   await ownerDb.$transaction([
@@ -75,6 +83,70 @@ async function seedJobs(shopId: string, count: number) {
   );
 }
 
+/**
+ * The Jobs list's worst case: 5,000 older jobs over a week (all inside the
+ * problem window), five types in four languages, by every origin; every
+ * French one stopped, so a quarter are stops the supersede rule has to look
+ * at, and every other Spanish one completed with failed items. Then the 20
+ * newest jobs with 2,000 items each (5 running, half their items waiting):
+ * per 20 items a failed, a dead, a cancelled, a partly translated, a refused
+ * and a changed one, 7 drafted (with a pending draft each) and 7 up to date.
+ */
+async function seedJobList(shopId: string, count: number) {
+  await asTenant(
+    shopId,
+    `INSERT INTO "TranslationJob" ("shopId","resourceType","targetLocale","status","requestedBy","idempotencyKey","failedItems","discoveryDone","createdAt","finishedAt","updatedAt")
+     SELECT $1::uuid,
+            (ARRAY['PRODUCT','COLLECTION','PAGE','ARTICLE','BLOG'])[1 + (g / 4) % 5],
+            (ARRAY['de','fr','it','es'])[1 + g % 4],
+            (ARRAY['COMPLETED','FAILED','CANCELLED','COMPLETED'])[1 + g % 4]::"TranslationJobStatus",
+            (ARRAY['system:auto','system:smart','42'])[1 + g % 3],
+            'list-' || g, CASE WHEN g % 8 = 3 THEN 2 ELSE 0 END, true,
+            now() - (g * 2 || ' minutes')::interval, now() - (g * 2 - 1 || ' minutes')::interval, now()
+     FROM generate_series(1, $2::int) g`,
+    shopId,
+    count,
+  );
+  await asTenant(
+    shopId,
+    `INSERT INTO "TranslationJob" ("shopId","resourceType","targetLocale","status","requestedBy","idempotencyKey","failedItems","discoveryDone","createdAt","finishedAt","updatedAt")
+     SELECT $1::uuid, 'PRODUCT', (ARRAY['de','fr','it','es'])[1 + g % 4],
+            (CASE WHEN g <= 5 THEN 'RUNNING' ELSE 'COMPLETED' END)::"TranslationJobStatus", '42', 'big-' || g,
+            CASE WHEN g <= 5 THEN 0 ELSE $2::int / 10 END, true,
+            now() - (g || ' seconds')::interval, CASE WHEN g <= 5 THEN NULL ELSE now() END, now()
+     FROM generate_series(1, $3::int) g`,
+    shopId,
+    BIG_ITEMS,
+    BIG_JOBS,
+  );
+  // Position in 20: failed, dead, cancelled, partly translated, refused, changed original, 7 drafted, 7 up to date.
+  await asTenant(
+    shopId,
+    `INSERT INTO "TranslationJobItem" ("shopId","jobId","resourceGid","status","errorCode","attempts","updatedAt")
+     SELECT $1::uuid, j."id", 'gid://shopify/Product/' || (1000000 + substring(j."idempotencyKey" from 5)::int * 10000 + i),
+            (CASE WHEN j."status" = 'RUNNING' AND i % 2 = 0 THEN 'PENDING'
+                  WHEN i % 20 = 0 THEN 'FAILED' WHEN i % 20 = 1 THEN 'DEAD' WHEN i % 20 = 2 THEN 'CANCELLED'
+                  WHEN i % 20 IN (3, 6, 7, 8, 9, 10, 11, 12) THEN 'SUCCEEDED' ELSE 'SKIPPED' END)::"TranslationJobItemStatus",
+            CASE WHEN j."status" = 'RUNNING' AND i % 2 = 0 THEN NULL
+                 WHEN i % 20 = 0 THEN 'PROVIDER_REJECTED' WHEN i % 20 = 1 THEN 'PROVIDER_UNAVAILABLE' WHEN i % 20 = 2 THEN 'JOB_CANCELLED'
+                 WHEN i % 20 = 3 THEN 'PARTIAL' WHEN i % 20 = 4 THEN 'ALL_FIELDS_REJECTED' WHEN i % 20 = 5 THEN 'SOURCE_CHANGED'
+                 WHEN i % 20 <= 12 THEN 'DRAFTED' ELSE 'UP_TO_DATE' END,
+            1, now()
+     FROM "TranslationJob" j CROSS JOIN generate_series(0, $2::int - 1) i
+     WHERE j."shopId" = $1::uuid AND j."idempotencyKey" LIKE 'big-%'`,
+    shopId,
+    BIG_ITEMS,
+  );
+  await asTenant(
+    shopId,
+    `INSERT INTO "TranslationDraft" ("shopId","jobId","resourceGid","locale","key","sourceDigest","sourceValue","value","status","updatedAt")
+     SELECT $1::uuid, i."jobId", i."resourceGid", j."targetLocale", 'title', md5(i."resourceGid"), 'Warm jacket', 'Warme Jacke', 'PENDING', now()
+     FROM "TranslationJobItem" i JOIN "TranslationJob" j ON j."id" = i."jobId"
+     WHERE i."shopId" = $1::uuid AND i."errorCode" = 'DRAFTED'`,
+    shopId,
+  );
+}
+
 async function measure(fn: () => Promise<unknown>, runs = 7) {
   await fn(); // warm-up
   const timings: number[] = [];
@@ -95,9 +167,12 @@ beforeAll(async () => {
   await seedDrafts(shopB, 10_000, "B");
   await seedJobs(shopA, JOBS);
   await seedJobs(shopB, 1_000);
+  shopC = (await upsertInstalledShop({ shopDomain: "large-c.myshopify.com" }, app)).shop.id;
+  await seedJobList(shopC, JOBS);
   await ownerDb.$executeRawUnsafe(`ANALYZE "TranslationDraft"`);
   await ownerDb.$executeRawUnsafe(`ANALYZE "CoverageItem"`);
   await ownerDb.$executeRawUnsafe(`ANALYZE "TranslationJob"`);
+  await ownerDb.$executeRawUnsafe(`ANALYZE "TranslationJobItem"`);
 }, 180_000);
 
 afterAll(async () => {
@@ -191,6 +266,54 @@ describe(`Jobs with ${JOBS.toLocaleString()} jobs`, () => {
     report("jobs: next page", next);
     for (const t of [open, filtered, next]) expect(t.median).toBeLessThan(300);
   }, 60_000);
+});
+
+describe(`the Jobs list with ${JOBS.toLocaleString()} jobs and ${BIG_JOBS} jobs of ${BIG_ITEMS.toLocaleString()} items on its first page`, () => {
+  it("loads the list's data, the Problems tab, both page directions and the live data within budget", async () => {
+    const now = new Date();
+    // The list loader's data: the tabs' counts, the live group, the page, the attention card, then each row's outcomes.
+    const loader = async () => {
+      const [counts, live, page, attention] = await Promise.all([
+        jobCounts(shopC, {}, now, app),
+        listActiveJobs(shopC, { now }, 21, app),
+        listJobsPage(shopC, { status: "history", take: 25, now }, app),
+        jobsAttention(shopC, now, app),
+      ]);
+      const outcomes = await rowOutcomesByJob(shopC, [...live, ...page.jobs].map((j) => j.id), app);
+      return { counts, live, page, attention, outcomes };
+    };
+    const first = await loader();
+    expect(first.counts).toMatchObject({ all: JOBS + BIG_JOBS, active: 5, history: JOBS + BIG_JOBS - 5 });
+    // The French stops of four types: no newer job of theirs supersedes them.
+    expect(first.counts.problems).toBeGreaterThanOrEqual(JOBS / 5);
+    expect(first.live).toHaveLength(5);
+    // The page starts with the 15 finished big jobs; each row's outcomes come from its 2,000 items.
+    expect(first.page.jobs.slice(0, 15).every((j) => j.idempotencyKey.startsWith("big-"))).toBe(true);
+    const per20 = BIG_ITEMS / 20;
+    expect(first.outcomes[first.page.jobs[0]!.id]).toEqual({ waiting: 7 * per20, partial: per20, rejected: per20, sourceChanged: per20, cancelled: per20, retryable: per20 });
+    expect(first.attention.stops.jobs).toHaveLength(4);
+
+    const list = await measure(loader);
+    const problems = await measure(() => Promise.all([listJobsPage(shopC, { status: "problems", take: 25, now }, app), jobCounts(shopC, {}, now, app)]));
+    const next = await measure(() => listJobsPage(shopC, { status: "history", cursor: first.page.nextCursor, take: 25, now }, app));
+    const second = await listJobsPage(shopC, { status: "history", cursor: first.page.nextCursor, take: 25, now }, app);
+    const previous = await measure(() => listJobsPage(shopC, { status: "history", before: second.prevCursor, take: 25, now }, app));
+    expect((await listJobsPage(shopC, { status: "history", before: second.prevCursor, take: 25, now }, app)).jobs.map((j) => j.id)).toEqual(first.page.jobs.map((j) => j.id));
+    // The live route: the active rows with their outcomes, the counts it shows and what decides the attention card.
+    const live = await measure(async () => {
+      const active = await listActiveJobs(shopC, { now }, 21, app);
+      await Promise.all([rowOutcomesByJob(shopC, active.map((j) => j.id), app), jobCounts(shopC, {}, now, app), jobsAttention(shopC, now, app), countPendingDrafts(shopC, app)]);
+    });
+
+    report("jobs list: loader data (counts, live, page, attention, row outcomes)", list);
+    report("jobs list: Problems tab and its count", problems);
+    report("jobs list: next page", next);
+    report("jobs list: previous page", previous);
+    report("jobs list: live data", live);
+    // The CI limits of docs/PERFORMANCE.md; the measured values are reported above.
+    for (const t of [list, problems, next, previous]) expect(t.median).toBeLessThan(300);
+    expect(live.median).toBeLessThan(100);
+  }, 120_000);
 });
 
 describe(`bulk job over ${PRODUCTS.toLocaleString()} products`, () => {

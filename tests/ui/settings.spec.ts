@@ -277,9 +277,11 @@ test("translating shortly after saving says why it waits, and names a chosen lan
   await openApp(page, "autoLimits", "/app/settings");
   const card = page.locator("#settings-changes");
   await expect(card.locator("s-badge").first()).toHaveText("Paused");
-  await expect(glance(page).locator("li").nth(1)).toHaveText(/Paused\s*Continues from .+ UTC · Daily limit reached$/, { useInnerText: true });
+  // Times in the store's zone (Europe/Berlin in the fixtures), so without "UTC".
+  await expect(glance(page).locator("li").nth(1)).toHaveText(/Paused\s*Continues from .+\d{1,2}:\d{2}\s?[AP]M · Daily limit reached$/, { useInnerText: true });
   const paused = card.locator('s-banner[heading="Automatic translation is paused"]');
-  await expect(paused).toContainText(/Today's AI characters are used up\. From .+ UTC, Linguva continues by itself, including everything that changes until then\./);
+  await expect(paused).toContainText(/Today's AI characters are used up\. From .+\d{1,2}:\d{2}\s?[AP]M, Linguva continues by itself, including everything that changes until then\./);
+  await expect(paused).not.toContainText("UTC");
   // The Starter plan's three languages; Spanish was chosen and is named, not offered.
   const basic = option(page, "#settings-changes", "Shortly after saving");
   for (const name of ["French", "German", "Italian"]) await expect(basic.getByRole("checkbox", { name, exact: true })).toBeVisible();

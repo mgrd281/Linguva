@@ -22,7 +22,8 @@ test("the content page shows the store area by area for one language @responsive
   await expect(languages.getByRole("link", { name: /^French: / })).toHaveAttribute("href", "/app/content?lang=fr");
   await expect(languages.locator("li", { hasText: "Arabic" })).toContainText("hidden");
   // When it was counted, as the language page says it, never "today"; the way to its next steps.
-  await expect(page.getByText(/^Last counted .+ UTC$/)).toBeVisible();
+  // In the store's time zone (Europe/Berlin in the fixtures), so without "UTC".
+  await expect(page.getByText(/^Last counted .+\d{1,2}:\d{2}\s?[AP]M$/)).toBeVisible();
   await expect(page.locator("s-page")).not.toContainText(/today/i);
   await expect(page.getByRole("link", { name: "Next steps for German" })).toHaveAttribute("href", "/app/languages/de");
 

@@ -14,7 +14,9 @@ test("a job page explains every result and offers a report @responsive", async (
   const results = page.locator('s-section[heading="Results in detail"]');
   // The seeded French job drafted every product for review.
   await expect(results.getByText("Saved as drafts for review")).toBeVisible();
-  await expect(page.getByText(/^Started .+ UTC/)).toBeVisible();
+  // In the store's time zone (Europe/Berlin in the fixtures), so without "UTC".
+  await expect(page.getByText(/^Started [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s?[AP]M( · |$)/)).toBeVisible();
+  await expect(page.getByText(/^Started .+UTC/)).toHaveCount(0);
   await expect(results.getByText(/^Reference for support: [0-9a-f-]{36}$/)).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);

@@ -217,7 +217,8 @@ describe("while an automatic job finishes what it started", () => {
     expect(items.filter((i) => i.jobId === taken.job.id).map((i) => i.status)).toEqual(["PENDING"]);
     expect(items.filter((i) => i.jobId !== taken.job.id).map((i) => [i.status, i.errorCode])).toEqual([["SKIPPED", "TAKEN_OVER"]]);
     for (const old of [older, today]) expect(await job(shop.id, old.id)).toMatchObject({ status: "COMPLETED" });
-    expect(await retryJobItems(shop.id, older.id, app)).toEqual({ itemIds: [], rediscover: false, busy: true });
+    // Busy, naming the job that took over (the job page links to it).
+    expect(await retryJobItems(shop.id, older.id, app)).toEqual({ itemIds: [], rediscover: false, busy: true, busyJobId: taken.job.id });
   });
 
   it("bills and drafts an item where it is counted when a handover moved it just before a worker took it", async () => {

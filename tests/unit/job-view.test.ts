@@ -19,6 +19,7 @@ import { TranslationProviderError } from "../../app/.server/providers/types";
 import { QUOTA_CODES, QuotaExceededError } from "../../app/.server/usage/usage-ledger";
 import { durationText } from "../../app/components/Coverage";
 import { INTL_LOCALE, translator, type AppLocale, type MessageVars } from "../../app/i18n/i18n";
+import { itemOutcome } from "../../app/i18n/labels";
 import { MESSAGES, type MessageKey } from "../../app/i18n/messages";
 import { ENGINE_IDS } from "../../app/lib/engines";
 import {
@@ -1455,3 +1456,26 @@ describe("plural texts, both forms in English and German", () => {
   });
 });
 
+describe("itemOutcome", () => {
+  it("says an item that waits or runs again will be retried, not what its last try failed with", () => {
+    const de = translator("de");
+    const en = translator("en");
+    expect(itemOutcome(en, "PENDING", "PROVIDER_UNAVAILABLE")).toBe("Waiting (will be retried)");
+    expect(itemOutcome(de, "PENDING", "SHOPIFY_UNAVAILABLE")).toBe("Wartet (wird wiederholt)");
+    expect(itemOutcome(en, "RUNNING", "UNEXPECTED_ERROR")).toBe("Being translated");
+    expect(itemOutcome(en, "PENDING", null)).toBe("Waiting");
+    // A failure keeps its reason.
+    expect(itemOutcome(en, "DEAD", "PROVIDER_UNAVAILABLE")).toBe("The translation service was unavailable.");
+    expect(itemOutcome(en, "FAILED", "PROVIDER_REJECTED")).toBe("The translation service rejected this content.");
+  });
+
+  it("says a stopped job's items were not translated because it stopped, leaving the cause to its page", () => {
+    const en = translator("en");
+    for (const code of ["ENGINE_CONSENT", "DAILY_LIMIT", "QUOTA_EXCEEDED", "OWN_KEY_AUTH_DEEPL", "PROVIDER_AUTH", "SHOP_INACTIVE"]) expect(itemOutcome(en, "CANCELLED", code), code).toBe("Not translated: the job stopped");
+    expect(itemOutcome(translator("de"), "CANCELLED", "ENGINE_CONSENT")).toBe("Nicht übersetzt: Der Auftrag wurde angehalten");
+    // Cancels keep their own words.
+    expect(itemOutcome(en, "CANCELLED", "JOB_CANCELLED")).toBe("Not translated: the job was cancelled");
+    expect(itemOutcome(en, "CANCELLED", "AUTO_OFF")).toBe("Not translated: automatic translation was turned off for this language");
+    expect(itemOutcome(en, "CANCELLED", "SHOP_UNINSTALLED")).toBe("The app was uninstalled.");
+  });
+});

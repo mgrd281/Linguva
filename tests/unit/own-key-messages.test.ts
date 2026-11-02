@@ -4,8 +4,9 @@
  * service by its brand name in every interface language, OWN_KEY_AUTH_<ENGINE>
  * has one text per engine that names only that engine's set-up (a DeepL key
  * never gets Google's or Azure's hints), OWN_KEY_MISSING says to add a key,
- * an item's outcome falls through to them, and the English fallbacks are the
- * English catalogue's words.
+ * an item the stopped job didn't reach says only that the job stopped (the
+ * job's page folds these texts), and the English fallbacks are the English
+ * catalogue's words.
  */
 import { describe, expect, it } from "vitest";
 import { APP_LOCALES, translator } from "../../app/i18n/i18n";
@@ -47,10 +48,13 @@ describe("own-key stop messages", () => {
     }
   });
 
-  it("an item's outcome falls through to them", () => {
+  it("leave an item the stopped job didn't reach to the job's page: it says only that the job stopped", () => {
     const de = translator("de");
-    expect(itemOutcome(de, "CANCELLED", "OWN_KEY_QUOTA_DEEPL")).toBe(de.t("common.jobError.OWN_KEY_QUOTA", { engine: "DeepL" }));
-    expect(itemOutcome(de, "CANCELLED", "OWN_KEY_MISSING")).toBe(de.t("common.jobError.OWN_KEY_MISSING"));
+    for (const code of ["OWN_KEY_QUOTA_DEEPL", "OWN_KEY_AUTH_AZURE", "OWN_KEY_MISSING"]) {
+      expect(itemOutcome(de, "CANCELLED", code), code).toBe(de.t("jobs.outcome.STOPPED"));
+    }
+    // The job's page folds the stop's own text under "What happened?" (jobErrorMessage).
+    expect(jobErrorMessage(de, "OWN_KEY_QUOTA_DEEPL")).toBe(de.t("common.jobError.OWN_KEY_QUOTA", { engine: "DeepL" }));
   });
 
   it("leave other codes as they were", () => {

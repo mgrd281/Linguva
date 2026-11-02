@@ -963,7 +963,8 @@ export async function translateCategoryAction(
       });
       jobs.push(job);
     }
-    return redirect(jobs.length === 1 ? `/app/jobs/${jobs[0]!.id}` : "/app/jobs");
+    // One job: its page. Several: the running jobs, which say once how many started.
+    return redirect(jobs.length === 1 ? `/app/jobs/${jobs[0]!.id}` : `/app/jobs?status=active&started=${jobs.length}`);
   } catch (error) {
     if (error instanceof BackgroundJobsUnavailableError) return { error: "JOBS_UNAVAILABLE" };
     throw error;

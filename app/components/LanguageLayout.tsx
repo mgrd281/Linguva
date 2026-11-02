@@ -29,27 +29,61 @@ export function settingsLinkFor(code: string): string | null {
   return null;
 }
 
-/** "Overview › Danish › Products": links up, then the page itself. */
-export function Breadcrumbs({ i18n, trail, current }: { i18n: I18n; trail: Array<{ href: string; label: string; before?: ReactNode }>; current: string }) {
+/** The trail on a wide container, the back row on a narrow one (Breadcrumbs `touch`). */
+const TRAIL_WIDE = "@container (inline-size > 640px) auto, none";
+const TRAIL_NARROW = "@container (inline-size > 640px) none, auto";
+
+/**
+ * "Overview › Danish › Products": links up, then the page itself.
+ *
+ * `touch` (inside an s-query-container, as the Jobs pages' header): on a
+ * narrow container the trail becomes one 44 px back row to the last link
+ * ("‹ Jobs"), on a wide one it stays the trail. Only one of the two is
+ * displayed; the other is display: none, so it is neither read nor focusable.
+ */
+export function Breadcrumbs({
+  i18n,
+  trail,
+  current,
+  touch = false,
+}: {
+  i18n: I18n;
+  trail: Array<{ href: string; label: string; before?: ReactNode }>;
+  current: string;
+  touch?: boolean;
+}) {
   const separator = (
     <span aria-hidden="true">
       <s-text color="subdued">›</s-text>
     </span>
   );
+  const wide = (
+    <s-stack direction="inline" gap="small-200" alignItems="center">
+      {trail.map((step) => (
+        <s-stack key={step.href} direction="inline" gap="small-200" alignItems="center">
+          {step.before}
+          <s-link href={step.href}>{step.label}</s-link>
+          {separator}
+        </s-stack>
+      ))}
+      <span aria-current="page">
+        <s-text color="subdued">{current}</s-text>
+      </span>
+    </s-stack>
+  );
+  const parent = trail[trail.length - 1];
+  if (!touch || !parent) return <nav aria-label={i18n.t("language.breadcrumb")}>{wide}</nav>;
   return (
     <nav aria-label={i18n.t("language.breadcrumb")}>
-      <s-stack direction="inline" gap="small-200" alignItems="center">
-        {trail.map((step) => (
-          <s-stack key={step.href} direction="inline" gap="small-200" alignItems="center">
-            {step.before}
-            <s-link href={step.href}>{step.label}</s-link>
-            {separator}
+      <s-box display={TRAIL_WIDE}>{wide}</s-box>
+      <s-box display={TRAIL_NARROW}>
+        <s-clickable href={parent.href} padding="small-200 none" minBlockSize="44px" borderRadius="base">
+          <s-stack direction="inline" gap="small-300" alignItems="center">
+            <s-icon type="chevron-left" color="subdued" size="small" />
+            <s-text>{parent.label}</s-text>
           </s-stack>
-        ))}
-        <span aria-current="page">
-          <s-text color="subdued">{current}</s-text>
-        </span>
-      </s-stack>
+        </s-clickable>
+      </s-box>
     </nav>
   );
 }
@@ -78,6 +112,9 @@ export interface StepView {
   action?: ReactNode;
 }
 
+/** A step's title given as text: semibold, since Polaris draws s-text type="strong" at the body weight (450). */
+const STEP_TITLE = { fontWeight: 600 } as const;
+
 /** Up to three numbered steps, each with what to do, why, and its button. */
 export function NumberedSteps({ steps }: { steps: StepView[] }) {
   return (
@@ -90,7 +127,7 @@ export function NumberedSteps({ steps }: { steps: StepView[] }) {
               <StepNumber n={i + 1} first={i === 0} />
               <s-stack direction="block" gap="small-200">
                 <s-stack direction="block" gap="small-500">
-                  {typeof step.title === "string" ? <s-text type="strong">{step.title}</s-text> : step.title}
+                  {typeof step.title === "string" ? <strong style={STEP_TITLE}>{step.title}</strong> : step.title}
                   {step.detail ? <s-text color="subdued">{step.detail}</s-text> : null}
                 </s-stack>
                 {step.action ? <s-stack direction="inline">{step.action}</s-stack> : null}

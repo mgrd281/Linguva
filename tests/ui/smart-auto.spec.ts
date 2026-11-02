@@ -30,8 +30,8 @@ test("Settings shows the smart schedule as the current way changes are translate
   await openApp(page, "business", "/app/settings");
   const card = page.locator("#settings-changes");
   await expect(card.locator("s-badge").first()).toHaveText("On");
-  // When it checks next, in the schedule's own time zone.
-  await expect(card.getByText(/^Next check: .*23:00 \(Europe\/Berlin\)$/)).toBeVisible();
+  // When it checks next, in the schedule's own time zone, on the interface language's clock (12-hour in English).
+  await expect(card.getByText(/^Next check: .*11:00\s?PM \(Europe\/Berlin\)$/)).toBeVisible();
   await isCurrent(page, "#settings-changes", "On a schedule");
   const smart = option(page, "#settings-changes", "On a schedule");
   await expect(smart.getByText("Business", { exact: true })).toBeVisible();
@@ -193,7 +193,7 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await page.getByRole("combobox", { name: "Time", exact: true }).selectOption("09:00");
   const next = page.locator("s-ordered-list s-list-item");
   await expect(next).toHaveCount(3);
-  for (const text of await next.allInnerTexts()) expect(text).toMatch(/^(Mon|Thu), .*09:00 \(Europe\/Berlin\)$/);
+  for (const text of await next.allInnerTexts()) expect(text).toMatch(/^(Mon|Thu), .*9:00\s?AM \(Europe\/Berlin\)$/);
   // The save bar saves and turns on in this state too.
   await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
   await expect(page.locator("ui-save-bar#smart-auto-save-bar button").first()).toHaveText("Save and turn on");

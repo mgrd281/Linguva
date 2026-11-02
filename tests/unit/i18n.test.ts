@@ -4,7 +4,7 @@
  * that is the same on server and browser.
  */
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, formatDayMonth, formatMonth, formatNumber, languageName, resolveLocale, translate, translator } from "../../app/i18n/i18n";
+import { formatDate, formatDateTime, formatDateTimeIn, formatDayMonth, formatMonth, formatNumber, languageName, resolveLocale, translate, translator } from "../../app/i18n/i18n";
 import { MESSAGES, NAMESPACES, type Message } from "../../app/i18n/messages";
 import { fieldName, issueName, jobStatus, kindLabel } from "../../app/i18n/labels";
 
@@ -45,12 +45,28 @@ describe("interface language", () => {
     expect(formatNumber("de", 1234567)).toBe("1.234.567");
   });
 
-  it("formats dates in UTC, so server and browser render the same text", () => {
+  it("formats dates in UTC without the store's zone, so server and browser render the same text", () => {
     expect(formatDate("de", "2026-10-27T23:30:00Z")).toBe("27. Oktober 2026");
     expect(formatDate("en", "2026-10-27T23:30:00Z")).toBe("October 27, 2026");
     expect(formatDateTime("de", "2026-10-27T23:30:00Z")).toBe("27.10.2026, 23:30 UTC");
     expect(formatMonth("de", "2026-10")).toBe("Oktober 2026");
     expect(formatDate("en", "not a date")).toBe("");
+  });
+
+  it("formats instants in the store's zone when it is known, naming UTC only for UTC (D1)", () => {
+    expect(formatDateTime("de", "2026-10-27T23:30:00Z", "Europe/Berlin")).toBe("28.10.2026, 00:30");
+    expect(formatDateTime("de", "2026-10-27T23:30:00Z", "America/New_York")).toBe("27.10.2026, 19:30");
+    expect(formatDateTime("en", "2026-10-27T23:30:00Z", "America/New_York")).toBe("Oct 27, 2026, 7:30 PM");
+    expect(formatDateTime("de", "2026-10-27T23:30:00Z", "UTC")).toBe("27.10.2026, 23:30 UTC");
+    expect(translator("de", { timeZone: "Europe/Berlin" }).dateTime("2026-10-27T23:30:00Z")).toBe("28.10.2026, 00:30");
+    expect(translator("de").dateTime("2026-10-27T23:30:00Z")).toBe("27.10.2026, 23:30 UTC");
+  });
+
+  it("writes times on the interface language's clock: 12-hour in English, 24-hour otherwise (D1b)", () => {
+    expect(formatDateTimeIn("en", "2026-10-29T22:00:00Z", "Europe/Berlin")).toBe("Thu, Oct 29, 11:00 PM");
+    expect(formatDateTimeIn("de", "2026-10-29T22:00:00Z", "Europe/Berlin")).toBe("Do., 29. Okt., 23:00");
+    expect(translator("en").clock(1380)).toBe("11:00 PM");
+    expect(translator("de").clock(1380)).toBe("23:00");
   });
 
   it("names a day and month, with the year only when it isn't this year's (in UTC)", () => {

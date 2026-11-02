@@ -26,10 +26,18 @@ const PAGES: Array<[string, string, UiShopKey?]> = [
   ["content", "/app/content"],
 ];
 
-// With the time and zone where a page shows them ("Oct 30, 2026, 9:15 AM UTC"),
-// and a day of this year without the year (the Plan page: "on November 1").
-const DATE =
-  /(\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b|\b[A-Z][a-z]{2} \d{1,2}, \d{4})(, \d{1,2}:\d{2}\s?[AP]M UTC)?|\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}\b/;
+// With the time where a page shows it, in the store's zone or with "UTC" ("Oct 30, 2026,
+// 9:15 AM"), a weekday with its day ("Monday, November 2": a day's heading), a day of this
+// year without the year (the Plan page: "on November 1") and a time alone ("2:02 PM").
+const MONTH = "(January|February|March|April|May|June|July|August|September|October|November|December)";
+const DATE = new RegExp(
+  [
+    `(\\b${MONTH} \\d{1,2}, \\d{4}\\b|\\b[A-Z][a-z]{2} \\d{1,2}, \\d{4})(, \\d{1,2}:\\d{2}\\s?[AP]M( UTC)?)?`,
+    `\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(, ${MONTH} \\d{1,2})?\\b`,
+    `\\b${MONTH} \\d{1,2}\\b`,
+    `\\b\\d{1,2}:\\d{2}\\s?[AP]M\\b`,
+  ].join("|"),
+);
 
 async function settle(page: Page) {
   // Polaris uses the Inter web font. `document.fonts.ready` doesn't wait for
@@ -48,8 +56,8 @@ async function settle(page: Page) {
     const pattern = new RegExp(source, "g");
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      // A date with a year (and time) becomes "January 1, 2026", a day without one "January 1".
-      if (pattern.test(node.nodeValue ?? "")) node.nodeValue = node.nodeValue!.replace(pattern, (date) => (/\d{4}/.test(date) ? "January 1, 2026" : "January 1"));
+      // A date with a year (and time) becomes "January 1, 2026", a day without one "January 1", a time alone "9:00 AM".
+      if (pattern.test(node.nodeValue ?? "")) node.nodeValue = node.nodeValue!.replace(pattern, (date) => (/\d{4}/.test(date) ? "January 1, 2026" : /^\d/.test(date) ? "9:00 AM" : "January 1"));
       pattern.lastIndex = 0;
     }
   }, DATE.source);

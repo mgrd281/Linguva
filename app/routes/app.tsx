@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { requireShop } from "../.server/shopify/require-shop";
+import { shopTimeZone } from "../.server/shopify/shop-time-zone";
 import { shopBilling } from "../.server/billing/billing";
 import { getConfig } from "../.server/lib/config";
 import { planSelectionUrl } from "../lib/plans";
@@ -24,7 +25,8 @@ const PLAN_FREE_PATHS = ["/app/plan", "/app/welcome"];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, redirect } = await requireShop(request);
-  const billing = await shopBilling(admin, shop);
+  // The store's time zone: every page shows instants in it (cached per shop, so polling never asks Shopify).
+  const [billing, timeZone] = await Promise.all([shopBilling(admin, shop), shopTimeZone(shop.id, admin)]);
   const path = new URL(request.url).pathname;
   if (billing.mustChoosePlan && !PLAN_FREE_PATHS.includes(path)) {
     const appHandle = getConfig().SHOPIFY_APP_HANDLE!;
@@ -32,7 +34,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", timeZone };
 };
 
 /**
@@ -54,13 +56,13 @@ function AppNav() {
 }
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, timeZone } = useLoaderData<typeof loader>();
   const locale = useAppLocale();
   useAdminLoadingBar();
 
   return (
     <AppProvider apiKey={apiKey}>
-      <I18nProvider locale={locale}>
+      <I18nProvider locale={locale} timeZone={timeZone}>
         <AppNav />
         <Outlet />
       </I18nProvider>
@@ -77,7 +79,7 @@ export function ErrorBoundary() {
   if (isShopifyAuthResponse(error)) return boundary.error(error);
   return (
     <AppProvider apiKey={data && "apiKey" in data ? data.apiKey : ""}>
-      <I18nProvider locale={locale}>
+      <I18nProvider locale={locale} timeZone={data && "timeZone" in data ? data.timeZone : null}>
         <RouteErrorContent error={error} />
       </I18nProvider>
     </AppProvider>

@@ -12,6 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   APP_LOCALES,
+  calendarDay,
   displayZone,
   formatAt,
   formatClock,
@@ -265,6 +266,16 @@ describe("day headings by calendar days in the store's zone", () => {
   it("a weekday title from last year names the year in its detail", () => {
     expect(de("2026-12-30T10:00:00Z", "2027-01-02T10:00:00Z")).toEqual({ title: "Mittwoch", detail: "30. Dezember 2026" });
     expect(de("2026-12-31T10:00:00Z", "2027-01-01T10:00:00Z")).toEqual({ title: "Gestern", detail: "Donnerstag, 31. Dezember 2026" });
+  });
+
+  it("calendarDay: the store's calendar day the headings count with (the Jobs list's day groups use it)", () => {
+    expect(calendarDay(LATE, BERLIN)).toEqual({ day: "2026-10-28", number: Date.UTC(2026, 9, 28) / 86_400_000 });
+    expect(calendarDay(LATE, NEW_YORK).day).toBe("2026-10-27");
+    // UTC for a missing, unknown or offset zone, as every helper here.
+    for (const zone of [null, "Mars/Olympus", "+05:30"]) expect(calendarDay(LATE, zone).day, String(zone)).toBe("2026-10-27");
+    // One day from Saturday to Sunday, October 25, although that day has 25 hours in Berlin.
+    expect(calendarDay("2026-10-25T10:00:00Z", BERLIN).number - calendarDay("2026-10-24T10:00:00Z", BERLIN).number).toBe(1);
+    expect(calendarDay("not a date", BERLIN)).toEqual({ day: "", number: Number.NaN });
   });
 });
 

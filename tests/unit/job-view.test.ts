@@ -18,7 +18,8 @@ import { classifyError } from "../../app/.server/jobs/errors";
 import { TranslationProviderError } from "../../app/.server/providers/types";
 import { QUOTA_CODES, QuotaExceededError } from "../../app/.server/usage/usage-ledger";
 import { durationText } from "../../app/components/Coverage";
-import { INTL_LOCALE, translator, type AppLocale, type MessageVars } from "../../app/i18n/i18n";
+import { ringFigureSize as coverageRingFigureSize } from "../../app/components/CoverageRing";
+import { translator, type AppLocale, type MessageVars } from "../../app/i18n/i18n";
 import { itemOutcome } from "../../app/i18n/labels";
 import { MESSAGES, type MessageKey } from "../../app/i18n/messages";
 import { ENGINE_IDS } from "../../app/lib/engines";
@@ -79,7 +80,6 @@ import {
   type StopGroup,
   type StopLook,
   type TextValue,
-  type When,
 } from "../../app/lib/job-view";
 import { ownKeyStopCode } from "../../app/lib/own-keys";
 
@@ -400,20 +400,8 @@ const J15 = job({ id: id(15), resourceType: "PRODUCT_METAFIELD", requestedBy: SM
 const J16 = job({ id: id(16), resourceType: "PAGE", targetLocale: "es", totalItems: 12, succeededItems: 12, createdAt: yesterday("12:30") });
 const R16 = outcomesOf({ waiting: 10, partial: 2 });
 
-/** The page's I18n in Berlin time; `at` stands in for i18n.at of app/i18n/i18n.ts (the time track's helper). */
-function writer(locale: AppLocale): JobTextI18n {
-  const clock = new Intl.DateTimeFormat(INTL_LOCALE[locale], { timeStyle: "short", timeZone: ZONE });
-  const day = new Intl.DateTimeFormat("en-CA", { timeZone: ZONE });
-  const time = (value: When) => clock.format(new Date(value));
-  const words: Partial<Record<AppLocale, [string, string]>> = { en: ["today at", "yesterday at"], de: ["heute um", "gestern um"] };
-  const at = (value: When, now: When) => {
-    const days = (Date.parse(day.format(new Date(now))) - Date.parse(day.format(new Date(value)))) / 86_400_000;
-    const pair = words[locale];
-    if (!pair || (days !== 0 && days !== 1)) throw new Error("the test's i18n.at knows today and yesterday, in English and German");
-    return `${pair[days]} ${time(value)}`;
-  };
-  return { ...translator(locale), time, timeRef: time, at };
-}
+/** The page's I18n in the store's zone (the app route's loader names it): its own time, timeRef, at and dayMonth write every instant. */
+const writer = (locale: AppLocale): JobTextI18n => translator(locale, { timeZone: ZONE });
 const contextFor = (locale: AppLocale) => ({ now: NOW, duration: (ms: number) => durationText(translator(locale), ms) });
 const say = (locale: AppLocale, text: JobText) => jobText(writer(locale), text, contextFor(locale));
 const sayAll = (locale: AppLocale, texts: readonly JobText[]) => texts.map((text) => say(locale, text)).join(" ");
@@ -433,6 +421,36 @@ const CODE_OF: Record<StopGroup, string | null> = {
   PROVIDER: "PROVIDER_QUOTA",
   UNKNOWN: null,
 };
+
+describe("instants inside the texts: the page's time helpers", () => {
+  const cancelled: JobText = { key: "jobs.meta.cancelledAt", vars: { time: { timeRef: today("08:55") } } };
+  // Stopped at 00:30 on Monday in Berlin: still Sunday, 23:30, in UTC.
+  const stopped: JobText = { key: "jobs.attention.stopText", vars: { when: { at: "2026-11-01T23:30:00Z" }, done: 1, total: 10, count: 1 } };
+  /** A store without a zone, or in UTC: the same texts, in UTC and saying so. */
+  const inUtc = (locale: AppLocale, text: JobText) => jobText(translator(locale), text, contextFor(locale));
+
+  it("writes times in the store's zone, the clock of the interface language, Spanish with its article", () => {
+    expect(say("de", cancelled)).toBe("Abgebrochen um 08:55");
+    expect(say("en", cancelled)).toBe("Cancelled at 8:55 AM");
+    expect(say("es", cancelled)).toBe("Cancelada a las 8:55");
+    expect(say("es", { key: "jobs.meta.cancelledAt", vars: { time: { timeRef: today("01:30") } } })).toBe("Cancelada a la 1:30");
+    expect(valueText("de", { join: [{ time: today("06:10") }, { time: today("13:45") }], separator: "–" })).toBe("06:10–13:45");
+  });
+
+  it("names the day by the store's calendar day, as the day headings do", () => {
+    expect(say("de", stopped)).toBe("Angehalten heute um 00:30, 1 von 10 ist fertig.");
+    expect(say("en", stopped)).toBe("Stopped today at 12:30 AM; 1 of 10 is done.");
+    expect(inUtc("de", stopped)).toBe("Angehalten gestern um 23:30 UTC, 1 von 10 ist fertig.");
+    expect(writer("de").dayHeading("2026-11-01T23:30:00Z", NOW).title).toBe("Heute");
+    expect(translator("de").dayHeading("2026-11-01T23:30:00Z", NOW).title).toBe("Gestern");
+  });
+
+  it("says UTC after every time when the store has no zone, or UTC", () => {
+    expect(inUtc("en", cancelled)).toBe("Cancelled at 7:55 AM UTC");
+    expect(inUtc("es", cancelled)).toBe("Cancelada a las 7:55 UTC");
+    expect(jobText(translator("de", { timeZone: "Etc/UTC" }), cancelled, contextFor("de"))).toBe("Abgebrochen um 07:55 UTC");
+  });
+});
 
 describe("names, kinds and counts", () => {
   it("name a job by its language and kind, the same everywhere", () => {
@@ -661,6 +679,8 @@ describe("the ring's figure", () => {
     expect(ringFigure(translator("en"), share(62, 100)).fontSize).toEqual({ wide: 28, narrow: 22 });
     expect(ringFigure(translator("de"), share(62, 100)).fontSize).toEqual({ wide: 24, narrow: 20 });
     expect(ringFigure(translator("de"), share(100, 100)).fontSize).toEqual({ wide: 22, narrow: 18 });
+    // One rule: the ring component draws its figure with this very function.
+    expect(coverageRingFigureSize).toBe(ringFigureSize);
   });
 });
 
@@ -824,6 +844,56 @@ describe("dayGroups", () => {
   it("shows UTC days for a missing, unknown or offset zone (a name every browser knows)", () => {
     const list = rows("2026-10-27T23:30:00Z");
     for (const zone of [null, "", "Mars/Olympus", "+05:30"]) expect(days(zone, list), String(zone)).toEqual([["2026-10-27", 6, 1]]);
+  });
+
+  it("gets its headings from the page's i18n.dayHeading: the spec's titles in the store's zone", () => {
+    const de = translator("de", { timeZone: ZONE });
+    // Newest first; 23:30 UTC on Tuesday, October 27 is Wednesday, October 28 in Berlin.
+    const list = rows("2026-11-02T08:00:00Z", "2026-11-01T22:30:00Z", "2026-10-30T14:48:00Z", "2026-10-27T23:30:00Z", "2026-10-27T10:00:00Z", "2026-10-26T10:00:00Z", "2025-05-12T12:12:00Z");
+    const headings = dayGroups(list, de.timeZone, NOW).map((day) => Object.values(de.dayHeading(day.at, NOW)).join(" · "));
+    expect(headings).toEqual([
+      "Heute · Montag, 2. November",
+      "Gestern · Sonntag, 1. November",
+      "Freitag · 30. Oktober",
+      "Mittwoch · 28. Oktober",
+      "Dienstag · 27. Oktober",
+      "26. Oktober · Montag",
+      "12. Mai 2025 · Montag",
+    ]);
+  });
+
+  it("puts every row under its own day's heading, in every zone the pages show or replace by UTC", () => {
+    // Around midnight in each zone and across the changes to winter time (Berlin October 25, New York November 1), newest first.
+    const list = rows(
+      "2026-11-02T13:00:00Z",
+      "2026-11-01T23:30:00Z",
+      "2026-11-01T15:30:00Z",
+      "2026-11-01T05:30:00Z",
+      "2026-11-01T04:30:00Z",
+      "2026-11-01T03:30:00Z",
+      "2026-10-25T23:30:00Z",
+      "2026-10-25T00:30:00Z",
+      "2026-10-24T22:30:00Z",
+      "2026-10-24T21:30:00Z",
+      "2025-12-31T23:30:00Z",
+    );
+    const weekdays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+    // "Japan" and "EST": zone names without a region, which the pages show as given.
+    for (const zone of [ZONE, "America/New_York", "Asia/Kolkata", "Japan", "EST", "Etc/UTC", "GMT", "UTC", null, "+05:30", "Mars/Olympus"]) {
+      const de = translator("de", { timeZone: zone });
+      const heading = (at: string | Date) => Object.values(de.dayHeading(at, NOW)).join(" · ");
+      const groups = dayGroups(list, zone, NOW);
+      // The store's zone as given or as the page's i18n names it: the same days.
+      expect(dayGroups(list, de.timeZone, NOW), String(zone)).toEqual(groups);
+      const shown = groups.map((day) => heading(day.at));
+      expect(new Set(shown).size, `${zone}: one heading per day`).toBe(groups.length);
+      for (const day of groups) {
+        for (const row of day.rows) expect(heading(row.createdAt), `${zone}: ${row.createdAt}`).toBe(heading(day.at));
+        const title = de.dayHeading(day.at, NOW).title;
+        const expected = day.daysAgo === 0 ? "Heute" : day.daysAgo === 1 ? "Gestern" : day.daysAgo <= 6 ? "weekday" : "date";
+        expect(title === "Heute" ? "Heute" : title === "Gestern" ? "Gestern" : weekdays.includes(title) ? "weekday" : /^\d/.test(title) ? "date" : title, `${zone}: ${day.day}`).toBe(expected);
+      }
+    }
   });
 });
 
@@ -1041,6 +1111,9 @@ describe("heroModel", () => {
       ["review", "54 Übersetzungen freigeben", "Für 18 Blogbeiträge. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt prüfen → /app/review?job=${id(40)}`, "primary"],
       ["wait", "Ab 01:00 fortsetzen", "Dann ist das Tageskontingent wieder da. Der Knopf zum Fortsetzen erscheint hier von selbst.", null, "-"],
     ]);
+    // The page's timeRef writes the reset (midnight UTC, 1:00 in Berlin): 12-hour in English, Spanish with its article.
+    expect(steps("en", model)[1]?.[1]).toBe("Resume from 1:00 AM");
+    expect(steps("es", model)[1]?.[1]).toBe("Reanudar a partir de la 1:00");
     expect(model.panel?.foot && [say("de", model.panel.foot.text), say("de", model.panel.foot.action.label), model.panel.foot.wide]).toEqual([
       "Passiert das öfter? Größere Tarife haben mehr KI‑Zeichen pro Tag.",
       "Tarife ansehen",

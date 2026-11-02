@@ -158,6 +158,26 @@ function dayNumber(date: Date, timeZone: string): number {
   return Date.UTC(year, month - 1, day) / DAY_MS;
 }
 
+/** A calendar day: its date ("2026-11-02") and its day count (comparable across daylight-saving changes). */
+export interface CalendarDay {
+  day: string;
+  number: number;
+}
+
+/**
+ * The calendar day of an instant in the store's zone (UTC when the zone is
+ * missing, unknown or an offset: displayZone), counted exactly as the day
+ * headings count (formatDayHeading), so the Jobs list's day groups
+ * (dayGroups in app/lib/job-view.ts) and their headings never disagree. An
+ * invalid instant has no day ("", NaN).
+ */
+export function calendarDay(value: Instant, timeZone?: string | null): CalendarDay {
+  const date = toDate(value);
+  if (!isValid(date)) return { day: "", number: Number.NaN };
+  const number = dayNumber(date, displayZone(timeZone).zone);
+  return { day: new Date(number * DAY_MS).toISOString().slice(0, 10), number };
+}
+
 function sameYear(date: Date, now: Date, timeZone: string): boolean {
   return isValid(now) && wallClock(date.getTime(), timeZone).year === wallClock(now.getTime(), timeZone).year;
 }

@@ -8,6 +8,7 @@ import { prisma as defaultClient } from "../lib/db";
 import { refreshCoverageOverlays } from "../coverage/items";
 import { finishSmartRunIfDone } from "../smart/finish";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
+import { displayZone } from "../../i18n/i18n";
 import { ITEM_PERMANENT_CODES, retryHelps } from "../../lib/job-view";
 import { ATTACHED_TYPES } from "../../lib/review-areas";
 import { wallClock, zonedInstant } from "../../lib/schedule";
@@ -216,7 +217,7 @@ export interface JobListFilter {
   origin?: string | null;
   /** today, 7d, 30d (since the start of that store-zone day) or older (before the 30 days). */
   since?: string | null;
-  /** The store's time zone for `since` (default UTC). */
+  /** The store's time zone for `since` (shopTimeZone, the zone the pages show; default UTC). */
   timeZone?: string | null;
   /** Only these jobs (a search's, at most JOB_IDS_MAX); an empty list matches nothing. */
   ids?: readonly string[] | null;
@@ -306,14 +307,13 @@ const ORIGIN_SQL: Record<JobOrigin, Prisma.Sql> = {
   smart: Prisma.sql`j."requestedBy" = ${SMART_REQUESTED_BY}`,
 };
 
+/**
+ * The zone of `since`, by the pages' rule (displayZone: a missing, unknown
+ * or offset zone is UTC), so "today" starts where the list's "Today" group
+ * and its heading do.
+ */
 function validZone(timeZone: string | null | undefined): string {
-  if (!timeZone) return "UTC";
-  try {
-    wallClock(0, timeZone);
-    return timeZone;
-  } catch {
-    return "UTC";
-  }
+  return displayZone(timeZone).zone;
 }
 
 /** Midnight in the zone that starts the local day `daysBack` days before `now`'s. */

@@ -21,7 +21,7 @@
  * - A job's page: the hero by state with its numbered steps (heroModel), the
  *   problems card's heading, the cancel dialog's sentences, the stats.
  */
-import { INTL_LOCALE, type I18n, type MessageKey, type MessageVars } from "../i18n/i18n";
+import { calendarDay, INTL_LOCALE, type I18n, type MessageKey, type MessageVars } from "../i18n/i18n";
 import { MESSAGES } from "../i18n/messages";
 import { coveragePercent } from "./coverage-rules";
 import { ENGINE_NAMES } from "./engines";
@@ -30,7 +30,6 @@ import { CATEGORIES, isCategoryId, languagePath, type CategoryId } from "./langu
 import { upperFirst } from "./name-lists";
 import { parseOwnKeyCode } from "./own-keys";
 import { CONTENT_TYPES, coverageTypeLabel, RESOURCE_KINDS } from "./resource-kinds";
-import { wallClock } from "./schedule";
 import { SMART_REQUESTED_BY } from "./smart-auto";
 
 /**
@@ -233,12 +232,12 @@ export interface JobText {
   upperFirst?: boolean;
 }
 
-/** What jobText needs of the page's I18n: the time helpers name instants in the store's zone (app/i18n/i18n.ts). */
-export type JobTextI18n = I18n & {
-  time(value: When): string;
-  timeRef(value: When): string;
-  at(value: When, now: When): string;
-};
+/**
+ * What jobText needs: the page's I18n, whose time helpers (time, timeRef, at,
+ * dayMonth) write instants in the store's zone, "UTC" only when it is UTC or
+ * unknown (app/i18n/i18n.ts).
+ */
+export type JobTextI18n = I18n;
 
 export interface JobTextContext {
   /** The page's time (the loader's), for day words ("heute um 14:02"). */
@@ -609,7 +608,7 @@ export function ringFigure(i18n: Pick<I18n, "number" | "percent">, groups: JobGr
  * The figure's size by its length in characters (a no-break space counts:
  * "62 %" has 4), so a longer figure stays inside the ring: 28 px up to 3
  * characters, 24 px for 4, 22 px from 5 in a ring of 112 px or more; 22, 20
- * and 18 px in a smaller one.
+ * and 18 px in a smaller one. CoverageRing draws every ring's figure with it.
  */
 export function ringFigureSize(figure: string, size: number): number {
   const length = [...figure].length;
@@ -848,8 +847,6 @@ export function rowMeta(row: JobRowView, options: RowMetaOptions = {}): TextValu
 
 // ─── Days and clusters ───────────────────────────────────────────────────────
 
-const DAY_MS = 86_400_000;
-
 /** A day of the list in the store's zone. */
 export interface DayGroup<T> {
   /** The calendar day ("2026-11-02"): a stable id. */
@@ -861,33 +858,18 @@ export interface DayGroup<T> {
   rows: T[];
 }
 
-/** A zone by its name (an offset such as "+05:30" isn't one every browser knows), else UTC. */
-function zoneOrUtc(zone: string | null | undefined): string {
-  if (!zone || !/^(?:UTC|[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)+)$/.test(zone)) return "UTC";
-  try {
-    wallClock(0, zone);
-    return zone;
-  } catch {
-    return "UTC";
-  }
-}
-
-function calendarDay(value: When, zone: string): { day: string; number: number } {
-  const { year, month, day } = wallClock(new Date(value).getTime(), zone);
-  return { day: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`, number: Date.UTC(year, month - 1, day) / DAY_MS };
-}
-
 /**
  * The rows (newest first) by their calendar day in the store's zone, each
  * day with how many days before `now`'s it is; its heading is
- * i18n.dayHeading(at, now) ("Heute · Montag, 2. November").
+ * i18n.dayHeading(at, now) ("Heute · Montag, 2. November"). `zone` is the
+ * page's `i18n.timeZone`: the days are counted by the headings' own rule
+ * (calendarDay in app/i18n/i18n.ts; a missing, unknown or offset zone is UTC).
  */
 export function dayGroups<T extends { createdAt: When }>(rows: readonly T[], zone: string | null | undefined, now: When): DayGroup<T>[] {
-  const tz = zoneOrUtc(zone);
-  const today = calendarDay(now, tz).number;
+  const today = calendarDay(now, zone).number;
   const groups: DayGroup<T>[] = [];
   for (const row of rows) {
-    const { day, number } = calendarDay(row.createdAt, tz);
+    const { day, number } = calendarDay(row.createdAt, zone);
     const last = groups.at(-1);
     if (last?.day === day) last.rows.push(row);
     else groups.push({ day, daysAgo: today - number, at: row.createdAt, rows: [row] });

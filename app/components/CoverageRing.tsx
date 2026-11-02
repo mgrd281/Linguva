@@ -10,6 +10,7 @@
  * in dashes and no segments, since nothing has a share yet.
  */
 import type { StateCounts } from "../lib/coverage-rules";
+import { ringFigureSize } from "../lib/job-view";
 import { TRACK_COLOUR } from "./Coverage";
 import { DRAWN_STATES, ITEM_STATE_LOOK, textCounts } from "./ItemStates";
 
@@ -30,13 +31,10 @@ export interface RingSegment {
 /**
  * The figure's size by its length in characters (a no-break space counts: "62 %" has 4), so a longer figure
  * stays inside the ring: 28 px up to 3 characters ("34%", "—"), 24 px for 4 ("62 %", "100%"), 22 px from 5
- * ("100 %") in a ring of 112 px or more; 22, 20 and 18 px in a smaller one.
+ * ("100 %") in a ring of 112 px or more; 22, 20 and 18 px in a smaller one. One rule, in the Jobs view logic
+ * (app/lib/job-view.ts), so a job's hero model (ringFigure) and the drawn ring always agree.
  */
-export function ringFigureSize(figure: string, size: number): number {
-  const length = [...figure].length;
-  const [short, four, long] = size >= 112 ? [28, 24, 22] : [22, 20, 18];
-  return length <= 3 ? short : length === 4 ? four : long;
-}
+export { ringFigureSize };
 
 /** A language's texts as segments: the drawn states in their order, then the missing ones (the track). */
 function countSegments(counts: StateCounts): RingSegment[] {

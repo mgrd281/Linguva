@@ -217,6 +217,8 @@ describe("listJobsPage", () => {
     expect(await list({ since: "today", timeZone: "Europe/Berlin" })).toEqual(ids([auto, berlinToday]));
     expect(await list({ since: "today", timeZone: "UTC" })).toEqual(ids([auto]));
     expect(await list({ since: "today", timeZone: "Not/AZone" })).toEqual(ids([auto]));
+    // An offset is no zone the pages show (displayZone): UTC, as the list's day groups and their headings count.
+    expect(await list({ since: "today", timeZone: "+05:30" })).toEqual(ids([auto]));
     expect(await list({ since: "7d", timeZone: "Europe/Berlin" })).toEqual(ids([auto, berlinToday, berlinYesterday, smart]));
     expect(await list({ since: "30d", timeZone: "Europe/Berlin" })).toEqual(ids([auto, berlinToday, berlinYesterday, smart, team, within30]));
     expect(await list({ since: "older", timeZone: "Europe/Berlin" })).toEqual(ids([older]));

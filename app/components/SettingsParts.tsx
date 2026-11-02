@@ -373,18 +373,21 @@ function flatten(children: ReactNode): ReactNode[] {
 }
 
 /**
- * A notice inside a card: stopped by the plan, nothing yet, not set up. Its
- * icon, a short heading, one sentence, and its actions (`actionsWide`: the
- * width they need side by side).
+ * A notice inside a card: stopped by the plan, nothing yet, not set up, a
+ * job that is busy. Its icon (in `tone` when given), a short heading, one
+ * sentence, and its actions (`actionsWide`: the width they need side by
+ * side).
  */
 export function InlineNotice({
   icon,
+  tone,
   heading,
   children,
   actions,
   actionsWide = 360,
 }: {
   icon: IconName;
+  tone?: JSX.IntrinsicElements["s-icon"]["tone"];
   heading: string;
   children?: ReactNode;
   actions?: ReactNode;
@@ -393,7 +396,7 @@ export function InlineNotice({
   return (
     <s-box background="subdued" borderRadius="large-100" padding="base">
       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-        <s-icon type={icon} />
+        <s-icon type={icon} tone={tone} />
         <s-stack direction="block" gap="small-300">
           <s-stack direction="block" gap="small-500">
             <span style={SETTING_NAME}>{heading}</span>

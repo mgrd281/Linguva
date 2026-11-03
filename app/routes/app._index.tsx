@@ -521,7 +521,7 @@ function StoreFigure({ data, i18n, counting }: { data: Data; i18n: I18n; countin
                 counts={share.counts}
                 figure={percent}
                 caption={t("language.hero.translated")}
-                label={t("language.hero.ringLabel", { percent, complete: share.complete, total: share.total })}
+                label={t("language.hero.ringLabel", { percent, complete: share.complete, total: share.total, count: share.total })}
                 size={112}
               />
               <s-stack direction="block" gap="small-300">

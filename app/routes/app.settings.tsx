@@ -371,6 +371,9 @@ const TOOLS = [
   { href: "/app/translations", icon: "transfer", tint: "slate", label: "transfer.page.heading", detail: "settings.tools.transfer.detail" },
 ] as const;
 
+/** The panel with "Shortly after saving"'s languages (focused when the choice opens it). */
+const BASIC_PANEL = "settings-changes-basic-panel";
+
 /** Each section's icon and the colour of its square, the same on its tile and wherever it is named. */
 const SECTION_LOOK: Record<SectionKey, { icon: IconName; tint: Tint }> = {
   changes: { icon: "automation", tint: "blue" },
@@ -650,8 +653,8 @@ function keysSummary(data: Data, i18n: I18n): Omit<SectionText, "name"> {
   if (!own) return { state: "", tone: null };
   if (own.access === "off") return { state: t("settings.changes.line.notInPlan"), tone: null };
   if (own.keys.some((k) => k.status !== "OK")) {
-    const refused = own.keys.some((k) => k.status === "REFUSED" || k.status === "UNREADABLE");
-    return { state: t("settings.tile.keys.problem"), tone: refused ? "critical" : "warning" };
+    // The tone of the badge and the status row (keysState names the worst key).
+    return { state: t("settings.tile.keys.problem"), tone: keysState(i18n, own.keys).tone === "critical" ? "critical" : "warning" };
   }
   const usable = own.keys.filter(usableOwnKey).length;
   if (usable) return { state: t("settings.summary.keys.ok", { count: usable }), tone: null };
@@ -922,6 +925,20 @@ function ChangesCard({
   const smartConfig = data.smart?.config ?? null;
   const entitled = Boolean(data.smart?.entitled);
   const [choosingBasic, setChoosingBasic] = useState(false);
+  // Choosing "Shortly after saving" opens its languages in the panel under the choices (the tile itself turns
+  // into a plain one): the focus goes there, and Cancel brings it back to the tile.
+  const moved = useRef<"open" | "cancel" | null>(null);
+  useEffect(() => {
+    const move = moved.current;
+    moved.current = null;
+    if (move === "open") {
+      const panel = document.getElementById(BASIC_PANEL);
+      panel?.focus({ preventScroll: true });
+      panel?.scrollIntoView({ block: "nearest" });
+    } else if (move === "cancel") {
+      document.querySelector<HTMLElement>('[data-option="settings-changes-basic"] .lv-option__choose')?.focus();
+    }
+  }, [choosingBasic]);
   const busy = autoFetcher.state !== "idle" || smartFetcher.state !== "idle";
   // A switch that went through closes the language choice.
   useFreshResult(autoFetcher, (result) => {
@@ -977,7 +994,14 @@ function ChangesCard({
             {mode === "basic" ? t("settings.auto.saveLanguages") : t("settings.auto.turnOn")}
           </Button>
           {mode === "basic" ? null : (
-            <Button type="button" variant="tertiary" onClick={() => setChoosingBasic(false)}>
+            <Button
+              type="button"
+              variant="tertiary"
+              onClick={() => {
+                moved.current = "cancel";
+                setChoosingBasic(false);
+              }}
+            >
               {t("common.action.cancel")}
             </Button>
           )}
@@ -1138,7 +1162,13 @@ function ChangesCard({
           currentLabel={t("settings.option.current")}
           select={
             data.auto.planIncludes && data.auto.available && data.consent && hasLanguages && !choosingBasic
-              ? { onClick: () => setChoosingBasic(true), disabled: busy }
+              ? {
+                  onClick: () => {
+                    moved.current = "open";
+                    setChoosingBasic(true);
+                  },
+                  disabled: busy,
+                }
               : undefined
           }
         >
@@ -1189,7 +1219,7 @@ function ChangesCard({
       </OptionGrid>
       {/* The chosen way's details, under the choices: shortly after saving's languages, the schedule's summary. */}
       {showBasicForm ? (
-        <OptionPanel label={t("settings.changes.basic.panel")} icon="automation" tint="blue" title={t("settings.changes.basic.title")}>
+        <OptionPanel id={BASIC_PANEL} label={t("settings.changes.basic.panel")} icon="automation" tint="blue" title={t("settings.changes.basic.title")}>
           {basicForm}
           {errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
         </OptionPanel>

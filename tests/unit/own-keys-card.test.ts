@@ -196,4 +196,12 @@ describe("Your translation keys", () => {
       expect(keysState(i18n, []).label).toBe(i18n.t("settings.changes.badge.noKey"));
     }
   });
+
+  it("names the worst problem first: a refused key before one used up for now, whatever their order", () => {
+    const i18n = translator("en");
+    const state = keysState(i18n, [key("deepl", { status: "QUOTA" }), key("azure", { status: "REFUSED" })]);
+    expect(state).toMatchObject({ tone: "critical", label: i18n.t("settings.keys.state.REFUSED", { engine: "Microsoft Azure" }) });
+    // Only problems that a moment fixes: the milder tone.
+    expect(keysState(i18n, [key("deepl", { status: "QUOTA" }), key("azure", { status: "RECHECK" })]).tone).toBe("warning");
+  });
 });

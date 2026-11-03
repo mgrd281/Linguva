@@ -319,9 +319,10 @@ export function OptionGrid({ label, children, min = 220 }: { label: string; chil
  * languages and their button, or its summary with its actions. A group named
  * by `label`, its icon and title as its heading line.
  */
-export function OptionPanel({ label, icon, tint = "grey", title, children }: { label: string; icon: IconName; tint?: Tint; title: string; children: ReactNode }) {
+export function OptionPanel({ id, label, icon, tint = "grey", title, children }: { id?: string; label: string; icon: IconName; tint?: Tint; title: string; children: ReactNode }) {
+  // With an id it can take the focus (tabIndex -1): where a choice opens it, the focus follows.
   return (
-    <div role="group" aria-label={label} className="lv-option-panel">
+    <div id={id} {...(id ? { tabIndex: -1 } : {})} role="group" aria-label={label} className="lv-option-panel">
       <s-stack direction="block" gap="small-300">
         <s-stack direction="inline" gap="small-200" alignItems="center">
           <IconSquare icon={icon} tint={tint} size={28} />

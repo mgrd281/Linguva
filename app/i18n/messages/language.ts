@@ -583,8 +583,8 @@ export const fr: Translation<typeof en> = {
 
   "language.hero.label": "Avancement de la traduction : {language}",
   "language.hero.translated": "terminé",
-  "language.hero.ringLabel": { one: "{percent} traduit : {complete} texte sur {total} est terminé et en ligne", other: "{percent} traduit : {complete} textes sur {total} sont terminés et en ligne" },
-  "language.hero.figure": { one: "{complete} texte sur {total} est terminé et en ligne", other: "{complete} textes sur {total} sont terminés et en ligne" },
+  "language.hero.ringLabel": { one: "{percent} traduit : {complete} sur {total} texte est terminé et en ligne", other: "{percent} traduit : {complete} sur {total} textes sont terminés et en ligne" },
+  "language.hero.figure": { one: "{complete} sur {total} texte est terminé et en ligne", other: "{complete} sur {total} textes sont terminés et en ligne" },
   "language.hero.fallback": "Là où rien n'est encore traduit, les clients voient le texte en {primary}.",
   "language.hero.state.complete": { one: "terminé – les clients le voient", other: "terminés – les clients les voient" },
   "language.hero.state.waiting": { one: "attend votre approbation", other: "attendent votre approbation" },

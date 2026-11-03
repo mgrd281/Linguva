@@ -127,9 +127,13 @@ function keyToast(i18n: I18n, result: KeyActionResult | null): string | null {
   return i18n.t("settings.keys.toast.removed", { engine });
 }
 
-/** The card's state badge: the keys work, one needs attention, or none yet. */
+/**
+ * The card's state badge: the keys work, one needs attention, or none yet. With several problems the worst
+ * one is named (a refused or unreadable key before one used up for now), so the badge, the page's status row
+ * and the Keys tile say the same.
+ */
 export function keysState(i18n: I18n, keys: readonly OwnKeySummary[]): SettingState {
-  const problem = keys.find((k) => k.status !== "OK");
+  const problem = keys.find((k) => k.status === "REFUSED" || k.status === "UNREADABLE") ?? keys.find((k) => k.status !== "OK");
   if (problem) return { label: keyStateText(i18n, problem), icon: STATE_LOOK[problem.status].icon, tone: problem.status === "QUOTA" || problem.status === "RECHECK" ? "warning" : "critical" };
   const usable = keys.filter(usableOwnKey);
   if (usable.length) return { label: engineList(i18n, usable.map((k) => ENGINE_NAMES[k.engine])), icon: "check-circle", tone: "success" };

@@ -442,10 +442,17 @@ test("translating shortly after saving: chosen with the plan's languages ticked,
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  // Chosen for the first time: its languages open in the panel under the choices, every language of the plan ticked.
+  // Chosen for the first time: its languages open in the panel under the choices, every language of the plan ticked;
+  // the focus follows into the panel (the tile turns into a plain one), and Cancel brings it back to the tile.
   await expect(languagesPanel(page)).toHaveCount(0);
   await choose(page, "#settings-changes", "Shortly after saving");
+  await expect(languagesPanel(page)).toBeFocused();
+  await languagesPanel(page).getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(languagesPanel(page)).toHaveCount(0);
+  await expect(option(page, "#settings-changes", "Shortly after saving").getByRole("button").first()).toBeFocused();
+  await choose(page, "#settings-changes", "Shortly after saving");
   const basic = languagesPanel(page);
+  await expect(basic).toBeFocused();
   for (const name of ["German", "French", "Arabic"]) await expect(basic.getByRole("checkbox", { name, exact: true })).toBeChecked();
   // Without a language it is refused, where the choice is made.
   for (const name of ["German", "French", "Arabic"]) await basic.getByRole("checkbox", { name, exact: true }).uncheck();

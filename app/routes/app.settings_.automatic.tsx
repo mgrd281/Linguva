@@ -408,7 +408,7 @@ export default function SmartAutomatic() {
     if (form.querySelector('input[name="weekday"]')) setWeekdays(fd.getAll("weekday").map(Number).filter((n) => n >= 1 && n <= 7));
     const chosenZone = fd.get("timeZone");
     if (typeof chosenZone === "string" && chosenZone) setZone(chosenZone);
-    setScope({ locales: fd.getAll("locale").map(String), types: fd.getAll("type").map(String) });
+    setScope({ locales: fd.getAll("locale").flatMap((v) => String(v).split(",")).map((v) => v.trim()).filter(Boolean), types: fd.getAll("type").map(String) });
     changed();
   };
   const discard = () => {
@@ -459,6 +459,10 @@ export default function SmartAutomatic() {
   const canTurnOn = data.entitled && data.consent && data.available;
   // Never set up: saving turns it on in the same step (when it can run).
   const saveTurnsOn = notConfigured && canTurnOn;
+  // Paused for a changed main language: only saving lifts it (the save records the new main language; Resume
+  // would be paused again by the next check), so Save is there even before anything is changed.
+  const saveToContinue = !readOnly && panel.status.state === "paused" && panel.status.reason === "PRIMARY_LANGUAGE";
+  // The admin's save bar only for changes: shown on load, it would hold up leaving the page.
   useSaveBar(SAVE_BAR, dirty && !readOnly);
 
   // While a check runs, its figures follow (not while the form is being edited, nor in a hidden tab).
@@ -604,9 +608,15 @@ export default function SmartAutomatic() {
     ) : null
   ) : panel.status.state === "paused" ? (
     <>
-      <Button variant={heroVariant} icon="play-circle" onClick={() => act("resume")} {...loading("resume")}>
-        {t("automatic.action.resume")}
-      </Button>
+      {saveToContinue ? (
+        <Button variant={heroVariant} onClick={() => formRef.current?.requestSubmit()} {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
+          {t("automatic.action.save")}
+        </Button>
+      ) : (
+        <Button variant={heroVariant} icon="play-circle" onClick={() => act("resume")} {...loading("resume")}>
+          {t("automatic.action.resume")}
+        </Button>
+      )}
       {turnOff}
     </>
   ) : panel.status.state === "on" ? (
@@ -1288,7 +1298,7 @@ export default function SmartAutomatic() {
               </SettingCard>
 
               {/* The save bar is the main way to save; this one is for pages opened without it, secondary, and only while there is something to save. */}
-              {readOnly || !dirty ? null : (
+              {readOnly || !(dirty || saveToContinue) ? null : (
                 <s-stack direction="inline" gap="small-200 base" alignItems="center">
                   <Button type="submit" {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
                     {saveTurnsOn ? t("automatic.action.saveAndTurnOn") : t("automatic.action.save")}

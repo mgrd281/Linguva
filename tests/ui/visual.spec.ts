@@ -32,6 +32,11 @@ const PAGES: Array<[string, string, UiShopKey?]> = [
   ["smart", "/app/settings/automatic", "business"],
   // Its schedule card, opened at its address (the page scrolls there): the mode tiles and the next checks.
   ["smart-schedule", "/app/settings/automatic#smart-schedule", "business"],
+  // The tools of Settings › Tools, each with its header (the glossary is above).
+  ["memory", "/app/memory"],
+  ["coverage", "/app/coverage"],
+  ["markets", "/app/markets"],
+  ["transfer", "/app/translations"],
 ];
 
 // With the time where a page shows it, in the store's zone or with "UTC" ("Oct 30, 2026,

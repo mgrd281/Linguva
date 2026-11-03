@@ -33,7 +33,7 @@ import {
 import { showToast } from "./app-bridge";
 import { ConfirmModal } from "./ConfirmModal";
 import { Flag } from "./Flag";
-import { IconSquare } from "./IconSquare";
+import { PageHeader } from "./PageHeader";
 import { ProgressBar } from "./ProgressBar";
 import { ReviewApproveConfirm, type ApproveSummary } from "./ReviewApproveConfirm";
 import { firstSight, focusSoon, languageLabel, outcomeText, ReviewCardView, textLabel, visible, type CardContext } from "./ReviewCard";
@@ -62,14 +62,8 @@ export function ReviewPage({ data }: { data: ReviewPageData }) {
   return (
     <s-page heading={t("review.page.heading")}>
       <s-stack direction="block" gap="base">
-        {/* One of the five menu pages (no trail): its icon is the app's "waiting for approval" clock, in the page's tint. */}
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-          <IconSquare icon="clock" tint="blue" size={44} />
-          <s-stack direction="block" gap="small-500">
-            <h1 className="lv-h1">{t("review.page.heading")}</h1>
-            <s-text color="subdued">{t("review.header.promise")}</s-text>
-          </s-stack>
-        </s-grid>
+        {/* One of the five menu pages (no trail): their one header, approving's icon. */}
+        <PageHeader page="review" title={t("review.page.heading")} lead={t("review.header.promise")} />
         {/* While a new page's pictures load, its cards wait for them (empty squares), not for the last page's answer. */}
         <ReviewBody key={keyOf(data)} data={data} previews={previews.state === "idle" ? (previews.data ?? null) : null} />
       </s-stack>

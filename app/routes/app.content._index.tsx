@@ -27,6 +27,7 @@ import { AccessCard, Areas, CountCard, Folds, LanguageChips, LanguageMeta, MoreT
 import { languageErrorText } from "../components/LanguageLayout";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
+import { PageHeader } from "../components/PageHeader";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -103,10 +104,7 @@ export default function ContentPage() {
     <s-page heading={t("common.nav.content")}>
       <s-query-container>
         <s-stack direction="block" gap="base">
-          <s-stack direction="block" gap="small-500">
-            <h1 className="lv-h1">{t("common.nav.content")}</h1>
-            <s-text color="subdued">{t("content.subtitle")}</s-text>
-          </s-stack>
+          <PageHeader page="content" title={t("common.nav.content")} lead={t("content.subtitle")} />
 
           {data.language ? (
             <s-stack direction="block" gap="small-200">

@@ -27,6 +27,7 @@ import { shopTimeZone } from "../.server/shopify/shop-time-zone";
 import { nextCheck } from "../.server/smart/config";
 import { showToast } from "../components/app-bridge";
 import { Button } from "../components/Button";
+import { PageHeader } from "../components/PageHeader";
 import { categoryName } from "../components/CategoryCard";
 import { CARD } from "../components/ContentTiles";
 import { STATE_COLOURS } from "../components/Coverage";
@@ -727,10 +728,7 @@ export default function Jobs() {
   return (
     <s-page heading={t("jobs.list.heading")}>
       <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-500">
-          <h1 className="lv-h1">{t("jobs.list.heading")}</h1>
-          <s-text color="subdued">{t("jobs.list.subtitle")}</s-text>
-        </s-stack>
+        <PageHeader page="jobs" title={t("jobs.list.heading")} lead={t("jobs.list.subtitle")} />
 
         {resumed?.unavailable ? (
           <s-banner tone="critical">

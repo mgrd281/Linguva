@@ -15,7 +15,7 @@ export const en = {
   "editor.consent.heading": "Allow AI translation",
   "editor.consent.body":
     "To translate with AI, the {singular} text you choose is sent to our translation provider (DeepL SE, Germany) for processing. No customer data is sent. You can review every result before it is published.",
-  "editor.consent.allow": "Allow AI processing",
+  "editor.consent.allow": "Allow AI translation",
 
   "editor.reloadAndRetry": "Please reload the page and try again.",
   "editor.removed.heading": "Translation removed",
@@ -31,7 +31,7 @@ export const en = {
   "editor.aiError.generic": "Something went wrong.",
   "editor.aiError.retryAfter": "Try again in {seconds} s.",
   "editor.aiError.AI_NOT_CONFIGURED": "AI translation isn't configured for this app yet.",
-  "editor.aiError.CONSENT_REQUIRED": "Allow AI processing below before translating with AI.",
+  "editor.aiError.CONSENT_REQUIRED": "Allow AI translation below before translating with AI.",
   "editor.aiError.ENGINE_CONSENT": "Only a translation service your store hasn't allowed yet translates this language. Allow it in Settings first.",
   "editor.aiError.ENGINE_CONSENT.named": "Only {engine} translates this language, and your store hasn't allowed it yet. Allow it in Settings first.",
   "editor.aiError.QUOTA_EXCEEDED": "This month's AI translation allowance is used up.",
@@ -209,7 +209,7 @@ export const de: Translation<typeof en> = {
   "editor.consent.heading": "KI\u2011Übersetzung erlauben",
   "editor.consent.body":
     "Für die KI\u2011Übersetzung wird der ausgewählte Text dieses Eintrags ({singular}) zur Verarbeitung an unseren Übersetzungsanbieter (DeepL SE, Deutschland) gesendet. Es werden keine Kundendaten gesendet. Du kannst jedes Ergebnis prüfen, bevor es veröffentlicht wird.",
-  "editor.consent.allow": "KI\u2011Verarbeitung erlauben",
+  "editor.consent.allow": "KI\u2011Übersetzung erlauben",
 
   "editor.reloadAndRetry": "Bitte lade die Seite neu und versuche es noch einmal.",
   "editor.removed.heading": "Übersetzung entfernt",
@@ -225,7 +225,7 @@ export const de: Translation<typeof en> = {
   "editor.aiError.generic": "Etwas ist schiefgelaufen.",
   "editor.aiError.retryAfter": "Versuche es in {seconds} s erneut.",
   "editor.aiError.AI_NOT_CONFIGURED": "KI\u2011Übersetzung ist für diese App noch nicht eingerichtet.",
-  "editor.aiError.CONSENT_REQUIRED": "Erlaube zuerst die KI\u2011Verarbeitung, bevor du mit KI übersetzt.",
+  "editor.aiError.CONSENT_REQUIRED": "Erlaube zuerst die KI\u2011Übersetzung, bevor du mit KI übersetzt.",
   "editor.aiError.ENGINE_CONSENT": "Diese Sprache übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat. Erlaube ihn zuerst in den Einstellungen.",
   "editor.aiError.ENGINE_CONSENT.named": "Diese Sprache übersetzt nur {engine}, und dein Shop hat diesen Dienst noch nicht erlaubt. Erlaube ihn zuerst in den Einstellungen.",
   "editor.aiError.QUOTA_EXCEEDED": "Das KI\u2011Kontingent dieses Monats ist aufgebraucht.",
@@ -406,7 +406,7 @@ export const fr: Translation<typeof en> = {
   "editor.consent.heading": "Autoriser la traduction par IA",
   "editor.consent.body":
     "Pour traduire avec l'IA, le texte que vous choisissez pour cet élément ({singular}) est envoyé à notre prestataire de traduction (DeepL SE, Allemagne) pour être traité. Aucune donnée client n'est envoyée. Vous pouvez réviser chaque résultat avant sa publication.",
-  "editor.consent.allow": "Autoriser le traitement par IA",
+  "editor.consent.allow": "Autoriser la traduction par IA",
 
   "editor.reloadAndRetry": "Veuillez recharger la page et réessayer.",
   "editor.removed.heading": "Traduction supprimée",
@@ -422,7 +422,7 @@ export const fr: Translation<typeof en> = {
   "editor.aiError.generic": "Une erreur s'est produite.",
   "editor.aiError.retryAfter": "Réessayez dans {seconds} s.",
   "editor.aiError.AI_NOT_CONFIGURED": "La traduction par IA n'est pas encore configurée pour cette application.",
-  "editor.aiError.CONSENT_REQUIRED": "Autorisez le traitement par IA ci-dessous avant de traduire avec l'IA.",
+  "editor.aiError.CONSENT_REQUIRED": "Autorisez la traduction par IA ci-dessous avant de traduire avec l'IA.",
   "editor.aiError.ENGINE_CONSENT": "Seul un service de traduction que votre boutique n'a pas encore autorisé traduit cette langue. Autorisez-le d'abord dans les paramètres.",
   "editor.aiError.ENGINE_CONSENT.named": "Seul {engine} traduit cette langue, et votre boutique ne l'a pas encore autorisé. Autorisez-le d'abord dans les paramètres.",
   "editor.aiError.QUOTA_EXCEEDED": "Le quota d'IA de ce mois-ci est épuisé.",
@@ -606,7 +606,7 @@ export const es: Translation<typeof en> = {
   "editor.consent.heading": "Permitir la traducción con IA",
   "editor.consent.body":
     "Para traducir con IA, el texto que elijas de este elemento ({singular}) se envía a nuestro proveedor de traducción (DeepL SE, Alemania) para su procesamiento. No se envían datos de clientes. Puedes revisar cada resultado antes de que se publique.",
-  "editor.consent.allow": "Permitir el procesamiento con IA",
+  "editor.consent.allow": "Permitir la traducción con IA",
 
   "editor.reloadAndRetry": "Recarga la página e inténtalo de nuevo.",
   "editor.removed.heading": "Traducción eliminada",
@@ -622,7 +622,7 @@ export const es: Translation<typeof en> = {
   "editor.aiError.generic": "Algo salió mal.",
   "editor.aiError.retryAfter": "Inténtalo de nuevo en {seconds} s.",
   "editor.aiError.AI_NOT_CONFIGURED": "La traducción con IA aún no está configurada para esta aplicación.",
-  "editor.aiError.CONSENT_REQUIRED": "Antes de traducir con IA, permite el procesamiento con IA más abajo.",
+  "editor.aiError.CONSENT_REQUIRED": "Antes de traducir con IA, permite la traducción con IA más abajo.",
   "editor.aiError.ENGINE_CONSENT": "Solo un servicio de traducción que tu tienda aún no ha permitido traduce este idioma. Permítelo primero en la configuración.",
   "editor.aiError.ENGINE_CONSENT.named": "Solo {engine} traduce este idioma, y tu tienda aún no lo ha permitido. Permítelo primero en la configuración.",
   "editor.aiError.QUOTA_EXCEEDED": "Se agotó la cuota de IA de este mes.",

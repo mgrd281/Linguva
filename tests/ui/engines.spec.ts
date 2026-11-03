@@ -105,7 +105,7 @@ test("allowing the other services too keeps focus on the permission card", async
 
 test("the editor's permission names the services and their order", async ({ page }) => {
   await openApp(page, "enginesNoConsent", "/app/products/1?lang=de");
-  const banner = page.locator("s-banner").filter({ has: page.getByRole("button", { name: "Allow AI processing" }) });
+  const banner = page.locator("s-banner").filter({ has: page.getByRole("button", { name: "Allow AI translation" }) });
   await expect(banner.getByText(/our translation providers \(DeepL SE .*Google Cloud EMEA Ltd\. .*\)/)).toBeVisible();
   await expect(banner.getByText(/Texts go to DeepL first; only if it can't translate them are they sent to Microsoft Azure, then Google Cloud\./)).toBeVisible();
 });

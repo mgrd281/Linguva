@@ -55,6 +55,7 @@ import { usableOwnKey } from "../lib/own-keys";
 import { languageList, upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
 import { Button } from "../components/Button";
+import { PageHeader } from "../components/PageHeader";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -781,10 +782,7 @@ export default function Overview() {
   return (
     <s-page heading={t("common.nav.overview")} inlineSize="large">
       <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-500">
-          <h1 className="lv-h1">{t("common.nav.overview")}</h1>
-          {subtitle ? <s-text color="subdued">{subtitle}</s-text> : null}
-        </s-stack>
+        <PageHeader page="overview" title={t("common.nav.overview")} lead={subtitle || undefined} />
 
         {/* Back from Shopify's plan page: the next step below is where translating goes on. */}
         {data.welcome ? (

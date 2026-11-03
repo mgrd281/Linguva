@@ -12,7 +12,7 @@ export const en = {
   "resources.noLanguages.body": "Add a language under Settings → Languages in the Shopify admin to start translating your {plural}.",
   "resources.noLanguages.open": "Open language settings",
 
-  "resources.consent.heading": "Allow AI processing to translate in bulk",
+  "resources.consent.heading": "Allow AI translation to translate many texts at once",
   "resources.consent.before": "Bulk translation uses AI. Allow it under ",
   "resources.consent.after": " first.",
 
@@ -65,7 +65,7 @@ export const de: Translation<typeof en> = {
   "resources.noLanguages.body": "Füge im Shopify-Adminbereich unter „Einstellungen → Sprachen“ eine Sprache hinzu, um {plural} zu übersetzen.",
   "resources.noLanguages.open": "Spracheinstellungen öffnen",
 
-  "resources.consent.heading": "KI-Verarbeitung für Massenübersetzungen erlauben",
+  "resources.consent.heading": "KI-Übersetzung erlauben, um viele Texte auf einmal zu übersetzen",
   "resources.consent.before": "Massenübersetzung nutzt KI. Erlaube sie zuerst unter ",
   "resources.consent.after": ".",
 
@@ -119,7 +119,7 @@ export const fr: Translation<typeof en> = {
   "resources.noLanguages.body": "Ajoutez une langue dans l'interface administrateur Shopify, sous Paramètres → Langues, pour commencer à traduire vos {plural}.",
   "resources.noLanguages.open": "Ouvrir les paramètres de langue",
 
-  "resources.consent.heading": "Autoriser le traitement par IA pour la traduction groupée",
+  "resources.consent.heading": "Autoriser la traduction par IA pour traduire de nombreux textes à la fois",
   "resources.consent.before": "La traduction groupée utilise l'IA. Autorisez-la d'abord dans ",
   "resources.consent.after": ".",
 
@@ -173,7 +173,7 @@ export const es: Translation<typeof en> = {
   "resources.noLanguages.body": "Agrega un idioma en Configuración → Idiomas del panel de control de Shopify para empezar a traducir tus {plural}.",
   "resources.noLanguages.open": "Abrir la configuración de idiomas",
 
-  "resources.consent.heading": "Permitir el procesamiento con IA para la traducción masiva",
+  "resources.consent.heading": "Permitir la traducción con IA para traducir muchos textos a la vez",
   "resources.consent.before": "La traducción masiva usa IA. Primero, permítela en ",
   "resources.consent.after": ".",
 

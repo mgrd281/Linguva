@@ -7,7 +7,7 @@ export const en = {
   "coverage.startFailed.fallback": "Please reload the page and try again.",
   "coverage.lastFailed.heading": "The last count didn't finish",
   "coverage.lastFailed.fallback": "Figures of the parts not counted again may be older. Count again.",
-  "coverage.error.JOBS_UNAVAILABLE": "Background processing isn't configured for this app yet.",
+  "coverage.error.JOBS_UNAVAILABLE": "Linguva's background service isn't set up for this app yet.",
   "coverage.error.NO_LANGUAGES": "Add a language in Shopify under Settings → Languages first.",
   "coverage.error.STALLED": "The last count stopped making progress. Count again.",
   "coverage.error.PLAN_BULK": "Translating whole areas at once is part of the paid plans.",
@@ -171,7 +171,7 @@ export const en = {
   "coverage.items.retryFailed": "Translate failed texts again",
   "coverage.items.reviewDrafts": "Review drafts",
   "coverage.items.openOutdated": "Show outdated",
-  "coverage.items.cantTranslate": "AI translation isn't available: allow AI processing under Settings.",
+  "coverage.items.cantTranslate": "AI translation isn't available: allow it under Settings → AI permission.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -180,7 +180,7 @@ export const de: Translation<typeof en> = {
   "coverage.startFailed.fallback": "Bitte lade die Seite neu und versuche es noch einmal.",
   "coverage.lastFailed.heading": "Das letzte Zählen wurde nicht fertig",
   "coverage.lastFailed.fallback": "Die Zahlen der Teile, die nicht neu gezählt wurden, können älter sein. Zähle noch einmal.",
-  "coverage.error.JOBS_UNAVAILABLE": "Die Hintergrundverarbeitung ist für diese App noch nicht eingerichtet.",
+  "coverage.error.JOBS_UNAVAILABLE": "Linguvas Hintergrunddienst ist für diese App noch nicht eingerichtet.",
   "coverage.error.NO_LANGUAGES": "Füge zuerst in Shopify unter „Einstellungen“ → „Sprachen“ eine Sprache hinzu.",
   "coverage.error.STALLED": "Das letzte Zählen kam nicht mehr voran. Zähle noch einmal.",
   "coverage.error.PLAN_BULK": "Ganze Bereiche auf einmal zu übersetzen ist in den kostenpflichtigen Tarifen enthalten.",
@@ -344,7 +344,7 @@ export const de: Translation<typeof en> = {
   "coverage.items.retryFailed": "Fehlgeschlagene erneut übersetzen",
   "coverage.items.reviewDrafts": "Entwürfe prüfen",
   "coverage.items.openOutdated": "Veraltete anzeigen",
-  "coverage.items.cantTranslate": "KI-Übersetzung ist nicht verfügbar: Erlaube die KI-Verarbeitung unter „Einstellungen“.",
+  "coverage.items.cantTranslate": "KI-Übersetzung ist nicht verfügbar: Erlaube sie unter „Einstellungen“ → „KI-Erlaubnis“.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -353,7 +353,7 @@ export const fr: Translation<typeof en> = {
   "coverage.startFailed.fallback": "Veuillez actualiser la page et réessayer.",
   "coverage.lastFailed.heading": "Le dernier comptage ne s'est pas terminé",
   "coverage.lastFailed.fallback": "Les chiffres des parties non recomptées peuvent être plus anciens. Comptez à nouveau.",
-  "coverage.error.JOBS_UNAVAILABLE": "Le traitement en arrière-plan n'est pas encore configuré pour cette application.",
+  "coverage.error.JOBS_UNAVAILABLE": "Le service d'arrière-plan de Linguva n'est pas encore configuré pour cette application.",
   "coverage.error.NO_LANGUAGES": "Ajoutez d'abord une langue dans Shopify, sous Paramètres → Langues.",
   "coverage.error.STALLED": "Le dernier comptage n'avançait plus. Comptez à nouveau.",
   "coverage.error.PLAN_BULK": "Traduire des sections entières en une fois est inclus dans les forfaits payants.",
@@ -517,7 +517,7 @@ export const fr: Translation<typeof en> = {
   "coverage.items.retryFailed": "Traduire à nouveau les échecs",
   "coverage.items.reviewDrafts": "Vérifier les brouillons",
   "coverage.items.openOutdated": "Voir les obsolètes",
-  "coverage.items.cantTranslate": "La traduction par IA n'est pas disponible : autorisez le traitement par IA dans Paramètres.",
+  "coverage.items.cantTranslate": "La traduction par IA n'est pas disponible : autorisez-la dans « Paramètres » → « Autorisation de l'IA ».",
 };
 
 export const es: Translation<typeof en> = {
@@ -526,7 +526,7 @@ export const es: Translation<typeof en> = {
   "coverage.startFailed.fallback": "Vuelve a cargar la página e inténtalo de nuevo.",
   "coverage.lastFailed.heading": "El último recuento no terminó",
   "coverage.lastFailed.fallback": "Las cifras de las partes que no se volvieron a contar pueden ser más antiguas. Vuelve a contar.",
-  "coverage.error.JOBS_UNAVAILABLE": "El procesamiento en segundo plano aún no está configurado para esta aplicación.",
+  "coverage.error.JOBS_UNAVAILABLE": "El servicio en segundo plano de Linguva aún no está configurado para esta aplicación.",
   "coverage.error.NO_LANGUAGES": "Primero agrega un idioma en Shopify, en Configuración → Idiomas.",
   "coverage.error.STALLED": "El último recuento dejó de avanzar. Vuelve a contar.",
   "coverage.error.PLAN_BULK": "Traducir secciones enteras de una vez está incluido en los planes de pago.",
@@ -690,5 +690,5 @@ export const es: Translation<typeof en> = {
   "coverage.items.retryFailed": "Volver a traducir los fallidos",
   "coverage.items.reviewDrafts": "Revisar borradores",
   "coverage.items.openOutdated": "Ver desactualizados",
-  "coverage.items.cantTranslate": "La traducción con IA no está disponible: permite el procesamiento con IA en Configuración.",
+  "coverage.items.cantTranslate": "La traducción con IA no está disponible: permítela en «Configuración» → «Permiso de IA».",
 };

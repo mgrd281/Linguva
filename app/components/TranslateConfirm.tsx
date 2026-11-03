@@ -61,15 +61,15 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
             </s-text>
           </Point>
           {publishMode === "AUTO_PUBLISH" ? (
-            <Point icon="check-circle" title={t("language.confirm.live")}>
+            <Point icon="send" title={t("language.confirm.live")}>
               <s-text color="subdued">{t("language.confirm.liveDetail")}</s-text>
             </Point>
           ) : (
-            <Point icon="clock" title={t("language.confirm.review")}>
+            <Point icon="eye-check-mark" title={t("language.confirm.review")}>
               <s-text color="subdued">{t("language.confirm.reviewDetail", { review: t("common.nav.review") })}</s-text>
             </Point>
           )}
-          <Point icon="shield-check-mark" title={t("language.confirm.keep")}>
+          <Point icon="edit" title={t("language.confirm.keep")}>
             <s-text color="subdued">{t("language.confirm.keepDetail")}</s-text>
           </Point>
           {/* AI characters have one icon in the whole app (gauge, as on the Plan page); wand means "translate with AI". */}

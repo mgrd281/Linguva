@@ -128,9 +128,11 @@ describe("Your translation keys", () => {
     expect(saved).toContain("Through your keys this calendar month (UTC), as counted by Linguva: 4,200 characters.");
     expect(saved).toContain("DeepL: 4,200 characters");
     expect(saved).toContain("DeepL: 1,234 of 500,000 characters used in this billing period");
-    // The card takes the AI characters tile's place, so it leads to the Plan page.
-    expect(html).toContain('href="/app/plan"');
-    expect(words).toContain("Change plan");
+    // A section of its own, named as in Settings' nav; the plan and its usage are the Plan section's (no second plan link here).
+    expect(html).toContain('<h2 id="settings-keys-heading" tabindex="-1"');
+    expect(words).toContain("Your keys");
+    expect(html).not.toContain('href="/app/plan"');
+    expect(words).not.toContain("Change plan");
     expect(text(render(view({ keys: [key("deepl"), key("google")] })))).toContain("DeepL and Google Cloud bill you for every character");
   });
 
@@ -179,7 +181,7 @@ describe("Your translation keys", () => {
       const i18n = translator(locale);
       const html = text(render(view({ keys: [key("azure", { status: "REFUSED" })] }), locale));
       for (const message of [
-        i18n.t("settings.keys.heading"),
+        i18n.t("settings.section.keys"),
         i18n.t("settings.keys.lead"),
         i18n.t("settings.keys.hint", { hint: "3c4d" }),
         i18n.t("settings.keys.state.REFUSED", { engine: "Microsoft Azure" }),

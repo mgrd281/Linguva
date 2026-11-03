@@ -1,5 +1,5 @@
 /**
- * Settings › "Your translation keys" (the Own key plan): one row per
+ * Settings › "Your keys" (the Own key plan), a section of its own: one row per
  * translation service (DeepL, Microsoft Azure, Google Cloud), each saved key
  * with its state in words, its last four characters and where it processes;
  * a form to add or replace a key, "Check again", and "Remove" behind a
@@ -21,7 +21,7 @@ import type { IconName } from "../lib/icons";
 import { engineList } from "../lib/name-lists";
 import { DEEPL_PLAN_NAMES, ownKeyToken, usableOwnKey, type OwnKeyStatus, type OwnKeySummary } from "../lib/own-keys";
 import { useResultToast } from "./app-bridge";
-import { Actions, FactList, focusById, InlineNotice, More, SETTING_NAME, SettingCard, StateLine, useFreshResult, type SettingState } from "./SettingsParts";
+import { Actions, FactList, focusById, InlineNotice, More, SETTING_NAME, SettingSection, StateLine, useFreshResult, type SettingState } from "./SettingsParts";
 
 /** The Settings loader's `ownKeys` (OwnKeysView): summaries only, never a key. */
 export interface OwnKeysCardData {
@@ -43,7 +43,7 @@ export type KeyActionResult =
 /** One fetcher per engine row (its add/replace, check and remove forms). */
 export type KeyFetcher = FetcherWithComponents<unknown>;
 
-/** The card's id: the glance tile, the Overview, the Plan page and the editor link to it. */
+/** The section's id (its key is `keys`: /app/settings?section=keys, where the Overview, the Plan page and the editor link). */
 export const KEYS_CARD = "settings-keys";
 /** A row's name, focused after a key's result (and the remove dialog's id). */
 export const keyRowId = (engine: EngineId) => `${KEYS_CARD}-${engine}`;
@@ -141,9 +141,11 @@ export interface OwnKeysCardProps {
   fetchers: Record<EngineId, KeyFetcher>;
   /** DeepL's "Check and save" is the page's one primary button (on the plan, no usable key, languages added). */
   primary: boolean;
+  /** Above the card: the way back to a job stopped for a key, once a key works. */
+  top?: ReactNode;
 }
 
-export function OwnKeysCard({ data, i18n, fetchers, primary }: OwnKeysCardProps) {
+export function OwnKeysCard({ data, i18n, fetchers, primary, top }: OwnKeysCardProps) {
   const { t } = i18n;
   const manage = data.access !== "off";
   // Off the plan only the saved keys (to remove them); otherwise every service, saved or to add.
@@ -168,12 +170,12 @@ export function OwnKeysCard({ data, i18n, fetchers, primary }: OwnKeysCardProps)
     );
   }
   return (
-    <SettingCard
+    <SettingSection
       id={KEYS_CARD}
-      icon="connect"
-      heading={t("settings.keys.heading")}
+      heading={t("settings.section.keys")}
       state={manage ? keysState(i18n, data.keys) : null}
       lead={data.access === "plan" ? t("settings.keys.lead") : undefined}
+      top={top}
     >
       {notice}
       {/* The services bill every character: their own cost limit is the only one. */}
@@ -213,15 +215,9 @@ export function OwnKeysCard({ data, i18n, fetchers, primary }: OwnKeysCardProps)
                 : t("settings.keys.deeplUsage.unlimited", { used: data.deepl.used })}
             </s-text>
           ) : null}
-          {/* On the plan this card replaces the AI characters tile, Settings' way to the Plan page. */}
-          {data.access === "plan" ? (
-            <s-text>
-              <s-link href="/app/plan">{t("common.action.changePlan")}</s-link>
-            </s-text>
-          ) : null}
         </s-stack>
       ) : null}
-    </SettingCard>
+    </SettingSection>
   );
 }
 

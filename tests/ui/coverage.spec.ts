@@ -117,6 +117,8 @@ test("a number opens the exact items behind it, filtered and paged", async ({ pa
   await page.getByRole("button", { name: "Translate missing and outdated" }).click();
   await expect(page.getByRole("dialog", { name: "Translate Products into German?" })).toBeVisible();
   await page.locator("s-modal#coverage-items-translate").getByRole("button", { name: "Cancel", exact: true }).click();
+  // The page is checked once the question has closed: while it fades out, axe measures half-transparent text.
+  await expect(page.getByRole("dialog", { name: "Translate Products into German?" })).toBeHidden();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

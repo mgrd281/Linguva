@@ -417,7 +417,8 @@ export function ResourceTranslationEditor() {
         : t("editor.toolbar.notConfigured");
 
   const googleSection = data.seoPreview ? (
-    <s-section key="editor-google" accessibilityLabel={t("editor.seo.heading")}>
+    // No accessibilityLabel: Polaris would add a hidden heading beside the row's own (data-text names it for tests).
+    <s-section key="editor-google" data-text={t("editor.seo.heading")}>
       <s-stack direction="block" gap="base">
         <HeadingRow id="editor-google" title={t("editor.seo.heading")} icon="search" />
         <s-paragraph>{t("editor.seo.intro", { title: data.title, language: targetName })}</s-paragraph>
@@ -831,7 +832,8 @@ export function ResourceTranslationEditor() {
     ) : null;
 
     return (
-      <s-section key={field.key} accessibilityLabel={label}>
+      // The heading row is the text's one heading: an accessibilityLabel would add a hidden second one.
+      <s-section key={field.key} data-text={label}>
         <input type="hidden" name={`digest:${field.key}`} value={field.digest} />
         <input type="hidden" name={`current:${field.key}`} value={field.currentDigest} />
         {draft !== undefined ? <input type="hidden" name={`origin:${field.key}`} value="AI" /> : null}

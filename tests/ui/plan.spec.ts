@@ -74,9 +74,10 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
     await expect(card(page, HANDLES.find((h) => NAMES[h] === fits)!).locator("s-badge", { hasText: de.t("plan.recommend.badge") })).toHaveCount(1);
   }
   for (const text of await badges(page)) expect(text).not.toMatch(POPULAR);
-  // The recommendation has the whole row: no legend beside it (each row says it in words and marks). The closed
-  // table's spoken cells say the same word, but nothing visible does.
-  await expect(page.getByText(de.t("plan.compare.notIncluded"), { exact: true }).filter({ visible: true })).toHaveCount(0);
+  // The recommendation has the whole row: no legend beside it (each row says it in words and marks). Only the
+  // table's spoken cells say the same word (Playwright counts a visually hidden text in a closed fold as visible).
+  const legend = await page.getByText(de.t("plan.compare.notIncluded"), { exact: true }).evaluateAll((els) => els.filter((el) => !el.closest("table")).length);
+  expect(legend).toBe(0);
   // Today's figure says what it counts (no daily limit on this server); "KI‑Zeichen" with its non-breaking hyphen (U+2011).
   await expect(page.getByText(/^Heute genutzt: [\d.]+ KI‑Zeichen$/)).toBeVisible();
 

@@ -11,8 +11,15 @@ import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 const ENGLISH = /\b(the|your|and|Translate|Translated|Settings|Review|Save|Search|Language|Products|Overview|Status|Show|Jobs|allowance)\b/;
 
 async function interfaceText(page: Page) {
-  // Text of the page itself; product data and previews are the merchant's.
-  return page.locator("s-page").evaluate((el) => (el as HTMLElement).innerText);
+  // Text of the page itself; product data and previews are the merchant's, and the store's own texts
+  // marked translate="no" (the memory's originals and translations) are left out.
+  return page.locator("s-page").evaluate((el) => {
+    const own = Array.from(el.querySelectorAll<HTMLElement>('[translate="no"]'));
+    for (const node of own) node.style.setProperty("display", "none");
+    const text = (el as HTMLElement).innerText;
+    for (const node of own) node.style.removeProperty("display");
+    return text;
+  });
 }
 
 const GERMAN_PAGES = [

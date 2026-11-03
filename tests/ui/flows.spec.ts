@@ -25,7 +25,8 @@ test("translate with AI, edit and publish; the published value is read back from
   // The previous state is in the history (the app's fold) and can be restored.
   const history = page.locator("summary", { hasText: /^History \(\d+\)$/ }).first();
   await history.click();
-  await expect(page.locator("details", { has: history })).toHaveAttribute("open", "");
+  // The clicked summary's own fold (every text with an earlier version has one).
+  await expect(history.locator("xpath=..")).toHaveAttribute("open", "");
   await expect(page.getByText(/· (Manual|AI|Before Linguva)/).first()).toBeVisible();
 });
 
@@ -34,9 +35,9 @@ test("AI fills only the open texts: a translation the merchant has stays", async
   await openApp(page, "full", "/app/products/9?lang=de");
   await expect(page.getByRole("button", { name: "Translate with AI: 1 open text" })).toBeVisible();
   await page.getByRole("button", { name: "Translate with AI" }).click();
-  await expect(page.locator('s-section[accessibilitylabel="Description"]').locator("s-badge").first()).toHaveText("AI draft");
+  await expect(page.locator('s-section[data-text="Description"]').locator("s-badge").first()).toHaveText("AI draft");
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Produkt 9 Jacke");
-  await expect(page.locator('s-section[accessibilitylabel="Name"]').locator("s-badge").first()).toHaveText("Translated");
+  await expect(page.locator('s-section[data-text="Name"]').locator("s-badge").first()).toHaveText("Translated");
 });
 
 test("image descriptions are translated with the product's texts and published with them", async ({ page }) => {

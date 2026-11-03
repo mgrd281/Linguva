@@ -10,14 +10,14 @@ import { expectAccessible, openApp } from "./helpers";
 test("each text starts with its state, in Review's order, and its tile leads to it @responsive", async ({ page }) => {
   // Demo catalog: the jacket's German name is translated, its description outdated, its Google description missing.
   await openApp(page, "demo", "/app/products/2?lang=de");
-  const text = (name: string) => page.locator(`s-section[accessibilitylabel="${name}"]`);
+  const text = (name: string) => page.locator(`s-section[data-text="${name}"]`);
   await expect(text("Name").locator("s-badge").first()).toHaveText("Translated");
   await expect(text("Description").locator("s-badge").first()).toHaveText("Outdated");
   await expect(text("Google description").locator("s-badge").first()).toHaveText("Not translated");
   // The web address is never machine-translated: said next to its state.
   await expect(text("Web address").locator("s-badge", { hasText: "Manual only" })).toBeVisible();
   // Name, description, the Google preview and texts, the web address last; then the image descriptions.
-  const order = await page.locator("s-section[accessibilitylabel]").evaluateAll((els) => els.map((el) => el.getAttribute("accessibilitylabel")));
+  const order = await page.locator("s-section[data-text]").evaluateAll((els) => els.map((el) => el.getAttribute("data-text")));
   expect(order).toEqual(["Name", "Description", "On Google", "Google title", "Google description", "Web address", "Image descriptions and extra details"]);
 
   // The item's name with how much is open (the image's description counts, the web address doesn't).

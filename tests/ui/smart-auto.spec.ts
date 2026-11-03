@@ -403,10 +403,10 @@ test("the smart page is German for a German admin user, with one word for each t
     await expect(page.getByRole("group", { name: "Wie oft" }).getByRole("radio", { name, exact: true })).toBeAttached();
   }
   await expect(page.locator("#smart-activity").getByText("Der Zeitplan war pausiert.")).toBeVisible();
-  // Only certain fields: the Coverage page's names for the field groups, never their codes ("seo_title").
+  // Only certain fields: the Coverage page's names for the field groups (Review's words), never their codes ("seo_title").
   await page.getByRole("radio", { name: "Nur bestimmte Felder" }).check();
   const groups = page.locator("#smart-scope");
-  for (const name of ["Titel und Namen", "Beschreibungen", "SEO-Titel", "Meta-Beschreibungen", "Alt-Texte von Bildern", "Werte benutzerdefinierter Felder", "Weitere Texte"]) {
+  for (const name of ["Titel und Namen", "Beschreibungen", "Google-Titel", "Google-Beschreibungen", "Bildbeschreibungen", "Zusatzinfos", "Weitere Texte"]) {
     await expect(groups.getByRole("checkbox", { name, exact: true })).toBeVisible();
   }
   expect(await groups.innerText()).not.toMatch(/\b(seo_title|seo_description|title|description|alt|value|other)\b/);

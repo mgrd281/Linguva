@@ -169,8 +169,13 @@ export default function Memory() {
                 <s-table-body>
                   {data.entries.map((e) => (
                     <s-table-row key={e.id}>
-                      <s-table-cell>{e.source}</s-table-cell>
-                      <s-table-cell>{e.target}</s-table-cell>
+                      {/* The store's own texts: never machine-translated by the browser (and no interface text). */}
+                      <s-table-cell>
+                        <span translate="no">{e.source}</span>
+                      </s-table-cell>
+                      <s-table-cell>
+                        <span translate="no">{e.target}</span>
+                      </s-table-cell>
                       <s-table-cell>
                         <LanguagePair data={data} i18n={i18n} source={e.sourceLocale} target={e.targetLocale} />
                       </s-table-cell>

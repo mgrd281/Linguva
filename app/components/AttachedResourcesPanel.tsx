@@ -85,7 +85,7 @@ export function AttachedResourcesPanel({
 
   if (!attached.available) {
     return (
-      <s-section accessibilityLabel={heading}>
+      <s-section data-text={heading}>
         <s-stack direction="block" gap="base">
           <HeadingRow id={id} title={heading} icon="image-alt" />
           <s-paragraph>{t("editor.attached.unavailable")}</s-paragraph>
@@ -96,7 +96,7 @@ export function AttachedResourcesPanel({
   if (!attached.items.length && !attached.imagesWithoutAlt && !attached.unsupported) return null;
 
   return (
-    <s-section accessibilityLabel={heading}>
+    <s-section data-text={heading}>
       <s-stack direction="block" gap="base">
         <HeadingRow id={id} title={heading} icon="image-alt" />
         <s-paragraph>{t("editor.attached.intro")}</s-paragraph>

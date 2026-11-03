@@ -132,7 +132,8 @@ export async function expectAccessible(page: Page) {
  * tables as lists, as headed items with labelled values.
  */
 export async function expectAccessibleTables(page: Page) {
-  const tables = await page.locator("s-table").count();
+  // Only the tables on screen: one in a closed fold or a hidden section isn't in the accessibility tree.
+  const tables = await page.locator("s-table").evaluateAll((els) => els.filter((el) => !el.closest("details:not([open]), [hidden]")).length);
   if (!tables) return;
   const cdp = await page.context().newCDPSession(page);
   const { nodes } = (await cdp.send("Accessibility.getFullAXTree")) as { nodes: Array<{ role?: { value?: string } }> };

@@ -87,7 +87,8 @@ async function render(data: Record<string, unknown>, locale: AppLocale = "en"): 
 const tags = (markup: string, name: string) => markup.match(new RegExp(`<${name}\\b[^>]*>`, "g")) ?? [];
 const attr = (tag: string, name: string) => tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
 /** The text inside the first element with this attribute value. */
-const sections = (markup: string) => tags(markup, "s-section").map((tag) => attr(tag, "accessibilityLabel") ?? attr(tag, "heading"));
+// A text's section is named by data-text (its heading row is its one heading), the toolbar's by its Polaris heading.
+const sections = (markup: string) => tags(markup, "s-section").map((tag) => attr(tag, "data-text") ?? attr(tag, "heading"));
 
 describe("the editor's page", () => {
   it("leads back to the area list it is opened from, and names the item with what is open", async () => {
@@ -109,6 +110,9 @@ describe("the editor's page", () => {
   it("shows the texts in Review's order, the Google preview before the Google texts, the web address last", async () => {
     const html = await render(product());
     expect(sections(html)).toEqual(["English → German", "Name", "Description", "On Google", "Google title", "Google description", "Web address", "Image descriptions and extra details"]);
+    // One heading per text: an accessibilityLabel would make Polaris add a hidden second one with the same name.
+    expect(html).not.toMatch(/<s-section[^>]*accessibilityLabel/);
+    expect(html.match(/<h2 id="editor-text-title-heading"/g)).toHaveLength(1);
   });
 
   it("starts every text with its state, and draws one tile per text in the same order", async () => {
@@ -136,7 +140,8 @@ describe("the editor's page", () => {
     const html = await render(product());
     // Description (outdated), Google description (missing) and the image's description.
     expect(html).toContain('aria-label="Translate with AI: 3 open texts"');
-    expect(html).toMatch(/Translate with AI<span class="lv-ed-count" aria-hidden="true">3<\/span>/);
+    // The figure's leading space keeps "Translate with AI 3" apart in the visible text (axe: label in name).
+    expect(html).toMatch(/Translate with AI<span class="lv-ed-count" aria-hidden="true"> 3<\/span>/);
     expect(html).toContain('aria-label="Translate Google texts only: 1 open text"');
     // The memory fills the item's own open texts.
     expect(html).toContain('aria-label="Fill from memory: 2 open texts"');

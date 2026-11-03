@@ -162,11 +162,15 @@ export function TextTiles({ label, tiles }: { label: string; tiles: readonly Tex
   );
 }
 
-/** How many texts a button works on, in a small pill after its words (its name says it in full). */
+/**
+ * How many texts a button works on, in a small pill after its words (its name says it in full). The
+ * leading space draws nothing in the pill but keeps the words and the figure apart in the button's
+ * visible text ("Translate with AI 2"), which its name ("Translate with AI: 2 open texts") contains.
+ */
 export function CountChip({ count }: { count: number }) {
   return (
     <span className="lv-ed-count" aria-hidden="true">
-      {count}
+      {` ${count}`}
     </span>
   );
 }

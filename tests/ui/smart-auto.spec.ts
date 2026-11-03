@@ -22,6 +22,8 @@ test.afterAll(() => setWorkerRunning(false));
 const option = (page: Page, card: string, name: string) => page.locator(card).getByRole("group", { name, exact: true });
 const choose = (page: Page, card: string, name: string) => option(page, card, name).getByRole("button").first().click();
 const isCurrent = (page: Page, card: string, name: string) => expect(option(page, card, name).getByText("Current setting")).toBeVisible();
+/** Shortly after saving's languages and its button, in the panel under Settings' choices. */
+const languagesPanel = (page: Page) => page.locator("#settings-changes").getByRole("group", { name: "Languages for “Shortly after saving”", exact: true });
 const post = async (page: Page, shop: UiShopKey, path: string, form: Record<string, string>) => {
   const response = await page.request.post(new URL(path, UI_ENV.appUrl).toString(), { headers: { Authorization: `Bearer ${sessionToken(UI_SHOPS[shop].domain)}` }, form });
   expect(response.ok()).toBe(true);
@@ -69,7 +71,7 @@ test("switching between the three ways: one step each, the other way turned off,
 
   // Shortly after saving replaces the schedule (the form says so: replaceSmart).
   await choose(page, card, "Shortly after saving");
-  const basic = option(page, card, "Shortly after saving");
+  const basic = languagesPanel(page);
   await expect(basic.getByText("Replaces the smart schedule.")).toBeVisible();
   for (const name of ["German", "French"]) await expect(basic.getByRole("checkbox", { name, exact: true })).toBeChecked();
   await basic.getByRole("button", { name: "Turn on", exact: true }).click();
@@ -84,14 +86,15 @@ test("switching between the three ways: one step each, the other way turned off,
   await isCurrent(page, card, "On a schedule");
   await expect(page.locator("#settings-changes-smart")).toBeFocused();
   await page.reload();
-  await expect(basic.getByRole("checkbox")).toHaveCount(0);
+  await expect(basic).toHaveCount(0);
 
   // Start it yourself: whichever way is on is turned off.
   await choose(page, card, "Start it yourself");
   await expectToast(page, "Smart schedule is off.");
   await isCurrent(page, card, "Start it yourself");
   await expect(page.locator("#settings-changes-manual")).toBeFocused();
-  await expect(page.locator(`${card} s-badge`).first()).toHaveText("Off");
+  // Off: the current choice says it; the heading has no badge.
+  await expect(page.locator(`${card} h2 ~ s-badge`)).toHaveCount(0);
 
   // As it was (other tests use this store).
   await choose(page, card, "On a schedule");
@@ -116,7 +119,7 @@ test("a stale form never switches silently: without the explicit flag the server
   await isCurrent(page, "#settings-changes", "Start it yourself");
   await post(page, "businessSwitch", "/app/settings/automatic.data", { intent: "turn-on" });
   await choose(page, "#settings-changes", "Shortly after saving");
-  await option(page, "#settings-changes", "Shortly after saving").getByRole("button", { name: "Turn on", exact: true }).click();
+  await languagesPanel(page).getByRole("button", { name: "Turn on", exact: true }).click();
   const refused = page.locator('#settings-changes s-banner[heading="The smart schedule is on"]');
   await expect(refused).toContainText("Turn it off, or choose “Shortly after saving” to replace it.");
   await page.reload();
@@ -147,7 +150,7 @@ test("after a move to a plan without the schedule: paused with the plan named, i
   await card.getByRole("button", { name: "Translate automatically instead" }).click();
   await expectToast(page, /translated about a minute later/);
   await isCurrent(page, "#settings-changes", "Shortly after saving");
-  await expect(option(page, "#settings-changes", "Shortly after saving").getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
+  await expect(languagesPanel(page).getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
   // The two never run together: the schedule was turned off (and is kept).
   await openApp(page, "smartDowngraded", "/app/settings/automatic");
   await expect(page.locator("#smart-status s-badge").first()).toHaveText("Off");

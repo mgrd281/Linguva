@@ -12,7 +12,9 @@ import {
   nextCharsOn,
   planName,
   planView,
+  recommendationKind,
   recommendPlan,
+  renewalNeedsTime,
   smallestPlanForLanguages,
   splitLanguages,
   usagePercent,
@@ -75,6 +77,18 @@ describe("the hero for each billing state", () => {
     expect(view().allowanceRisesAt).toBeNull();
     expect(view({ stale: true, subscription: sub({ trialEndsAt: "2026-11-05T00:00:00.000Z" }) }).allowanceRisesAt).toBeNull();
     expect(nextCharsOn(view(), "2026-12-01T00:00:00.000Z")).toBe("2026-12-01T00:00:00.000Z");
+  });
+
+  it("writes the renewal's time where 00:00 UTC on the 1st is another day in the store's zone (the evening before in the Americas)", () => {
+    expect(renewalNeedsTime("2026-12-01T00:00:00.000Z", "America/New_York")).toBe(true);
+    expect(renewalNeedsTime("2026-12-01T00:00:00.000Z", "America/Los_Angeles")).toBe(true);
+    // The 1st there too: 1:00 in Berlin, 9:00 in Tokyo, midnight in UTC.
+    expect(renewalNeedsTime("2026-12-01T00:00:00.000Z", "Europe/Berlin")).toBe(false);
+    expect(renewalNeedsTime("2026-12-01T00:00:00.000Z", "Asia/Tokyo")).toBe(false);
+    expect(renewalNeedsTime("2026-12-01T00:00:00.000Z", "UTC")).toBe(false);
+    // A new year: 31 December in New York.
+    expect(renewalNeedsTime("2027-01-01T00:00:00.000Z", "America/New_York")).toBe(true);
+    expect(renewalNeedsTime("not a date", "America/New_York")).toBe(false);
   });
 
   it("names a pending change with its date, or the next billing period without one, and marks the plan's card", () => {
@@ -145,7 +159,8 @@ describe("the hero for each billing state", () => {
     expect(view({ state: "COMPLIMENTARY", subscription: null })).toMatchObject({
       kind: "complimentary",
       name: { key: "plan.hero.name.complimentary" },
-      icon: "key",
+      // A person's shield: "key" is the app's sign for translation keys (the Own key plan's).
+      icon: "shield-person",
       lines: [{ icon: null, words: { key: "plan.hero.line.complimentary" } }],
       primary: null,
       refresh: false,
@@ -225,6 +240,18 @@ describe("Fits your store", () => {
   it("recommends nothing when no plan fits", () => {
     expect(recommendPlan(use({ monthChars: 4_000_000 }))).toBeNull();
     expect(recommendPlan(use({ languages: 21 }))).toBeNull();
+  });
+
+  it("says how the fitting plan relates to the store's own: the same, a smaller one (never an order to downgrade) or a bigger one", () => {
+    expect(recommendationKind("pro", "pro")).toBe("same");
+    expect(recommendationKind("free", "free")).toBe("same");
+    expect(recommendationKind("starter", "pro")).toBe("smaller");
+    expect(recommendationKind("free", "business")).toBe("smaller");
+    expect(recommendationKind("pro", "starter")).toBe("bigger");
+    expect(recommendationKind("business", "pro")).toBe("bigger");
+    // No plan of the four (none chosen, an unknown handle): the plain line, as for a bigger plan.
+    expect(recommendationKind("free", null)).toBe("bigger");
+    expect(recommendationKind("starter", "own-key")).toBe("bigger");
   });
 
   it("compares with the plans' own allowances, never a trial's, and doesn't count glossary terms", () => {

@@ -11,6 +11,7 @@ import { usableOwnKey, type OwnKeySummary } from "./own-keys";
 import { OWN_KEY_ICON, PLAN_ICON, STATE_ICON } from "./plan-features";
 import { inTrial } from "./plan-prices";
 import { isKnownPlanHandle, isOwnKeyHandle, planEntitlements, PLANS, TRIAL_AI_CHARS, type Entitlements, type KnownPlanHandle, type PlanHandle } from "./plans";
+import { wallClock } from "./schedule";
 
 export const PLAN_ORDER = Object.keys(PLANS) as PlanHandle[];
 
@@ -202,10 +203,11 @@ export function planView(input: PlanViewInput): HeroView {
   const ownKey = isOwnKeyHandle(known);
   const ready = ownKey && Boolean(input.ownKeys?.engines.length);
   if (ownKey) {
+    // The app's sign for translation keys, for both lines (Settings draws a missing key with it too).
     lines.push(
       ready
-        ? { icon: "connect", words: { key: "plan.hero.line.ownKey.ready", engines: { engines: input.ownKeys!.engines } } }
-        : { icon: "info", words: { key: "plan.hero.line.ownKey.missing" } },
+        ? { icon: "key", words: { key: "plan.hero.line.ownKey.ready", engines: { engines: input.ownKeys!.engines } } }
+        : { icon: "key", words: { key: "plan.hero.line.ownKey.missing" } },
     );
   }
   const pendingHandle = sub?.pendingPlanHandle ?? null;
@@ -277,6 +279,19 @@ export function planIcon(handle: KnownPlanHandle): IconType {
 export function nextCharsOn(hero: Pick<HeroView, "allowanceRisesAt">, resetsOn: string): string {
   const rises = hero.allowanceRisesAt;
   return rises && Date.parse(rises) < Date.parse(resetsOn) ? rises : resetsOn;
+}
+
+/**
+ * Whether the month's renewal (00:00 UTC on the 1st) falls on another calendar day in the store's
+ * zone: the evening before in the Americas. The page then writes its time too ("30. November um
+ * 19:00"), so it doesn't seem to contradict "on the 1st of every month" in the table and the questions.
+ */
+export function renewalNeedsTime(resetsOn: string, timeZone: string): boolean {
+  const at = Date.parse(resetsOn);
+  if (!Number.isFinite(at)) return false;
+  const local = wallClock(at, timeZone);
+  const utc = new Date(at);
+  return local.day !== utc.getUTCDate() || local.month !== utc.getUTCMonth() + 1;
 }
 
 /** "10 % used": whole percent, 0–100; `tiny` when something is used but less than 1 %. */
@@ -358,4 +373,18 @@ export function recommendPlan(use: ShopUse): { plan: PlanHandle; reasons: FitRea
     }
   }
   return null;
+}
+
+/**
+ * How the fitting plan relates to the store's own: the same ("Your plan fits your store", and no
+ * second badge on its card), a smaller one ("… Starter is enough too", never an order to downgrade),
+ * or a bigger one ("Fits your store: Pro."). Without a plan of the four (none chosen, Free applying,
+ * an unknown handle) it is "bigger": the plain line.
+ */
+export type RecommendationKind = "same" | "smaller" | "bigger";
+
+export function recommendationKind(recommended: PlanHandle, current: KnownPlanHandle | null): RecommendationKind {
+  if (current === recommended) return "same";
+  const at = isPlanHandle(current) ? PLAN_ORDER.indexOf(current) : -1;
+  return at >= 0 && PLAN_ORDER.indexOf(recommended) < at ? "smaller" : "bigger";
 }

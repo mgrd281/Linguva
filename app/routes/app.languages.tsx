@@ -108,7 +108,7 @@ export default function Languages() {
                     // Only an engine the shop hasn't allowed serves it: every job item would wait for consent.
                     <s-text color="subdued">
                       {t("languages.ai.needsConsent", { engine: ENGINE_NAMES[summary.aiEngine[l.locale] as EngineId] })}{" "}
-                      <s-link href="/app/settings">{t("languages.ai.settingsLink")}</s-link>
+                      <s-link href="/app/settings?section=ai">{t("languages.ai.settingsLink")}</s-link>
                     </s-text>
                   ) : summary.ai[l.locale] === "unsupported" ? (
                     <s-text color="subdued">{unsupportedText(t, summary.showEngine, summary.singleEngine)}</s-text>

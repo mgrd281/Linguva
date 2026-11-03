@@ -76,7 +76,7 @@ export function ResourceList() {
         <s-banner tone="info" heading={t("resources.consent.heading")}>
           <s-paragraph>
             {t("resources.consent.before")}
-            <s-link href="/app/settings">{t("common.nav.settings")}</s-link>
+            <s-link href="/app/settings?section=ai">{t("common.nav.settings")}</s-link>
             {t("resources.consent.after")}
           </s-paragraph>
         </s-banner>

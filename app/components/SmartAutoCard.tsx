@@ -103,7 +103,7 @@ export function SmartStateBanner({ status, zone, consentAction }: { status: Smar
         <s-paragraph>
           {t(WAITING_TEXT[status.reason])}{" "}
           {status.reason === "PLAN" ? <s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link> : null}
-          {status.reason === "CONSENT" && !consentAction ? <s-link href="/app/settings">{t("automatic.page.back")}</s-link> : null}
+          {status.reason === "CONSENT" && !consentAction ? <s-link href="/app/settings?section=ai">{t("automatic.page.back")}</s-link> : null}
         </s-paragraph>
         {status.reason === "CONSENT" && consentAction ? consentAction : null}
       </s-banner>

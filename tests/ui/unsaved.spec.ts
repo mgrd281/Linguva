@@ -5,7 +5,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { clickSaveBarButton, expectToast, openApp, saveBarShown } from "./helpers";
 
-// The breadcrumb back to the list, as the admin's title bar would follow it.
+// The breadcrumb back to the area list (Products in French), as the admin's title bar would follow it.
 const goBack = (page: Page) => page.locator('s-link[slot="breadcrumb-actions"]').evaluate((el) => (el as HTMLElement).click());
 
 test("unpublished changes are kept unless the merchant chooses to leave @responsive", async ({ page }) => {
@@ -14,7 +14,7 @@ test("unpublished changes are kept unless the merchant chooses to leave @respons
 
   // Untouched: leaves without asking.
   await goBack(page);
-  await expect(page).toHaveURL(/\/app\/products\?lang=fr/);
+  await expect(page).toHaveURL(/\/app\/languages\/fr\/products(\?|$)/);
 
   await openApp(page, "full", "/app/products/3?lang=fr");
   const editor = page.url();
@@ -31,7 +31,7 @@ test("unpublished changes are kept unless the merchant chooses to leave @respons
 
   await goBack(page);
   await page.locator('s-banner[heading="Leave without publishing?"]').getByRole("button", { name: "Leave without publishing" }).click();
-  await expect(page).toHaveURL(/\/app\/products\?lang=fr/);
+  await expect(page).toHaveURL(/\/app\/languages\/fr\/products(\?|$)/);
 });
 
 test("after publishing, leaving doesn't ask", async ({ page }) => {
@@ -40,7 +40,7 @@ test("after publishing, leaving doesn't ask", async ({ page }) => {
   await page.getByRole("button", { name: "Publish translations" }).click();
   await expectToast(page, /translations? published$/);
   await goBack(page);
-  await expect(page).toHaveURL(/\/app\/products\?lang=fr/);
+  await expect(page).toHaveURL(/\/app\/languages\/fr\/products(\?|$)/);
 });
 
 test("the admin's save bar appears with changes, publishes, and discards", async ({ page }) => {
@@ -63,5 +63,5 @@ test("the admin's save bar appears with changes, publishes, and discards", async
   await expectToast(page, "1 translation published");
   await expect.poll(() => saveBarShown(page, BAR)).toBe(false);
   await goBack(page);
-  await expect(page).toHaveURL(/\/app\/products\?lang=fr/);
+  await expect(page).toHaveURL(/\/app\/languages\/fr\/products(\?|$)/);
 });

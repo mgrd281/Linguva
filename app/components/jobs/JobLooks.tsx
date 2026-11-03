@@ -1,9 +1,12 @@
 /**
  * What the Jobs list and a job's page draw the same way: each outcome
  * group's icon and colour (the legend, the bar, the ring), each job state's
- * badge, the origin badges, and the words of a JobText in the interface
- * language and the store's time zone (app/lib/job-view.ts jobText). Never
- * colour alone: every mark has its words beside it.
+ * badge, the origin badges, the tinted status panel (the attention card, the
+ * way back to a job), and the words of a JobText in the interface language
+ * and the store's time zone (app/lib/job-view.ts jobText). Never colour
+ * alone: every mark has its words beside it. One icon per concept, the app's
+ * (FEATURE_ICON for automatic translation, the smart schedule and the texts
+ * for Google; in-progress for translating).
  */
 import { useMemo, type ReactNode } from "react";
 import type { I18n } from "../../i18n/i18n";
@@ -15,6 +18,8 @@ import {
   jobText,
   jobValue,
   STATE_WORD,
+  type FragmentLook,
+  type FragmentTone,
   type JobGroups,
   type JobState,
   type JobText,
@@ -24,6 +29,7 @@ import {
   type TextValue,
   type When,
 } from "../../lib/job-view";
+import { FEATURE_ICON } from "../../lib/plan-features";
 import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { durationText, KEPT_COLOUR, STATE_COLOURS, TRACK_COLOUR } from "../Coverage";
 import type { RingSegment } from "../CoverageRing";
@@ -47,11 +53,15 @@ export const GROUP_LOOK: Readonly<Record<OutcomeGroup, { icon: IconName; tone: I
   open: { icon: "circle-dashed", tone: null, colour: TRACK_COLOUR },
 };
 
-/** A job state's badge: the same icon and tone in the list and on the job's page. */
+/**
+ * A job state's badge: the same icon and tone in the list and on the job's page. Translating is
+ * in-progress, as on Content, the Overview and the smart page (refresh means outdated); finding the
+ * content is search-list (search is the texts for Google's).
+ */
 export const STATE_LOOK: Readonly<Record<JobState, { icon: IconName; tone: BadgeTone }>> = {
   queued: { icon: "clock", tone: "info" },
-  finding: { icon: "search", tone: "info" },
-  running: { icon: "refresh", tone: "info" },
+  finding: { icon: "search-list", tone: "info" },
+  running: { icon: "in-progress", tone: "info" },
   done: { icon: "check-circle", tone: "success" },
   doneLook: { icon: "alert-triangle", tone: "caution" },
   doneErrors: { icon: "alert-circle", tone: "critical" },
@@ -65,9 +75,12 @@ export function groupSegments(groups: JobGroups): RingSegment[] {
   return displayParts(groups).map(({ group, count }) => ({ colour: GROUP_LOOK[group].colour, count }));
 }
 
-/** A group's icon (subdued for the groups without a tone of their own). */
-export function GroupIcon({ group, size = "small" }: { group: OutcomeGroup | "paused"; size?: "small" | "base" }) {
-  if (group === "paused") return <s-icon type="pause-circle" tone="warning" size={size} />;
+/**
+ * A group's icon (subdued for the groups without a tone of their own), or a stop's pause-circle in the
+ * fragment's tone: critical while it needs the merchant, warning when it goes on.
+ */
+export function GroupIcon({ group, tone, size = "small" }: { group: FragmentLook; tone?: FragmentTone; size?: "small" | "base" }) {
+  if (group === "paused") return <s-icon type="pause-circle" tone={tone === "critical" ? "critical" : "warning"} size={size} />;
   const look = GROUP_LOOK[group];
   return look.tone ? <s-icon type={look.icon} tone={look.tone} size={size} /> : <s-icon type={look.icon} color="subdued" size={size} />;
 }
@@ -97,19 +110,85 @@ export function StateBadge({ state, words }: { state: JobState; words: JobWords 
   );
 }
 
-/** Automatic translation's and the smart schedule's jobs, and a job of the texts for Google only, carry a badge. */
+/** Automatic translation's and the smart schedule's jobs, and a job of the texts for Google only, carry a badge with the feature's icon. */
 export function OriginBadges({ job, words, skipOrigin = false }: { job: { requestedBy: string | null; fieldScope: string }; words: JobWords; skipOrigin?: boolean }) {
   const { t } = words.i18n;
   const badges: ReactNode[] = [];
-  if (!skipOrigin && job.requestedBy === AUTO_STARTER) badges.push(<s-badge key="auto">{t("common.automatic")}</s-badge>);
+  if (!skipOrigin && job.requestedBy === AUTO_STARTER)
+    badges.push(
+      <s-badge key="auto" icon={FEATURE_ICON.auto}>
+        {t("common.automatic")}
+      </s-badge>,
+    );
   if (!skipOrigin && job.requestedBy === SMART_REQUESTED_BY)
     badges.push(
-      <s-badge key="smart" tone="info" icon="calendar-time">
+      <s-badge key="smart" tone="info" icon={FEATURE_ICON.smart}>
         {t("automatic.name")}
       </s-badge>,
     );
-  if (job.fieldScope === "SEO") badges.push(<s-badge key="seo">{t("jobs.badge.seo")}</s-badge>);
+  if (job.fieldScope === "SEO")
+    badges.push(
+      <s-badge key="seo" icon={FEATURE_ICON.seo}>
+        {t("jobs.badge.seo")}
+      </s-badge>,
+    );
   return badges.length ? <>{badges}</> : null;
+}
+
+/** A status panel's tone; caution (a delay) takes the warning tint, info (only translations to approve) none. */
+export type StatusTone = "success" | "warning" | "caution" | "critical" | "info";
+
+const STATUS_TINT: Readonly<Record<StatusTone, "success" | "warning" | "critical" | null>> = { success: "success", warning: "warning", caution: "warning", critical: "critical", info: null };
+
+/**
+ * A tinted status as Settings' status row draws it (ui.css .lv-status): a round mark with its icon in the
+ * tone, the title (the caller's element: a heading, or the bold line), the words under it, and its action
+ * beside them once the panel is wide enough (under them on a phone). `children` follow under the row (the
+ * attention card's featured stop and rows). With `label` it is a section of the page by that name.
+ */
+export function StatusPanel({
+  tone,
+  icon,
+  title,
+  text,
+  action,
+  label,
+  children,
+}: {
+  tone: StatusTone;
+  icon: IconName;
+  title: ReactNode;
+  text?: ReactNode;
+  action?: ReactNode;
+  label?: string;
+  children?: ReactNode;
+}) {
+  const tint = STATUS_TINT[tone];
+  const content = (
+    <>
+      <div className="lv-status__row">
+        <span className="lv-status__mark" aria-hidden="true">
+          <s-icon type={icon} tone={tone} />
+        </span>
+        <div className="lv-status__body">
+          <s-stack direction="block" gap="small-500">
+            {title}
+            {text ? <s-text color="subdued">{text}</s-text> : null}
+          </s-stack>
+          {action ?? null}
+        </div>
+      </div>
+      {children ? <div className="lv-jobs-status__more">{children}</div> : null}
+    </>
+  );
+  const look = { className: "lv-status", ...(tint ? { "data-tone": tint } : {}) };
+  return label ? (
+    <section {...look} aria-label={label}>
+      {content}
+    </section>
+  ) : (
+    <div {...look}>{content}</div>
+  );
 }
 
 /** The legend: one line per group with items, its icon and figure with words. */

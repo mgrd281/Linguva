@@ -1268,6 +1268,184 @@ a.lv-filter:focus-visible {
 
 /* ── Jobs (app.jobs*, components/jobs): its own rules here, media queries included. ── */
 
+/* What a status panel holds under its row (the attention card's featured stop and rows). */
+.lv-jobs-status__more {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+/* The list's rows, a cluster's rail, a day's date beside its name. */
+.lv-jobs-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-jobs-cluster {
+  margin-inline-start: 16px;
+  border-inline-start: 3px solid var(--lv-border);
+}
+.lv-jobs-day__date {
+  color: var(--lv-text-subdued);
+  font-weight: 450;
+}
+.lv-jobs-name {
+  overflow-wrap: anywhere;
+}
+/* A heading the page jumps to: focusable by script, no ring of its own. */
+.lv-jobs-anchor {
+  outline: none;
+}
+
+/*
+ * The list's tabs as compact tiles (Settings' .lv-tile): the icon in its grey square with the figure
+ * beside it (under it where a long figure doesn't fit), the name below; the chosen one framed in blue, a
+ * dot on Problems. Five in a row; on a phone two rows with no sideways scroll, the longer names below.
+ * `.lv-jobtabs .lv-jobtab` is specific enough to win over Settings' container rules for .lv-tile, which
+ * would match inside this container too.
+ */
+.lv-jobtabs {
+  container-type: inline-size;
+}
+.lv-jobtabs__list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-jobtabs__item {
+  display: flex;
+  min-width: 0;
+}
+.lv-jobtabs .lv-jobtab {
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  aspect-ratio: auto;
+  min-height: 0;
+  padding: 12px;
+  text-align: start;
+}
+.lv-jobtab__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  max-width: 100%;
+}
+.lv-jobtab__figure {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+@container (max-width: 640px) {
+  .lv-jobtabs__list {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .lv-jobtabs__item {
+    grid-column: span 2;
+  }
+  .lv-jobtabs__item:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+  .lv-jobtab__figure {
+    font-size: 18px;
+  }
+}
+
+/*
+ * The search and the four filters: the filters in a row on a wide card, two by two narrower; on a phone
+ * folded behind "Filter (n)" under the search, so the first job is in view.
+ */
+.lv-jobs-filters {
+  container-type: inline-size;
+  display: grid;
+  gap: 8px;
+}
+.lv-jobs-filters__search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.lv-jobs-filters__toggle {
+  display: none;
+  grid-column: 1 / -1;
+}
+.lv-jobs-filters__fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+@container (max-width: 760px) {
+  .lv-jobs-filters__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 560px) {
+  .lv-jobs-filters__toggle {
+    display: block;
+  }
+  .lv-jobs-filters__fields:not([data-open]) {
+    display: none;
+  }
+}
+@container (max-width: 300px) {
+  .lv-jobs-filters__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* No job yet, no match, an empty tab: the mark, the words and the way on, centred. */
+.lv-jobs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+/* A job's stats: each with its icon in a grey square; the ones there are share the row, two to a row on a phone. */
+.lv-jobstats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 16px;
+}
+.lv-jobstats__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.lv-jobstats__value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Under the results' fold: the CSV report and the support reference with its copy button. */
+.lv-jobreport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.lv-jobreport__reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
 /* ── Plan (app.plan.tsx, components/plan): its own rules here, media queries included. ── */
 
 /* ── Editor, lists and tools (the editor, the content lists, glossary, memory, coverage, markets, import & export): its own rules here, media queries included. ── */

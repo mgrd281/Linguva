@@ -128,9 +128,9 @@ export interface StatusView {
 const STATUS_ICON: Record<StatusView["tone"], IconName> = { success: "check-circle-filled", warning: "alert-triangle", critical: "alert-circle" };
 
 /** The full-width row under the page's heading: a round mark, the bold line, why, and the fix (beside it where there is room). */
-export function StatusRow({ status, action }: { status: StatusView; action?: ReactNode }) {
+export function StatusRow({ id, status, action }: { id?: string; status: StatusView; action?: ReactNode }) {
   return (
-    <s-box {...CARD} padding="base">
+    <s-box id={id} {...CARD} padding="base">
       <s-query-container>
         <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
           <s-icon type={STATUS_ICON[status.tone]} tone={status.tone} />

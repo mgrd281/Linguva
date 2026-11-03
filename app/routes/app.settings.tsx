@@ -537,7 +537,7 @@ export default function Settings() {
                 <h1 style={BIG_HEADING}>{t("common.nav.settings")}</h1>
                 <s-text color="subdued">{t("settings.subtitle")}</s-text>
               </s-stack>
-              <StatusRow status={status} action={statusAction} />
+              <StatusRow id="settings-status" status={status} action={statusAction} />
             </s-stack>
           </s-box>
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 260px 1fr, 1fr" gap="base" alignItems="start">

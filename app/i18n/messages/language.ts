@@ -307,8 +307,8 @@ export const de: Translation<typeof en> = {
 
   "language.hero.label": "So weit ist {language}",
   "language.hero.translated": "fertig",
-  "language.hero.ringLabel": { one: "{percent} übersetzt: {complete} von {total} Text ist fertig und live", other: "{percent} übersetzt: {complete} von {total} Texten sind fertig und live" },
-  "language.hero.figure": { one: "{complete} von {total} Text ist fertig und live", other: "{complete} von {total} Texten sind fertig und live" },
+  "language.hero.ringLabel": { one: "{percent} übersetzt. Fertig und live: {complete} von {total} Text", other: "{percent} übersetzt. Fertig und live: {complete} von {total} Texten" },
+  "language.hero.figure": { one: "Fertig und live: {complete} von {total} Text", other: "Fertig und live: {complete} von {total} Texten" },
   "language.hero.fallback": "Wo noch nichts übersetzt ist, sehen Kunden {primary}.",
   "language.hero.state.complete": { one: "fertig – Kunden sehen ihn", other: "fertig – Kunden sehen sie" },
   "language.hero.state.waiting": { one: "wartet auf deine Freigabe", other: "warten auf deine Freigabe" },
@@ -583,8 +583,8 @@ export const fr: Translation<typeof en> = {
 
   "language.hero.label": "Avancement de la traduction : {language}",
   "language.hero.translated": "terminé",
-  "language.hero.ringLabel": { one: "{percent} traduit : {complete} sur {total} texte est terminé et en ligne", other: "{percent} traduit : {complete} sur {total} textes sont terminés et en ligne" },
-  "language.hero.figure": { one: "{complete} sur {total} texte est terminé et en ligne", other: "{complete} sur {total} textes sont terminés et en ligne" },
+  "language.hero.ringLabel": { one: "{percent} traduit. Terminés et en ligne : {complete} sur {total} texte", other: "{percent} traduit. Terminés et en ligne : {complete} sur {total} textes" },
+  "language.hero.figure": { one: "Terminés et en ligne : {complete} sur {total} texte", other: "Terminés et en ligne : {complete} sur {total} textes" },
   "language.hero.fallback": "Là où rien n'est encore traduit, les clients voient le texte en {primary}.",
   "language.hero.state.complete": { one: "terminé – les clients le voient", other: "terminés – les clients les voient" },
   "language.hero.state.waiting": { one: "attend votre approbation", other: "attendent votre approbation" },
@@ -693,7 +693,7 @@ export const fr: Translation<typeof en> = {
   "language.category.images.detail": "Pour Google et pour les personnes qui se font lire les images",
   "language.category.images.items": { one: "{count} image", other: "{count} images" },
 
-  "language.card.figure": { one: "{complete} texte sur {total}", other: "{complete} textes sur {total}" },
+  "language.card.figure": { one: "{complete} sur {total} texte", other: "{complete} sur {total} textes" },
   "language.card.all": "Tout voir",
   "language.card.allCount": { one: "Voir", other: "Voir les {count}" },
   "language.card.review": { one: "Vérifier {count}", other: "Vérifier {count}" },
@@ -858,8 +858,8 @@ export const es: Translation<typeof en> = {
 
   "language.hero.label": "Cómo va el {language}",
   "language.hero.translated": "listo",
-  "language.hero.ringLabel": { one: "{percent} traducido: {complete} de {total} texto está listo y publicado", other: "{percent} traducido: {complete} de {total} textos están listos y publicados" },
-  "language.hero.figure": { one: "{complete} de {total} texto está listo y publicado", other: "{complete} de {total} textos están listos y publicados" },
+  "language.hero.ringLabel": { one: "{percent} traducido. Listos y publicados: {complete} de {total} texto", other: "{percent} traducido. Listos y publicados: {complete} de {total} textos" },
+  "language.hero.figure": { one: "Listos y publicados: {complete} de {total} texto", other: "Listos y publicados: {complete} de {total} textos" },
   "language.hero.fallback": "Donde aún no hay nada traducido, los clientes ven el texto en {primary}.",
   "language.hero.state.complete": { one: "listo – los clientes lo ven", other: "listos – los clientes los ven" },
   "language.hero.state.waiting": { one: "espera tu aprobación", other: "esperan tu aprobación" },

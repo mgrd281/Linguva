@@ -3,20 +3,21 @@
  * row (all set up, or the one thing that needs the merchant with its fix),
  * the sections as square tiles (icon, name, state in a few words, a dot
  * where one needs the merchant) in one row above the section on a wide page
- * (the current one marked) and as a grid of squares on a phone (a back row
- * above a chosen one), deep links and the cards' old `#settings-*`
- * addresses, switching without loading the page again with focus on the
- * section's heading, the choices as tiles with their icons and the chosen
- * way's details in a panel under them, and every state as it really is:
- * translating changes (off, on, paused, waiting for the permission,
- * stopped by the plan), publishing (with its dialog, and after a move to a
- * smaller plan), how AI writes under the admin's save bar, translation
- * memory, the permission (withdrawn in a dialog), the plan with its AI
- * characters and a trial's date, the empty store, the tools, the way back
- * to a stopped job and the German texts.
+ * (the current one marked, a click on it staying) and as a grid of squares
+ * on a phone (a back row above a chosen one), deep links and the cards' old
+ * `#settings-*` addresses, switching without loading the page again with
+ * focus on the section's heading, the choices as tiles with their icons and
+ * the chosen way's details in a panel under them, the chosen marks in a
+ * Windows contrast theme, and every state as it really is: translating
+ * changes (off, on, paused, waiting for the permission, stopped by the
+ * plan), publishing (with its dialog, after a move to a smaller plan, and
+ * its tile's words in French and Spanish), how AI writes under the admin's
+ * save bar, translation memory, the permission (withdrawn in a dialog), the
+ * plan with its AI characters and a trial's date, the empty store, the
+ * tools, the way back to a stopped job and the German texts.
  */
 import { randomUUID } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { UI_ENV, UI_SHOPS, type UiShopKey } from "./fixtures/shops";
 import { clickSaveBarButton, expectAccessible, expectNoHorizontalScroll, expectToast, openApp, saveBarShown, sessionToken } from "./helpers";
 import { stoppedJob } from "./stopped-jobs";
@@ -121,8 +122,16 @@ test("the status row and the tiles: every section with its icon and state; a sec
   await expect(section(page, "publish")).toBeVisible();
   await expect(page.locator("#settings-publish-heading")).toBeFocused();
   await expect(page.locator("#settings-publish-heading")).toBeInViewport();
-  expect((await Promise.all(loads)).some((body) => body.includes("smartCheckKey"))).toBe(false);
+  if (desktop) {
+    // The tile of the section shown: a click on it stays (a link to the same address would load the page's data again).
+    const address = page.url();
+    await nav(page).locator('[aria-current="page"]').click();
+    await expect(page).toHaveURL(address);
+    await expect(nav(page).locator('[aria-current="page"]')).toHaveText(/^Publishing/);
+    await expect(section(page, "publish")).toBeVisible();
+  }
   await expectAccessible(page);
+  expect((await Promise.all(loads)).some((body) => body.includes("smartCheckKey"))).toBe(false);
 });
 
 test("a phone: the sections as a grid of squares, three in a row; a chosen one opens alone under a 44 px back row @responsive", async ({ page }, info) => {
@@ -349,6 +358,58 @@ test("automatic publishing left on from a bigger plan: shows what really happens
   await expect(auto.getByRole("button")).toHaveCount(0);
   // The tile says what really happens.
   await expect(navEntry(page, "Publishing")).toHaveText(/^Publishing\s*Review first$/, { useInnerText: true });
+});
+
+test("French and Spanish say automatic publishing in the two lines of a 360 px phone's tile", async ({ page }) => {
+  // The option's own name ("Publier automatiquement") has a word wider than that tile: the tile has its own words.
+  expect(await (await post(page, "full", "/app/settings.data", { intent: "publish-mode", mode: "AUTO_PUBLISH", confirm: "on" })).text()).toContain("AUTO_PUBLISH");
+  try {
+    await page.setViewportSize({ width: 360, height: 780 });
+    const tiles: Array<[string, string, string]> = [
+      ["fr", "Sections des paramètres", "Publication automatique"],
+      ["es", "Secciones de la configuración", "Publicación automática"],
+    ];
+    for (const [locale, label, words] of tiles) {
+      await openApp(page, "full", "/app/settings", { locale });
+      const state = page.getByRole("navigation", { name: label }).locator('[data-section="publish"] .lv-tile__state');
+      await expect(state).toHaveText(words);
+      await page.evaluate(() => document.fonts.load("450 12px Inter"));
+      // The tile shows two lines; a third would be cut off.
+      expect(await state.evaluate((el) => el.scrollHeight <= el.clientHeight), locale).toBe(true);
+    }
+  } finally {
+    await post(page, "full", "/app/settings.data", { intent: "publish-mode", mode: "DRAFT" });
+  }
+});
+
+test("a Windows contrast theme keeps the chosen marks: the current tile, option and form of address get a 2 px edge in the highlight colour", async ({ page }) => {
+  // Forced colours draw no shadows and no tints, so the blue ring and tint are gone there.
+  await page.emulateMedia({ forcedColors: "active" });
+  await openApp(page, "full", "/app/settings?section=publish");
+  // An element's border and outline, "Highlight" where it has the system's highlight colour (resolved beside it).
+  const look = (locator: Locator) =>
+    locator.evaluate((el) => {
+      const probe = el.parentElement!.appendChild(document.createElement("span"));
+      probe.style.color = "Highlight";
+      const highlight = getComputedStyle(probe).color;
+      probe.remove();
+      const style = getComputedStyle(el);
+      const colour = (value: string) => (value === highlight ? "Highlight" : value);
+      return {
+        border: `${style.borderTopWidth} ${colour(style.borderTopColor)}`,
+        outline: style.outlineStyle === "none" ? "none" : `${style.outlineWidth} ${style.outlineStyle} ${colour(style.outlineColor)}`,
+      };
+    });
+  await expect.poll(async () => (await look(nav(page).locator('[aria-current="page"]'))).border).toBe("2px Highlight");
+  expect((await look(nav(page).getByRole("link", { name: /^How AI writes/ }))).border).toMatch(/^1px /);
+  await isCurrent(page, "#settings-publish", "Review first");
+  await expect.poll(async () => (await look(option(page, "#settings-publish", "Review first"))).border).toBe("2px Highlight");
+  expect((await look(option(page, "#settings-publish", "Publish automatically"))).border).toMatch(/^1px /);
+  // A segment has no border of its own: the chosen one gets an inner outline.
+  await nav(page).getByRole("link", { name: /^How AI writes/ }).click();
+  const german = section(page, "style").getByRole("group", { name: "German", exact: true });
+  await expect.poll(async () => (await look(german.locator("input:checked + .lv-seg__text"))).outline).toBe("2px solid Highlight");
+  expect((await look(german.locator("input:not(:checked) + .lv-seg__text").first())).outline).toBe("none");
 });
 
 test("translation memory: the whole option chooses it, with a toast and focus on the choice that is now current", async ({ page }) => {

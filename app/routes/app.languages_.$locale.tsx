@@ -26,7 +26,7 @@ import { Disclosure } from "../components/Disclosure";
 import { Flag } from "../components/Flag";
 import { SHOWN_STATES, StateIcon, StateKey, StateLines, TextStateBar } from "../components/ItemStates";
 import { Breadcrumbs, languageErrorText, NumberedSteps, PLAIN_LIST, type StepView } from "../components/LanguageLayout";
-import { attachedTexts, STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
+import { accessTitle, attachedTexts, STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
 import { ProgressBar } from "../components/ProgressBar";
 import { StepStrip } from "../components/StepStrip";
 import { TranslateConfirm } from "../components/TranslateConfirm";
@@ -293,10 +293,11 @@ function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<St
         detail: t("language.next.recount.detail", { categories: list(i18n, step.categories), count: step.categories.length }),
         action: countForm(t("language.next.recount.action")),
       };
-    case "access":
+    case "access": {
+      const types = data.categories.flatMap((c) => (step.categories.includes(c.id) && c.state.kind === "no-access" ? c.state.types : []));
       return {
         icon: <StepIcon {...STEP_LOOK.access} />,
-        title: t("language.next.access.title", { categories: list(i18n, step.categories) }),
+        title: accessTitle(i18n, { href: step.href, categories: list(i18n, step.categories), types }),
         detail: t("language.next.access.detail"),
         action: step.href ? (
           <Button variant={variant} href={step.href}>
@@ -304,6 +305,7 @@ function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<St
           </Button>
         ) : undefined,
       };
+    }
     case "done":
       return { icon: <StepIcon {...STEP_LOOK.done} />, title: t("language.next.done.title"), detail: t("language.next.done.detail") };
   }

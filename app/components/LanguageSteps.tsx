@@ -3,12 +3,15 @@
  * step's icon square (what kind of step it is, in the colour of the place it
  * leads to: numbers are left to the steps to live), the words and button of
  * the step that lifts a translate gate (the AI permission, the own key, the
- * plan), and how a step names the image descriptions and extra details that
- * are translated with it.
+ * plan), the title of the step for content Linguva may not read, and how a
+ * step names the image descriptions and extra details that are translated
+ * with it.
  */
 import { INTL_LOCALE, type I18n, type MessageKey } from "../i18n/i18n";
+import { contentTypeName } from "../lib/content-type-names";
 import type { IconName } from "../lib/icons";
 import type { AttachedOpen, UnlockGate } from "../lib/language-categories";
+import { languageList } from "../lib/name-lists";
 import { Button } from "./Button";
 import { IconSquare, type Tint } from "./IconSquare";
 
@@ -53,6 +56,15 @@ export function unlockStep(i18n: I18n, input: { gate: UnlockGate; href: string; 
       </Button>
     ),
   };
+}
+
+/**
+ * The access step's title: "Allow access to …" where the Content page can ask Shopify for a permission
+ * (`href`); else nothing can be allowed, so it says which texts no app may read, as the Content tile does.
+ */
+export function accessTitle(i18n: I18n, input: { href: string | null; categories: string; types: readonly string[] }): string {
+  if (input.href) return i18n.t("language.next.access.title", { categories: input.categories });
+  return i18n.t("content.tile.unavailable", { parts: languageList(i18n, input.types.map((type) => contentTypeName(i18n, type))) });
 }
 
 /** "3 image descriptions and 2 extra details" (null without any). */

@@ -2,8 +2,9 @@
  * The smart schedule's page loader (app/routes/app.settings_.automatic.tsx)
  * against PostgreSQL, with the session and billing stood in: its exclusions
  * are named by their titles and pictures as Shopify has them, read live in
- * one call (Linguva stores no merchant text), and a read that fails or an
- * item Shopify no longer has keeps the row by its kind and number, never
+ * one call (Linguva stores no merchant text) and kept a minute, so the
+ * page's reloads while a check runs don't ask again; a read that fails or
+ * an item Shopify no longer has keeps the row by its kind and number, never
  * breaking the page.
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,6 +28,7 @@ import type { BillingStatus } from "../../app/.server/billing/subscription";
 import { resetConfigCache } from "../../app/.server/lib/config";
 import { resetQueueClient } from "../../app/.server/queue/client";
 import { addSmartExclusion, saveSmartSettings } from "../../app/.server/smart/config";
+import { clearExclusionNamesCache } from "../../app/.server/smart/exclusion-names";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { PLANS } from "../../app/lib/plans";
 import { loader as smartLoader } from "../../app/routes/app.settings_.automatic";
@@ -38,6 +40,7 @@ const app = new PrismaClient();
 beforeEach(async () => {
   await resetDatabase();
   resetConfigCache();
+  clearExclusionNamesCache();
 });
 afterAll(async () => {
   await resetQueueClient();
@@ -132,6 +135,18 @@ describe("the smart page's exclusions", () => {
     const loaded = await page();
     expect(loaded.panel.exclusions).toEqual([expect.objectContaining({ resourceGid: "gid://shopify/Product/1", title: null, image: null })]);
     expect(loaded.panel.config?.mode).toBe("daily");
+  });
+
+  it("are read from Shopify once for the page's reloads while a check runs", async () => {
+    const store = new FakeShopifyStore(2);
+    const shop = await standIn(store.asAdmin());
+    for (const gid of ["gid://shopify/Product/1", "gid://shopify/Product/2"]) await addSmartExclusion({ shopId: shop.id, resourceGid: gid, actorId: "42" }, app);
+    const first = await page();
+    const reload = await page();
+    expect(store.calls.filter((c) => c === "LinguvaPreviewNodes")).toHaveLength(1);
+    // The same names and pictures from what was kept.
+    expect(reload.panel.exclusions).toEqual(first.panel.exclusions);
+    expect(byGid(reload.panel.exclusions)["gid://shopify/Product/2"]!.title).toBe("Product 2 jacket");
   });
 
   it("make no call to Shopify when there are none", async () => {

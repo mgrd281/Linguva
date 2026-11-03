@@ -28,7 +28,7 @@ import { CoverageRing } from "../components/CoverageRing";
 import { Flag } from "../components/Flag";
 import { StateCountList } from "../components/ItemStates";
 import { Breadcrumbs, languageErrorText, NumberedSteps, type StepView } from "../components/LanguageLayout";
-import { STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
+import { accessTitle, STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
 import { ProgressBar } from "../components/ProgressBar";
 import { TranslateConfirm, translateWhat } from "../components/TranslateConfirm";
 import { useI18n } from "../i18n/react";
@@ -390,11 +390,11 @@ function areaSteps(ctx: StepContext): StepView[] {
     });
   }
   if (category.state.kind === "no-access") {
-    const { href } = category.state;
+    const { href, types } = category.state;
     steps.push({
       key: "access",
       icon: <StepIcon {...STEP_LOOK.access} />,
-      title: t("language.next.access.title", { categories: names.category }),
+      title: accessTitle(i18n, { href, categories: names.category, types }),
       detail: t("language.next.access.detail"),
       action: href ? (
         <Button variant={variant()} href={href}>

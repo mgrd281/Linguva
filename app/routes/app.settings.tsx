@@ -687,8 +687,8 @@ function sectionTexts(data: Data, i18n: I18n): Record<SectionKey, SectionText> {
   // Paused, stopped or waiting: the tile says that, in its tone (its section says the rest).
   const attention = changes.badge.tone === "warning" || changes.badge.tone === "critical" ? changes.badge.tone : null;
   const publish = effectivePublishMode({ mode: data.publishMode, inPlan: data.autoPublishInPlan });
-  const publishTitle = publish === "AUTO_PUBLISH" ? t("settings.publish.auto.title") : t("settings.publish.review.title");
-  // The tile's few words (the option's own name doesn't fit a tile in every language).
+  // The tiles' few words (an option's own name doesn't fit a tile in every language).
+  const publishTitle = publish === "AUTO_PUBLISH" ? t("settings.tile.publish.auto") : t("settings.publish.review.title");
   const memory = data.reuseMachineMemory ? t("settings.tile.memory.machine") : t("settings.memory.approved.title");
   const level = usageLevel(data.used, data.limit);
   // Own key plan: no allowance of Linguva's to run out.

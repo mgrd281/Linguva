@@ -15,7 +15,7 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - Spanish: "tú", as Shopify's Spanish admin; neutral Latin American vocabulary (agregar, costo, configuración).
 - Language names: lower case in French and Spanish ("allemand", "alemán"), capitalised in German (`languageName()`).
 - German on the Plan page: "KI-" compounds ("KI-Zeichen", "KI-Übersetzung") are written with a non-breaking hyphen (`\u2011`, drawn like "-"), so a narrow card or a phone never ends a line in "KI-". Keep it when editing those texts (`app/i18n/messages/plan.ts`).
-- Shared terms: Révision / Revisión (Review), Tâches / Tareas (Jobs), Mémoire de traduction / Memoria de traducción, Forfait / Plan, quota d'IA / cuota de IA, champ personnalisé / campo personalizado, texte alternatif / texto alternativo, référencement / listado en buscadores.
+- Shared terms: Révision / Revisión (Review), Tâches / Tareas (Jobs), Mémoire de traduction / Memoria de traducción, Forfait / Plan, quota d'IA / cuota de IA, champ personnalisé / campo personalizado, texte alternatif / texto alternativo (shown as description d'image / descripción de imagen since Redesign 4), textes pour Google / textos para Google (formerly référencement / listado en buscadores).
 
 ## Points to check first
 
@@ -32,7 +32,7 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 **Editor, content, languages, landing page**
 - `editor.badge.manualOnly`: "Manuel uniquement" / "Solo manual".
 - `editor.discard`: "Ignorer" / "Descartar" (Shopify's own save bar wording).
-- `editor.seo.heading`: "Aperçu du référencement" / "Listado en buscadores".
+- `editor.seo.heading`: "Sur Google" / "En Google" (Redesign 4: how the item looks on Google, as Review says it).
 - `editor.valueType.*`: translated from the English, not from Shopify's metafield type names.
 - `{singular}` sentences use "cet élément ({singular})" / "este elemento ({singular})" because the noun's gender varies.
 - `landing.feature.control.text`, `landing.feature.seo.title`: marketing wording, free renderings.

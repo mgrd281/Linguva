@@ -1307,7 +1307,8 @@ a.lv-filter:focus-visible {
 /*
  * The list's tabs as compact tiles (Settings' .lv-tile): the icon in its grey square with the figure
  * beside it (under it where a long figure doesn't fit), the name below; the chosen one framed in blue, a
- * dot on Problems. Five in a row; on a phone two rows with no sideways scroll, the longer names below.
+ * dot on Problems while one of its jobs needs the merchant. Five in a row; on a phone two rows with no
+ * sideways scroll, the longer names below.
  * `.lv-jobtabs .lv-jobtab` is specific enough to win over Settings' container rules for .lv-tile, which
  * would match inside this container too.
  */
@@ -1841,7 +1842,8 @@ a.lv-filter:focus-visible {
   cursor: not-allowed;
   opacity: 0.55;
 }
-.lv-tools-rules:disabled .lv-tools-rule:hover {
+/* Off (not in the plan): hovering draws no edge, and the current rule keeps its ring. */
+.lv-tools-rules:disabled .lv-tools-rule:not(.lv-option--current):hover {
   border-color: var(--lv-border);
   box-shadow: none;
 }
@@ -2218,5 +2220,28 @@ a.lv-filter:focus-visible {
   }
   .lv-btn__spinner {
     animation-duration: 1.6s;
+  }
+}
+
+/*
+ * Forced colours (Windows contrast themes) draw no shadows and no tints, so the chosen look would vanish:
+ * there the chosen item gets a 2 px edge in the system's highlight colour: a border where the item has
+ * one, an inner outline on the plan card's frame and on segments (a focused segment shows its focus ring
+ * instead).
+ */
+@media (forced-colors: active) {
+  .lv-tile[aria-current="page"],
+  .lv-option--current,
+  .lv-lang[aria-current="page"],
+  .lv-filter[aria-current],
+  .lv-smart-tile__input:checked + .lv-smart-tile__face,
+  .lv-smart-day__input:checked + .lv-smart-day__face {
+    border: 2px solid Highlight;
+  }
+  .lv-selected-frame,
+  .lv-seg__option input:checked:not(:focus-visible) + .lv-seg__text,
+  .lv-seg--buttons .lv-seg__text[aria-pressed="true"]:not(:focus-visible) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }

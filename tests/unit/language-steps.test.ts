@@ -1,10 +1,12 @@
 /**
  * The language pages' "Next" steps (app/components/LanguageSteps.tsx): how a
  * step names the image descriptions and extra details translated with it,
- * the step that lifts a translate gate, the icon squares in place of numbers
- * (NumberedSteps' optional icon), semibold figures in the hero (StateLines'
- * optional `strong`) and the translate dialog's ticked box when it was opened
- * for image descriptions and extra details. Rendered on the server.
+ * the step that lifts a translate gate, the title of the step for content
+ * Linguva may not read, the icon squares in place of numbers (NumberedSteps'
+ * optional icon), semibold figures in the hero (StateLines' optional
+ * `strong`), the figures' words in every language and the translate
+ * dialog's ticked box when it was opened for image descriptions and extra
+ * details. Rendered on the server.
  */
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -12,11 +14,11 @@ import { describe, expect, it } from "vitest";
 import type { BulkEstimate } from "../../app/.server/languages/language-page";
 import { StateLines } from "../../app/components/ItemStates";
 import { NumberedSteps } from "../../app/components/LanguageLayout";
-import { attachedTexts, STEP_LOOK, StepIcon, unlockStep } from "../../app/components/LanguageSteps";
+import { accessTitle, attachedTexts, STEP_LOOK, StepIcon, unlockStep } from "../../app/components/LanguageSteps";
 import { TranslateConfirm } from "../../app/components/TranslateConfirm";
 import { translator } from "../../app/i18n/i18n";
 import { emptyCounts } from "../../app/lib/coverage-rules";
-import { UNLOCK_GATES, unlockHref } from "../../app/lib/language-categories";
+import { contentAccessPath, UNLOCK_GATES, unlockHref } from "../../app/lib/language-categories";
 
 const de = translator("de");
 const en = translator("en");
@@ -55,6 +57,44 @@ describe("the step that lifts a translate gate", () => {
       }
     }
     expect(unlockStep(de, { gate: "CONSENT_REQUIRED", href: unlockHref("CONSENT_REQUIRED"), language: "Deutsch", variant: "primary" }).title).toBe("KI‑Übersetzung erlauben");
+  });
+});
+
+describe("the step for content Linguva may not read", () => {
+  it("asks to allow access where the Content page can ask Shopify for it", () => {
+    expect(accessTitle(de, { href: contentAccessPath("de"), categories: "Shop & Kasse", types: ["SHOP_POLICY"] })).toBe("Zugriff auf Shop & Kasse erlauben");
+  });
+
+  it("says which texts no app may read where there is nothing to allow, in the Content tile's words", () => {
+    expect(accessTitle(de, { href: null, categories: "Shop & Kasse", types: ["PAYMENT_GATEWAY"] })).toBe("Für Apps nicht verfügbar: Zahlungsarten");
+    expect(accessTitle(en, { href: null, categories: "Menus & filters, Sizes & colors", types: ["FILTER", "PRODUCT_OPTION", "PRODUCT_OPTION_VALUE"] })).toBe(
+      "Not available to apps: Filters, Option names, and Option values",
+    );
+    expect(accessTitle(translator("fr"), { href: null, categories: "x", types: ["SHOP"] })).toBe("Non disponible pour les applications : Fiche de la boutique sur Google");
+    expect(accessTitle(translator("es"), { href: null, categories: "x", types: ["SELLING_PLAN"] })).toBe("No disponible para aplicaciones: Opciones de suscripción");
+  });
+});
+
+describe("a figure in words", () => {
+  const [fr, es] = [translator("fr"), translator("es")];
+  const figure = { complete: 1, total: 350, count: 350 };
+
+  it("puts the label first in German, French and Spanish: the form follows the total, so 1 done text of 350 reads right", () => {
+    expect(de.t("language.hero.figure", figure)).toBe("Fertig und live: 1 von 350 Texten");
+    expect(de.t("language.hero.figure", { complete: 0, total: 1, count: 1 })).toBe("Fertig und live: 0 von 1 Text");
+    expect(de.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % übersetzt. Fertig und live: 1 von 350 Texten");
+    // French reads 0 as singular too: no verb has to agree with it.
+    expect(fr.t("language.hero.figure", { ...figure, complete: 0 })).toBe("Terminés et en ligne : 0 sur 350 textes");
+    expect(fr.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % traduit. Terminés et en ligne : 1 sur 350 textes");
+    expect(es.t("language.hero.figure", figure)).toBe("Listos y publicados: 1 de 350 textos");
+    expect(es.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % traducido. Listos y publicados: 1 de 350 textos");
+  });
+
+  it("names the texts after the total on an area's card", () => {
+    expect(fr.t("language.card.figure", { complete: 1, total: 12, count: 12 })).toBe("1 sur 12 textes");
+    expect(fr.t("language.card.figure", { complete: 0, total: 1, count: 1 })).toBe("0 sur 1 texte");
+    expect(de.t("language.card.figure", { complete: 1, total: 12, count: 12 })).toBe("1 von 12 Texten");
+    expect(es.t("language.card.figure", { complete: 1, total: 12, count: 12 })).toBe("1 de 12 textos");
   });
 });
 

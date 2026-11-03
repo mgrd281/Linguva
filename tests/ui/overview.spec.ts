@@ -89,6 +89,17 @@ test("the next step first, the store's figure, and a card per country that opens
   await expectNoHorizontalScroll(page);
 });
 
+test("in French and Spanish the outdated row's button names the language page it opens", async ({ page }) => {
+  // Not "Voir en allemand" / "Ver en alemán", which reads like switching the display language.
+  for (const [locale, label] of [
+    ["fr", "Ouvrir la langue (allemand)"],
+    ["es", "Abrir alemán"],
+  ] as const) {
+    await openApp(page, "demo", "/app", { locale });
+    await expect(page.locator("#overview-next").getByRole("link", { name: label, exact: true })).toHaveAttribute("href", "/app/languages/de");
+  }
+});
+
 test("names the content Linguva can't read beside the figure, with the way to allow it @responsive", async ({ page }) => {
   // Policies need read_legal_policies, which this store didn't grant.
   await openApp(page, "full", "/app");

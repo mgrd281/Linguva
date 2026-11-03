@@ -3,10 +3,13 @@
  * store: the categories add up to the language's percentage (the Overview's
  * figure), previews and lists show open work first with names and pictures
  * read live, survive Shopify failing, and translating a category starts one
- * job per type behind the plan, consent, provider and queue gates.
+ * job per type behind the plan, consent, provider and queue gates. The
+ * languages list (its loader called as a function, the session stood in)
+ * tells a counted language without texts from one not counted yet.
  */
 import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import type { LoaderFunctionArgs } from "react-router";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCoverageReport, runCoveragePage, type CoverageDeps, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
 import { loadCoverageSummary } from "../../app/.server/coverage/summary";
@@ -28,11 +31,17 @@ import { saveDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
+import { emptyCounts } from "../../app/lib/coverage-rules";
 import { headlineByLocale } from "../../app/lib/coverage-view";
 import { CATEGORY_IDS, ITEM_STATES, type CategoryId } from "../../app/lib/language-categories";
+import { loader as languagesLoader } from "../../app/routes/app.languages";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FAKE_AZURE_KEY } from "../support/engine-fixtures";
 import { FakeShopifyStore } from "../support/fake-store";
+
+// The languages list's session: its loader reads the store and shop from it (the pages' functions take them directly).
+const session = vi.hoisted(() => ({ admin: null as unknown, shop: null as unknown }));
+vi.mock("../../app/.server/shopify/require-shop", () => ({ requireShop: async () => session }));
 
 const app = new PrismaClient();
 const P = (n: number) => `gid://shopify/Product/${n}`;
@@ -306,6 +315,35 @@ describe("the language page", () => {
     const german = await loadLanguagePage(store.asAdmin(), shop, "de", app, available);
     expect(german).toMatchObject({ measured: true, scanning: true, canCount: false });
     expect(german.headline).not.toBeNull();
+  });
+});
+
+describe("the languages list", () => {
+  const list = () => languagesLoader({ request: new Request("https://linguva.test/app/languages"), params: {}, context: {} } as LoaderFunctionArgs);
+
+  it("gives a counted language without texts an empty figure (nothing to translate), and one not counted yet none", async () => {
+    // Every type read and none has a text: the count leaves no rows for German.
+    const store = new FakeShopifyStore(0);
+    store.locales = [...LOCALES];
+    const { shop } = await upsertInstalledShop({ shopDomain: `empty-${++n}.myshopify.com`, name: "Empty store" }, app);
+    await measure(store, shop.id, ["de"]);
+    Object.assign(session, { admin: store.asAdmin(), shop });
+    const data = await list();
+    // French and Arabic weren't counted: no figure, so their rows say so.
+    expect(data.figures).toEqual({ de: { complete: 0, total: 0, counts: emptyCounts() } });
+    // As the language's own page says it.
+    expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, available)).headline).toMatchObject({ complete: 0, total: 0 });
+  });
+
+  it("gives a counted language with texts the Overview's figure", async () => {
+    const { shop, store } = await outdoorShop();
+    Object.assign(session, { admin: store.asAdmin(), shop });
+    const german = headlineByLocale((await loadCoverageSummary(shop.id, app)).counts).get("de")!;
+    expect(german.total).toBeGreaterThan(0);
+    const { figures } = await list();
+    expect(figures.de).toEqual({ complete: german.complete, total: german.total, counts: german.counts });
+    // Arabic (hidden) was counted too; French wasn't.
+    expect(Object.keys(figures).sort()).toEqual(["ar", "de"]);
   });
 });
 

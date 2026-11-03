@@ -42,9 +42,9 @@ export const en = {
   "resources.bulk.review": "Results wait in Review until you approve them.",
   "resources.bulk.scopeLabel": "What to translate",
   "resources.bulk.scopeAll": "All fields",
-  "resources.bulk.scopeSeo": "Only search engine listings (SEO title and description)",
+  "resources.bulk.scopeSeo": "Only texts for Google (Google title and Google description)",
   "resources.bulk.overwrite": "Also replace outdated translations that a person wrote or approved",
-  "resources.bulk.attachedDetails": 'Checks every {singular}, so the job takes longer. Not used for "Only search engine listings".',
+  "resources.bulk.attachedDetails": 'Reads every {singular} one by one, so the job takes longer. Not used for "Only texts for Google".',
   "resources.bulk.submit": "Translate all into {language}",
 
   "resources.empty.heading": "No {plural} yet",
@@ -95,10 +95,10 @@ export const de: Translation<typeof en> = {
   "resources.bulk.review": "Die Ergebnisse warten unter „Prüfen“, bis du sie freigibst.",
   "resources.bulk.scopeLabel": "Was übersetzt wird",
   "resources.bulk.scopeAll": "Alle Felder",
-  "resources.bulk.scopeSeo": "Nur Suchmaschinen-Einträge (SEO-Titel und SEO-Beschreibung)",
+  "resources.bulk.scopeSeo": "Nur Texte für Google (Google-Titel und Google-Beschreibung)",
   "resources.bulk.overwrite": "Auch veraltete Übersetzungen ersetzen, die eine Person geschrieben oder freigegeben hat",
   "resources.bulk.attachedDetails":
-    "Prüft jeden Eintrag vom Typ „{singular}“, daher dauert der Auftrag länger. Gilt nicht für „Nur Suchmaschinen-Einträge“.",
+    "Liest jeden Eintrag vom Typ „{singular}“ einzeln, daher dauert der Auftrag länger. Gilt nicht für „Nur Texte für Google“.",
   "resources.bulk.submit": "Alle in {language} übersetzen",
 
   "resources.empty.heading": "Noch keine {plural}",
@@ -149,10 +149,10 @@ export const fr: Translation<typeof en> = {
   "resources.bulk.review": "Les résultats restent en attente dans Révision jusqu'à ce que vous les approuviez.",
   "resources.bulk.scopeLabel": "Champs à traduire",
   "resources.bulk.scopeAll": "Tous les champs",
-  "resources.bulk.scopeSeo": "Uniquement le référencement (titre et description SEO)",
+  "resources.bulk.scopeSeo": "Uniquement les textes pour Google (titre et description pour Google)",
   "resources.bulk.overwrite": "Remplacer aussi les traductions obsolètes rédigées ou approuvées par une personne",
   "resources.bulk.attachedDetails":
-    "Vérifie chaque élément de type « {singular} », la tâche prend donc plus de temps. Ne s'applique pas à « Uniquement le référencement ».",
+    "Lit chaque élément de type « {singular} » un par un, la tâche prend donc plus de temps. Ne s'applique pas à « Uniquement les textes pour Google ».",
   "resources.bulk.submit": "Tout traduire : {language}",
 
   "resources.empty.heading": "La liste des {plural} est encore vide",
@@ -204,10 +204,10 @@ export const es: Translation<typeof en> = {
   "resources.bulk.review": "Los resultados esperan en Revisión hasta que los apruebes.",
   "resources.bulk.scopeLabel": "Qué traducir",
   "resources.bulk.scopeAll": "Todos los campos",
-  "resources.bulk.scopeSeo": "Solo listados en buscadores (título y descripción SEO)",
+  "resources.bulk.scopeSeo": "Solo textos para Google (título y descripción para Google)",
   "resources.bulk.overwrite": "Reemplazar también las traducciones desactualizadas que una persona escribió o aprobó",
   "resources.bulk.attachedDetails":
-    'Revisa cada elemento de tipo "{singular}", por lo que la tarea tarda más. No se aplica a "Solo listados en buscadores".',
+    'Lee cada elemento de tipo "{singular}" uno por uno, por lo que la tarea tarda más. No se aplica a "Solo textos para Google".',
   "resources.bulk.submit": "Traducir todo: {language}",
 
   "resources.empty.heading": "Todavía no hay {plural}",

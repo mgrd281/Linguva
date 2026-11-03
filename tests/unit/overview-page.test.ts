@@ -222,5 +222,18 @@ describe("the Overview page", () => {
     expect(html).toContain("1 Text auf Deutsch ist veraltet");
     expect(html).toContain('<span class="lv-btn__label">Deutsch öffnen</span>');
     expect(html).toContain('<h2 id="overview-next-heading" class="lv-h2">Als Nächstes</h2>');
+    expect(html).toContain("Fertig und live: 16 von 94 Texten – in allen Sprachen, die Kunden wählen können.");
+  });
+
+  it("names the language a row opens in French and Spanish, and the store's figure reads right for 1 done text", async () => {
+    // One done text of many: the label comes first, so no verb disagrees with it.
+    const one = { storeShare: { complete: 1, total: 94, counts: { ...counts, complete: 1 }, languages: 1, published: 1, payoff: 23 } };
+    const fr = await render(demo(one), "fr");
+    // The page it opens, not a display language ("Voir en allemand").
+    expect(section(fr, 'id="overview-next"')).toMatch(linkButton("/app/languages/de", "secondary", "Ouvrir la langue \\(allemand\\)"));
+    expect(fr).toContain("Terminés et en ligne : 1 sur 94 textes – dans toutes les langues que les clients peuvent choisir.");
+    const es = await render(demo(one), "es");
+    expect(section(es, 'id="overview-next"')).toMatch(linkButton("/app/languages/de", "secondary", "Abrir alemán"));
+    expect(es).toContain("Listos y publicados: 1 de 94 textos – en todos los idiomas que los clientes pueden elegir.");
   });
 });

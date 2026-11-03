@@ -28,10 +28,11 @@ import { getTranslationProvider } from "../.server/providers";
 import { getQueues } from "../.server/queue/client";
 import { getShopSettings, hasCurrentAiConsent, textConsentTokens } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
-import { settle, sizedImage } from "../.server/shopify/preview-images";
-import { PREVIEW_NODE_TYPES, readPreviewNodes } from "../.server/shopify/preview-nodes";
+import { sizedImage } from "../.server/shopify/preview-images";
+import { PREVIEW_NODE_TYPES } from "../.server/shopify/preview-nodes";
 import { fetchShopTimeZone } from "../.server/shopify/shop-time-zone";
 import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled } from "../.server/smart/config";
+import { exclusionNodes } from "../.server/smart/exclusion-names";
 import { loadSmartPanel, smartContext } from "../.server/smart/panel";
 import { requestSmartRun, retrySmartRun } from "../.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsProblem } from "../.server/smart/validate";
@@ -55,6 +56,7 @@ import {
   smartErrorText,
   SmartPreview,
   SmartStateBanner,
+  sameScope,
   smartToast,
   whenIn,
   type ChoiceTile,
@@ -112,13 +114,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const measured = await loadSmartPanel(shop.id, { ...context, shopTimeZone });
   // Access allowed since the last check: the next one reads the type, there is nothing left to do.
   const granted = measured.noAccess.length ? (await scopes.query()).granted : [];
-  // The exclusions' names and pictures, read live in one call (Linguva stores no merchant text); a row
-  // Shopify doesn't answer for keeps its kind and number.
+  // The exclusions' names and pictures, read live (Linguva stores no merchant text) and kept a minute, so the
+  // 10-second reloads while a check runs don't ask Shopify each time; a row Shopify doesn't answer for keeps
+  // its kind and number.
   const readable = measured.exclusions.filter((e) => PREVIEW_NODE_TYPES.has(e.resourceType)).map((e) => e.resourceGid);
   const nameLocale = measured.config?.locales[0] ?? targets[0]?.locale ?? locales.primary?.locale ?? "en";
-  const nodes = readable.length ? await settle(shop.id, "smart exclusions", readPreviewNodes(admin, readable, nameLocale)) : null;
+  const nodes = await exclusionNodes(admin, shop.id, readable, nameLocale);
   const exclusions = measured.exclusions.map((e) => {
-    const node = nodes?.get(e.resourceGid);
+    const node = nodes.get(e.resourceGid);
     return { ...e, title: node?.text ?? null, image: sizedImage(node?.image, 80) };
   });
   const panel = { ...measured, noAccess: stillWithoutAccess(measured.noAccess, granted), exclusions };
@@ -345,6 +348,8 @@ export default function SmartAutomatic() {
       publishMode: (config?.publishMode === "AUTO_PUBLISH" ? "AUTO_PUBLISH" : "DRAFT") as PublishMode,
       locales: config ? [...config.locales] : data.languages.filter((l) => l.inPlan).map((l) => l.locale),
       types: config ? [...config.resourceTypes] : [...SMART_DEFAULT_TYPES],
+      attached: Boolean(config?.includeAttached),
+      replace: config?.replaceOutdatedMachine !== false,
     }),
     [config, data.shopTimeZone, data.languages],
   );
@@ -369,8 +374,9 @@ export default function SmartAutomatic() {
   const [zone, setZone] = useState(initial.zone);
   // The zone's long list waits behind "Change": few stores need another zone than their own.
   const [zoneOpen, setZoneOpen] = useState(false);
-  // Before setup the summary shows the form's languages and content as the suggestion it turns on.
-  const [scope, setScope] = useState(() => ({ locales: initial.locales, types: initial.types }));
+  // Before setup the summary shows the form's languages and content as the suggestion it turns on; the whole
+  // scope says whether the first check's figure is still the form's.
+  const [scope, setScope] = useState(() => ({ locales: initial.locales, types: initial.types, attached: initial.attached, replace: initial.replace }));
   const [dirty, setDirty] = useState(false);
   // The answer to a save that was current when the form last changed: a refused field keeps its error until
   // the form changes after that answer (a new answer shows its errors again).
@@ -408,7 +414,13 @@ export default function SmartAutomatic() {
     if (form.querySelector('input[name="weekday"]')) setWeekdays(fd.getAll("weekday").map(Number).filter((n) => n >= 1 && n <= 7));
     const chosenZone = fd.get("timeZone");
     if (typeof chosenZone === "string" && chosenZone) setZone(chosenZone);
-    setScope({ locales: fd.getAll("locale").flatMap((v) => String(v).split(",")).map((v) => v.trim()).filter(Boolean), types: fd.getAll("type").map(String) });
+    setScope({
+      locales: fd.getAll("locale").flatMap((v) => String(v).split(",")).map((v) => v.trim()).filter(Boolean),
+      types: fd.getAll("type").map(String),
+      // As the server reads them when saving.
+      attached: fd.get("attached") === "on",
+      replace: fd.get("outdated") !== "keep",
+    });
     changed();
   };
   const discard = () => {
@@ -422,7 +434,7 @@ export default function SmartAutomatic() {
     setWeekdays([...initial.weekdays]);
     setZone(initial.zone);
     setZoneOpen(false);
-    setScope({ locales: initial.locales, types: initial.types });
+    setScope({ locales: initial.locales, types: initial.types, attached: initial.attached, replace: initial.replace });
     setDirty(false);
   };
   // "+ Add a time": a new check as far from the others as it can be, focused; × takes one away.
@@ -672,6 +684,10 @@ export default function SmartAutomatic() {
   const suggestion = notConfigured
     ? { mode, times: schedule.ok ? schedule.spec.times : [], weekdays: schedule.ok ? schedule.spec.weekdays : [], locales: scope.locales }
     : null;
+  // What the first check may use is counted on the server for the suggestion as loaded (the plan's languages, the
+  // usual content, every field, no images or custom fields, outdated ones replaced). For another scope in the form
+  // that figure isn't its own, so it isn't shown; a store never counted says so whatever the scope.
+  const firstCheckShown = sameScope({ ...scope, fieldsChosen }, initial) || (panel.estimate === null && !panel.remeasure);
   const checkNow = t("automatic.action.checkNow");
   const modeKey: Mode = (MODES as readonly string[]).includes(mode) ? (mode as Mode) : "daily";
   const modeTiles: ChoiceTile[] = MODES.map((m) => ({
@@ -857,7 +873,7 @@ export default function SmartAutomatic() {
                     <SmartPreview
                       data={{ ...panel, config: suggestion, publishing, types: scope.types, scheduleNote: liveProblem ? smartErrorText(i18n, liveProblem) : null }}
                       languageNames={languageNames}
-                      omit={["nextCheck", "lastSuccess", "lastRun"]}
+                      omit={["nextCheck", "lastSuccess", "lastRun", ...(firstCheckShown ? [] : (["waiting"] as const))]}
                       now={data.now}
                       shopZone={shopZone}
                       firstCheck
@@ -892,7 +908,8 @@ export default function SmartAutomatic() {
                   </ul>
                   {earlier.length ? (
                     <Disclosure summary={t("automatic.activity.more", { count: earlier.length })}>
-                      <ul aria-label={t("automatic.activity.more", { count: earlier.length })} style={PLAIN_LIST}>
+                      {/* Named by what it holds, not by the fold's line that opens it. */}
+                      <ul aria-label={t("automatic.activity.earlier")} style={PLAIN_LIST}>
                         {earlier.map(runRow)}
                       </ul>
                     </Disclosure>

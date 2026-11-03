@@ -23,7 +23,8 @@ import { aiLanguageCoverage } from "../.server/providers/language-support";
 import { getShopSettings, textConsentTokens } from "../.server/settings/shop-settings";
 import { ENGINE_NAMES, engineOfToken, type EngineId } from "../lib/engines";
 import { chipName, chipOrder } from "../lib/content-language";
-import { headlineByLocale, measuredLocales } from "../lib/coverage-view";
+import { emptyCounts } from "../lib/coverage-rules";
+import { headlineByLocale, measuredLocales, tally } from "../lib/coverage-view";
 import { localeCountry } from "../lib/flags";
 import { languageList } from "../lib/name-lists";
 import { percentLabel } from "../components/Coverage";
@@ -58,8 +59,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     summary.locales
       .filter((l) => !l.primary && measured.has(l.locale))
       .map((l) => {
-        const figure = headline.get(l.locale);
-        return [l.locale, figure ? { complete: figure.complete, total: figure.total, counts: figure.counts } : null];
+        // A counted language without texts has no rows: its figure is empty ("Nothing to translate", as on its page), never "not counted".
+        const figure = headline.get(l.locale) ?? tally(emptyCounts());
+        return [l.locale, { complete: figure.complete, total: figure.total, counts: figure.counts }];
       }),
   );
   return { ...summary, ai, aiEngine, figures, showEngine: router, singleEngine: router ? null : (provider?.id ?? null) };

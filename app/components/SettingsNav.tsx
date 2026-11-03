@@ -5,14 +5,15 @@
  * row above the section, the current one framed in blue (`aria-current`);
  * narrower, four in a row; on a phone three in a row, each opening its
  * section alone. Every tile is a link to `?section=<key>` (React Router: no
- * reload, and the page's data isn't loaded again). Above them the status
- * row: all set up, or the one thing that needs the merchant with its fix.
+ * reload, and the page's data isn't loaded again); a click on the current
+ * one stays. Above them the status row: all set up, or the one thing that
+ * needs the merchant with its fix.
  *
  * Styles in app/styles/ui.css (.lv-tile, .lv-status). The wide and the
  * narrow form switch by the page's container (Breadcrumbs `touch` does the
  * same), so only one of them is displayed, read and focusable.
  */
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router";
 import type { IconName } from "../lib/icons";
 import { IconSquare, StateBadge, type SettingState, type Tint } from "./SettingsParts";
@@ -38,6 +39,14 @@ export interface SectionEntry {
   tone?: "warning" | "critical" | null;
 }
 
+/**
+ * A click on the current tile stays: a link to the same address would load the page's data again. With a
+ * modifier key the browser still opens it (a new tab or window), as it does every other tile.
+ */
+function stay(event: MouseEvent<HTMLAnchorElement>) {
+  if (!(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) event.preventDefault();
+}
+
 function Tile({ entry, current }: { entry: SectionEntry; current: boolean }) {
   // A name with soft hyphens is shown as it breaks and read as the word itself.
   const split = entry.tileName !== undefined && entry.tileName !== entry.name;
@@ -47,7 +56,7 @@ function Tile({ entry, current }: { entry: SectionEntry; current: boolean }) {
       className="lv-tile"
       data-section={entry.key}
       {...(entry.tone ? { "data-tone": entry.tone } : {})}
-      {...(current ? { "aria-current": "page" as const } : {})}
+      {...(current ? { "aria-current": "page" as const, onClick: stay } : {})}
     >
       <IconSquare icon={entry.icon} tint={entry.tint} />
       {split ? <span className="lv-sr">{entry.name}</span> : null}

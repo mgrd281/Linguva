@@ -9,9 +9,14 @@
  * page after a downgrade, pause and resume, Check now, forged requests,
  * German texts, accessibility and the phone layout.
  */
+import { randomUUID } from "node:crypto";
+import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
 import { UI_ENV, UI_SHOPS, type UiShopKey } from "./fixtures/shops";
-import { SMART_REQUESTED_BY } from "../../app/lib/smart-auto";
+import { findShopByDomain } from "../../app/.server/tenancy/shop-service";
+import { withTenant } from "../../app/.server/tenancy/with-tenant";
+import { SMART_DEFAULT_TYPES, SMART_REQUESTED_BY } from "../../app/lib/smart-auto";
+import { testEnv } from "../support/env";
 import { clickSaveBarButton, expectAccessible, expectNoHorizontalScroll, expectToast, openApp, saveBarShown, sessionToken, setWorkerRunning } from "./helpers";
 import { stoppedJob } from "./stopped-jobs";
 
@@ -29,6 +34,68 @@ const post = async (page: Page, shop: UiShopKey, path: string, form: Record<stri
   expect(response.ok()).toBe(true);
   return response.text();
 };
+
+/** Skipped checks of days long past, as the schedule leaves them; `remove()` takes them away again (the store is shared). */
+async function pastChecks(shop: UiShopKey, count: number) {
+  const db = new PrismaClient({ datasources: { db: { url: testEnv.DATABASE_URL } } });
+  const owner = new PrismaClient({ datasources: { db: { url: testEnv.MIGRATION_DATABASE_URL } } });
+  const shopId = (await findShopByDomain(UI_SHOPS[shop].domain, db))!.id;
+  const ids = Array.from({ length: count }, () => randomUUID());
+  const day = 86_400_000;
+  await withTenant(
+    shopId,
+    (tx) =>
+      tx.smartAutoRun.createMany({
+        data: ids.map((id, i) => {
+          const at = new Date(Date.now() - (30 + i) * day);
+          return { id, shopId, trigger: "SCHEDULED" as const, occurrenceAt: at, status: "SKIPPED" as const, errorCode: "PAUSED", locales: ["de"], resourceTypes: ["PRODUCT"], fieldGroups: [], createdAt: at, finishedAt: at };
+        }),
+      }),
+    db,
+  );
+  return {
+    async remove() {
+      try {
+        await owner.$transaction([owner.$executeRaw`SELECT set_config('app.shop_id', ${shopId}, true)`, owner.$executeRaw`DELETE FROM "SmartAutoRun" WHERE "id" = ANY(${ids}::uuid[])`]);
+      } finally {
+        await Promise.all([db.$disconnect(), owner.$disconnect()]);
+      }
+    },
+  };
+}
+
+/**
+ * Counted for the smart schedule's suggestion (every language and the usual content read in full, `chars`
+ * characters of German product titles missing); `remove()` makes the store uncounted again (it is shared).
+ */
+async function counted(shop: UiShopKey, chars: number) {
+  const db = new PrismaClient({ datasources: { db: { url: testEnv.DATABASE_URL } } });
+  const owner = new PrismaClient({ datasources: { db: { url: testEnv.MIGRATION_DATABASE_URL } } });
+  const shopId = (await findShopByDomain(UI_SHOPS[shop].domain, db))!.id;
+  const locales = UI_SHOPS[shop].locales.filter((l) => !l.primary).map((l) => l.locale);
+  await withTenant(
+    shopId,
+    async (tx) => {
+      await tx.coverageSegment.createMany({ data: locales.flatMap((locale) => SMART_DEFAULT_TYPES.map((resourceType) => ({ shopId, locale, resourceType, status: "SCANNED" as const, scannedAt: new Date() }))) });
+      await tx.coverageCount.create({ data: { shopId, locale: locales[0]!, resourceType: "PRODUCT", fieldGroup: "title", state: "missing", count: 1, chars } });
+    },
+    db,
+  );
+  return {
+    async remove() {
+      try {
+        // The store was never counted: all it has is this.
+        await owner.$transaction([
+          owner.$executeRaw`SELECT set_config('app.shop_id', ${shopId}, true)`,
+          owner.$executeRaw`DELETE FROM "CoverageCount" WHERE "shopId" = ${shopId}::uuid`,
+          owner.$executeRaw`DELETE FROM "CoverageSegment" WHERE "shopId" = ${shopId}::uuid`,
+        ]);
+      } finally {
+        await Promise.all([db.$disconnect(), owner.$disconnect()]);
+      }
+    },
+  };
+}
 
 test("Settings shows the smart schedule as the current way changes are translated, with real values @responsive", async ({ page }) => {
   // The sections' tiles (a grid on a phone, a row above the section on a wide page): the way changes are translated.
@@ -207,6 +274,25 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   await expectNoHorizontalScroll(page);
 });
 
+test("before setup, the first check's figure is the suggestion's only: other content in the form hides it, Discard brings it back", async ({ page }) => {
+  const store = await counted("businessEdit", 1234);
+  try {
+    await openApp(page, "businessEdit", "/app/settings/automatic");
+    const status = page.locator("#smart-status");
+    const figure = status.getByText(/^At most 1,234 AI characters/);
+    await expect(figure).toBeVisible();
+    // Menus weren't counted: "At most" would be wrong for them, so no figure is said.
+    await page.locator("#smart-scope").getByRole("checkbox", { name: "Menus", exact: true }).check();
+    await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
+    await expect(status.getByText("At the first check")).toHaveCount(0);
+    // Discard: the suggestion as it was counted, with its figure.
+    await clickSaveBarButton(page, "smart-auto-save-bar", 1);
+    await expect(figure).toBeVisible();
+  } finally {
+    await store.remove();
+  }
+});
+
 test("setting it up in one trip: the suggestions, then saved and turned on together", async ({ page }) => {
   await openApp(page, "businessEdit", "/app/settings/automatic");
   const status = page.locator("#smart-status");
@@ -217,6 +303,14 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await expect(status.getByText(/^Every day at 3:00\sAM$/)).toBeVisible();
   await expect(status.getByText("Products, Collections, Pages, Blog posts, and Blogs")).toBeVisible();
   await expect(status.getByText("At the first check")).toBeVisible();
+  // A figure is only the suggestion's (the test before); a store never counted says so whatever the form holds.
+  const menus = page.locator("#smart-scope").getByRole("checkbox", { name: "Menus", exact: true });
+  await menus.check();
+  // Read by the form (its save bar shows), and still said.
+  await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
+  await expect(status.getByText("At the first check")).toBeVisible();
+  await expect(status.getByRole("link", { name: "Count store" })).toBeVisible();
+  await menus.uncheck();
   // "Adjust" goes to the form's first card.
   await status.getByRole("button", { name: "Adjust", exact: true }).click();
   await expect(page.locator("#smart-schedule-heading")).toBeFocused();
@@ -337,6 +431,23 @@ test("pause, resume and Check now", async ({ page }) => {
   await expectToast(page, /^Check (started|queued)/);
   // The check shows in the activity (no worker runs in the UI tests: it stays queued or running).
   await expect(page.locator("#smart-activity").getByText("Started by you")).toBeVisible();
+});
+
+test("earlier checks fold behind one line that says what it does; the list it opens is named by what it holds", async ({ page }) => {
+  const checks = await pastChecks("businessPause", 4);
+  try {
+    await openApp(page, "businessPause", "/app/settings/automatic");
+    const activity = page.locator("#smart-activity");
+    await expect(activity.getByRole("list", { name: "Recent checks", exact: true }).getByRole("listitem")).toHaveCount(3);
+    const fold = activity.locator("details summary");
+    await expect(fold).toHaveText(/^Show \d+ earlier checks?$/);
+    await fold.click();
+    // Not named again by the fold's line (a screen reader heard "Show 2 earlier checks, list").
+    await expect(activity.getByRole("list", { name: "Earlier checks", exact: true })).toBeVisible();
+    await expect(activity.getByRole("list", { name: /^Show/ })).toHaveCount(0);
+  } finally {
+    await checks.remove();
+  }
 });
 
 test("forged requests: a lower plan can't save, and forged values are refused with nothing written", async ({ page }) => {

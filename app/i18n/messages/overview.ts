@@ -229,8 +229,8 @@ export const de: Translation<typeof en> = {
 
   "overview.store.label": "Dein Shop",
   "overview.store.heading": { one: "Dein Shop in {count} weiteren Sprache", other: "Dein Shop in {count} weiteren Sprachen" },
-  "overview.store.figure": "{complete} von {total} Texten sind fertig und live – in allen Sprachen, die Kunden wählen können.",
-  "overview.store.figureSome": "{complete} von {total} Texten sind fertig und live – in den {count} von {published} Sprachen, die schon gezählt sind.",
+  "overview.store.figure": "Fertig und live: {complete} von {total} Texten – in allen Sprachen, die Kunden wählen können.",
+  "overview.store.figureSome": "Fertig und live: {complete} von {total} Texten – in den {count} von {published} Sprachen, die schon gezählt sind.",
   "overview.store.notCountedHelp": "Die Prozente erscheinen, sobald dein Shop einmal gezählt ist.",
   "overview.store.noLanguage": "Noch keine weitere Sprache",
   "overview.store.onlyPrimary": "Dein Shop hat nur seine Originalsprache ({primary}).",
@@ -411,8 +411,8 @@ export const fr: Translation<typeof en> = {
 
   "overview.store.label": "Votre boutique",
   "overview.store.heading": { one: "Votre boutique en {count} autre langue", other: "Votre boutique en {count} autres langues" },
-  "overview.store.figure": "{complete} textes sur {total} sont terminés et en ligne – dans toutes les langues que les clients peuvent choisir.",
-  "overview.store.figureSome": "{complete} textes sur {total} sont terminés et en ligne – dans les {count} langues sur {published} déjà comptées.",
+  "overview.store.figure": "Terminés et en ligne : {complete} sur {total} textes – dans toutes les langues que les clients peuvent choisir.",
+  "overview.store.figureSome": "Terminés et en ligne : {complete} sur {total} textes – dans les {count} langues sur {published} déjà comptées.",
   "overview.store.notCountedHelp": "Les pourcentages s'affichent une fois votre boutique comptée.",
   "overview.store.noLanguage": "Pas encore d'autre langue",
   "overview.store.onlyPrimary": "Votre boutique n'a que sa langue d'origine ({primary}).",
@@ -470,7 +470,7 @@ export const fr: Translation<typeof en> = {
   "overview.next.access.detail": "Les contenus sans accès ne sont ni comptés ni traduits. Autorisez l'accès pour les inclure ; l'autorisation est en lecture seule.",
   "overview.next.access.coverage": "Voir le détail de la couverture",
 
-  "overview.attention.open": "Voir en {language}",
+  "overview.attention.open": "Ouvrir la langue ({language})",
   "overview.attention.outdated": { one: "{count} texte en {languages} est obsolète", other: "{count} textes en {languages} sont obsolètes" },
   "overview.attention.failed": { one: "{count} texte n'a pas pu être traduit en {languages}", other: "{count} textes n'ont pas pu être traduits en {languages}" },
   "overview.attention.failedDetail": "Ouvrez la langue pour réessayer.",
@@ -594,8 +594,8 @@ export const es: Translation<typeof en> = {
 
   "overview.store.label": "Tu tienda",
   "overview.store.heading": { one: "Tu tienda en {count} idioma más", other: "Tu tienda en {count} idiomas más" },
-  "overview.store.figure": "{complete} de {total} textos están listos y publicados – en todos los idiomas que los clientes pueden elegir.",
-  "overview.store.figureSome": "{complete} de {total} textos están listos y publicados – en los {count} de {published} idiomas ya contados.",
+  "overview.store.figure": "Listos y publicados: {complete} de {total} textos – en todos los idiomas que los clientes pueden elegir.",
+  "overview.store.figureSome": "Listos y publicados: {complete} de {total} textos – en los {count} de {published} idiomas ya contados.",
   "overview.store.notCountedHelp": "Los porcentajes aparecen en cuanto tu tienda se haya contado.",
   "overview.store.noLanguage": "Todavía no hay otro idioma",
   "overview.store.onlyPrimary": "Tu tienda solo tiene su idioma original ({primary}).",
@@ -652,7 +652,7 @@ export const es: Translation<typeof en> = {
   "overview.next.access.detail": "El contenido sin acceso no se cuenta ni se traduce. Permite el acceso para incluirlo; el permiso es solo de lectura.",
   "overview.next.access.coverage": "Ver el detalle de la cobertura",
 
-  "overview.attention.open": "Ver en {language}",
+  "overview.attention.open": "Abrir {language}",
   "overview.attention.outdated": { one: "{count} texto en {languages} está desactualizado", other: "{count} textos en {languages} están desactualizados" },
   "overview.attention.failed": { one: "{count} texto no se pudo traducir al {languages}", other: "{count} textos no se pudieron traducir al {languages}" },
   "overview.attention.failedDetail": "Abre el idioma para volver a intentarlo.",

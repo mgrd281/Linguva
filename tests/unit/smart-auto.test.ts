@@ -7,7 +7,7 @@ import { createElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { normaliseSmartSettings, type SmartSettingsContext, type SmartSettingsInput } from "../../app/.server/smart/validate";
-import { BudgetMeter, budgetMeter, ChoiceTiles, DayToggles, failedAction, shortWeekday, SmartPreview, SmartStateBanner, whenIn } from "../../app/components/SmartAutoCard";
+import { BudgetMeter, budgetMeter, ChoiceTiles, DayToggles, failedAction, sameScope, shortWeekday, SmartPreview, SmartStateBanner, whenIn } from "../../app/components/SmartAutoCard";
 import { APP_LOCALES, translator, type AppLocale } from "../../app/i18n/i18n";
 import { I18nProvider } from "../../app/i18n/react";
 import { PLANS } from "../../app/lib/plans";
@@ -324,6 +324,13 @@ describe("the smart page's choices", () => {
     expect(markup).toContain('<span class="lv-smart-day__face">Mo</span>');
     expect(markup).toContain('<legend class="lv-smart-days__legend">Tage</legend>');
   });
+
+  it("for outdated translations never end a line in “KI-” in German: a narrow tile keeps the compound whole", () => {
+    const { t } = translator("de");
+    const lines = [t("automatic.outdated.replace.details"), t("automatic.outdated.keep.details", { outdated: t("coverage.state.outdated") })];
+    for (const line of lines) expect(line).not.toContain("KI-");
+    expect(lines[0]).toContain("KI‑Übersetzungen");
+  });
 });
 
 describe("the smart page's words for alt text and custom fields", () => {
@@ -410,5 +417,26 @@ describe("the summary before setup", () => {
     expect(markup).toContain('<s-text tone="caution">Checks need to be at least an hour apart.</s-text>');
     expect(markup).toContain("Not counted yet");
     expect(markup).toContain(">Count store</s-link>");
+  });
+
+  it("knows the scope the first check's figure was counted for, and no other", () => {
+    const suggested = { locales: ["de", "fr"], types: ["PRODUCT", "COLLECTION"], fieldsChosen: false, attached: false, replace: true };
+    // The form's lists come in its own order.
+    expect(sameScope({ ...suggested, locales: ["fr", "de"], types: ["COLLECTION", "PRODUCT"] }, suggested)).toBe(true);
+    // Any other languages or content, images and custom fields too, outdated ones kept, or only chosen fields.
+    for (const other of [
+      { locales: ["de"] },
+      { locales: ["de", "fr", "es"] },
+      { types: ["PRODUCT"] },
+      { types: ["PRODUCT", "COLLECTION", "MENU"] },
+      { types: ["PRODUCT", "MENU"] },
+      { attached: true },
+      { replace: false },
+      { fieldsChosen: true },
+    ]) {
+      expect(sameScope({ ...suggested, ...other }, suggested), JSON.stringify(other)).toBe(false);
+    }
+    // Chosen fields aren't compared one by one: never the same, not even as each other.
+    expect(sameScope({ ...suggested, fieldsChosen: true }, { ...suggested, fieldsChosen: true })).toBe(false);
   });
 });

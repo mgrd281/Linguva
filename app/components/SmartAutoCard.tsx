@@ -199,6 +199,29 @@ function Fact({ icon, label, children }: { icon: IconName; label: string; childr
 
 type PreviewFact = "languages" | "schedule" | "content" | "nextCheck" | "lastSuccess" | "lastRun" | "publishing" | "waiting";
 
+/** What a check translates, as far as the characters it may use depend on it. */
+export interface SmartScope {
+  locales: readonly string[];
+  types: readonly string[];
+  /** Only chosen fields; else every field but web addresses. */
+  fieldsChosen: boolean;
+  /** Also image descriptions and custom fields. */
+  attached: boolean;
+  /** Outdated translations are translated again. */
+  replace: boolean;
+}
+
+/**
+ * Whether a figure counted for one scope is the other's: the same languages
+ * and content in any order, and the same choices for images and custom
+ * fields and for outdated translations. Chosen fields aren't compared one by
+ * one, so a scope with them is never the same.
+ */
+export function sameScope(a: SmartScope, b: SmartScope): boolean {
+  const same = (x: readonly string[], y: readonly string[]) => new Set(x).size === new Set(y).size && x.every((v) => y.includes(v));
+  return same(a.locales, b.locales) && same(a.types, b.types) && !a.fieldsChosen && !b.fieldsChosen && a.attached === b.attached && a.replace === b.replace;
+}
+
 /**
  * The preview: what it does, from real values (no promises the data can't
  * back). The smart page's summary card names the schedule, the next check

@@ -160,6 +160,8 @@ test("an area Linguva can't read says so, with the way to allow it (Content's ca
   await expect(page.getByRole("heading", { level: 1, name: "Store & checkout in German" })).toBeVisible();
   const hero = page.locator(labelled("Progress: Store & checkout"));
   await expect(hero.getByRole("img", { name: "No access" })).toBeVisible();
+  // Policies have a permission to ask for: the step says to allow it (without one it would name what no app may read).
+  await expect(hero.getByText("Allow access to Store & checkout", { exact: true })).toBeVisible();
   await expect(hero.locator('[data-button][href="/app/content?lang=de#content-access"]')).toHaveText("Allow access");
   await expectAccessible(page);
 });

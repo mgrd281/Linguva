@@ -9,7 +9,7 @@ import { refreshCoverageOverlays } from "../coverage/items";
 import { finishSmartRunIfDone } from "../smart/finish";
 import { withTenant, type TenantTx } from "../tenancy/with-tenant";
 import { displayZone } from "../../i18n/i18n";
-import { ITEM_PERMANENT_CODES, retryHelps } from "../../lib/job-view";
+import { ITEM_PERMANENT_CODES, NEEDS_YOU_CODES, retryHelps } from "../../lib/job-view";
 import { ATTACHED_TYPES } from "../../lib/review-areas";
 import { wallClock, zonedInstant } from "../../lib/schedule";
 import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
@@ -425,13 +425,18 @@ export async function listJobsPage(shopId: string, filter: JobPageFilter = {}, c
   );
 }
 
-/** The figures of the tabs (with the filters, without a status): history = everything not active (tab All's pages). */
+/**
+ * The figures of the tabs (with the filters, without a status): history = everything not active (tab
+ * All's pages); problemsNeedYou = the problems that need the merchant (a completed job's failed items, or
+ * a stop whose cause needs them: NEEDS_YOU_CODES), so the Problems tile's dot is critical only then.
+ */
 export interface JobCounts {
   all: number;
   active: number;
   queued: number;
   history: number;
   problems: number;
+  problemsNeedYou: number;
   completed: number;
   cancelled: number;
 }
@@ -439,6 +444,7 @@ export interface JobCounts {
 /** Every tab's count in one statement, with the list's filters (status left out). */
 export async function jobCounts(shopId: string, filter: JobListFilter = {}, now: Date = filter.now ?? new Date(), client: PrismaClient = defaultClient): Promise<JobCounts> {
   const where = Prisma.join(filterConditions(shopId, filter, now), " AND ");
+  const needsYou = Prisma.sql`(j."status" = 'COMPLETED' OR j."errorCode" = ANY(${[...NEEDS_YOU_CODES]}::text[]))`;
   const [row] = await withTenant(
     shopId,
     (tx) =>
@@ -449,12 +455,13 @@ export async function jobCounts(shopId: string, filter: JobListFilter = {}, now:
                count(*) FILTER (WHERE j."status" = 'PENDING')::int AS "queued",
                count(*) FILTER (WHERE j."status" = 'COMPLETED')::int AS "completed",
                count(*) FILTER (WHERE j."status" = 'CANCELLED')::int AS "cancelled",
-               count(*) FILTER (WHERE ${problemSql(now)})::int AS "problems"
+               count(*) FILTER (WHERE ${problemSql(now)})::int AS "problems",
+               count(*) FILTER (WHERE ${problemSql(now)} AND ${needsYou})::int AS "problemsNeedYou"
         FROM "TranslationJob" j
         WHERE ${where}`,
     client,
   );
-  const counts = row ?? { all: 0, active: 0, queued: 0, completed: 0, cancelled: 0, problems: 0 };
+  const counts = row ?? { all: 0, active: 0, queued: 0, completed: 0, cancelled: 0, problems: 0, problemsNeedYou: 0 };
   return { ...counts, history: counts.all - counts.active };
 }
 

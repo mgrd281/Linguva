@@ -13,7 +13,8 @@
  * - loading (a spinner in the words' place, disabled, aria-busy),
  *   disabled (a link without its address), icon (a Polaris icon before
  *   the words), accessibilityLabel (starts with the visible words, WCAG
- *   2.5.3), inlineSize "fill" (the full width).
+ *   2.5.3), inlineSize "fill" (the full width), expanded and controls (a
+ *   button that shows or hides a part of the page).
  *
  * Buttons that Polaris places itself stay s-button: a dialog's actions
  * (slot primary-action / secondary-actions), a banner's, the page's.
@@ -44,6 +45,9 @@ export interface ButtonProps {
   inlineSize?: "auto" | "fill" | "fit-content";
   /** A short word shown on hover (an icon-only button: its accessible name stays accessibilityLabel). */
   tooltip?: string;
+  /** A button that shows or hides a part of the page: whether it is shown (aria-expanded), and its id (aria-controls). */
+  expanded?: boolean;
+  controls?: string;
   id?: string;
   lang?: string;
   /** Hooks for the page's own scripts and the tests (data-review-approve, …): passed on as they are. */
@@ -90,6 +94,8 @@ export function Button(props: ButtonProps) {
     accessibilityLabel,
     inlineSize,
     tooltip,
+    expanded,
+    controls,
     id,
     lang,
   } = props;
@@ -131,6 +137,8 @@ export function Button(props: ButtonProps) {
     ...(commandFor ? { "data-command-for": commandFor } : {}),
     ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}),
     ...(loading ? { "aria-busy": true as const } : {}),
+    ...(expanded !== undefined ? { "aria-expanded": expanded } : {}),
+    ...(controls ? { "aria-controls": controls } : {}),
   };
   const click = (event: MouseEvent<HTMLElement>) => {
     if (inactive) {

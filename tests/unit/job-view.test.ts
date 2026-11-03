@@ -27,17 +27,22 @@ import {
   attentionVerdict,
   AUTO_STARTER,
   cancelBody,
+  clearedHref,
   clusters,
   dayGroups,
   DISPLAY_ORDER,
   displayParts,
   ENDED_WELL,
   filterCount,
+  filterHref,
+  finishTarget,
   FIX_GROUPS,
   heroModel,
   isItemPermanentCode,
   ITEM_PERMANENT_CODES,
+  itemName,
   JOB_BY,
+  JOB_FILTERS,
   JOB_PERIODS,
   JOB_TABS,
   JOB_TYPES,
@@ -51,15 +56,19 @@ import {
   jobText,
   jobValue,
   legend,
+  NEEDS_YOU_CODES,
   outcomeGroups,
   parseJobsQuery,
   problemsHeading,
+  RESUME_CHECK,
+  resumeCheckDelay,
   retryHelps,
   ringFigure,
   ringFigureSize,
   rowCounts,
   rowMeta,
   rowResult,
+  startedText,
   STATE_WORD,
   STOP_FIX_HREF,
   STOP_GROUPS,
@@ -212,6 +221,16 @@ describe("stopGroup and stopLook", () => {
   it("reach every group from some code", () => {
     const reached = new Set([...Object.keys(EXPECTED), null].map((code) => stopGroup(code)));
     expect([...reached].sort()).toEqual([...STOP_GROUPS].sort());
+  });
+
+  it("list every code whose stop needs the merchant, an own key's with each engine, for the server's count", () => {
+    for (const code of NEEDS_YOU_CODES) expect(stopLook(stopGroup(code)), code).toBe("needsYou");
+    for (const [code, [, look]] of Object.entries(EXPECTED)) expect(NEEDS_YOU_CODES.includes(code), code).toBe(look === "needsYou");
+    for (const engine of ENGINE_IDS) {
+      expect(NEEDS_YOU_CODES).toContain(ownKeyStopCode("quota", engine));
+      expect(NEEDS_YOU_CODES).toContain(ownKeyStopCode("auth", engine));
+    }
+    expect(new Set(NEEDS_YOU_CODES).size).toBe(NEEDS_YOU_CODES.length);
   });
 });
 
@@ -548,7 +567,7 @@ describe("jobState", () => {
   it("names each state with one word", () => {
     const de = translator("de");
     const words = (["queued", "finding", "running", "done", "doneLook", "doneErrors", "stopped", "stoppedWait", "cancelled"] as JobState[]).map((s) => de.t(STATE_WORD[s]));
-    expect(words).toEqual(["In der Warteschlange", "Inhalte werden gesucht", "Wird übersetzt", "Abgeschlossen", "Abgeschlossen mit Lücken", "Abgeschlossen mit Fehlern", "Angehalten", "Angehalten", "Abgebrochen"]);
+    expect(words).toEqual(["In der Warteschlange", "Inhalte werden gesucht", "Wird übersetzt", "Abgeschlossen", "Abgeschlossen, teils unvollständig", "Abgeschlossen mit Fehlern", "Angehalten", "Angehalten", "Abgebrochen"]);
   });
 });
 
@@ -704,7 +723,7 @@ describe("a row's result", () => {
     expect(queued).toMatchObject({ live: true, subdued: true, bar: null });
     if (queued.live) expect(say("de", queued.text)).toBe("Startet gleich");
     const waiting = rowResult(rowOf(J03), { workerDown: true });
-    if (waiting.live) expect(say("en", waiting.text)).toBe("Waiting for background jobs");
+    if (waiting.live) expect(say("en", waiting.text)).toBe("Starts with a delay");
   });
 
   it("says what came out, failed before incomplete before waiting or translated, at most two", () => {
@@ -731,11 +750,11 @@ describe("a row's result", () => {
   });
 
   it("names a stop's cause in its look, and what a cancelled job finished", () => {
-    expect(fragments("de", rowOf(J10, R10))).toEqual(["failed/critical: Übersetzungsdienst nicht erlaubt"]);
+    expect(fragments("de", rowOf(J10, R10))).toEqual(["paused/critical: Übersetzungsdienst nicht erlaubt"]);
     expect(fragments("de", rowOf(J10, R10, true))).toEqual(["paused/warning: Übersetzungsdienst nicht erlaubt"]);
     expect(fragments("de", rowOf(job({ status: "FAILED", errorCode: "DAILY_LIMIT" })))).toEqual(["paused/warning: Tageskontingent aufgebraucht"]);
-    expect(fragments("de", rowOf(job({ status: "FAILED", errorCode: "OWN_KEY_QUOTA_AZURE" })))).toEqual(["failed/critical: Microsoft Azure-Schlüssel aufgebraucht"]);
-    expect(fragments("en", rowOf(job({ status: "FAILED", errorCode: "OWN_KEY_AUTH_GOOGLE" })))).toEqual(["failed/critical: Google Cloud refused your key"]);
+    expect(fragments("de", rowOf(job({ status: "FAILED", errorCode: "OWN_KEY_QUOTA_AZURE" })))).toEqual(["paused/critical: Microsoft Azure-Schlüssel aufgebraucht"]);
+    expect(fragments("en", rowOf(job({ status: "FAILED", errorCode: "OWN_KEY_AUTH_GOOGLE" })))).toEqual(["paused/critical: Google Cloud refused your key"]);
     expect(fragments("de", rowOf(J05, R05))).toEqual(["skipped/subdued: 120 von 410 fertig"]);
     expect(fragments("en", rowOf(J12, R12))).toEqual(["skipped/subdued: 2 of 5 done"]);
   });
@@ -763,7 +782,7 @@ describe("a row's meta", () => {
     expect(meta("de", rowOf(J10, R10))).toBe("Angehalten · 9 von 24 fertig · von dir");
     expect(meta("de", rowOf(J11))).toBe("Abgeschlossen · 6 Seiten · von dir");
     expect(meta("de", rowOf(J12, R12))).toBe("Abgebrochen: automatische Übersetzung aus");
-    expect(meta("de", rowOf(J16, R16))).toBe("Abgeschlossen mit Lücken · 12 Seiten · von dir");
+    expect(meta("de", rowOf(J16, R16))).toBe("Abgeschlossen, teils unvollständig · 12 Seiten · von dir");
   });
 
   it("says who started it: you, your team, nobody for older jobs; automatic and smart jobs carry a badge instead", () => {
@@ -982,8 +1001,8 @@ describe("heroModel", () => {
     // Background jobs don't run: the title and line say so in caution, the strip stays the cancel foot.
     const down = hero(J03, rowCounts(J03), NONE, null, { workerDown: true });
     expect(down.mark).toEqual({ kind: "clock", tone: "caution" });
-    expect(say("de", down.title)).toBe("Wartet auf Hintergrundaufträge");
-    expect(lines("de", down)).toEqual(["subdued: Sie laufen gerade nicht. Linguva startet sie von selbst neu; der Auftrag beginnt dann von allein."]);
+    expect(say("de", down.title)).toBe("Startet verzögert");
+    expect(lines("de", down)).toEqual(["subdued: Linguvas Hintergrunddienst läuft gerade nicht. Er startet von selbst neu, dann beginnt der Auftrag von allein."]);
     expect(strip("en", down)).toBe("foot: No longer needed? Cancel job");
   });
 
@@ -1036,7 +1055,7 @@ describe("heroModel", () => {
     expect(steps("de", model)).toEqual([
       ["review", "140 Übersetzungen freigeben", "Für 52 Produkte. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt prüfen → /app/review?job=${id(7)}`, "primary"],
       ["retry", "1 Produkt noch einmal versuchen", "Ein neuer Versuch klappt meistens, etwa wenn ein Dienst kurz nicht erreichbar war.", "retry: Wiederholen", "-"],
-      ["finish", "4 Produkte im Editor fertig übersetzen", "Ein neuer Versuch hilft hier nicht; das geht nur im Editor.", "Ansehen → #problems-heading", "-"],
+      ["finish", "4 Produkte im Editor fertig übersetzen", "Ein neuer Versuch hilft hier nicht; das geht nur im Editor.", "Einträge zeigen → #problems-heading", "-"],
     ]);
     expect(steps("en", model).map((s) => s[1])).toEqual(["Approve 140 translations", "Try 1 product again", "Finish 4 products in the editor"]);
     const problems = problemsHeading(J07, groups)!;
@@ -1049,6 +1068,43 @@ describe("heroModel", () => {
       ["retry", "primary"],
       ["finish", "-"],
     ]);
+  });
+
+  it("opens the editor of the one item only the editor finishes, and shows the list for several (French · Pages)", () => {
+    const pages = job({ id: id(17), resourceType: "PAGE", publishMode: "AUTO_PUBLISH", totalItems: 4, succeededItems: 2, skippedItems: 1, failedItems: 1 });
+    const outcomes: ItemOutcomes[] = [
+      { status: "SUCCEEDED", code: null, count: 2 },
+      { status: "SKIPPED", code: "UP_TO_DATE", count: 1 },
+      { status: "FAILED", code: "PROVIDER_REJECTED", count: 1 },
+    ];
+    const groups = outcomeGroups(outcomes, 0, pages);
+    const editor = "/app/pages/4?lang=fr";
+    const href = finishTarget(pages, [{ status: "FAILED", errorCode: "PROVIDER_REJECTED", href: editor }]);
+    expect(href).toBe(editor);
+    const one = hero(pages, groups, NONE, null, { finishHref: href });
+    expect(steps("de", one)).toEqual([["finish", "1 Seite im Editor fertig übersetzen", "Ein neuer Versuch hilft hier nicht; das geht nur im Editor.", `Im Editor öffnen → ${editor}`, "primary"]]);
+    expect(steps("en", one)[0]![3]).toBe(`Open in editor → ${editor}`);
+    expect(one.panel!.steps[0]!.action).toMatchObject({ kind: "link", icon: "edit" });
+    // Without its editor's address (Shopify's list too long, or no editor for the kind): the list below.
+    expect(steps("en", hero(pages, groups, NONE, null, { finishHref: null }))[0]![3]).toBe("Show items → #problems-heading");
+    // Several: never one item's editor, even with an address.
+    expect(steps("en", hero(J07, outcomeGroups(O07, 0, J07), NONE, null, { finishHref: editor }))[1]![3]).toBe("Show items → #problems-heading");
+  });
+
+  it("finds that one item by outcomeGroups' rule: incomplete or failed for good, never what a new try or the schedule fixes", () => {
+    const item = (status: string, errorCode: string | null, href: string | null = `/app/products/${status}-${errorCode}`) => ({ status, errorCode, href });
+    const own = job();
+    const smart = job({ requestedBy: SMART, smartRunId: "run-9" });
+    for (const one of [item("SUCCEEDED", "PARTIAL"), item("SKIPPED", "ALL_FIELDS_REJECTED"), item("SKIPPED", "SOURCE_CHANGED"), item("FAILED", "PROVIDER_REJECTED"), item("FAILED", "TOO_LARGE_FOR_LIMIT")]) {
+      expect(finishTarget(own, [one, item("DEAD", "PROVIDER_UNAVAILABLE"), item("FAILED", "PROVIDER_UNAVAILABLE")]), `${one.status} ${one.errorCode}`).toBe(one.href);
+    }
+    // A smart job's changed original is its schedule's; a new try fixes DEAD and retryable failures.
+    expect(finishTarget(smart, [item("SKIPPED", "SOURCE_CHANGED")])).toBeNull();
+    expect(finishTarget(own, [item("DEAD", "PROVIDER_REJECTED"), item("FAILED", null)])).toBeNull();
+    // Two, none, or one without an editor.
+    expect(finishTarget(own, [item("SUCCEEDED", "PARTIAL"), item("FAILED", "PROVIDER_REJECTED")])).toBeNull();
+    expect(finishTarget(own, [])).toBeNull();
+    expect(finishTarget(own, [item("FAILED", "PROVIDER_REJECTED", null)])).toBeNull();
   });
 
   it("shows a finished job whose translations wait, one that is live, and one with nothing to do", () => {
@@ -1065,7 +1121,8 @@ describe("heroModel", () => {
     expect(nothing.mark).toMatchObject({ kind: "ring", caption: "jobs.ring.upToDate" });
     expect(label("de", nothing)).toBe("100 % aktuell. Produkte: alle 23 waren schon aktuell. 23 waren schon aktuell.");
     expect(say("de", nothing.title)).toBe("Produkte: alle 23 waren schon aktuell");
-    expect(lines("de", nothing)).toEqual(["subdued: Linguva hat 23 Produkte geprüft. Kein Text, den Kunden sehen, war neu – es gab nichts zu übersetzen."]);
+    expect(lines("de", nothing)).toEqual(["subdued: Linguva hat 23 Produkte durchgesehen. Alles war schon übersetzt und aktuell."]);
+    expect(lines("en", nothing)).toEqual(["subdued: Linguva looked through 23 products. Everything was already translated and up to date."]);
     expect(strip("de", nothing)).toBe(
       "done: Nichts zu tun. Wenn etwas deine Hilfe braucht, siehst du es unter „Aufträge“. [Automatische Übersetzung einstellen → /app/settings?section=changes]",
     );
@@ -1093,7 +1150,9 @@ describe("heroModel", () => {
     // Back from Settings: the cause is fixed, the stop goes on with one click.
     const fixed = hero(J10, groups, P10, { fixed: true });
     expect(fixed.state).toBe("stoppedWait");
-    expect(lines("de", fixed)[0]).toBe("warning: Die Ursache ist behoben – setze den Auftrag fort.");
+    expect(lines("de", fixed)[0]).toBe("success: Die Ursache ist behoben – setze den Auftrag fort.");
+    // Good news in its own look, the stop's reason with the stop's pause.
+    expect([fixed.lines[0]!.icon, model.lines[0]!.icon]).toEqual(["check-circle", "pause-circle"]);
     expect(steps("en", fixed).map((s) => [s[0], s[1], s[4]])).toEqual([
       ["resume", "You can resume now", "primary"],
       ["review", "Approve 27 translations", "-"],
@@ -1122,7 +1181,8 @@ describe("heroModel", () => {
     // The Own key plan has no allowance to upsell.
     expect(hero(stopped, groups, pending, { fixed: false, resumesAt: "2026-11-03T00:00:00.000Z" }, { ownKeyPlan: true }).panel?.foot).toBeNull();
     const back = hero(stopped, groups, pending, { fixed: true });
-    expect(lines("de", back)[0]).toBe("warning: Das KI‑Kontingent ist wieder da – setze den Auftrag fort.");
+    expect(lines("de", back)[0]).toBe("success: Das KI‑Kontingent ist wieder da – setze den Auftrag fort.");
+    expect(back.lines[0]!.icon).toBe("check-circle");
     expect(steps("de", back).map((s) => [s[0], s[1], s[4]])).toEqual([
       ["resume", "Du kannst jetzt fortsetzen", "primary"],
       ["review", "54 Übersetzungen freigeben", "-"],
@@ -1251,9 +1311,39 @@ describe("problemsHeading and cancelBody", () => {
   });
 });
 
+describe("a job's header, its unnamed items and the wait for the reset", () => {
+  it("says when a job started, and when a queued one was created", () => {
+    expect(say("de", startedText(J01))).toBe(`Gestartet heute um ${clock("de", today("14:02"))}`);
+    expect(say("de", startedText(J03))).toBe(`Erstellt heute um ${clock("de", today("14:08"))}`);
+    expect(say("en", startedText(J03))).toBe(`Created today at ${clock("en", today("14:08"))}`);
+    expect(say("en", startedText(J10))).toBe(`Started yesterday at ${clock("en", yesterday("22:01"))}`);
+  });
+
+  it("names an item Shopify gave no name by its kind and number, else as an item", () => {
+    expect(itemName(translator("de"), "PAGE", "4")).toBe("Seite 4");
+    expect(itemName(translator("de"), "PRODUCT", "12")).toBe("Produkt 12");
+    expect(itemName(translator("en"), "PAGE", "4")).toBe("Page 4");
+    // French and Spanish nouns start a name with a capital.
+    expect(itemName(translator("fr"), "PRODUCT", "12")).toBe("Produit 12");
+    expect(itemName(translator("es"), "COLLECTION", "3")).toBe("Colección 3");
+    expect(itemName(translator("de"), "SOMETHING_NEW", "7")).toBe("Eintrag 7");
+  });
+
+  it("looks again a few seconds after the reset, then every minute, never longer than a timer can wait", () => {
+    const reset = "2026-11-03T00:00:00.000Z";
+    const at = Date.parse(reset);
+    expect(resumeCheckDelay(reset, at - 60 * 60_000)).toBe(60 * 60_000 + RESUME_CHECK.margin);
+    expect(resumeCheckDelay(reset, at)).toBe(RESUME_CHECK.margin);
+    expect(resumeCheckDelay(reset, at + RESUME_CHECK.margin)).toBe(RESUME_CHECK.every);
+    expect(resumeCheckDelay(reset, at + 10 * 60_000)).toBe(RESUME_CHECK.every);
+    expect(resumeCheckDelay("not a date", at)).toBe(RESUME_CHECK.every);
+    expect(resumeCheckDelay("2027-12-01T00:00:00.000Z", at)).toBe(RESUME_CHECK.longest);
+  });
+});
+
 describe("visibleStats", () => {
   const stats = (locale: AppLocale, j: JobFields, ownKeyPlan = false) =>
-    visibleStats(j, { now: NOW, ownKeyPlan })?.map((stat) => stat && [say(locale, stat.name), valueText(locale, stat.value), stat.note && say(locale, stat.note)]) ?? null;
+    visibleStats(j, { now: NOW, ownKeyPlan })?.map((stat) => [stat.icon, say(locale, stat.name), valueText(locale, stat.value), stat.note && say(locale, stat.note)]) ?? null;
 
   it("shows no strip for a job that sent and saved nothing (queued, finding, nothing to do)", () => {
     expect(stats("de", J03)).toBeNull();
@@ -1261,24 +1351,30 @@ describe("visibleStats", () => {
     expect(stats("de", J13)).toBeNull();
   });
 
-  it("shows how long a running job has run, its AI characters and what was saved", () => {
+  it("shows how long a running job has run, its AI characters and what was saved, each with its feature's icon", () => {
     expect(stats("de", J01)).toEqual([
-      ["Läuft seit", "7 Minuten", null],
-      ["KI‑Zeichen", "96.540", "aus deinem Monatskontingent"],
-      ["Gespart", "18.200 Zeichen", "aus früheren Übersetzungen"],
+      ["clock", "Läuft seit", "7 Minuten", null],
+      ["gauge", "KI‑Zeichen", "96.540", "aus deinem Monatskontingent"],
+      ["database", "Gespart", "18.200 Zeichen", "aus früheren Übersetzungen"],
     ]);
   });
 
   it("calls the time Dauer once the job is over, and the span of the changes for automatic jobs", () => {
-    expect(stats("de", J07)![0]).toEqual(["Dauer", "9 Minuten", null]);
-    expect(stats("de", J10)![0]).toEqual(["Dauer", "13 Minuten", null]);
-    expect(stats("de", J12)![0]).toEqual(["Zeitraum", `${clock("de", yesterday("09:12"))}–${clock("de", yesterday("09:21"))}`, null]);
+    expect(stats("de", J07)![0]).toEqual(["clock", "Dauer", "9 Minuten", null]);
+    expect(stats("de", J10)![0]).toEqual(["clock", "Dauer", "13 Minuten", null]);
+    expect(stats("de", J12)![0]).toEqual(["clock", "Zeitraum", `${clock("de", yesterday("09:12"))}–${clock("de", yesterday("09:21"))}`, null]);
   });
 
-  it("leaves out a stat whose value is 0, keeping its column; the Own key plan counts its own characters", () => {
+  it("leaves out a stat whose value is 0, so the others share the row; the Own key plan counts its own characters", () => {
     const ownKey = job({ status: "FAILED", errorCode: "OWN_KEY_AUTH_DEEPL", charsBilled: 3_120, startedAt: today("11:40"), finishedAt: today("11:41") });
-    expect(stats("de", ownKey, true)).toEqual([["Dauer", "1 Minute", null], ["Zeichen über deine Schlüssel", "3.120", "zahlst du deinem Dienst"], null]);
-    expect(stats("en", job({ charsSaved: 1, finishedAt: today("14:02") }))).toEqual([["Duration", "less than a minute", null], null, ["Saved", "1 character", "from earlier translations"]]);
+    expect(stats("de", ownKey, true)).toEqual([
+      ["clock", "Dauer", "1 Minute", null],
+      ["gauge", "Zeichen über deine Schlüssel", "3.120", "zahlst du deinem Dienst"],
+    ]);
+    expect(stats("en", job({ charsSaved: 1, finishedAt: today("14:02") }))).toEqual([
+      ["clock", "Duration", "less than a minute", null],
+      ["database", "Saved", "1 character", "from earlier translations"],
+    ]);
   });
 });
 
@@ -1365,6 +1461,10 @@ describe("attentionVerdict", () => {
       "clock/info: 12 Übersetzungen warten auf deine Freigabe · Kunden sehen sie erst, wenn du sie freigibst. → /app/review",
     ]);
     expect(say("de", model.heading)).toBe("5 Aufträge wurden angehalten");
+    // One more: "it", not "them all".
+    const two = attentionVerdict(input({ stops: [S10, stopOf({ ...J10, id: id(46) }, R10, { fixed: false })], stopCount: 2 }))!;
+    expect(rows("de", two)).toEqual(["pause-circle/critical: 1 weiterer angehaltener Auftrag · Du findest ihn unter „Probleme“. → /app/jobs?status=problems"]);
+    expect(rows("en", two)).toEqual(["pause-circle/critical: 1 more stopped job · You'll find it under “Problems”. → /app/jobs?status=problems"]);
   });
 
   it("names failed items when nothing stopped, promising a new try only when it helps every one", () => {
@@ -1385,7 +1485,7 @@ describe("attentionVerdict", () => {
     expect(delayed).toMatchObject({ verdict: "delayed", mark: { icon: "clock", tone: "caution" } });
     expect([say("de", delayed.heading), sayAll("de", delayed.text)]).toEqual([
       "Die Übersetzung startet verzögert",
-      "Hintergrundaufträge laufen gerade nicht. Linguva startet sie von selbst neu; deine Aufträge laufen dann von allein los.",
+      "Linguvas Hintergrunddienst läuft gerade nicht. Er startet von selbst neu, dann laufen deine Aufträge von allein los.",
     ]);
     expect(delayed.rows.map((row) => row.href)).toEqual(["/app/review"]);
     const review = attentionVerdict(input({ drafts: 826 }))!;
@@ -1457,6 +1557,22 @@ describe("the list's address", () => {
     const full = `/app/jobs?status=problems&lang=it&area=images&by=you&since=7d&q=Jacke&after=${ID.toLowerCase()}&p=2`;
     const parsed = parseJobsQuery(full);
     expect(jobsHref(parsed, { after: parsed.after, page: parsed.page })).toBe(full);
+  });
+
+  it("applies a select's choice at once: its value by the address's own rules, from the first page", () => {
+    const query = parseJobsQuery(`/app/jobs?status=problems&type=LINK&q=Jacke&after=${ID}&p=2`);
+    expect(filterHref(query, "lang", "fr")).toBe("/app/jobs?status=problems&lang=fr&type=LINK&q=Jacke");
+    // An area replaces the legacy type; "All …" (ALL) and an unknown value set no filter.
+    expect(filterHref(query, "area", "navigation")).toBe("/app/jobs?status=problems&area=navigation&q=Jacke");
+    expect(filterHref(query, "area", "all")).toBe("/app/jobs?status=problems&q=Jacke");
+    expect(filterHref(parseJobsQuery("/app/jobs?lang=fr"), "lang", "all")).toBe("/app/jobs");
+    expect(filterHref(query, "by", "robot")).toBe("/app/jobs?status=problems&type=LINK&q=Jacke");
+    expect(filterHref(query, "by", "smart")).toBe("/app/jobs?status=problems&type=LINK&by=smart&q=Jacke");
+    expect(filterHref(query, "since", "7d")).toBe("/app/jobs?status=problems&type=LINK&since=7d&q=Jacke");
+    expect([...JOB_FILTERS]).toEqual(["lang", "area", "by", "since"]);
+    // "Filter zurücksetzen": the tab's first page, without filters or the search.
+    expect(clearedHref(parseJobsQuery(`/app/jobs?status=completed&lang=fr&area=pages&by=you&since=today&q=Jacke&after=${ID}&p=3`))).toBe("/app/jobs?status=completed");
+    expect(clearedHref(parseJobsQuery("/app/jobs?lang=fr"))).toBe("/app/jobs");
   });
 
   it("counts the filters set and hands them to the server", () => {

@@ -1,12 +1,16 @@
 /**
- * A job's page (Redesign 3): the hero by state (the ring with what ended
- * well, or a queued job's clock), its title and lines, the legend, and the
- * Next panel with at most three numbered steps (app/lib/job-view.ts
- * heroModel); the stats; the items that need the merchant; the results in
- * detail with the CSV report and the support reference. While the job runs
- * (or a cancelled job's items still settle) the page refreshes itself.
+ * A job's page (Redesign 3, Redesign 4): the hero by state (the ring with
+ * what ended well, or a queued job's clock), its title and lines, the
+ * legend, and the Next panel with at most three numbered steps
+ * (app/lib/job-view.ts heroModel); then the items that need the merchant
+ * (the hero's "listed below" and its button lead there), the stats with
+ * their icons, and the results in detail: the table folded, the CSV report
+ * and the support reference always in view. While the job runs (or a
+ * cancelled job's items still settle) the page refreshes itself; a stop that
+ * waits for the daily reset is looked at again once it has passed. Styles in
+ * app/styles/ui.css (the Jobs section).
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -21,24 +25,31 @@ import { PREVIEW_NODE_TYPES, readPreviewNodes } from "../.server/shopify/preview
 import { requireShop } from "../.server/shopify/require-shop";
 import { nextCheck } from "../.server/smart/config";
 import { showToast } from "../components/app-bridge";
+import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { STATE_COLOURS } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
+import { IconSquare } from "../components/IconSquare";
 import { GroupIcon, groupSegments, Legend, OriginBadges, StateBadge, useJobWords, type JobWords } from "../components/jobs/JobLooks";
 import { TintMark } from "../components/jobs/TintMark";
-import { BIG_HEADING, Breadcrumbs, NumberedSteps, PLAIN_LIST } from "../components/LanguageLayout";
+import { Breadcrumbs, NumberedSteps } from "../components/LanguageLayout";
 import { InlineNotice, More } from "../components/SettingsParts";
+import { Strong } from "../components/Type";
 import { itemOutcome, jobErrorMessage } from "../i18n/labels";
 import { reliableEta } from "../lib/eta";
 import {
   cancelBody,
+  finishTarget,
   heroModel,
+  itemName,
   jobKindLabel,
   jobName,
   jobOrigin,
   outcomeGroups,
   problemsHeading,
+  resumeCheckDelay,
   ringFigure,
+  startedText,
   stopGroup,
   visibleStats,
   type HeroLine,
@@ -52,12 +63,13 @@ import {
 } from "../lib/job-view";
 import { usesOwnKeys } from "../lib/plans";
 import { editorPathFor, numericId } from "../lib/resource-kinds";
-import { Button } from "../components/Button";
 
 const ACTIVE = new Set(["PENDING", "DISCOVERING", "RUNNING"]);
 const CANCEL_MODAL = "job-cancel";
 const POLL_MS = 3000;
 const SMART_BUDGETS = new Set(["SMART_BUDGET_DAILY", "SMART_BUDGET_MONTHLY"]);
+/** The report's address stays usable this long after its download starts. */
+const REPORT_URL_MS = 10_000;
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, shop, actorId } = await requireShop(request);
@@ -175,21 +187,24 @@ type Data = ReturnType<typeof useLoaderData<typeof loader>>;
 type ActionData = Awaited<ReturnType<typeof action>>;
 type Fetcher = ReturnType<typeof useFetcher<typeof action>>;
 
-// fetch() inside the embedded app carries the session token (App Bridge), a plain link wouldn't.
-async function downloadReport(jobId: string, locale: string) {
+/**
+ * The CSV report as a file (fetch() inside the embedded app carries the session token, a plain link
+ * wouldn't); false when it couldn't be loaded. Its address stays usable while the download starts.
+ */
+async function downloadReport(jobId: string, locale: string): Promise<boolean> {
   const response = await fetch(`/app/jobs/${jobId}/report?ui=${encodeURIComponent(locale)}`);
-  if (!response.ok) return;
+  if (!response.ok) return false;
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;
   link.download = `linguva-job-${jobId.slice(0, 8)}.csv`;
+  document.body.append(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), REPORT_URL_MS);
+  return true;
 }
 
-const STRONG = { fontWeight: 600 } as const;
-const HERO_TITLE = { margin: 0, fontSize: 16, lineHeight: "24px", fontWeight: 650 } as const;
-const STAT_VALUE = { display: "block", fontSize: 20, lineHeight: "28px", fontWeight: 700, fontVariantNumeric: "tabular-nums" } as const;
 const LIVE_DOT = { display: "inline-block", width: 8, height: 8, borderRadius: 4, background: STATE_COLOURS.complete, flex: "none" } as const;
 const THUMB = { width: 40, height: 40, borderRadius: 8, objectFit: "cover", flex: "none", display: "block" } as const;
 
@@ -204,11 +219,11 @@ function Header({ data, words, name }: { data: Data; words: JobWords; name: stri
         <Breadcrumbs i18n={words.i18n} trail={[{ href: "/app/jobs", label: t("jobs.detail.breadcrumb") }]} current={name} touch />
         <s-stack direction="block" gap="small-500">
           <s-stack direction="inline" gap="small-200" alignItems="center">
-            <h1 style={BIG_HEADING}>{name}</h1>
+            <h1 className="lv-h1">{name}</h1>
             <StateBadge state={heroState(data)} words={words} />
             <OriginBadges job={job} words={words} />
           </s-stack>
-          <s-text color="subdued">{[t("jobs.detail.startedAt", { when: words.i18n.at(job.startedAt ?? job.createdAt, data.now) }), by].filter(Boolean).join(" · ")}</s-text>
+          <s-text color="subdued">{[words.say(startedText(job)), by].filter(Boolean).join(" · ")}</s-text>
         </s-stack>
       </s-stack>
     </s-query-container>
@@ -229,6 +244,7 @@ function heroOf(data: Data): HeroModel {
     workerDown: data.workerDown,
     settling: data.settling,
     ownKeyPlan: data.ownKeyPlan,
+    finishHref: finishTarget(data.job, data.problems),
   });
 }
 
@@ -256,10 +272,10 @@ function Line({ line, words }: { line: HeroLine; words: JobWords }) {
       </s-stack>
     );
   }
-  if (line.tone) {
+  if (line.tone && line.icon) {
     return (
       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-        <s-icon type="pause-circle" tone={line.tone} size="small" />
+        <s-icon type={line.icon} tone={line.tone} size="small" />
         <s-text>{text}</s-text>
       </s-grid>
     );
@@ -274,7 +290,7 @@ function Figure({ hero, groups, words }: { hero: HeroModel; groups: JobGroups; w
       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="large" alignItems="center">
         <Mark hero={hero} groups={groups} words={words} />
         <s-stack direction="block" gap="small-300">
-          <h2 style={HERO_TITLE}>{words.say(hero.title)}</h2>
+          <h2 className="lv-h2">{words.say(hero.title)}</h2>
           {hero.lines.map((line, i) => (
             <Line key={i} line={line} words={words} />
           ))}
@@ -305,7 +321,7 @@ function stepAction(step: Step, words: JobWords, fetcher: Fetcher): ReactNode {
   switch (action.kind) {
     case "link":
       return (
-        <Button variant={variant} href={action.href}>
+        <Button variant={variant} href={action.href} {...(action.icon ? { icon: action.icon } : {})}>
           {words.say(action.label)}
         </Button>
       );
@@ -375,7 +391,7 @@ function Strip({ strip, words }: { strip: HeroStrip; words: JobWords }) {
       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
         {strip.icon === "done" ? <s-icon type="check-circle" tone="success" /> : <s-icon type="info" color="subdued" />}
         <s-stack direction="block" gap="small-500">
-          <strong style={STRONG}>{words.say(strip.title)}</strong>
+          <Strong>{words.say(strip.title)}</Strong>
           <s-text color="subdued">{words.say(strip.text)}</s-text>
         </s-stack>
       </s-grid>
@@ -388,26 +404,24 @@ function Strip({ strip, words }: { strip: HeroStrip; words: JobWords }) {
   );
 }
 
+/** The stats, each with its icon in a grey square; the ones there are share the row (two to a row on a phone). */
 function Stats({ data, words }: { data: Data; words: JobWords }) {
   const stats = visibleStats(data.job, { now: data.now, ownKeyPlan: data.ownKeyPlan });
   if (!stats) return null;
   return (
     <s-section accessibilityLabel={words.i18n.t("jobs.stats.label")}>
-      <s-query-container>
-        <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr 1fr, 1fr" gap="base">
-          {stats.map((stat, i) =>
-            stat ? (
-              <s-stack key={i} direction="block" gap="small-500">
-                <s-text color="subdued">{words.say(stat.name)}</s-text>
-                <span style={STAT_VALUE}>{words.value(stat.value)}</span>
-                {stat.note ? <s-text color="subdued">{words.say(stat.note)}</s-text> : null}
-              </s-stack>
-            ) : (
-              <span key={i} />
-            ),
-          )}
-        </s-grid>
-      </s-query-container>
+      <div className="lv-jobstats">
+        {stats.map((stat) => (
+          <div key={stat.name.key} className="lv-jobstats__item">
+            <IconSquare icon={stat.icon} size={36} />
+            <s-stack direction="block" gap="small-500">
+              <s-text color="subdued">{words.say(stat.name)}</s-text>
+              <span className="lv-jobstats__value">{words.value(stat.value)}</span>
+              {stat.note ? <span className="lv-caption">{words.say(stat.note)}</span> : null}
+            </s-stack>
+          </div>
+        ))}
+      </div>
     </s-section>
   );
 }
@@ -421,14 +435,14 @@ function Problems({ data, groups, words }: { data: Data; groups: JobGroups; word
     <s-section>
       <s-stack direction="block" gap="base">
         <s-stack direction="block" gap="small-500">
-          <h2 id="problems-heading" tabIndex={-1} style={{ ...HERO_TITLE, outline: "none" }}>
+          <h2 id="problems-heading" tabIndex={-1} className="lv-h2 lv-jobs-anchor">
             {words.say(head.heading)}
           </h2>
           <s-text color="subdued">{head.text.map(words.say).join(" ")}</s-text>
         </s-stack>
-        <ul aria-labelledby="problems-heading" style={{ ...PLAIN_LIST, display: "grid", gap: 2 }}>
+        <ul aria-labelledby="problems-heading" className="lv-jobs-rows">
           {data.problems.map((p) => {
-            const name = p.name ?? t("jobs.problems.unnamed", { id: p.number });
+            const name = p.name ?? itemName(words.i18n, data.job.resourceType, p.number);
             const outcome = itemOutcome(words.i18n, p.status, p.errorCode) || t("jobs.detail.failed.unknown");
             const failed = p.status === "FAILED" || p.status === "DEAD";
             const row = (
@@ -436,7 +450,7 @@ function Problems({ data, groups, words }: { data: Data; groups: JobGroups; word
                 <GroupIcon group={failed ? "failed" : "look"} />
                 {p.image ? <img src={p.image} alt="" style={THUMB} loading="lazy" /> : null}
                 <s-stack direction="block" gap="small-500">
-                  <span style={{ ...STRONG, overflowWrap: "anywhere" }}>{name}</span>
+                  <span className="lv-strong lv-jobs-name">{name}</span>
                   <s-text color="subdued">{[outcome, p.attempts > 1 ? t("jobs.problems.attempts", { count: p.attempts }) : null].filter(Boolean).join(" · ")}</s-text>
                 </s-stack>
                 {p.href ? <s-icon type="chevron-right" color="subdued" size="small" /> : <span />}
@@ -461,37 +475,93 @@ function Problems({ data, groups, words }: { data: Data; groups: JobGroups; word
   );
 }
 
-/** Every outcome by reason, the CSV report and the support reference, folded (the table is drawn once opened). */
+/** The CSV report: a spinner while it is built, an error toast when it couldn't be loaded. */
+function ReportButton({ data, words }: { data: Data; words: JobWords }) {
+  const { t, locale } = words.i18n;
+  const [loading, setLoading] = useState(false);
+  const download = async () => {
+    setLoading(true);
+    const ok = await downloadReport(data.job.id, locale).catch(() => false);
+    setLoading(false);
+    if (!ok) showToast(t("jobs.detail.reportFailed"), { isError: true });
+  };
+  return (
+    <Button icon="download" onClick={() => void download()} {...(loading ? { loading: true } : {})}>
+      {t("jobs.detail.outcomes.download")}
+    </Button>
+  );
+}
+
+/** Where a text's placeholder stands (never a character of a message). */
+const SLOT = "\u0001";
+
+/** The support reference (the start of the job's id, which the list's search finds too), with a copy button. */
+function Reference({ data, words }: { data: Data; words: JobWords }) {
+  const { t } = words.i18n;
+  const reference = data.job.id.slice(0, 8);
+  // The sentence around the reference, wherever the language puts it: the reference alone is what gets selected.
+  const [before = "", after = ""] = t("jobs.detail.reference", { id: SLOT }).split(SLOT);
+  const shown = useRef<HTMLSpanElement>(null);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(reference);
+      showToast(t("jobs.detail.reference.copied"));
+    } catch {
+      // The admin's frame may refuse the clipboard: the reference is selected, ready to copy.
+      const node = shown.current;
+      const selection = typeof window === "undefined" ? null : window.getSelection();
+      if (!node || !selection) return;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  };
+  return (
+    <span className="lv-jobreport__reference">
+      <s-text color="subdued">
+        {before}
+        <span ref={shown}>{reference}</span>
+        {after}
+      </s-text>
+      <Button variant="tertiary" icon="clipboard" accessibilityLabel={t("jobs.detail.reference.copy")} tooltip={t("jobs.detail.reference.copy")} onClick={() => void copy()} />
+    </span>
+  );
+}
+
+/** Every outcome by reason, folded (the table is drawn once opened); the CSV report and the support reference in view under it. */
 function Details({ data, words }: { data: Data; words: JobWords }) {
   const { t } = words.i18n;
   const kind = jobKindLabel(words.i18n, data.job.resourceType);
   const [open, setOpen] = useState(false);
   return (
     <s-section>
-      <More summary={t("jobs.detail.outcomes.heading")} onToggle={setOpen}>
-        {!open ? null : data.outcomes.length ? (
-          <s-table>
-            <s-table-header-row>
-              <s-table-header listSlot="primary">{t("jobs.report.reason")}</s-table-header>
-              <s-table-header format="numeric">{kind}</s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {data.outcomes.map((o) => (
-                <s-table-row key={`${o.status}:${o.code ?? ""}`}>
-                  <s-table-cell>{itemOutcome(words.i18n, o.status, o.code)}</s-table-cell>
-                  <s-table-cell>{words.i18n.number(o.count)}</s-table-cell>
-                </s-table-row>
-              ))}
-            </s-table-body>
-          </s-table>
-        ) : (
-          <s-text color="subdued">{t("jobs.detail.outcomes.empty")}</s-text>
-        )}
-        <s-stack direction="inline" gap="base" alignItems="center">
-          {data.outcomes.length ? <Button onClick={() => void downloadReport(data.job.id, words.i18n.locale)}>{t("jobs.detail.outcomes.download")}</Button> : null}
-          <s-text color="subdued">{t("jobs.detail.reference", { id: data.job.id })}</s-text>
-        </s-stack>
-      </More>
+      <s-stack direction="block" gap="small-200">
+        <More summary={t("jobs.detail.outcomes.heading")} onToggle={setOpen}>
+          {!open ? null : data.outcomes.length ? (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">{t("jobs.report.reason")}</s-table-header>
+                <s-table-header format="numeric">{kind}</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {data.outcomes.map((o) => (
+                  <s-table-row key={`${o.status}:${o.code ?? ""}`}>
+                    <s-table-cell>{itemOutcome(words.i18n, o.status, o.code)}</s-table-cell>
+                    <s-table-cell>{words.i18n.number(o.count)}</s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          ) : (
+            <s-text color="subdued">{t("jobs.detail.outcomes.empty")}</s-text>
+          )}
+        </More>
+        <div className="lv-jobreport">
+          {data.outcomes.length ? <ReportButton data={data} words={words} /> : null}
+          <Reference data={data} words={words} />
+        </div>
+      </s-stack>
     </s-section>
   );
 }
@@ -552,6 +622,29 @@ export default function JobDetail() {
     return () => clearInterval(timer);
   }, [live, revalidator]);
 
+  // A stop waiting for the daily reset: once it has passed, look again (the resume button then appears by
+  // itself), also when the page comes back into view.
+  const resetAt = hero.panel?.steps.some((step) => step.id === "wait") ? (data.stop?.resumesAt ?? null) : null;
+  useEffect(() => {
+    if (!resetAt) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const look = () => {
+      if (document.visibilityState === "visible" && Date.now() >= Date.parse(resetAt)) revalidator.revalidate();
+    };
+    const arm = () => {
+      timer = setTimeout(() => {
+        look();
+        arm();
+      }, resumeCheckDelay(resetAt, Date.now()));
+    };
+    arm();
+    document.addEventListener("visibilitychange", look);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", look);
+    };
+  }, [resetAt, revalidator]);
+
   // Confirmations: a toast for what happened; a busy or missing worker stays on the page.
   const result = fetcher.data;
   useEffect(() => {
@@ -584,8 +677,9 @@ export default function JobDetail() {
           </s-query-container>
         </s-section>
 
-        <Stats data={data} words={words} />
+        {/* What the hero says is "listed below" comes right after it. */}
         <Problems data={data} groups={groups} words={words} />
+        <Stats data={data} words={words} />
         <Details data={data} words={words} />
       </s-stack>
 

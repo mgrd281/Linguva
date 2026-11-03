@@ -170,14 +170,17 @@ describe("jobCounts and the problem rule", () => {
     const linkNew = await job(s.id, { status: "FAILED", errorCode: "PLAN_REQUIRED", resourceType: "LINK", targetLocale: "de", createdAt: ago(2 * DAY) });
     await job(s.id, { status: "PENDING", resourceType: "FILTER", targetLocale: "de", createdAt: ago(MIN) });
 
-    expect(await jobCounts(s.id, {}, NOW, app)).toEqual({ all: 15, active: 2, queued: 1, history: 13, completed: 4, cancelled: 1, problems: 6 });
+    // Problems that need the merchant: the engine's consent, the failed items, the two plan stops (not the limits that reset).
+    expect(await jobCounts(s.id, {}, NOW, app)).toEqual({ all: 15, active: 2, queued: 1, history: 13, completed: 4, cancelled: 1, problems: 6, problemsNeedYou: 4 });
     const problems = await listJobsPage(s.id, { status: "problems", now: NOW, take: 100 }, app);
     expect(ids(problems.jobs).sort()).toEqual(ids([stop, failed, edge, menu, linkOld, linkNew]).sort());
     // A day later the edge job has left the window.
-    expect((await jobCounts(s.id, {}, new Date(NOW.getTime() + DAY), app)).problems).toBe(5);
+    expect(await jobCounts(s.id, {}, new Date(NOW.getTime() + DAY), app)).toMatchObject({ problems: 5, problemsNeedYou: 4 });
     // With the list's filters (never the status).
-    expect(await jobCounts(s.id, { locale: "it", status: "cancelled" }, NOW, app)).toMatchObject({ all: 2, completed: 1, problems: 2 });
-    expect(await jobCounts(s.id, { types: ["MENU", "LINK", "FILTER"] }, NOW, app)).toEqual({ all: 5, active: 1, queued: 1, history: 4, completed: 0, cancelled: 1, problems: 3 });
+    expect(await jobCounts(s.id, { locale: "it", status: "cancelled" }, NOW, app)).toMatchObject({ all: 2, completed: 1, problems: 2, problemsNeedYou: 2 });
+    expect(await jobCounts(s.id, { types: ["MENU", "LINK", "FILTER"] }, NOW, app)).toEqual({ all: 5, active: 1, queued: 1, history: 4, completed: 0, cancelled: 1, problems: 3, problemsNeedYou: 2 });
+    // Only stops that wait for a reset: problems, none of them the merchant's.
+    expect(await jobCounts(s.id, { types: ["MENU", "SHOP"] }, NOW, app)).toMatchObject({ problems: 2, problemsNeedYou: 0 });
   });
 });
 

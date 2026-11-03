@@ -23,12 +23,13 @@ test("a job page explains every result and offers a report @responsive", async (
   // In the store's time zone (Europe/Berlin in the fixtures), so without "UTC".
   await expect(page.getByText(/^Started (today|yesterday|on .+) at \d{1,2}:\d{2}\s?[AP]M( · |$)/)).toBeVisible();
   await expect(page.getByText(/^Started .+UTC/)).toHaveCount(0);
-  await expect(results.getByText(/^Reference for support: [0-9a-f-]{36}$/)).toBeVisible();
+  // The reference and the report stay in view under the fold: the job id's start, as the list's search takes it.
+  await expect(page.getByText(/^Reference for support: [0-9a-f]{8}$/)).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
   const download = page.waitForEvent("download");
-  await results.locator("[data-button]", { hasText: "Download report (CSV)" }).click();
+  await page.locator("[data-button]", { hasText: "Download report (CSV)" }).click();
   const file = await (await download).path();
   const csv = await readFile(file!, "utf8");
   const [header, ...rows] = csv.replace(/^\uFEFF/, "").trim().split("\r\n");
@@ -45,7 +46,7 @@ test("the job report is German for a German admin user", async ({ page }) => {
   await expect(results.getByText("Als Entwurf zur Prüfung gespeichert")).toBeVisible();
   await expect(page.locator("s-page")).toHaveAttribute("heading", "Französisch · Produkte");
   const download = page.waitForEvent("download");
-  await results.locator("[data-button]", { hasText: "Bericht herunterladen (CSV)" }).click();
+  await page.locator("[data-button]", { hasText: "Bericht herunterladen (CSV)" }).click();
   const csv = await readFile((await (await download).path())!, "utf8");
   expect(csv.replace(/^\uFEFF/, "").split("\r\n")[0]).toBe("Nr.,Shopify-ID,Status,Grund-Code,Grund,Übersetzte Felder,Zurückgehaltene Felder,Versuche,Beendet (UTC),Referenz");
 });

@@ -85,7 +85,7 @@ import {
   type SettingState,
 } from "../components/SettingsParts";
 import { scheduleSummary, smartErrorText, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
-import { INTL_LOCALE, type I18n } from "../i18n/i18n";
+import { formatDayMonth, INTL_LOCALE, type I18n } from "../i18n/i18n";
 import { jobErrorMessage } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { basicState, changesMode, effectivePublishMode, smartState, type BasicState, type SmartState } from "../lib/automation-state";
@@ -775,6 +775,16 @@ function changesStatusTitle(view: ReturnType<typeof changesView>, i18n: I18n): s
 
 // ─── Plan and tools ───────────────────────────────────────────────────────────
 
+/**
+ * The day new AI characters come: a calendar month starts on the 1st at 0:00 UTC, so that day is said
+ * in UTC (a store west of UTC would read the evening before); a trial's end is a moment of the store's day.
+ */
+function resetDay(i18n: I18n, iso: string, now: string): string {
+  const date = new Date(iso);
+  const monthStart = date.getUTCDate() === 1 && date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
+  return monthStart ? formatDayMonth(i18n.locale, iso, now, "UTC") : i18n.dayMonth(iso, now);
+}
+
 /** The plan, this month's AI characters of its allowance and when new ones come (Own key: what went through the keys), and the way to the Plan page. */
 function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
   const { t } = i18n;
@@ -805,7 +815,7 @@ function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
             </s-stack>
           </s-grid>
           <ProgressBar value={usage.percent} label={t("settings.usage.progress")} tone={level === "exhausted" ? "critical" : level === "high" ? "warning" : "success"} />
-          <s-text color="subdued">{t("settings.usage.line", { used: i18n.number(data.used), limit: i18n.number(data.limit), date: i18n.dayMonth(data.resetsOn, data.now) })}</s-text>
+          <s-text color="subdued">{t("settings.usage.line", { used: i18n.number(data.used), limit: i18n.number(data.limit), date: resetDay(i18n, data.resetsOn, data.now) })}</s-text>
         </s-stack>
       )}
       <s-stack direction="inline">

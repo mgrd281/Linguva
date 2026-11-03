@@ -278,7 +278,68 @@ Texts: publishing's scope in plain words ("wenn Linguva viele Texte auf einmal �
 
 `app/styles/ui.css` starts with the app's tokens (`--lv-font`, text and border colours, `--lv-radius-card` 12 px, shadows, `--lv-focus`, the chosen look `--lv-selected-*`) and a type scale (`.lv-h1` 22/28/700, `.lv-h2` 17/24/650, `.lv-h3` 14/20/650, `.lv-strong` 600, `.lv-figure`, `.lv-figure-row`, `.lv-caption`), because Polaris' `s-text` has no size and draws `type="strong"` at the body weight. Shared components: `IconSquare` (the one icon square, tinted by place; `IconTile` draws it), `Strong`, `Disclosure`. Each area keeps its own rules in its section of `ui.css`.
 
-Status: **Implemented; Settings checked in CI's browser** (the `settings` and `settings-style` screenshots, desktop and phone). The other pages follow below as they are built.
+### Overview
+
+| Before | After | Why |
+|---|---|---|
+| The store card first, the next step under it (on a phone about 670 px down) | **Next first**: on the left on a desktop, on top on a phone; every card a native section with its edge (`CARD`) | The page's one primary button on the first screen |
+| Five heading styles, the most important section the smallest | One scale: `.lv-h1` for the page, `.lv-h2` for Next, Running now, the customers and the store card, `.lv-h3` for a step's title | Size follows importance |
+| Bare 20 px step icons, three of them pointing elsewhere (a gear for the AI permission, `connect` for a key, a dashed circle for translating) | Each step's icon in a tinted square, the icon of the place it opens: `shield-check-mark`, `key`, `language-translate`, `chart-donut` (count), `eye-check-mark` (approve), `globe` (countries), `lock` (access) | Recognition by picture; nothing looks disabled |
+| "Your store in 1 language" for English plus German | "Your store in 1 other language" / "Dein Shop in 1 weiteren Sprache" | The original isn't counted as a translation |
+| "Shop neu zählen" with the outdated state's `refresh` icon, top right, far from its date | "Übersetzungen neu zählen" with `chart-donut`, beside "Zuletzt gezählt" in the store card | Says what is counted, next to when |
+| "Ansehen", "… Auf Deutsch." | The language in the title ("1 Text auf Deutsch ist veraltet") and the button ("Deutsch öffnen") | Says where it leads |
+| Two looks for the Countries · Languages switch | `SegmentedButtons` (Segmented's pressed-button mode, `.lv-seg`) with `globe` and `language` | One segmented control app-wide |
+| After approving a plan: the Plan page, a dead end | `/app/welcome` lands on the Overview with the plan's success banner above Next (the Plan page only while Shopify doesn't report the plan active) | The first moment after paying leads on |
+| A country's language states as badges, badges without icons or grey words | One badge with its icon per state: Hidden (`hide`), Not offered (`disabled`), Not set up (`minus-circle`), Original (`check-circle`) | One look per state |
+
+### Content, a language's page, an area's list, Languages
+
+| Before | After | Why |
+|---|---|---|
+| Grey squares and grey icons for every area | Each area has its tint (`CATEGORIES`; image descriptions and extra details take their products' blue) in the shared icon square, on Content, the language page, the list's header and the steps | The same place has the same picture and colour everywhere |
+| The chosen language chip and filter a grey fill | The app's chip and pill with the chosen ring and tint (`.lv-lang`, `.lv-filter`); `aria-current` stays | One "chosen" look app-wide |
+| A lone tile beside empty space | Rows always full: one card full width, two or three side by side, four as two by two | No half-empty rows |
+| Image descriptions and extra details as their own step with "Ansehen" to a list without "Übersetzen" | Their open texts join their owner's step ("Produkte übersetzen – … dazu 3 Bildbeschreibungen"), whose Translate opens the dialog with "Auch Bildbeschreibungen und Zusatzinfos übersetzen" ticked | No dead end |
+| A gate (no permission, plan, key) turned every step into "Ansehen" with a grey line | The gate is a step with its own button: "KI-Übersetzung erlauben" (`?section=ai`), "Schlüssel hinzufügen" (`?section=keys`), "Tarife ansehen" | The fix is the next step |
+| Tier headings with filled 1/2/3 circles like the steps | Plain tier headings; steps carry an icon square instead of a number where the kind is clear | Numbers only where order matters |
+| "34 % übersetzt" beside drafts "von der KI übersetzt" | "34 % fertig" (the state word); the steps-to-live strip only while texts wait, with state icons and semibold titles, "2 · Du gibst frei" | One word, one meaning |
+| A small "Öffnen ›" on each list row; the name repeated in "Noch nicht auf Deutsch – Kunden sehen …" | The whole row opens the editor (a chevron at its end); the repeated line is gone | A bigger target, less text |
+| The trail always "Übersicht › …" | "Inhalte › Deutsch › Produkte" when opened from Content (`?from=content`) | Back leads where the merchant came from |
+| Languages as a technical table (code, role, "(RTL)") | One row per language like Content's chips: flag, visibility badge, bar and figure, the AI line, chevron; the main language first; a trail to Settings › Tools | Readable, one look with Content |
+
+Words: "Bildbeschreibung" everywhere for alt text, the list's kind words in the previews (no "Tarifgruppe", "Richtlinie"), "Theme" for the theme, plural forms ("1 von 1 Text ist fertig").
+
+### Review
+
+| Before | After | Why |
+|---|---|---|
+| A bare ✕ for rejecting (read as "close") | "✕ Ablehnen" in words on every width; on a phone "Bearbeiten" at the start, "Ablehnen" and "Freigeben" together at the end | Says what it does |
+| Questions answered with Polaris' dark-edged buttons | The in-card questions (reject, a new web address) answer with the app's buttons, with a spinner while the request runs | One button look |
+| "Diese Übersetzung ablehnen? Das lässt sich nicht rückgängig machen." | Says what rejecting does: nothing changes in the store, Linguva won't translate the text again by itself while the original stays the same | No fear of the unknown |
+| Approving a page with notes: one answer | A second answer: "Nur die 3 ohne Hinweis freigeben" | The safe, fast path |
+| Deciding a long page meant scrolling back up | A decision bar at the bottom while the strip is out of view (count and both buttons) | The decision where the merchant is |
+| "4 Übersetzungen auf dieser Seite" after deciding 2 of 6 | "Noch 4 von 6 offen" with a bar | Progress, not a stale count |
+| Tabs by name only, the chosen one a grey fill | Visible languages first, the chosen tab semibold, "versteckt" in words, 44 px, a swipe row on a phone, a select above six languages | As Content's chips |
+| A drawn tick for "Alles geprüft" | The green status row with one next step ("Deutsch weiter übersetzen") and the languages as tiles | As Settings' status row |
+
+Hints in plain words: "Zu kurz für Google (…)", "Wie im Original – nicht übersetzt", "Falsche Schrift für diese Sprache", "Gib eine Webadresse ein.".
+
+### Jobs
+
+| Before | After | Why |
+|---|---|---|
+| The four filters applied only after "Suchen" (React 18 never sends `onChange` for a web component) | Filters apply at once (`onInput`, deduped with `onChange`) | **Bug fixed** |
+| Tabs as words with a grey pill, cut on a phone ("Comple…") | Tabs as tiles: icon, figure, name; the chosen one framed in blue; five in a row, two rows on a phone; a dot on Problems only when one needs the merchant | The app's square buttons; nothing cut |
+| Search and four selects always open on a phone (the first job far down) | The selects fold behind "Filter (n)" on a narrow card | The list first |
+| A stopped job's page never refreshed; "Ansehen" as a finished job's one button | It checks again after the stop's time and when the tab returns; "Im Editor öffnen" goes straight to the editor when one item is left | Promises kept, one step |
+| Stats between the problems and the hero; CSV and reference inside a closed fold | Hero → what needs you → stats (each with its icon) → details; the CSV button and an 8-character support reference with "Copy" outside the fold | The page in the order it speaks |
+| A silent CSV download | A spinner, an error toast on failure | Feedback |
+| "Hintergrundaufträge", "Wer gestartet hat", "mit Lücken" / "unvollständig" | "Linguvas Hintergrunddienst" (app-wide), "Gestartet von", "Zeitraum", "Abgeschlossen, teils unvollständig" | One word per thing |
+| A green check for a store without jobs | "Noch keine Aufträge" with what to do and "Sprache auswählen" | Never "all done" for nothing done |
+
+The attention card and the way back to a job are drawn as Settings' tinted status row.
+
+Status: **Implemented; checked in CI's browser** (screenshots `settings`, `settings-style`, `overview`, `content`, `language`, `category`, `review-empty`, `jobs-completed` and `job`, desktop and phone, regenerated by `visual-baselines.yml` and looked at). The Plan page, the editor with its lists, the tools and the smart schedule's page follow below as they are built.
 
 ## 4. Tests for the changes
 

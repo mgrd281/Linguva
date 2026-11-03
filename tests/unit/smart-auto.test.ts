@@ -3,8 +3,13 @@
  * full checks run, when a pause lifts, and the server-side validation of
  * the settings form (every value from the browser is checked again).
  */
+import { createElement, type ComponentProps, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { normaliseSmartSettings, type SmartSettingsContext, type SmartSettingsInput } from "../../app/.server/smart/validate";
+import { BudgetMeter, budgetMeter, ChoiceTiles, DayToggles, failedAction, shortWeekday, SmartPreview, SmartStateBanner, whenIn } from "../../app/components/SmartAutoCard";
+import { translator, type AppLocale } from "../../app/i18n/i18n";
+import { I18nProvider } from "../../app/i18n/react";
 import { PLANS } from "../../app/lib/plans";
 import { attachedOwner, budgetWindows, checkSpec, pauseLiftsAt, smartCoverageTypes, smartStatus } from "../../app/lib/smart-auto";
 import { nextOccurrence } from "../../app/lib/schedule";
@@ -203,5 +208,196 @@ describe("the settings form, checked on the server", () => {
       ok: false,
       problem: "PLAN_AUTO_PUBLISH",
     });
+  });
+});
+
+// ─── The smart page's controls and its words (app/components/SmartAutoCard.tsx) ───
+
+/** Server markup of a component, inside the interface language's provider. */
+function html(node: ReactNode, locale: AppLocale = "en"): string {
+  return renderToStaticMarkup(createElement(I18nProvider, { locale, timeZone: "Europe/Berlin" } as ComponentProps<typeof I18nProvider>, node));
+}
+/** The opening tags of one element, in document order. */
+const tags = (markup: string, name: string) => markup.match(new RegExp(`<${name}\\b[^>]*>`, "g")) ?? [];
+
+describe("times on the smart page", () => {
+  const now = at("2026-11-03T15:00:00Z"); // 16:00 in Berlin
+  it("say today, yesterday or the date, and name the zone only where it isn't the store's", () => {
+    const en = translator("en");
+    const tonight = at("2026-11-03T22:00:00Z");
+    expect(whenIn(en, tonight, "Europe/Berlin", now, "Europe/Berlin", true)).toBe("today, 11:00 PM");
+    expect(whenIn(en, tonight, "Europe/Berlin", now, "Europe/Berlin")).toBe("Today, 11:00 PM");
+    expect(whenIn(en, tonight, "Europe/Berlin", now, "America/New_York", true)).toBe("today, 11:00 PM (Europe/Berlin)");
+    expect(whenIn(en, tonight, "Europe/Berlin", now, null, true)).toBe("today, 11:00 PM (Europe/Berlin)");
+    expect(whenIn(translator("de"), at("2026-11-02T23:06:00Z"), "Europe/Berlin", now, "Europe/Berlin")).toBe("Heute, 00:06");
+    expect(whenIn(translator("de"), at("2026-11-02T22:06:00Z"), "Europe/Berlin", now, "Europe/Berlin")).toBe("Gestern, 23:06");
+  });
+
+  it("write a weekday short on its toggle, without the abbreviation's dot", () => {
+    expect([1, 2, 3, 4, 5, 6, 7].map((d) => shortWeekday(translator("en"), d))).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect([1, 2, 7].map((d) => shortWeekday(translator("de"), d))).toEqual(["Mo", "Di", "So"]);
+    expect([1, 3].map((d) => shortWeekday(translator("fr"), d))).toEqual(["Lun", "Mer"]);
+    expect([3, 6].map((d) => shortWeekday(translator("es"), d))).toEqual(["Mié", "Sáb"]);
+  });
+});
+
+describe("what a check's failed items offer", () => {
+  it("retries only what a new try can fix, and leads to the job for the rest", () => {
+    expect(failedAction({ failed: 3, retryable: 3, jobs: [{ id: "a", failed: 3 }] })).toEqual({ retry: 3, job: null });
+    // Only failures Retry can't fix: no Retry ("0 items will be translated again"), the job instead.
+    expect(
+      failedAction({
+        failed: 3,
+        retryable: 0,
+        jobs: [
+          { id: "a", failed: 0 },
+          { id: "b", failed: 3 },
+        ],
+      }),
+    ).toEqual({ retry: 0, job: "b" });
+    expect(failedAction({ failed: 4, retryable: 1, jobs: [{ id: "a", failed: 4 }] })).toEqual({ retry: 1, job: "a" });
+    expect(failedAction({ failed: 0, retryable: 0, jobs: [{ id: "a", failed: 0 }] })).toEqual({ retry: 0, job: null });
+  });
+});
+
+describe("a budget's meter", () => {
+  it("fills by the share used, in the Plan page's tones, and shows none without a budget", () => {
+    expect(budgetMeter(0, 50_000)).toEqual({ percent: 0, tone: "success" });
+    expect(budgetMeter(12_400, 50_000)).toEqual({ percent: 24, tone: "success" });
+    expect(budgetMeter(45_000, 50_000)).toEqual({ percent: 90, tone: "warning" });
+    expect(budgetMeter(52_000, 50_000)).toEqual({ percent: 100, tone: "critical" });
+    expect(budgetMeter(12_400, null)).toBeNull();
+  });
+
+  it("names the window and the figures in its bar, and says when no budget is set", () => {
+    const withBudget = html(createElement(BudgetMeter, { label: "Used today", used: 12_400, budget: 50_000 }));
+    expect(tags(withBudget, "div").find((tag) => tag.includes('role="progressbar"'))).toContain('aria-label="Used today: 12,400 of 50,000"');
+    const without = html(createElement(BudgetMeter, { label: "Heute verbraucht", used: 12_400, budget: null }), "de");
+    expect(without).not.toContain("progressbar");
+    expect(without).toContain("12.400");
+    expect(without).toContain("kein Limit gesetzt");
+  });
+});
+
+describe("the smart page's choices", () => {
+  const options = [
+    { value: "daily", name: "Every day", line: "One full check a day", icon: "calendar-time" as const, tint: "violet" as const },
+    { value: "manual", name: "Only on demand", line: "When you press “Check now”" },
+  ];
+
+  it("are native radio buttons in a fieldset named by its legend, each named by its tile and described by its line", () => {
+    const markup = html(createElement(ChoiceTiles, { name: "mode", legend: "How often", options, defaultValue: "daily" }));
+    expect(tags(markup, "fieldset")).toHaveLength(1);
+    expect(markup).toContain('<legend class="lv-smart-choice__legend">How often</legend>');
+    const radios = tags(markup, "input");
+    expect(radios).toHaveLength(2);
+    for (const radio of radios) {
+      expect(radio).toContain('type="radio"');
+      expect(radio).toContain('name="mode"');
+    }
+    expect(radios[0]).toContain('value="daily"');
+    expect(radios[0]).toContain("checked");
+    expect(radios[1]).not.toContain("checked");
+    // The line is the description, kept out of the name (never "Every dayOne full check a day").
+    const describedBy = radios[0]!.match(/aria-describedby="([^"]+)"/)?.[1];
+    expect(markup).toContain(`<span id="${describedBy}" class="lv-smart-tile__line" aria-hidden="true">One full check a day</span>`);
+    // A tile with an icon has it in its tinted square; one without shows its radio mark beside the name.
+    expect(markup).toContain('data-tint="violet"');
+    expect(markup).toContain("lv-smart-tile__face--plain");
+  });
+
+  it("are all disabled when read-only, and a legend a heading already says is for screen readers only", () => {
+    const markup = html(createElement(ChoiceTiles, { name: "outdated", legend: "Outdated translations", legendHidden: true, options, defaultValue: "manual", disabled: true }));
+    expect(tags(markup, "fieldset")[0]).toContain("disabled");
+    for (const radio of tags(markup, "input")) expect(radio).toContain("disabled");
+    expect(markup).toContain('<legend class="lv-sr">Outdated translations</legend>');
+  });
+
+  it("show the weekdays as seven toggles: native checkboxes named by the whole day, the chosen ones checked", () => {
+    const markup = html(createElement(DayToggles, { name: "weekday", legend: "Tage", checked: [1, 4] }), "de");
+    const boxes = tags(markup, "input");
+    expect(boxes).toHaveLength(7);
+    expect(boxes.map((box) => box.match(/aria-label="([^"]+)"/)?.[1])).toEqual(["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]);
+    expect(boxes.map((box) => box.match(/value="(\d)"/)?.[1])).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
+    expect(boxes.filter((box) => box.includes("checked")).map((box) => box.match(/value="(\d)"/)?.[1])).toEqual(["1", "4"]);
+    for (const box of boxes) expect(box).toContain('name="weekday"');
+    expect(markup).toContain('<span class="lv-smart-day__face">Mo</span>');
+    expect(markup).toContain('<legend class="lv-smart-days__legend">Tage</legend>');
+  });
+});
+
+describe("the smart schedule's banner", () => {
+  const waiting = { state: "waiting", reason: "NO_LANGUAGE" } as const;
+
+  it("waits with its own heading, and sends a missing language to Settings' button elsewhere", () => {
+    const markup = html(createElement(SmartStateBanner, { status: waiting, zone: "Europe/Berlin" }));
+    expect(markup).toContain('heading="Smart schedule is waiting"');
+    expect(markup).toContain("Choose languages under Schedule and options.");
+    expect(markup).not.toContain("#smart-scope");
+  });
+
+  it("on the smart page leads to the page's own language choice", () => {
+    const markup = html(createElement(SmartStateBanner, { status: waiting, zone: "Europe/Berlin", onChooseLanguages: () => undefined }), "de");
+    expect(markup).toContain('heading="Der intelligente Zeitplan wartet"');
+    expect(markup).toContain("Wähle unter „Was übersetzt wird“ mindestens eine Sprache.");
+    expect(markup).toContain('<s-link href="#smart-scope">Sprachen wählen</s-link>');
+  });
+});
+
+describe("the summary before setup", () => {
+  const empty = { status: { state: "off" } as const, nextChecks: [], lastSuccessAt: null, lastRun: null, translating: 0 };
+
+  it("shows the suggestion the form holds, what the first check may use, and publishing in the option's words", () => {
+    const markup = html(
+      createElement(SmartPreview, {
+        data: {
+          ...empty,
+          zone: "Europe/Berlin",
+          config: { mode: "daily", times: [180], weekdays: [1, 2, 3, 4, 5, 6, 7], locales: ["de", "fr"] },
+          estimate: 1234,
+          publishing: "DRAFT",
+          types: ["PRODUCT", "COLLECTION"],
+        },
+        languageNames: new Map([
+          ["de", "Deutsch"],
+          ["fr", "Französisch"],
+        ]),
+        omit: ["nextCheck", "lastSuccess", "lastRun"],
+        now: at("2026-11-03T15:00:00Z"),
+        shopZone: "Europe/Berlin",
+        firstCheck: true,
+      }),
+      "de",
+    );
+    expect(markup).toContain("Jeden Tag um 03:00");
+    expect(markup).toContain("Deutsch und Französisch");
+    expect(markup).toContain("Produkte und Kollektionen");
+    expect(markup).toContain("Erst prüfen");
+    expect(markup).toContain("Beim ersten Abgleich");
+    // An upper bound in AI characters, "KI-" never at a line's end.
+    expect(markup).toContain("Höchstens 1.234 KI‑Zeichen; Wiederholtes wird nicht neu übersetzt");
+  });
+
+  it("says a schedule the server would refuse in its place, and counting in the app's one word for it", () => {
+    const markup = html(
+      createElement(SmartPreview, {
+        data: {
+          ...empty,
+          zone: "UTC",
+          config: { mode: "custom", times: [], weekdays: [], locales: [] },
+          estimate: null,
+          remeasure: false,
+          scheduleNote: "Checks need to be at least an hour apart.",
+        },
+        languageNames: new Map(),
+        omit: ["nextCheck", "lastSuccess", "lastRun"],
+        now: at("2026-11-03T15:00:00Z"),
+        shopZone: "UTC",
+        firstCheck: true,
+      }),
+    );
+    expect(markup).toContain('<s-text tone="caution">Checks need to be at least an hour apart.</s-text>');
+    expect(markup).toContain("Not counted yet");
+    expect(markup).toContain(">Count store</s-link>");
   });
 });

@@ -12,8 +12,10 @@ import {
   normaliseSchedule,
   offsetMinutes,
   parseTime,
+  SCHEDULE_PROBLEMS,
   startOfLocalDay,
   startOfLocalMonth,
+  suggestTime,
   upcomingOccurrences,
   wallClock,
   zonedInstant,
@@ -200,5 +202,40 @@ describe("the merchant's schedule", () => {
     expect(parseTime("12:60")).toBeNull();
     expect(formatTime(1380)).toBe("23:00");
     expect(formatTime(425)).toBe("07:05");
+  });
+
+  it("names the problems that belong to the schedule's own fields", () => {
+    for (const problem of ["MODE", "TIME_ZONE", "TIMES", "WEEKDAYS", "TIMES_TOO_CLOSE", "TOO_MANY_TIMES"]) expect(SCHEDULE_PROBLEMS.has(problem), problem).toBe(true);
+    for (const problem of ["NO_LANGUAGE", "BUDGET", "CHANGED"]) expect(SCHEDULE_PROBLEMS.has(problem), problem).toBe(false);
+  });
+});
+
+describe("one more custom check (+ Add a time)", () => {
+  const clock = (times: number[]) => formatTime(suggestTime(times));
+
+  it("puts it in the middle of the longest gap, also across midnight, in 15-minute steps", () => {
+    expect(clock([parseTime("09:00")!])).toBe("21:00");
+    expect(clock([parseTime("09:00")!, parseTime("21:00")!])).toBe("03:00");
+    expect(clock([parseTime("03:00")!, parseTime("09:00")!, parseTime("21:00")!])).toBe("15:00");
+    // 23:30 → 00:10 is the short gap; the long one runs from 00:10 to 23:30. On the selects' grid, not 11:40.
+    expect(clock([parseTime("23:30")!, parseTime("00:10")!])).toBe("11:45");
+    expect(suggestTime([7, 1381]) % 15).toBe(0);
+    // Unsorted, repeated and out-of-range values change nothing.
+    expect(clock([1260, 540, 540, -5, 2000])).toBe("03:00");
+  });
+
+  it("is a time the schedule accepts: at least an hour from every other one, for up to six checks", () => {
+    let times = [parseTime("08:00")!];
+    while (times.length < 6) {
+      times = [...times, suggestTime(times)];
+      const result = normaliseSchedule({ mode: "custom", timeZone: "UTC", times, weekdays: [1, 2, 3, 4, 5, 6, 7] });
+      expect(result, times.map(formatTime).join(", ")).toMatchObject({ ok: true });
+    }
+    expect(new Set(times).size).toBe(6);
+  });
+
+  it("starts at the fallback when nothing is chosen", () => {
+    expect(suggestTime([])).toBe(9 * 60);
+    expect(suggestTime([], 180)).toBe(180);
   });
 });

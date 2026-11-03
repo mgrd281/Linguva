@@ -885,6 +885,309 @@
 
 /* ── Smart schedule (app.settings_.automatic.tsx, SmartAutoCard): its own rules here, media queries included. ── */
 
+/* The summary card decides by its own width where its actions go: beside the summary, or under it on a phone. */
+.lv-smart-hero {
+  container-type: inline-size;
+}
+/* Its actions: on a phone the main one at full width, the others side by side under it. */
+.lv-smart-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.lv-smart-actions > :first-child,
+.lv-smart-actions > :nth-child(2):last-child {
+  grid-column: 1 / -1;
+}
+.lv-smart-actions .lv-btn {
+  width: 100%;
+}
+.lv-smart-actions__note {
+  display: block;
+  margin-top: 8px;
+}
+@container (min-width: 681px) {
+  .lv-smart-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .lv-smart-actions .lv-btn {
+    width: auto;
+  }
+  .lv-smart-actions__note {
+    max-width: 300px;
+    margin-inline-start: auto;
+    text-align: end;
+  }
+}
+
+/*
+ * A choice as square tiles (how often, outdated translations): native radio buttons, each tile one
+ * label; the chosen one framed in blue like the current section's tile. Five in a row on a wide card,
+ * three on a tablet, two on a phone (an odd last one takes the row).
+ */
+.lv-smart-choice {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.lv-smart-choice__legend {
+  margin: 0 0 8px;
+  padding: 0;
+  color: var(--lv-text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+.lv-smart-choice__wrap {
+  container-type: inline-size;
+}
+.lv-smart-choice__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.lv-smart-choice__grid[data-count="2"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.lv-smart-choice__grid[data-count="5"] > :last-child {
+  grid-column: 1 / -1;
+}
+@container (min-width: 480px) {
+  .lv-smart-choice__grid[data-count="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lv-smart-choice__grid[data-count="5"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .lv-smart-choice__grid[data-count="5"] > :last-child {
+    grid-column: auto;
+  }
+}
+@container (min-width: 760px) {
+  .lv-smart-choice__grid[data-count="5"] {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+.lv-smart-tile {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+/* The radio covers the whole tile, invisible: a click anywhere chooses, the arrow keys move between tiles. */
+.lv-smart-tile__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.lv-smart-tile__face {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 128px;
+  padding: 14px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-surface);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  box-shadow: var(--lv-shadow-1);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+.lv-smart-tile__top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+/* A tile without an icon: the radio mark beside its name and line. */
+.lv-smart-tile__face--plain {
+  flex-direction: row;
+  gap: 10px;
+  align-items: flex-start;
+  min-height: 0;
+}
+.lv-smart-tile__face--plain .lv-smart-tile__radio {
+  margin-top: 1px;
+}
+.lv-smart-tile__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.lv-smart-tile__name {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+.lv-smart-tile__line {
+  color: var(--lv-text-subdued);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: break-word;
+}
+/* The radio mark: an empty ring, a thick blue one when chosen (more than colour: its shape changes). */
+.lv-smart-tile__radio {
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #8a8a8a;
+  border-radius: 50%;
+  background: var(--lv-surface);
+  transition: border-color 0.15s ease;
+}
+.lv-smart-tile:hover .lv-smart-tile__input:not(:checked):not(:disabled) + .lv-smart-tile__face {
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
+}
+.lv-smart-tile:hover .lv-smart-tile__input:not(:checked):not(:disabled) + .lv-smart-tile__face .lv-smart-tile__radio {
+  border-color: var(--lv-selected-ring);
+}
+.lv-smart-tile__input:checked + .lv-smart-tile__face {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+}
+.lv-smart-tile__input:checked + .lv-smart-tile__face .lv-smart-tile__radio {
+  border: 5px solid var(--lv-selected-ring);
+}
+.lv-smart-tile__input:focus-visible + .lv-smart-tile__face {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-smart-tile__input:disabled {
+  cursor: not-allowed;
+}
+/* Read-only after a downgrade: the chosen tile stays framed, the others quiet (no faded text). */
+.lv-smart-tile__input:disabled:not(:checked) + .lv-smart-tile__face {
+  background: var(--lv-surface-subdued);
+  box-shadow: none;
+}
+
+/* The weekdays as one row of square toggles (native checkboxes, the full day as each one's name). */
+.lv-smart-days {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.lv-smart-days__legend {
+  margin: 0 0 6px;
+  padding: 0;
+  color: var(--lv-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+.lv-smart-days__row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 380px;
+}
+.lv-smart-day {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.lv-smart-day__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.lv-smart-day__face {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 40px;
+  border: 1px solid var(--lv-border-hover);
+  border-radius: var(--lv-radius-control);
+  background: var(--lv-surface);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+.lv-smart-day:hover .lv-smart-day__input:not(:checked):not(:disabled) + .lv-smart-day__face {
+  border-color: #b5b5b5;
+  background: var(--lv-surface-subdued);
+}
+.lv-smart-day__input:checked + .lv-smart-day__face {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+  font-weight: 650;
+}
+.lv-smart-day__input:focus-visible + .lv-smart-day__face {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-smart-day__input:disabled {
+  cursor: not-allowed;
+}
+.lv-smart-day__input:disabled:not(:checked) + .lv-smart-day__face {
+  background: var(--lv-surface-subdued);
+}
+
+/* An excluded item's picture, as the language pages show it. */
+.lv-smart-thumb {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--lv-radius-control);
+  background: var(--lv-surface-subdued);
+  object-fit: cover;
+}
+
+@media (pointer: coarse) {
+  .lv-smart-day__face {
+    height: 44px;
+    font-size: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv-smart-tile__face,
+  .lv-smart-tile__radio,
+  .lv-smart-day__face {
+    transition: none;
+  }
+}
+
 @media (pointer: coarse) {
   .lv-btn {
     --lv-btn-height: 44px;

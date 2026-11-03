@@ -2,13 +2,17 @@
  * The DeepL keys' remaining quota as rings, for the operator's own stores:
  * one ring per key with what is left in the middle, and the state in words.
  * Its parts (ring, key tile, colours, badges) are shared with the
- * translation services card (TranslationEngines.tsx).
+ * translation services card (TranslationEngines.tsx). A card like the
+ * Overview's others (CARD), its title one size below theirs: it is the
+ * operator's, not the merchant's.
  */
 import type { DeepLKeyUsage } from "../.server/providers/deepl-usage";
 import type { I18n } from "../i18n/i18n";
 import { TRACK_COLOUR } from "./Coverage";
-import { IconTile } from "./CategoryCard";
+import { CARD } from "./ContentTiles";
+import { IconSquare } from "./IconSquare";
 import { ITEM_STATE_LOOK } from "./ItemStates";
+import { Strong } from "./Type";
 
 const RADIUS = 46;
 const STROKE = 10;
@@ -50,7 +54,7 @@ export function QuotaRing({ left, colour, figure, caption, label }: { left: numb
         ) : null}
       </svg>
       <div aria-hidden="true" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontSize: 21, lineHeight: 1.15, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{figure}</span>
+        <span className="lv-figure lv-ov-ring-figure">{figure}</span>
         <s-text color="subdued">{caption}</s-text>
       </div>
     </div>
@@ -88,7 +92,7 @@ export function DeepLKeyTile({ keyUsage: key, i18n }: { keyUsage: Key; i18n: I18
           label={t("overview.deepl.ringLabel", { name, figure })}
         />
         <s-stack direction="block" gap="small-300">
-          <s-text type="strong">{name}</s-text>
+          <Strong>{name}</Strong>
           <s-text color="subdued">
             {key.plan === "free" ? "Free" : "Pro"} · …{key.hint}
           </s-text>
@@ -118,32 +122,36 @@ export function DeepLQuota({ keys, i18n }: { keys: Key[]; i18n: I18n }) {
   const totalLimit = counted.reduce((s, k) => s + (k.limit ?? 0), 0);
   const totalLeft = counted.reduce((s, k) => s + Math.max(0, (k.limit ?? 0) - (k.used ?? 0)), 0);
   return (
-    <s-section accessibilityLabel={t("overview.deepl.heading")}>
-      <s-stack direction="block" gap="base">
-        <s-stack direction="inline" gap="small-200" alignItems="center">
-          <IconTile icon="key" size={40} />
-          <s-stack direction="block" gap="small-500">
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <h2 style={{ margin: 0, fontSize: 16, lineHeight: "24px", fontWeight: 650 }}>{t("overview.deepl.heading")}</h2>
-              <s-badge icon="lock">{t("overview.deepl.onlyYou")}</s-badge>
+    <section aria-labelledby="overview-deepl-heading">
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-stack direction="inline" gap="small-200" alignItems="center">
+            <IconSquare icon="key" tint="slate" />
+            <s-stack direction="block" gap="small-500">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <h2 id="overview-deepl-heading" className="lv-h3">
+                  {t("overview.deepl.heading")}
+                </h2>
+                <s-badge icon="lock">{t("overview.deepl.onlyYou")}</s-badge>
+              </s-stack>
+              {keys.length > 1 && totalLimit > 0 ? (
+                <s-text color="subdued">{t("overview.deepl.total", { left: number(totalLeft), limit: number(totalLimit) })}</s-text>
+              ) : null}
             </s-stack>
-            {keys.length > 1 && totalLimit > 0 ? (
-              <s-text color="subdued">{t("overview.deepl.total", { left: number(totalLeft), limit: number(totalLimit) })}</s-text>
-            ) : null}
           </s-stack>
+          {keys.length === 0 ? (
+            <s-text color="subdued">{t("overview.deepl.none")}</s-text>
+          ) : (
+            <s-query-container>
+              <s-grid gridTemplateColumns="@container (inline-size > 460px) 1fr 1fr, (inline-size > 720px) 1fr 1fr 1fr, 1fr" gap="base">
+                {keys.map((key) => (
+                  <DeepLKeyTile key={key.position} keyUsage={key} i18n={i18n} />
+                ))}
+              </s-grid>
+            </s-query-container>
+          )}
         </s-stack>
-        {keys.length === 0 ? (
-          <s-text color="subdued">{t("overview.deepl.none")}</s-text>
-        ) : (
-          <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 460px) 1fr 1fr, (inline-size > 720px) 1fr 1fr 1fr, 1fr" gap="base">
-              {keys.map((key) => {
-                return <DeepLKeyTile key={key.position} keyUsage={key} i18n={i18n} />;
-              })}
-            </s-grid>
-          </s-query-container>
-        )}
-      </s-stack>
-    </s-section>
+      </s-box>
+    </section>
   );
 }

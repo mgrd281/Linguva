@@ -873,6 +873,85 @@
 
 /* ── Overview (app/routes/app._index.tsx, CountryCards, the welcome page): its own rules here, media queries included. ── */
 
+/*
+ * Segmented's pressed-button mode (SegmentedButtons, the Overview's "Countries | Languages"): the
+ * radio choice's track and its chosen look, as buttons that change a view on the page.
+ */
+.lv-seg--buttons .lv-seg__text {
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lv-seg--buttons .lv-seg__text:not([aria-pressed="true"]):hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1f1f1f;
+}
+.lv-seg--buttons .lv-seg__text[aria-pressed="true"] {
+  background: #ffffff;
+  color: #1f1f1f;
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+.lv-seg--buttons .lv-seg__text:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 1px;
+}
+.lv-seg__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+/* A section's heading with its state's icon before the words ("Läuft gerade"). */
+.lv-ov-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.lv-ov-heading__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+/*
+ * A quiet line with its icon: a note under the store's figures (no access: a lock; not counted completely:
+ * a warning), the AI characters at the page's foot (gauge).
+ */
+.lv-ov-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.lv-ov-note__icon {
+  display: inline-flex;
+  padding-block-start: 2px;
+}
+
+/* What a count says while it runs, under the line with its date: apart from it, never a gap while it is empty. */
+.lv-ov-follow {
+  padding-block-start: 8px;
+}
+/* Live regions that take the focus once their button is gone: no ring around a sentence. */
+.lv-ov-status {
+  outline: none;
+}
+
+/* A card's percentage beside its name on a phone: between a row's figure and the big one. */
+.lv-ov-compact-figure {
+  font-size: 17px;
+  line-height: 24px;
+}
+/* The DeepL keys' rings: the figure fits a 96 px ring up to "100%". */
+.lv-ov-ring-figure {
+  font-size: 21px;
+  line-height: 1.15;
+}
+
 /* ── Content and language pages (app.content.*, app.languages*, ContentTiles, CategoryCard, CategoryList, LanguageLayout, StepStrip): its own rules here, media queries included. ── */
 
 /* ── Review (app.review*, Review* components): its own rules here, media queries included. ── */

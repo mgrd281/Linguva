@@ -28,10 +28,15 @@ export interface TranslateConfirmProps {
   /** AI characters left this month; null on the Own key plan (no Linguva allowance). */
   aiRemaining: number | null;
   i18n: I18n;
+  /**
+   * "Also translate image descriptions and extra details" starts ticked: the dialog was opened for them
+   * (a step that names them, an image descriptions' or extra details' list). Unticked otherwise.
+   */
+  attachedDefault?: boolean;
   onConfirm: (input: { category: CategoryId; includeAttached: boolean }) => void;
 }
 
-export function TranslateConfirm({ id, target, languageName, publishMode, aiRemaining, i18n, onConfirm }: TranslateConfirmProps) {
+export function TranslateConfirm({ id, target, languageName, publishMode, aiRemaining, i18n, attachedDefault = false, onConfirm }: TranslateConfirmProps) {
   const { t } = i18n;
   const attached = useRef<HTMLElementTagNameMap["s-checkbox"]>(null);
   const what = target ? translateWhat(i18n, target.category, target.estimate) : "";
@@ -46,8 +51,8 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
   return (
     <s-modal id={id} heading={heading} accessibilityLabel={heading}>
       {target && estimate ? (
-        // Rebuilt for each area, so the checkbox starts empty.
-        <s-stack key={target.category} direction="block" gap="base">
+        // Rebuilt for each area and way in, so the checkbox starts as that way says.
+        <s-stack key={`${target.category}:${attachedDefault ? "with" : "without"}`} direction="block" gap="base">
           <Point icon={CATEGORIES[target.category].icon} title={t("language.confirm.what")}>
             <s-text color="subdued">
               {estimate.items
@@ -81,7 +86,10 @@ export function TranslateConfirm({ id, target, languageName, publishMode, aiRema
               <s-text color="subdued">{estimate.chars !== null ? t("language.confirm.ownKey", { chars: estimate.chars }) : t("language.confirm.ownKeyUnknown")}</s-text>
             </Point>
           )}
-          {estimate.attached ? <s-checkbox ref={attached} label={t("language.confirm.attached")} details={t("language.confirm.attachedDetails")} /> : null}
+          {estimate.attached ? (
+            // The `checked` attribute is the box's first state (React 18 passes it on as an attribute); the merchant can untick it.
+            <s-checkbox ref={attached} label={t("language.confirm.attached")} details={t("language.confirm.attachedDetails")} {...(attachedDefault ? { checked: true } : {})} />
+          ) : null}
         </s-stack>
       ) : null}
       <s-button

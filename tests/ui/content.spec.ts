@@ -15,17 +15,20 @@ test("the content page shows the store area by area for one language @responsive
   await openApp(page, "full", "/app/content?lang=de");
   await expect(page.getByRole("heading", { level: 1, name: "Content" })).toBeVisible();
 
-  // The languages: visible ones by name, the hidden one last; the shown one is no link.
+  // The languages: visible ones by name, the hidden one last; the shown one is no link, in the chosen look (blue ring and tint).
   const languages = page.getByRole("navigation", { name: "Choose a language" });
   await expect(languages.locator("li")).toHaveText([/^French/, /^German/, /^Arabic/]);
-  await expect(languages.locator('[aria-current="page"]')).toHaveText(/German/);
+  const current = languages.locator('[aria-current="page"]');
+  await expect(current).toHaveText(/German/);
+  await expect(current).toHaveCSS("background-color", "rgb(245, 249, 255)");
+  await expect(current).toHaveCSS("box-shadow", /rgb\(0, 91, 211\)/);
   await expect(languages.getByRole("link", { name: /^French: / })).toHaveAttribute("href", "/app/content?lang=fr");
   await expect(languages.locator("li", { hasText: "Arabic" })).toContainText("hidden");
-  // When it was counted, as the language page says it, never "today"; the way to its next steps.
+  // When it was counted, as the language page says it, never "today"; the way to its next steps (whose trail leads back here).
   // In the store's time zone (Europe/Berlin in the fixtures), so without "UTC".
   await expect(page.getByText(/^Last counted .+\d{1,2}:\d{2}\s?[AP]M$/)).toBeVisible();
   await expect(page.locator("s-page")).not.toContainText(/today/i);
-  await expect(page.getByRole("link", { name: "Next steps for German" })).toHaveAttribute("href", "/app/languages/de");
+  await expect(page.getByRole("link", { name: "Next steps for German" })).toHaveAttribute("href", "/app/languages/de?from=content");
 
   // One card for what Linguva may not read, with one button that asks for all of it.
   await expect(page.getByRole("heading", { name: "Linguva can't read everything yet" })).toBeVisible();
@@ -35,10 +38,14 @@ test("the content page shows the store area by area for one language @responsive
   expect(await page.locator('form input[name="scope"]').evaluateAll((inputs) => inputs.map((i) => (i as HTMLInputElement).value))).toEqual(["read_legal_policies"]);
 
   // Each area is one link to its list in this language, with its figure in the link's name.
-  await expect(page.getByRole("link", { name: /^Products: \d+% translated\. / })).toHaveAttribute("href", "/app/languages/de/products");
-  await expect(page.getByRole("link", { name: /^Menus & filters/ })).toHaveAttribute("href", "/app/languages/de/navigation");
+  await expect(page.getByRole("link", { name: /^Products: \d+% translated\. / })).toHaveAttribute("href", "/app/languages/de/products?from=content");
+  await expect(page.getByRole("link", { name: /^Menus & filters/ })).toHaveAttribute("href", "/app/languages/de/navigation?from=content");
   // Store & checkout: no figure while legal texts are refused, and why.
   await expect(page.getByRole("link", { name: "Store & checkout. No access: Legal texts." })).toBeVisible();
+  // The tiers are groups, not steps: their headings carry no number.
+  await expect(page.getByRole("heading", { level: 3, name: "What customers see first" })).toBeVisible();
+  // Each permission's chip shows what it unlocks (legal texts: a contract).
+  await expect(page.locator("s-chip", { hasText: "Legal texts" }).locator('s-icon[type="contract"]')).toHaveCount(1);
 
   // More texts: the theme's parts open below their row, each a link to its list in the language.
   const theme = page.locator("details#theme");
@@ -70,6 +77,25 @@ test("without ?lang the page and the lists open in a visible language, never the
   // The hidden language is marked; the way back keeps the list's language.
   await expect(page.getByRole("link", { name: "Arabic (hidden)" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Content" })).toHaveAttribute("href", "/app/content?lang=fr");
+});
+
+test("opened from Content, a language's page and its areas lead back here", async ({ page }) => {
+  await openApp(page, "full", "/app/content?lang=de");
+  await page.getByRole("link", { name: "Next steps for German" }).click();
+  await expect(page).toHaveURL(/\/app\/languages\/de\?from=content/);
+  const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(crumbs.getByRole("link", { name: "Content" })).toHaveAttribute("href", "/app/content?lang=de");
+  await expect(crumbs.getByRole("link", { name: "Overview" })).toHaveCount(0);
+  await expect(page.locator('s-section[accessibilitylabel="Products"]').getByRole("link", { name: /^View all \d+: Products$/ })).toHaveAttribute(
+    "href",
+    "/app/languages/de/products?from=content",
+  );
+
+  await openApp(page, "full", "/app/languages/de/products?from=content");
+  await expect(crumbs.getByRole("link", { name: "Content" })).toHaveAttribute("href", "/app/content?lang=de");
+  await expect(crumbs.getByRole("link", { name: "German" })).toHaveAttribute("href", "/app/languages/de?from=content");
+  // The list's filters keep it too.
+  await expect(page.getByRole("navigation", { name: "Show" }).getByRole("link").first()).toHaveAttribute("href", /[?&]from=content/);
 });
 
 test("the permission request asks for allow-listed content scopes only", async ({ page }) => {
@@ -107,7 +133,7 @@ test("a language not counted yet says so, offers counting and shows no figures @
   await expect(page.getByRole("heading", { name: "German isn't counted yet" })).toBeVisible();
   await expect(page.locator('[data-button][data-variant="primary"]', { hasText: "Count now" })).toHaveCount(1);
   await expect(page.getByText(/^Last counted/)).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Products. Not counted yet." })).toHaveAttribute("href", "/app/languages/de/products");
+  await expect(page.getByRole("link", { name: "Products. Not counted yet." })).toHaveAttribute("href", "/app/languages/de/products?from=content");
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -184,14 +210,23 @@ test("an invalid content reference is a not-found page", async ({ page }) => {
   await expect(page.locator(`s-banner[heading="We couldn't find this page"]`)).toBeVisible();
 });
 
-test("bulk translation offers image alt text and custom fields where a type has them", async ({ page }) => {
+test("bulk translation offers image descriptions and extra details where a type has them", async ({ page }) => {
   await openApp(page, "full", "/app/products?lang=de");
-  const option = page.getByRole("checkbox", { name: "Also translate image alt text and custom fields" });
+  // The language pages' words for them.
+  const option = page.getByRole("checkbox", { name: "Also translate image descriptions and extra details" });
   await expect(option).toBeVisible();
   await expect(option).not.toBeChecked();
   await expect(page.getByText("so the job takes longer")).toBeVisible();
 
   await openApp(page, "full", "/app/content/menus?lang=de");
   await expect(page.getByText("Translate all into German")).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: "Also translate image alt text and custom fields" })).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: "Also translate image descriptions and extra details" })).toHaveCount(0);
+});
+
+test("a theme part's list is titled as Content names it, its items' states in the area lists' words", async ({ page }) => {
+  await openApp(page, "full", "/app/content/theme-templates?lang=de");
+  await expect(page.locator("s-page")).toHaveAttribute("heading", "Texts in templates");
+  await openApp(page, "full", "/app/products?lang=de");
+  await expect(page.locator("s-badge", { hasText: "Outdated" }).first()).toHaveAttribute("icon", "refresh");
+  await expect(page.locator("s-badge", { hasText: /^(Done|Missing)$/ }).first()).toBeVisible();
 });

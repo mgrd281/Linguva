@@ -9,7 +9,10 @@
  * the language needs it, "Load again" when Shopify didn't answer, and
  * "Show" beside the select of a store with many languages. It reloads every
  * few seconds only while a count reads the language; the areas' pictures
- * load after the page (the language page's previews).
+ * load after the page (the language page's previews). Its links into a
+ * language's page and lists say where they come from (`?from=content`), so
+ * their trail leads back here; the language pages' "Allow access" lands on
+ * the permission card (#content-access).
  */
 import { useEffect } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
@@ -21,7 +24,7 @@ import { clearContentHubCache, scopesToRequest } from "../.server/translation/co
 import { startMeasurement } from "../.server/coverage/dashboard";
 import type { clientLoader as previewsLoader } from "./app.languages_.$locale_.previews";
 import { AccessCard, Areas, CountCard, Folds, LanguageChips, LanguageMeta, MoreTexts, NoLanguagesCard, NothingCard, partName, countNotice, type TilePictures } from "../components/ContentTiles";
-import { BIG_HEADING, languageErrorText } from "../components/LanguageLayout";
+import { languageErrorText } from "../components/LanguageLayout";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
 
@@ -101,7 +104,7 @@ export default function ContentPage() {
       <s-query-container>
         <s-stack direction="block" gap="base">
           <s-stack direction="block" gap="small-500">
-            <h1 style={BIG_HEADING}>{t("common.nav.content")}</h1>
+            <h1 className="lv-h1">{t("common.nav.content")}</h1>
             <s-text color="subdued">{t("content.subtitle")}</s-text>
           </s-stack>
 

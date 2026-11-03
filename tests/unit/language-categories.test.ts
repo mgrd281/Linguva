@@ -10,6 +10,9 @@ import { SUPPORTED_BULK_RESOURCE_TYPES } from "../../app/.server/jobs/bulk-jobs"
 import { emptyCounts, FIELD_GROUPS, FIELD_STATES, HEADLINE_EXCLUDED_TYPES, type StateCounts } from "../../app/lib/coverage-rules";
 import { headlineByLocale, tally, type CountInput } from "../../app/lib/coverage-view";
 import {
+  ATTACHED,
+  ATTACHED_AREAS,
+  attachedOpen,
   bulkTypesOf,
   CATEGORIES,
   CATEGORY_IDS,
@@ -17,26 +20,36 @@ import {
   categoryPath,
   categoryState,
   categoryTallies,
+  contentAccessPath,
   EXTRA_IDS,
   EXTRAS,
+  isAttachedPart,
   isCategoryId,
+  isUnlockGate,
   ITEM_STATE_OF,
   ITEM_STATES,
   itemState,
   languagePath,
   nextSteps,
+  originOf,
   payoffPercent,
   reviewPayoff,
   stepCounts,
   textStates,
   tierOf,
   TIERS,
+  UNLOCK_GATES,
+  unlockHref,
+  withOrigin,
+  type AttachedOpen,
   type CategoryId,
   type CategoryState,
   type LanguageStepsInput,
 } from "../../app/lib/language-categories";
 
 const figure = (counts: Partial<StateCounts>) => tally({ ...emptyCounts(), ...counts });
+/** A step's image descriptions and extra details when it carries none. */
+const NONE: AttachedOpen = { images: 0, customFields: 0 };
 const row = (locale: string, resourceType: string, fieldGroup: string, state: CountInput["state"], count: number): CountInput => ({
   locale,
   resourceType,
@@ -105,6 +118,61 @@ describe("categories and extras", () => {
     expect(languagePath("da")).toBe("/app/languages/da");
     expect(languagePath("pt-BR")).toBe("/app/languages/pt-BR");
     expect(categoryPath("da", "customFields")).toBe("/app/languages/da/customFields");
+  });
+
+  it("keep where a page was opened from: Content, or nothing (the Overview's trail)", () => {
+    expect(originOf("content")).toBe("content");
+    for (const value of [null, undefined, "", "overview", "CONTENT", "content "]) expect(originOf(value), String(value)).toBeNull();
+    expect(withOrigin("/app/languages/de", "content")).toBe("/app/languages/de?from=content");
+    expect(withOrigin("/app/languages/de/products?state=missing", "content")).toBe("/app/languages/de/products?state=missing&from=content");
+    expect(withOrigin("/app/content?lang=de#content-access", "content")).toBe("/app/content?lang=de&from=content#content-access");
+    expect(withOrigin("/app/languages/de", null)).toBe("/app/languages/de");
+  });
+
+  it("give every area its own icon square: no two areas of a tier share a tint, image descriptions and extra details take their products' blue", () => {
+    for (const tier of TIERS) {
+      const tints = tier.categories.map((id) => CATEGORIES[id].tint);
+      expect(new Set(tints).size, tier.id).toBe(tints.length);
+    }
+    expect(CATEGORIES.images.tint).toBe(CATEGORIES.products.tint);
+    expect(CATEGORIES.customFields.tint).toBe(CATEGORIES.products.tint);
+    // Shopify's own pictures: alt text and metaobjects.
+    expect(CATEGORIES.images.icon).toBe("image-alt");
+    expect(CATEGORIES.metaobjects.icon).toBe("metaobject");
+  });
+
+  it("translate image descriptions and extra details with their owners: every one of their types belongs to exactly one owner", () => {
+    expect(ATTACHED_AREAS).toEqual(["products", "collections", "pages", "blog"]);
+    const owned = ATTACHED_AREAS.flatMap((area) => [...ATTACHED[area].images, ...ATTACHED[area].customFields]);
+    expect([...owned].sort()).toEqual([...CATEGORIES.images.types, ...CATEGORIES.customFields.types].sort());
+    expect(new Set(owned).size).toBe(owned.length);
+    expect(isAttachedPart("images")).toBe(true);
+    expect(isAttachedPart("customFields")).toBe(true);
+    for (const id of CATEGORY_IDS.filter((c) => c !== "images" && c !== "customFields")) expect(isAttachedPart(id), id).toBe(false);
+  });
+});
+
+describe("image descriptions and extra details waiting with their owners", () => {
+  it("count each owner's open texts of them in a language: missing, outdated and failed, never URL handles", () => {
+    const rows = [
+      row("da", "MEDIA_IMAGE", "alt", "missing", 3),
+      row("da", "MEDIA_IMAGE", "alt", "outdated", 1),
+      row("da", "MEDIA_IMAGE", "alt", "complete", 9),
+      row("da", "MEDIA_IMAGE", "alt", "draft", 2),
+      row("da", "PRODUCT_METAFIELD", "value", "failed", 2),
+      row("da", "COLLECTION_IMAGE", "alt", "missing", 4),
+      row("da", "ARTICLE_METAFIELD", "value", "missing", 5),
+      row("da", "PAGE_METAFIELD", "url", "missing", 7),
+      row("da", "PRODUCT", "title", "missing", 40),
+      row("fr", "MEDIA_IMAGE", "alt", "missing", 50),
+    ];
+    expect(attachedOpen(rows, "da")).toEqual({
+      products: { images: 4, customFields: 2 },
+      collections: { images: 4, customFields: 0 },
+      pages: { images: 0, customFields: 0 },
+      blog: { images: 0, customFields: 5 },
+    });
+    expect(attachedOpen([], "da").products).toEqual(NONE);
   });
 });
 
@@ -175,14 +243,20 @@ describe("a category's state", () => {
     expect(categoryState([...read(CATEGORIES.navigation.types), seg("MENU", "FAILED", { locale: "fr" })], "da", "navigation", idle)).toEqual({ kind: "ok" });
   });
 
-  it("says when Linguva may not read a type, and where to allow it", () => {
+  it("says when Linguva may not read a type, and leads to the Content card that asks for every permission at once", () => {
     const checkout = [...read(CATEGORIES.checkout.types.filter((t: string) => t !== "SHOP_POLICY")), seg("SHOP_POLICY", "DENIED")];
-    expect(categoryState(checkout, "da", "checkout", idle)).toEqual({ kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content/policies" });
+    expect(categoryState(checkout, "da", "checkout", idle)).toEqual({ kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content?lang=da#content-access" });
     const menus = [seg("MENU", "DENIED"), seg("LINK", "DENIED"), seg("FILTER", "SCANNING")];
-    expect(categoryState(menus, "da", "navigation", { scanning: true })).toEqual({ kind: "no-access", types: ["MENU", "LINK"], href: "/app/content/menus" });
-    // Types without a permission page of their own.
+    expect(categoryState(menus, "da", "navigation", { scanning: true })).toEqual({ kind: "no-access", types: ["MENU", "LINK"], href: "/app/content?lang=da#content-access" });
+    expect(categoryState([seg("ONLINE_STORE_THEME", "DENIED", { locale: "pt-BR" })], "pt-BR", "theme", idle)).toMatchObject({ kind: "no-access", href: "/app/content?lang=pt-BR#content-access" });
+    // Nothing the merchant can allow: no way to "allow" it.
     expect(categoryState([seg("PRODUCT", "DENIED")], "da", "products", idle)).toEqual({ kind: "no-access", types: ["PRODUCT"], href: null });
-    expect(categoryState([seg("ONLINE_STORE_THEME", "DENIED")], "da", "theme", idle)).toMatchObject({ kind: "no-access", href: "/app/content/theme" });
+    expect(categoryState([...read(["SHOP", "SHOP_POLICY", "DELIVERY_METHOD_DEFINITION", "SELLING_PLAN_GROUP", "SELLING_PLAN"]), seg("PAYMENT_GATEWAY", "DENIED")], "da", "checkout", idle)).toEqual({
+      kind: "no-access",
+      types: ["PAYMENT_GATEWAY"],
+      href: null,
+    });
+    expect(contentAccessPath("pt-BR")).toBe("/app/content?lang=pt-BR#content-access");
   });
 
   it("is being counted while a measurement reads it, and incomplete when none will", () => {
@@ -231,6 +305,8 @@ describe("next steps for a language", () => {
     bulk?: CategoryId[];
     measured?: boolean;
     canCount?: boolean;
+    attached?: Partial<Record<CategoryId, Partial<AttachedOpen>>>;
+    unlock?: LanguageStepsInput["unlock"];
   }): LanguageStepsInput => ({
     locale: "da",
     measured: options.measured ?? true,
@@ -241,7 +317,9 @@ describe("next steps for a language", () => {
       tally: figure(options.categories?.[id] ?? {}),
       state: options.states?.[id] ?? { kind: "ok" },
       bulk: (options.bulk ?? [...CATEGORY_IDS]).includes(id),
+      ...(options.attached?.[id] ? { attached: { ...NONE, ...options.attached[id] } } : {}),
     })),
+    ...(options.unlock ? { unlock: options.unlock } : {}),
   });
 
   it("counts a language first", () => {
@@ -265,8 +343,8 @@ describe("next steps for a language", () => {
     );
     expect(steps).toEqual([
       { kind: "review", count: 36, payoff: 34, href: "/app/review?lang=da" },
-      { kind: "category", category: "products", missing: 58, outdated: 4, failed: 2, action: "translate", href: "/app/languages/da/products" },
-      { kind: "category", category: "navigation", missing: 12, outdated: 0, failed: 0, action: "translate", href: "/app/languages/da/navigation" },
+      { kind: "category", category: "products", missing: 58, outdated: 4, failed: 2, attached: NONE, action: "translate", href: "/app/languages/da/products" },
+      { kind: "category", category: "navigation", missing: 12, outdated: 0, failed: 0, attached: NONE, action: "translate", href: "/app/languages/da/navigation" },
     ]);
   });
 
@@ -292,16 +370,16 @@ describe("next steps for a language", () => {
         headline: { complete: 90, missing: 10 },
         categories: { products: { complete: 90, missing: 10 } },
         states: {
-          navigation: { kind: "no-access", types: ["MENU", "LINK"], href: "/app/content/menus" },
-          checkout: { kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content/policies" },
+          navigation: { kind: "no-access", types: ["MENU", "LINK"], href: "/app/content?lang=da#content-access" },
+          checkout: { kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content?lang=da#content-access" },
           blog: { kind: "incomplete" },
         },
       }),
     );
     expect(steps).toEqual([
-      { kind: "category", category: "products", missing: 10, outdated: 0, failed: 0, action: "translate", href: "/app/languages/da/products" },
+      { kind: "category", category: "products", missing: 10, outdated: 0, failed: 0, attached: NONE, action: "translate", href: "/app/languages/da/products" },
       { kind: "recount", categories: ["blog"] },
-      { kind: "access", categories: ["navigation", "checkout"], href: "/app/content/menus" },
+      { kind: "access", categories: ["navigation", "checkout"], href: "/app/content?lang=da#content-access" },
     ]);
     // Counting again needs background jobs and no measurement under way.
     const noJobs = nextSteps(input({ headline: { complete: 100 }, states: { blog: { kind: "incomplete" } }, canCount: false }));
@@ -324,6 +402,83 @@ describe("next steps for a language", () => {
     const categories = Object.fromEntries(CATEGORY_IDS.map((id, i) => [id, { missing: i + 1 }]));
     expect(nextSteps(input({ headline: { draft: 1, missing: 55 }, categories }))).toHaveLength(3);
     expect(nextSteps(input({ headline: { missing: 55 }, categories }))).toHaveLength(3);
+    expect(nextSteps(input({ headline: { draft: 1, missing: 55 }, categories, unlock: "PLAN_BULK" }))).toHaveLength(3);
+  });
+
+  it("gives image descriptions and extra details no step of their own while their owner has one: the owner's step names them", () => {
+    const steps = nextSteps(
+      input({
+        headline: { complete: 10, missing: 40 },
+        categories: { products: { missing: 12 }, images: { missing: 3 }, customFields: { missing: 2, outdated: 1 } },
+        attached: { products: { images: 3, customFields: 3 } },
+      }),
+    );
+    expect(steps).toEqual([
+      { kind: "category", category: "products", missing: 12, outdated: 0, failed: 0, attached: { images: 3, customFields: 3 }, action: "translate", href: "/app/languages/da/products" },
+    ]);
+    // Without the owner's step (its own texts are done), they keep theirs: a list to translate them one by one.
+    const alone = nextSteps(
+      input({
+        headline: { complete: 10, missing: 5 },
+        categories: { products: { complete: 10 }, images: { missing: 3 }, customFields: { missing: 2 } },
+        attached: { products: { images: 3, customFields: 2 } },
+        bulk: ["products"],
+      }),
+    );
+    expect(alone.map((s) => (s.kind === "category" ? [s.category, s.action, s.attached] : s.kind))).toEqual([
+      ["customFields", "view", NONE],
+      ["images", "view", NONE],
+    ]);
+    // Only what no owner's step carries gets a step: a blog's image when only the products have a step.
+    const partly = nextSteps(
+      input({
+        headline: { missing: 20 },
+        categories: { products: { missing: 12 }, images: { missing: 4 } },
+        attached: { products: { images: 3 }, blog: { images: 1 } },
+      }),
+    );
+    expect(partly.map((s) => (s.kind === "category" ? s.category : s.kind))).toEqual(["products", "images"]);
+  });
+
+  it("ranks an owner within its tier with the image descriptions and extra details it carries", () => {
+    const steps = nextSteps(
+      input({
+        headline: { missing: 30 },
+        categories: { products: { missing: 5 }, collections: { missing: 8 }, images: { missing: 6 } },
+        attached: { products: { images: 6 } },
+      }),
+    );
+    expect(steps.map((s) => (s.kind === "category" ? s.category : s.kind))).toEqual(["products", "collections"]);
+  });
+
+  it("puts what keeps translating from starting right after approving, with the place that lifts it", () => {
+    const steps = nextSteps(input({ headline: { draft: 2, missing: 10 }, categories: { products: { missing: 10 } }, bulk: [], unlock: "CONSENT_REQUIRED" }));
+    expect(steps).toEqual([
+      { kind: "review", count: 2, payoff: reviewPayoff(figure({ draft: 2, missing: 10 })), href: "/app/review?lang=da" },
+      { kind: "unlock", gate: "CONSENT_REQUIRED", href: "/app/settings?section=ai" },
+      { kind: "category", category: "products", missing: 10, outdated: 0, failed: 0, attached: NONE, action: "view", href: "/app/languages/da/products" },
+    ]);
+    // A new store without the permission: it is the first step, so its button is the page's primary one.
+    expect(nextSteps(input({ headline: { missing: 10 }, categories: { products: { missing: 10 } }, bulk: [], unlock: "PLAN_BULK" }))[0]).toEqual({
+      kind: "unlock",
+      gate: "PLAN_BULK",
+      href: "/app/plan",
+    });
+    // Not counted yet: counting comes first, whatever keeps translating.
+    expect(nextSteps(input({ headline: {}, measured: false, unlock: "CONSENT_REQUIRED" }))).toEqual([{ kind: "count" }]);
+  });
+
+  it("knows which gates the merchant can lift, and where", () => {
+    expect(UNLOCK_GATES.map((gate) => [gate, unlockHref(gate)])).toEqual([
+      ["CONSENT_REQUIRED", "/app/settings?section=ai"],
+      ["ENGINE_CONSENT", "/app/settings?section=ai"],
+      ["OWN_KEY_MISSING", "/app/settings?section=keys"],
+      ["OWN_KEY_REFUSED", "/app/settings?section=keys"],
+      ["PLAN_BULK", "/app/plan"],
+      ["PLAN_LANGUAGE", "/app/plan"],
+    ]);
+    // The app's own setup isn't the merchant's to fix.
+    for (const code of ["JOBS_UNAVAILABLE", "AI_NOT_CONFIGURED", "", null, undefined]) expect(isUnlockGate(code), String(code)).toBe(false);
   });
 });
 

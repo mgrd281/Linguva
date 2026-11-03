@@ -1,8 +1,9 @@
 /**
  * One area of a language (Products, Menus & filters, …) on the language
- * page: its figure, its states, a few real examples from the store, and
- * what to do there. The title is the link to the area's list; translating
- * is a separate button that opens the confirm dialog (no nested controls).
+ * page: its icon in its tinted square, its name, figure and states, a few
+ * real examples from the store, and what to do there. One link opens the
+ * area's list ("View all 8 ›"); translating is a separate button that opens
+ * the confirm dialog (no nested controls).
  *
  * Examples come later than the card (a separate request): pictures with
  * their names for products, collections, blog posts and images, a list of
@@ -13,13 +14,16 @@
 import type { CategoryPreview, LanguagePage, PreviewItem } from "../.server/languages/language-page";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { itemKindLabel } from "../i18n/labels";
+import { cardColumns } from "../lib/content-areas";
 import type { IconName } from "../lib/icons";
-import { CATEGORIES, type CategoryId } from "../lib/language-categories";
+import { CATEGORIES, withOrigin, type CategoryId, type Origin } from "../lib/language-categories";
+import { kindWord } from "./CategoryList";
 import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
 import { ProgressBar } from "./ProgressBar";
 import { Button } from "./Button";
 import { IconSquare, type Tint } from "./IconSquare";
+import { Strong } from "./Type";
 
 export type LanguageCategory = LanguagePage["categories"][number];
 
@@ -57,6 +61,30 @@ const CLAMP = (lines: number) => ({ display: "-webkit-box", WebkitLineClamp: lin
 export function categoryName(i18n: I18n, id: CategoryId): string {
   return i18n.t(`language.category.${id}.name`);
 }
+
+/** An area's icon in its own tinted square (CATEGORIES): the same picture on its tile, card, list and step. */
+export function AreaIcon({ id, size = 40 }: { id: CategoryId; size?: number }) {
+  return <IconSquare icon={CATEGORIES[id].icon} tint={CATEGORIES[id].tint} size={size} />;
+}
+
+/**
+ * Columns for a row of `count` cards (cardColumns), as Polaris' grid takes them: one card the full width,
+ * two side by side from 560 px, three from 860 px (narrower, one under the other), four as two by two.
+ */
+export function cardGrid(count: number): string {
+  const columns = cardColumns(count);
+  if (columns === 1) return "1fr";
+  return columns === 2 ? "@container (inline-size > 560px) 1fr 1fr, 1fr" : "@container (inline-size > 860px) 1fr 1fr 1fr, 1fr";
+}
+
+/** An area's name inside a sentence: English writes it in lower case there ("Translate image descriptions"). */
+export function categoryInSentence(i18n: I18n, id: CategoryId): string {
+  const name = categoryName(i18n, id);
+  return i18n.locale === "en" ? name.toLowerCase() : name;
+}
+
+/** An icon inside a line of text (a link's chevron). */
+const INLINE_ICON = { display: "inline-flex", verticalAlign: "middle", marginInlineStart: 2 } as const;
 
 /** "48 products · Name, description and texts for Google" (also the Content page's tiles). */
 export function detailLine(i18n: I18n, category: { id: CategoryId; items: number | null; textTypes: readonly string[] }): string {
@@ -114,7 +142,7 @@ function Tile({ item, icon, i18n, locale, primaryName }: { item: PreviewItem; ic
       </div>
       {item.original ? (
         <span style={CLAMP(2)}>
-          <s-text type="strong">{item.original}</s-text>
+          <Strong>{item.original}</Strong>
         </span>
       ) : null}
       <span style={CLAMP(2)}>
@@ -167,13 +195,15 @@ function Outcome({ item, i18n, locale }: { item: PreviewItem; i18n: I18n; locale
   );
 }
 
-/** Originals beside their translations ("Menu · Hiking ✓ “Vandring”"), or page names with their states. */
+/**
+ * Originals beside their translations ("Menu item · Hiking ✓ “Vandring”"), or page names with their
+ * states. Each kind in the lists' words (kindWord: "Menu item", "Legal text"), a custom field by its name.
+ */
 function Rows({ category, items, i18n, locale }: PreviewProps) {
   const label = (item: PreviewItem) => {
     if (category === "pages" || category === "metaobjects") return null;
     if (item.label) return item.label;
-    if (item.type === "SHOP") return i18n.t("language.preview.google");
-    return itemKindLabel(i18n, item.type);
+    return kindWord(i18n, item.type) ?? itemKindLabel(i18n, item.type);
   };
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0, border: `1px solid ${TRACK_COLOUR}`, borderRadius: 10, overflow: "hidden" }}>
@@ -182,7 +212,7 @@ function Rows({ category, items, i18n, locale }: PreviewProps) {
         return (
           <li key={item.id} style={i === 0 ? { ...ROW, borderBlockStart: 0 } : ROW}>
             {kind ? (
-              <span style={{ flex: "0 0 72px", minWidth: 0, ...CLAMP(1) }}>
+              <span style={{ flex: "0 0 96px", minWidth: 0, ...CLAMP(1) }}>
                 <s-text color="subdued">{kind}</s-text>
               </span>
             ) : null}
@@ -245,7 +275,10 @@ function JobProgress({ job, name, i18n }: { job: NonNullable<LanguageCategory["j
   return (
     <s-box padding="small-100 base" background="subdued" borderRadius="base">
       <s-stack direction="block" gap="small-200">
-        <s-text type="strong">{job.discoveryDone && job.total > 0 ? t("language.card.job", { done: job.done, total: job.total }) : t("language.card.jobFinding")}</s-text>
+        <s-stack direction="inline" gap="small-200" alignItems="center">
+          <s-icon type="in-progress" tone="info" size="small" />
+          <Strong>{job.discoveryDone && job.total > 0 ? t("language.card.job", { done: job.done, total: job.total }) : t("language.card.jobFinding")}</Strong>
+        </s-stack>
         {job.discoveryDone && job.total > 0 ? <ProgressBar value={(job.done / job.total) * 100} label={t("language.card.jobLabel", { category: name })} /> : null}
       </s-stack>
     </s-box>
@@ -264,9 +297,11 @@ export interface CategoryCardProps {
   featured: boolean;
   /** Translating can start here: the confirm dialog's id, what to do before it opens, and whether it is starting. */
   translate: { modalId: string; onOpen: () => void; loading: boolean } | null;
+  /** Where the language page was opened from: its links keep it (the lists' trail). */
+  origin?: Origin;
 }
 
-export function CategoryCard({ category, i18n, locale, primaryName, preview, featured, translate }: CategoryCardProps) {
+export function CategoryCard({ category, i18n, locale, primaryName, preview, featured, translate, origin = null }: CategoryCardProps) {
   const { t } = i18n;
   const name = categoryName(i18n, category.id);
   const { tally, state } = category;
@@ -275,22 +310,22 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
   const figure = state.kind === "no-access" ? "—" : percentLabel(i18n, tally.complete, tally.total);
   const open = tally.counts.missing + tally.counts.outdated + tally.counts.failed;
   const all = category.items ? t("language.card.allCount", { count: category.items }) : t("language.card.all");
+  const href = withOrigin(category.href, origin);
   const examples = <Preview category={category.id} preview={preview} featured={featured} i18n={i18n} locale={locale} primaryName={primaryName} />;
   return (
     <s-section accessibilityLabel={name}>
       <s-stack direction="block" gap="base">
         <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="start">
-          <IconTile icon={CATEGORIES[category.id].icon} />
+          <AreaIcon id={category.id} />
+          {/* The name as the card's heading; "View all" below is its one link. */}
           <s-stack direction="block" gap="small-500">
-            <s-heading>
-              <s-link href={category.href}>{name}</s-link>
-            </s-heading>
+            <s-heading>{name}</s-heading>
             {detail ? <s-text color="subdued">{detail}</s-text> : null}
           </s-stack>
           <s-stack direction="block" alignItems="end">
             <span style={BIG_FIGURE}>{figure}</span>
             {tally.total > 0 && state.kind !== "no-access" ? (
-              <s-text color="subdued">{t("language.card.figure", { complete: tally.complete, total: tally.total })}</s-text>
+              <s-text color="subdued">{t("language.card.figure", { complete: tally.complete, total: tally.total, count: tally.total })}</s-text>
             ) : null}
           </s-stack>
         </s-grid>
@@ -325,8 +360,11 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
         <s-divider />
         <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
           <s-stack direction="inline" gap="small-100 base" alignItems="center">
-            <s-link href={category.href} accessibilityLabel={`${all}: ${name}`}>
-              {all} ›
+            <s-link href={href} accessibilityLabel={`${all}: ${name}`}>
+              {all}
+              <span style={INLINE_ICON}>
+                <s-icon type="chevron-right" size="small" />
+              </span>
             </s-link>
             {category.review ? (
               <s-link href={category.review.href} accessibilityLabel={`${t("language.card.review", { count: category.review.count })}: ${name}`}>

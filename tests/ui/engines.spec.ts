@@ -4,7 +4,7 @@
  * (playwright.config.ts, project "engines"; preload.ts answers only their
  * free checks and language lists). Nothing is translated here.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
 
 test("the operator's store sees the translation services: order, DeepL keys, an Azure and a Google tile", async ({ page }) => {
@@ -39,13 +39,16 @@ test("a merchant's store sees no translation services card", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "DeepL quota" })).toHaveCount(0);
 });
 
+/** A language's row on the Languages page (one row per language). */
+const languageRow = (page: Page, name: string) => page.getByRole("list", { name: "Languages" }).getByRole("listitem").filter({ hasText: name });
+
 test("the Languages page names the engine of each language", async ({ page }) => {
   await openApp(page, "engines", "/app/languages");
-  const german = page.locator("s-table-row").filter({ hasText: "de" }).filter({ hasText: "German" });
+  const german = languageRow(page, "German");
   await expect(german.getByText("Available")).toBeVisible();
   await expect(german.getByText("with DeepL")).toBeVisible();
   // DeepL's (fictional) list has no Thai: Microsoft Azure translates it.
-  const thai = page.locator("s-table-row").filter({ hasText: "Thai" });
+  const thai = languageRow(page, "Thai");
   await expect(thai.getByText("with Microsoft Azure")).toBeVisible();
   await expectAccessible(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -54,10 +57,11 @@ test("the Languages page names the engine of each language", async ({ page }) =>
 
 test("a DeepL-only consent: the language only Azure serves waits for consent, Settings ask to allow the others", async ({ page }) => {
   await openApp(page, "enginesLegacy", "/app/languages");
-  const thai = page.locator("s-table-row").filter({ hasText: "Thai" });
+  const thai = languageRow(page, "Thai");
   await expect(thai.getByText("Available with Microsoft Azure once you allow it in Settings")).toBeVisible();
-  await expect(thai.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/app/settings?section=ai");
-  const german = page.locator("s-table-row").filter({ hasText: "German" });
+  // The row opens the language; the way to allow the service is the notice above the list (no link inside a link).
+  await expect(page.locator('s-banner[heading="Some languages wait for your permission"]').getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/app/settings?section=ai");
+  const german = languageRow(page, "German");
   await expect(german.getByText("with DeepL")).toBeVisible();
 
   await openApp(page, "enginesLegacy", "/app/settings?section=ai");

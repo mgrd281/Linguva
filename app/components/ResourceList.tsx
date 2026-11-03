@@ -1,11 +1,17 @@
 /**
  * List of translatable resources (products, collections) with coverage
  * per language and bulk translation. See .server/translation/resource-list.
+ * Titled as the Content page names the type ("Buttons & fixed texts"), each
+ * item's state as the area lists show it (an icon and the same word).
  */
 import { useFetcher, useLoaderData } from "react-router";
 import type { loadResourceList, runResourceListAction } from "../.server/translation/resource-list";
 import { useI18n } from "../i18n/react";
+import type { I18n } from "../i18n/i18n";
 import { kindLabel, kindPlural, kindSingular } from "../i18n/labels";
+import { isHubType } from "../lib/content-areas";
+import type { ItemState } from "../lib/language-categories";
+import { ITEM_STATE_LOOK } from "./ItemStates";
 import { Breadcrumbs } from "./LanguageLayout";
 import { Button } from "./Button";
 
@@ -15,13 +21,29 @@ type ListAction = () => ReturnType<typeof runResourceListAction>;
 /** The Content page in the list's language (where every list opens from). */
 const contentHref = (locale: string | null) => (locale ? `/app/content?lang=${encodeURIComponent(locale)}` : "/app/content");
 
+/** The list's title: the Content page's name for the type, so its row and this page say the same. */
+function listTitle(i18n: I18n, type: string): string {
+  return isHubType(type) ? i18n.t(`content.part.${type}.name`) : kindLabel(i18n, type);
+}
+
+/** An item's state badge, in the area lists' words and icons: outdated, done, or still missing (also in part). */
+function StateBadge({ state, i18n }: { state: Extract<ItemState, "outdated" | "complete" | "missing">; i18n: I18n }) {
+  const look = ITEM_STATE_LOOK[state];
+  const tone = state === "outdated" ? "warning" : state === "complete" ? "success" : undefined;
+  return (
+    <s-badge icon={look.icon} {...(tone ? { tone } : {})}>
+      {i18n.t(`language.state.${state}`)}
+    </s-badge>
+  );
+}
+
 export function ResourceList() {
   const data = useLoaderData<ListLoader>();
   const bulk = useFetcher<ListAction>();
   const permission = useFetcher();
   const i18n = useI18n();
   const { t, number } = i18n;
-  const label = kindLabel(i18n, data.kind.type);
+  const label = listTitle(i18n, data.kind.type);
   const plural = kindPlural(i18n, data.kind.type);
 
   if (data.denied) {
@@ -158,7 +180,7 @@ export function ResourceList() {
                     {data.bulk.attached ? (
                       <s-checkbox
                         name="includeAttached"
-                        label={t("resources.bulk.attached")}
+                        label={t("language.confirm.attached")}
                         details={t("resources.bulk.attachedDetails", { singular: kindSingular(i18n, data.kind.type) })}
                       />
                     ) : null}
@@ -206,15 +228,7 @@ export function ResourceList() {
                     </s-link>
                   </s-table-cell>
                   <s-table-cell>
-                    {p.outdated > 0 ? (
-                      <s-badge tone="warning">{t("common.translationStatus.outdated")}</s-badge>
-                    ) : p.translated === p.total ? (
-                      <s-badge tone="success">{t("common.translationStatus.translated")}</s-badge>
-                    ) : p.translated > 0 ? (
-                      <s-badge tone="info">{t("resources.status.partial")}</s-badge>
-                    ) : (
-                      <s-badge>{t("common.translationStatus.missing")}</s-badge>
-                    )}
+                    <StateBadge state={p.outdated > 0 ? "outdated" : p.translated === p.total ? "complete" : "missing"} i18n={i18n} />
                   </s-table-cell>
                   <s-table-cell>
                     {number(p.translated)} / {number(p.total)}
@@ -228,13 +242,13 @@ export function ResourceList() {
 
       <s-stack direction="inline" gap="base">
         {!data.isFirstPage ? (
-          <Button href={`${data.kind.path}?lang=${encodeURIComponent(locale)}`}>{t("resources.paging.first")}</Button>
+          <Button href={`${data.kind.path}?lang=${encodeURIComponent(locale)}`}>{t("language.list.page.first")}</Button>
         ) : null}
         {data.nextCursor ? (
           <Button
             href={`${data.kind.path}?lang=${encodeURIComponent(locale)}&after=${encodeURIComponent(data.nextCursor)}`}
           >
-            {t("resources.paging.next")}
+            {t("language.list.page.next")}
           </Button>
         ) : null}
       </s-stack>

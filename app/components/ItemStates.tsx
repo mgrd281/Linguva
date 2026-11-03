@@ -11,6 +11,7 @@ import type { StateCounts } from "../lib/coverage-rules";
 import type { ItemState } from "../lib/language-categories";
 import { STATE_COLOURS, SURFACE_COLOUR, TRACK_COLOUR } from "./Coverage";
 import { PLAIN_LIST } from "./LanguageLayout";
+import { Strong } from "./Type";
 
 /** The states in reading order: what is live first, what is missing last. */
 export const SHOWN_STATES = ["complete", "waiting", "outdated", "failed", "missing"] as const satisfies readonly ItemState[];
@@ -96,8 +97,11 @@ export function OpenWorkLine({ counts, i18n, max = 2 }: { counts: StateCounts; i
   );
 }
 
-/** "✓ 15 done – customers see them": one line per state with texts, the figure first (a hero's list). */
-export function StateLines({ counts, i18n }: { counts: StateCounts; i18n: I18n }) {
+/**
+ * "✓ 15 done – customers see them": one line per state with texts, the figure first (a hero's list).
+ * `strong`: the figures in semibold (Strong), since Polaris draws s-text type="strong" at the body weight.
+ */
+export function StateLines({ counts, i18n, strong = false }: { counts: StateCounts; i18n: I18n; strong?: boolean }) {
   const texts = textCounts(counts);
   return (
     <ul style={{ ...PLAIN_LIST, display: "grid", gap: 6 }}>
@@ -106,7 +110,7 @@ export function StateLines({ counts, i18n }: { counts: StateCounts; i18n: I18n }
           <s-grid gridTemplateColumns="auto 1fr" gap="small-200" alignItems="center">
             <StateIcon state={s} size="small" />
             <s-text>
-              <s-text type="strong">{i18n.number(texts[s])}</s-text> {i18n.t(`language.hero.state.${s}`, { count: texts[s] })}
+              {strong ? <Strong>{i18n.number(texts[s])}</Strong> : <s-text type="strong">{i18n.number(texts[s])}</s-text>} {i18n.t(`language.hero.state.${s}`, { count: texts[s] })}
             </s-text>
           </s-grid>
         </li>

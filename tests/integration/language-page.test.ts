@@ -221,17 +221,23 @@ describe("the language page", () => {
     // Shop & checkout: the store's listing, never the legal texts (one by one).
     expect(category(page, "checkout").bulk).toMatchObject({ types: ["SHOP"], texts: { missing: 2, outdated: 0, failed: 0 }, items: null, attached: false });
     expect(category(page, "checkout").tally.counts.missing).toBe(3);
-    // Image descriptions and custom fields are never translated in bulk.
+    // Image descriptions and custom fields are never translated in bulk: they go with their products' step.
     expect(category(page, "images").bulk).toBeNull();
     expect(category(page, "customFields").bulk).toBeNull();
-    expect(page.next.find((s) => s.kind === "category" && s.category === "images")).toBeUndefined();
+    expect(page.next.find((s) => s.kind === "category" && (s.category === "images" || s.category === "customFields"))).toBeUndefined();
+    // Product 1's image description and the products' extra details (no collection, page or blog post has any).
+    expect(page.next[1]).toMatchObject({ attached: { images: 1, customFields: category(page, "customFields").tally.counts.missing } });
 
-    // Without the AI consent nothing starts in bulk: the steps open the lists instead.
+    // Without the AI consent nothing starts in bulk: allowing it comes first, the steps open the lists.
     await setAiConsent({ shopId: shop.id, granted: false, actorId: "1" }, app);
     const gated = await loadLanguagePage(store.asAdmin(), shop, "de", app, available);
     expect(gated.bulk.gate).toBe("CONSENT_REQUIRED");
-    expect(gated.next[1]).toMatchObject({ kind: "category", category: "products", action: "view" });
-    expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, { ...available, aiAvailable: false })).bulk.gate).toBe("AI_NOT_CONFIGURED");
+    expect(gated.next[1]).toEqual({ kind: "unlock", gate: "CONSENT_REQUIRED", href: "/app/settings?section=ai" });
+    expect(gated.next[2]).toMatchObject({ kind: "category", category: "products", action: "view" });
+    // The app's own setup is no step of the merchant's.
+    const unconfigured = await loadLanguagePage(store.asAdmin(), shop, "de", app, { ...available, aiAvailable: false });
+    expect(unconfigured.bulk.gate).toBe("AI_NOT_CONFIGURED");
+    expect(unconfigured.next.some((s) => s.kind === "unlock")).toBe(false);
     expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, { jobsAvailable: false, aiAvailable: true })).bulk.gate).toBe("JOBS_UNAVAILABLE");
   });
 
@@ -262,8 +268,9 @@ describe("the language page", () => {
   it("names the categories Linguva may not read, with where to allow it", async () => {
     const { shop, store } = await outdoorShop({ denied: ["MENU", "LINK", "SHOP_POLICY"] });
     const page = await loadLanguagePage(store.asAdmin(), shop, "de", app, available);
-    expect(category(page, "navigation").state).toEqual({ kind: "no-access", types: ["MENU", "LINK"], href: "/app/content/menus" });
-    expect(category(page, "checkout").state).toEqual({ kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content/policies" });
+    // "Allow access" leads to the Content page's card, which asks for every missing permission at once.
+    expect(category(page, "navigation").state).toEqual({ kind: "no-access", types: ["MENU", "LINK"], href: "/app/content?lang=de#content-access" });
+    expect(category(page, "checkout").state).toEqual({ kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content?lang=de#content-access" });
     expect(category(page, "products").state).toEqual({ kind: "ok" });
     // What it could read still adds up.
     expect(page.categories.reduce((total, c) => total + c.tally.total, 0)).toBe(page.headline!.total);
@@ -490,6 +497,22 @@ describe("a category's list", () => {
       countries: [{ code: "AT", name: "Austria" }, { code: "DE", name: "Germany" }],
       marketCountries: ["DE", "AT"],
     });
+  });
+
+  it("offers image descriptions and extra details with their owners: each owner's open texts of the list and what translating it would do", async () => {
+    const { shop, store } = await outdoorShop();
+    await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
+    const images = await loadCategoryItems(store.asAdmin(), shop, "de", "images", {}, app, available);
+    // Never a bulk job of their own.
+    expect(images.bulk.estimate).toBeNull();
+    expect(images.bulk.owners).toEqual([
+      { id: "products", open: 1, estimate: expect.objectContaining({ types: ["PRODUCT"], attached: true }), job: null },
+      { id: "collections", open: 1, estimate: expect.objectContaining({ types: ["COLLECTION"], attached: true }), job: null },
+    ]);
+    const fields = await loadCategoryItems(store.asAdmin(), shop, "de", "customFields", {}, app, available);
+    expect(fields.bulk.owners.map((o) => [o.id, o.open])).toEqual([["products", fields.category.tally!.counts.missing]]);
+    // Other areas have no owners.
+    expect((await loadCategoryItems(store.asAdmin(), shop, "de", "products", {}, app, available)).bulk.owners).toEqual([]);
   });
 
   it("finds items by title where Shopify can search them", async () => {

@@ -279,7 +279,8 @@ test("a refused key: the Overview warns and the language page waits for a key th
 
   await openApp(page, "ownkeyRefused", "/app/languages/de");
   await expect(page.getByText(en.t("language.error.OWN_KEY_REFUSED"))).toBeVisible();
-  await expect(page.locator('s-link[href="/app/settings?section=keys"]').first()).toBeVisible();
+  // The language page's step that lifts the gate: its button leads to the keys.
+  await expect(page.locator('[data-button][href="/app/settings?section=keys"]').first()).toBeVisible();
 
   // Settings says so in its status row, and opens the keys first.
   await openApp(page, "ownkeyRefused", "/app/settings");

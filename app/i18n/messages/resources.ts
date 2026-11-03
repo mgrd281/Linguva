@@ -18,7 +18,7 @@ export const en = {
 
   "resources.bulkError.heading": "Bulk translation couldn't start",
   "resources.bulkError.JOBS_UNAVAILABLE": "Background processing isn't configured for this app yet.",
-  "resources.bulkError.plan": "Your plan doesn't include this. Change it in Linguva under Settings → Plan.",
+  "resources.bulkError.plan": "Your plan doesn't include this. See the plans under Settings → Plan & usage.",
   "resources.bulkError.generic": "Please reload the page and try again.",
 
   "resources.plan.bulkHeading": "Bulk translation is part of paid plans",
@@ -44,7 +44,6 @@ export const en = {
   "resources.bulk.scopeAll": "All fields",
   "resources.bulk.scopeSeo": "Only search engine listings (SEO title and description)",
   "resources.bulk.overwrite": "Also replace outdated translations that a person wrote or approved",
-  "resources.bulk.attached": "Also translate image alt text and custom fields",
   "resources.bulk.attachedDetails": 'Checks every {singular}, so the job takes longer. Not used for "Only search engine listings".',
   "resources.bulk.submit": "Translate all into {language}",
 
@@ -53,9 +52,6 @@ export const en = {
   "resources.empty.yourLanguages": "your languages",
 
   "resources.table.translatedFields": "Translated fields",
-  "resources.status.partial": "Partial",
-  "resources.paging.first": "First page",
-  "resources.paging.next": "Next page",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -75,7 +71,7 @@ export const de: Translation<typeof en> = {
 
   "resources.bulkError.heading": "Die Massenübersetzung konnte nicht gestartet werden",
   "resources.bulkError.JOBS_UNAVAILABLE": "Die Hintergrundverarbeitung ist für diese App noch nicht eingerichtet.",
-  "resources.bulkError.plan": "Dein Tarif enthält das nicht. Du kannst ihn in Linguva unter „Einstellungen“ → „Tarif“ ändern.",
+  "resources.bulkError.plan": "Dein Tarif enthält das nicht. Die Tarife findest du unter „Einstellungen“ → „Tarif & Nutzung“.",
   "resources.bulkError.generic": "Bitte lade die Seite neu und versuche es noch einmal.",
 
   "resources.plan.bulkHeading": "Massenübersetzung ist in den kostenpflichtigen Tarifen enthalten",
@@ -101,7 +97,6 @@ export const de: Translation<typeof en> = {
   "resources.bulk.scopeAll": "Alle Felder",
   "resources.bulk.scopeSeo": "Nur Suchmaschinen-Einträge (SEO-Titel und SEO-Beschreibung)",
   "resources.bulk.overwrite": "Auch veraltete Übersetzungen ersetzen, die eine Person geschrieben oder freigegeben hat",
-  "resources.bulk.attached": "Auch Alt-Texte von Bildern und benutzerdefinierte Felder übersetzen",
   "resources.bulk.attachedDetails":
     "Prüft jeden Eintrag vom Typ „{singular}“, daher dauert der Auftrag länger. Gilt nicht für „Nur Suchmaschinen-Einträge“.",
   "resources.bulk.submit": "Alle in {language} übersetzen",
@@ -111,9 +106,6 @@ export const de: Translation<typeof en> = {
   "resources.empty.yourLanguages": "deine Sprachen",
 
   "resources.table.translatedFields": "Übersetzte Felder",
-  "resources.status.partial": "Teilweise",
-  "resources.paging.first": "Erste Seite",
-  "resources.paging.next": "Nächste Seite",
 };
 
 export const fr: Translation<typeof en> = {
@@ -133,7 +125,7 @@ export const fr: Translation<typeof en> = {
 
   "resources.bulkError.heading": "Impossible de lancer la traduction groupée",
   "resources.bulkError.JOBS_UNAVAILABLE": "Le traitement en arrière-plan n'est pas encore configuré pour cette application.",
-  "resources.bulkError.plan": "Votre forfait n'inclut pas cette fonctionnalité. Modifiez-le dans Linguva, sous Paramètres → Forfait.",
+  "resources.bulkError.plan": "Votre forfait n'inclut pas cette fonctionnalité. Consultez les forfaits sous Paramètres → Forfait et utilisation.",
   "resources.bulkError.generic": "Veuillez actualiser la page et réessayer.",
 
   "resources.plan.bulkHeading": "La traduction groupée est incluse dans les forfaits payants",
@@ -159,7 +151,6 @@ export const fr: Translation<typeof en> = {
   "resources.bulk.scopeAll": "Tous les champs",
   "resources.bulk.scopeSeo": "Uniquement le référencement (titre et description SEO)",
   "resources.bulk.overwrite": "Remplacer aussi les traductions obsolètes rédigées ou approuvées par une personne",
-  "resources.bulk.attached": "Traduire aussi le texte alternatif des images et les champs personnalisés",
   "resources.bulk.attachedDetails":
     "Vérifie chaque élément de type « {singular} », la tâche prend donc plus de temps. Ne s'applique pas à « Uniquement le référencement ».",
   "resources.bulk.submit": "Tout traduire : {language}",
@@ -169,9 +160,6 @@ export const fr: Translation<typeof en> = {
   "resources.empty.yourLanguages": "vos langues",
 
   "resources.table.translatedFields": "Champs traduits",
-  "resources.status.partial": "Partiel",
-  "resources.paging.first": "Première page",
-  "resources.paging.next": "Page suivante",
 };
 
 export const es: Translation<typeof en> = {
@@ -191,7 +179,7 @@ export const es: Translation<typeof en> = {
 
   "resources.bulkError.heading": "No se pudo iniciar la traducción masiva",
   "resources.bulkError.JOBS_UNAVAILABLE": "El procesamiento en segundo plano aún no está configurado para esta aplicación.",
-  "resources.bulkError.plan": "Tu plan no incluye esta función. Cámbialo en Linguva, en Configuración → Plan.",
+  "resources.bulkError.plan": "Tu plan no incluye esta función. Consulta los planes en Configuración → Plan y uso.",
   "resources.bulkError.generic": "Vuelve a cargar la página e inténtalo de nuevo.",
 
   "resources.plan.bulkHeading": "La traducción masiva está incluida en los planes de pago",
@@ -218,7 +206,6 @@ export const es: Translation<typeof en> = {
   "resources.bulk.scopeAll": "Todos los campos",
   "resources.bulk.scopeSeo": "Solo listados en buscadores (título y descripción SEO)",
   "resources.bulk.overwrite": "Reemplazar también las traducciones desactualizadas que una persona escribió o aprobó",
-  "resources.bulk.attached": "Traducir también el texto alternativo de las imágenes y los campos personalizados",
   "resources.bulk.attachedDetails":
     'Revisa cada elemento de tipo "{singular}", por lo que la tarea tarda más. No se aplica a "Solo listados en buscadores".',
   "resources.bulk.submit": "Traducir todo: {language}",
@@ -228,7 +215,4 @@ export const es: Translation<typeof en> = {
   "resources.empty.yourLanguages": "tus idiomas",
 
   "resources.table.translatedFields": "Campos traducidos",
-  "resources.status.partial": "Parcial",
-  "resources.paging.first": "Primera página",
-  "resources.paging.next": "Página siguiente",
 };

@@ -231,7 +231,8 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await clickSaveBarButton(page, "settings-style-save-bar", 0);
   await expectToast(page, "Saved. New AI translations use this form of address.");
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(false);
-  await page.reload();
+  // Opened again from the admin (a reload after a switch inside the app would lose its launch parameters).
+  await openApp(page, "full", "/app/settings?section=style");
   await expect(address("German").getByRole("radio", { name: "Informal (du)" })).toBeChecked();
   await expect(context).toHaveValue("Outdoor clothing for families, friendly and simple.");
   // German informal, French as DeepL decides: chosen per language.
@@ -243,7 +244,8 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await clickSaveBarButton(page, "settings-style-save-bar", 1);
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(false);
   await expect(address("French").getByRole("radio", { name: "DeepL decides" })).toBeChecked();
-  await page.reload();
+  // Opened again from the admin (a reload after a switch inside the app would lose its launch parameters).
+  await openApp(page, "full", "/app/settings?section=style");
   await expect(address("French").getByRole("radio", { name: "DeepL decides" })).toBeChecked();
 
   // As it was (other tests use this store).

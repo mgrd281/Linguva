@@ -81,7 +81,7 @@ export const en = {
   "overview.scan.updated": "Counting is done; the figures are up to date.",
   "overview.scan.updatedPartial": "Counting is done, but some content couldn't be read.",
   "overview.scan.updateFailed": "A newer count didn't finish; these figures are from the last complete one.",
-  "overview.scan.stopped": "Background jobs aren't running right now, so counting can't go on. It continues by itself once they're back; you can leave this page.",
+  "overview.scan.stopped": "Linguva's background service isn't running right now, so counting can't go on. It continues by itself once the service is back; you can leave this page.",
 
   "overview.next.measure.label": "See how much of your store is translated",
   "overview.next.measuring.label": "Counting your texts",
@@ -265,7 +265,7 @@ export const de: Translation<typeof en> = {
   "overview.scan.updated": "Fertig gezählt; die Zahlen sind aktuell.",
   "overview.scan.updatedPartial": "Fertig gezählt, einige Inhalte konnten aber nicht gelesen werden.",
   "overview.scan.updateFailed": "Ein neueres Zählen wurde nicht fertig; diese Zahlen stammen vom letzten vollständigen.",
-  "overview.scan.stopped": "Hintergrundaufgaben laufen gerade nicht, deshalb kommt das Zählen nicht weiter. Es geht von selbst weiter, sobald sie wieder laufen; du kannst diese Seite verlassen.",
+  "overview.scan.stopped": "Linguvas Hintergrunddienst läuft gerade nicht, deshalb kommt das Zählen nicht weiter. Es geht von selbst weiter, sobald er wieder läuft; du kannst diese Seite verlassen.",
 
   "overview.next.measure.label": "Sehen, wie viel deines Shops übersetzt ist",
   "overview.next.measuring.label": "Deine Texte werden gezählt",
@@ -448,7 +448,7 @@ export const fr: Translation<typeof en> = {
   "overview.scan.updated": "Le comptage est terminé ; les chiffres sont à jour.",
   "overview.scan.updatedPartial": "Le comptage est terminé, mais certains contenus n'ont pas pu être lus.",
   "overview.scan.updateFailed": "Un comptage plus récent ne s'est pas terminé ; ces chiffres viennent du dernier comptage complet.",
-  "overview.scan.stopped": "Les tâches en arrière-plan ne tournent pas en ce moment, le comptage ne peut donc pas avancer. Il reprendra de lui-même dès leur retour ; vous pouvez quitter cette page.",
+  "overview.scan.stopped": "Le service d'arrière-plan de Linguva ne tourne pas en ce moment, le comptage ne peut donc pas avancer. Il reprendra de lui-même dès le retour du service ; vous pouvez quitter cette page.",
 
   "overview.next.measure.label": "Voir quelle part de votre boutique est traduite",
   "overview.next.measuring.label": "Comptage de vos textes en cours",
@@ -630,7 +630,7 @@ export const es: Translation<typeof en> = {
   "overview.scan.updated": "El recuento ha terminado; las cifras están actualizadas.",
   "overview.scan.updatedPartial": "El recuento ha terminado, pero no se pudo leer parte del contenido.",
   "overview.scan.updateFailed": "Un recuento más reciente no terminó; estas cifras son del último completo.",
-  "overview.scan.stopped": "Las tareas en segundo plano no se están ejecutando ahora, así que el recuento no puede avanzar. Continuará solo cuando vuelvan; puedes salir de esta página.",
+  "overview.scan.stopped": "El servicio en segundo plano de Linguva no se está ejecutando ahora, así que el recuento no puede avanzar. Continuará solo cuando el servicio vuelva; puedes salir de esta página.",
 
   "overview.next.measure.label": "Ver cuánto de tu tienda está traducido",
   "overview.next.measuring.label": "Contando tus textos",

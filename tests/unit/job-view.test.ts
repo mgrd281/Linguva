@@ -1028,7 +1028,7 @@ describe("heroModel", () => {
     expect(label("en", model)).toBe("60% done. Products: 206 of 340 done. 176 wait for your approval, 30 were already up to date, 2 incomplete, 4 failed, 128 still to do.");
     expect(lines("de", model)).toEqual(["subdued: Noch etwa 4 Minuten. Du kannst die Seite verlassen, der Auftrag läuft weiter.", "live: Aktualisiert sich von selbst"]);
     expect(steps("de", model)).toEqual([
-      ["review", "452 Übersetzungen freigeben", "Für 176 Produkte. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt prüfen → /app/review?job=${id(1)}`, "primary"],
+      ["review", "452 Übersetzungen freigeben", "Für 176 Produkte. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt freigeben → /app/review?job=${id(1)}`, "primary"],
       ["retry", "1 Produkt noch einmal versuchen", "Ein neuer Versuch klappt meistens, etwa wenn ein Dienst kurz nicht erreichbar war.", "retry: Wiederholen", "-"],
     ]);
     const retry = model.panel!.steps[1]!.action;
@@ -1053,7 +1053,7 @@ describe("heroModel", () => {
     expect(label("de", model)?.startsWith("93 % fertig. Produkte: 83 von 89 fertig. 52 warten auf deine Freigabe, 31 waren schon aktuell, 2 unvollständig, 3 fehlgeschlagen, 1 noch nicht übersetzt.")).toBe(true);
     expect(lines("de", model)).toEqual(["subdued: Kunden sehen die neuen Übersetzungen, sobald du sie freigibst. Was fehlt, steht weiter unten."]);
     expect(steps("de", model)).toEqual([
-      ["review", "140 Übersetzungen freigeben", "Für 52 Produkte. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt prüfen → /app/review?job=${id(7)}`, "primary"],
+      ["review", "140 Übersetzungen freigeben", "Für 52 Produkte. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt freigeben → /app/review?job=${id(7)}`, "primary"],
       ["retry", "1 Produkt noch einmal versuchen", "Ein neuer Versuch klappt meistens, etwa wenn ein Dienst kurz nicht erreichbar war.", "retry: Wiederholen", "-"],
       ["finish", "4 Produkte im Editor fertig übersetzen", "Ein neuer Versuch hilft hier nicht; das geht nur im Editor.", "Einträge zeigen → #problems-heading", "-"],
     ]);
@@ -1142,7 +1142,7 @@ describe("heroModel", () => {
     expect(steps("de", model)).toEqual([
       ["fix", "Übersetzungsdienst erlauben", `In den Einstellungen unter „${section}“. Das dauert eine Minute.`, `In den Einstellungen erlauben → /app/settings?section=ai&job=${id(10)}`, "primary"],
       ["resume", "Auftrag fortsetzen", "Danach übersetzt Linguva die übrigen 15 Kollektionen. 9 Kollektionen sind schon fertig und bleiben.", "resume: Auftrag fortsetzen", "-"],
-      ["review", "27 Übersetzungen freigeben", "Für 9 Kollektionen. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt prüfen → /app/review?job=${id(10)}`, "-"],
+      ["review", "27 Übersetzungen freigeben", "Für 9 Kollektionen. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt freigeben → /app/review?job=${id(10)}`, "-"],
     ]);
     expect(steps("en", model).map((s) => s[1])).toEqual(["Allow the translation service", "Resume the job", "Approve 27 translations"]);
     expect(model.panel?.foot).toBeNull();
@@ -1167,7 +1167,7 @@ describe("heroModel", () => {
     expect(say("de", model.title)).toBe("Blogbeiträge: 18 von 64 fertig");
     expect(lines("de", model)[0]).toBe(`warning: Das KI‑Kontingent für heute ist aufgebraucht. Ab ${clock("de", "2026-11-03T00:00:00.000Z")} kannst du fortsetzen.`);
     expect(steps("de", model)).toEqual([
-      ["review", "54 Übersetzungen freigeben", "Für 18 Blogbeiträge. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt prüfen → /app/review?job=${id(40)}`, "primary"],
+      ["review", "54 Übersetzungen freigeben", "Für 18 Blogbeiträge. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt freigeben → /app/review?job=${id(40)}`, "primary"],
       ["wait", "Ab 01:00 fortsetzen", "Dann ist das Tageskontingent wieder da. Der Knopf zum Fortsetzen erscheint hier von selbst.", null, "-"],
     ]);
     // The page's timeRef writes the reset (midnight UTC, 1:00 in Berlin): 12-hour in English, Spanish with its article.
@@ -1196,7 +1196,7 @@ describe("heroModel", () => {
     expect(steps("de", model)).toEqual([
       ["fix", "Schlüssel prüfen", "In den Einstellungen unter „Deine Schlüssel“: erneut prüfen oder ersetzen.", `Zu deinen Schlüsseln → /app/settings?section=keys&job=${id(41)}`, "primary"],
       ["resume", "Auftrag fortsetzen", "Danach übersetzt Linguva die übrigen 10 Seiten. 2 Seiten sind schon fertig und bleiben.", "resume: Auftrag fortsetzen", "-"],
-      ["review", "6 Übersetzungen freigeben", "Für 2 Seiten. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt prüfen → /app/review?job=${id(41)}`, "-"],
+      ["review", "6 Übersetzungen freigeben", "Für 2 Seiten. Die KI hat sie schon geschrieben – Kunden sehen sie erst nach deiner Freigabe.", `Jetzt freigeben → /app/review?job=${id(41)}`, "-"],
     ]);
     expect(steps("en", model)[0]!.slice(1, 4)).toEqual(["Check your key", "In Settings under “Your keys”: check it again or replace it.", `Go to your keys → /app/settings?section=keys&job=${id(41)}`]);
     expect(model.panel?.fold).toEqual({ summary: "jobs.next.whatHappened", code: "OWN_KEY_AUTH_DEEPL" });
@@ -1267,7 +1267,7 @@ describe("heroModel", () => {
     expect(autoOff.legend.map((line) => say("de", line.text))).toEqual(["2 übersetzt und live", "3 nicht übersetzt"]);
     const smartOff = job({ id: id(43), status: "CANCELLED", errorCode: "SMART_OFF", requestedBy: SMART, smartRunId: "run-7", totalItems: 8, succeededItems: 3, skippedItems: 5 });
     expect(steps("en", hero(smartOff, rowCounts(smartOff, outcomesOf({ waiting: 3, cancelled: 5 })), { translations: 3, items: 3 })).map((s) => [s[0], s[3], s[4]])).toEqual([
-      ["review", `Review now → /app/review?job=${id(43)}`, "primary"],
+      ["review", `Approve now → /app/review?job=${id(43)}`, "primary"],
       ["smartOff", "View schedule → /app/settings/automatic", "-"],
     ]);
     const uninstalled = hero({ ...J05, errorCode: "SHOP_UNINSTALLED" }, rowCounts(J05, R05));
@@ -1492,7 +1492,7 @@ describe("attentionVerdict", () => {
     expect(review).toMatchObject({ verdict: "review", mark: { icon: "clock", tone: "info" }, featured: null, rows: [] });
     expect([say("de", review.heading), sayAll("de", review.text)]).toEqual(["826 Übersetzungen warten auf deine Freigabe", "Kunden sehen sie erst, wenn du sie freigibst. Sonst braucht dich gerade nichts."]);
     expect(review.headAction).toEqual({ kind: "link", href: "/app/review", label: { key: "language.next.review.action" } });
-    expect(say("de", review.headAction!.label)).toBe("Jetzt prüfen");
+    expect(say("de", review.headAction!.label)).toBe("Jetzt freigeben");
   });
 
   it("shows no card when nothing needs the merchant", () => {

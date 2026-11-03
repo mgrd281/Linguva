@@ -120,7 +120,7 @@ describe("the Overview page", () => {
     expect(next).toContain('<span class="lv-icon-square" data-tint="violet" aria-hidden="true"><s-icon type="eye-check-mark"');
     expect(next).toContain('<h3 class="lv-h3">Approve 6 translations</h3>');
     // The primary button carries no icon: the step's square is its icon.
-    expect(next).toMatch(linkButton("/app/review", "primary", "Review now"));
+    expect(next).toMatch(linkButton("/app/review", "primary", "Approve now"));
   });
 
   it("names the language in a quieter row's title and button, and opens Shopify's settings with one label and icon", async () => {

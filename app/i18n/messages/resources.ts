@@ -17,7 +17,7 @@ export const en = {
   "resources.consent.after": " first.",
 
   "resources.bulkError.heading": "Bulk translation couldn't start",
-  "resources.bulkError.JOBS_UNAVAILABLE": "Background processing isn't configured for this app yet.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "Linguva's background service isn't set up for this app yet.",
   "resources.bulkError.plan": "Your plan doesn't include this. See the plans under Settings → Plan & usage.",
   "resources.bulkError.generic": "Please reload the page and try again.",
 
@@ -70,7 +70,7 @@ export const de: Translation<typeof en> = {
   "resources.consent.after": ".",
 
   "resources.bulkError.heading": "Die Massenübersetzung konnte nicht gestartet werden",
-  "resources.bulkError.JOBS_UNAVAILABLE": "Die Hintergrundverarbeitung ist für diese App noch nicht eingerichtet.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "Linguvas Hintergrunddienst ist für diese App noch nicht eingerichtet.",
   "resources.bulkError.plan": "Dein Tarif enthält das nicht. Die Tarife findest du unter „Einstellungen“ → „Tarif & Nutzung“.",
   "resources.bulkError.generic": "Bitte lade die Seite neu und versuche es noch einmal.",
 
@@ -124,7 +124,7 @@ export const fr: Translation<typeof en> = {
   "resources.consent.after": ".",
 
   "resources.bulkError.heading": "Impossible de lancer la traduction groupée",
-  "resources.bulkError.JOBS_UNAVAILABLE": "Le traitement en arrière-plan n'est pas encore configuré pour cette application.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "Le service d'arrière-plan de Linguva n'est pas encore configuré pour cette application.",
   "resources.bulkError.plan": "Votre forfait n'inclut pas cette fonctionnalité. Consultez les forfaits sous Paramètres → Forfait et utilisation.",
   "resources.bulkError.generic": "Veuillez actualiser la page et réessayer.",
 
@@ -178,7 +178,7 @@ export const es: Translation<typeof en> = {
   "resources.consent.after": ".",
 
   "resources.bulkError.heading": "No se pudo iniciar la traducción masiva",
-  "resources.bulkError.JOBS_UNAVAILABLE": "El procesamiento en segundo plano aún no está configurado para esta aplicación.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "El servicio en segundo plano de Linguva aún no está configurado para esta aplicación.",
   "resources.bulkError.plan": "Tu plan no incluye esta función. Consulta los planes en Configuración → Plan y uso.",
   "resources.bulkError.generic": "Vuelve a cargar la página e inténtalo de nuevo.",
 

@@ -193,7 +193,7 @@ test("a stuck newer count keeps the figures and can be started again from the st
   const store = region(page, "Your store");
   await expect(store.getByText("Your store in 1 other language")).toBeVisible();
   // No worker runs in these tests: the note says so (with a worker: "A newer count didn't finish…").
-  await expect(store.getByText(/^Background jobs aren't running right now/)).toBeVisible();
+  await expect(store.getByText(/^Linguva's background service isn't running right now/)).toBeVisible();
   // A secondary action: the next step keeps the page's only primary button.
   await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   await store.getByRole("button", { name: "Count translations again" }).click();

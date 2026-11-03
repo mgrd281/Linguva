@@ -532,7 +532,7 @@ function StoreFigure({ data, i18n, counting }: { data: Data; i18n: I18n; countin
                 </s-text>
               </s-stack>
             </s-grid>
-            <StateLines counts={share.counts} i18n={i18n} />
+            <StateLines counts={share.counts} i18n={i18n} strong />
             <s-text color="subdued">{t("language.hero.fallback", { primary })}</s-text>
             {/* While approving is the next step, that step says what it brings. */}
             {share.payoff !== null && data.next?.id !== "review" ? (

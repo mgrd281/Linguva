@@ -65,8 +65,12 @@ function runCommand(target: string, command: Command | undefined) {
   else element.showOverlay?.();
 }
 
-/** An address inside the app: React Router navigates there without reloading the embedded page. */
-const inApp = (href: string) => href.startsWith("/") && !href.startsWith("//");
+/**
+ * An address inside the app, absolute ("/app/plan") or relative ("?after=…"): React Router navigates
+ * there without reloading the embedded page (a reload would lose the admin's launch parameters). A
+ * scheme (shopify:, https:), another host ("//…") or a jump on the page ("#…") isn't one.
+ */
+const inApp = (href: string) => !/^[a-z][a-z\d+.-]*:/i.test(href) && !href.startsWith("//") && !href.startsWith("#");
 
 export function Button(props: ButtonProps) {
   const {

@@ -451,13 +451,15 @@ export default function Settings() {
   const current: SectionKey = requested ?? (available.includes(openedSection) ? openedSection : "changes");
   const jobParam = searchParams.get("job");
 
-  // Another section chosen: its heading takes focus (the new address starts at the top of the page).
-  const shown = useRef(current);
+  // Another section shown, or a section chosen in the address (on a phone the list opens the one that
+  // needs the merchant, which is already the current one): its heading takes focus.
+  const shown = useRef({ requested, current });
   useEffect(() => {
-    if (shown.current === current) return;
-    shown.current = current;
-    focusSection(sectionId(current));
-  }, [current]);
+    const before = shown.current;
+    if (before.requested === requested && before.current === current) return;
+    shown.current = { requested, current };
+    if (requested || before.current !== current) focusSection(sectionId(current));
+  }, [requested, current]);
   // The cards' old addresses (/app/settings#settings-keys) open their section.
   const hasKeys = Boolean(data.ownKeys);
   useEffect(() => {

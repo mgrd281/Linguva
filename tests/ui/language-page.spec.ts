@@ -63,7 +63,7 @@ test("how far a language is, one next step, and each area with pictures @respons
   const primary = hero.locator("ol > li").first().locator('[data-button][data-variant="primary"]');
   await expect(primary).toHaveCount(1);
   // Easy to hit with a thumb.
-  if (info.project.name === "mobile") expect((await primary.getByRole("button").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  if (info.project.name === "mobile") expect((await primary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
   // Why the percentage rises only after approving.
   const strip = page.getByRole("region", { name: "How English becomes German" });

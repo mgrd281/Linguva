@@ -204,7 +204,9 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await expect(address("German").getByRole("radio", { name: "Informal (du)" })).toBeAttached();
   await expect(address("French").locator(".lv-seg__text")).toHaveText(["DeepL decides", "Vous", "Tu"]);
   await expect(address("Arabic")).toHaveCount(0);
-  await expect(style.getByText(/^No choice needed for\s+Arabic\.$/)).toBeVisible();
+  // Its flag is the code box "AR" (no single country): part of the line's text.
+  await expect(style.getByText(/^No choice needed for/)).toBeVisible();
+  await expect(style.getByText(/^No choice needed for/)).toContainText("Arabic");
   const context = style.getByRole("textbox", { name: "About your store" });
   await expect(context).toHaveAttribute("placeholder", "Outdoor clothing for families, friendly and simple");
   await expect(style.getByText("What you sell and how you speak. Helps AI choose its words; not translated.")).toBeVisible();

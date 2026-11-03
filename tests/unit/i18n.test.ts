@@ -19,7 +19,7 @@ const SAME_IN_BOTH = new Set([
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
-  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—"],
+  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—", "Page {page}"],
   ...["{language} · {kind}", "{figure} {caption}. {title}. {states}."],
 ]);
 const SAME_IN_SPANISH = new Set([
@@ -43,10 +43,10 @@ describe("interface language", () => {
   });
 
   it("fills placeholders, formats numbers for the language and picks plural forms", () => {
-    expect(translate("en", "jobs.detail.timing.minutes", { count: 1 })).toBe("1 minute");
-    expect(translate("en", "jobs.detail.timing.minutes", { count: 1200 })).toBe("1,200 minutes");
-    expect(translate("de", "jobs.detail.timing.minutes", { count: 1 })).toBe("1 Minute");
-    expect(translate("de", "jobs.detail.timing.minutes", { count: 1200 })).toBe("1.200 Minuten");
+    expect(translate("en", "jobs.problems.attempts", { count: 1 })).toBe("1 attempt");
+    expect(translate("en", "jobs.problems.attempts", { count: 1200 })).toBe("1,200 attempts");
+    expect(translate("de", "jobs.problems.attempts", { count: 1 })).toBe("1 Versuch");
+    expect(translate("de", "jobs.problems.attempts", { count: 1200 })).toBe("1.200 Versuche");
     expect(formatNumber("de", 1234567)).toBe("1.234.567");
   });
 

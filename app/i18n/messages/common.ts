@@ -41,7 +41,6 @@ export const en = {
   "common.language": "Language",
   "common.languages": "Languages",
   "common.allLanguages": "All languages",
-  "common.contentType": "Content",
   "common.status": "Status",
   "common.automatic": "Automatic",
 
@@ -263,7 +262,6 @@ export const de: Translation<typeof en> = {
   "common.language": "Sprache",
   "common.languages": "Sprachen",
   "common.allLanguages": "Alle Sprachen",
-  "common.contentType": "Inhalt",
   "common.status": "Status",
   "common.automatic": "Automatisch",
 
@@ -483,7 +481,6 @@ export const fr: Translation<typeof en> = {
   "common.language": "Langue",
   "common.languages": "Langues",
   "common.allLanguages": "Toutes les langues",
-  "common.contentType": "Contenu",
   "common.status": "Statut",
   "common.automatic": "Automatique",
 
@@ -703,7 +700,6 @@ export const es: Translation<typeof en> = {
   "common.language": "Idioma",
   "common.languages": "Idiomas",
   "common.allLanguages": "Todos los idiomas",
-  "common.contentType": "Contenido",
   "common.status": "Estado",
   "common.automatic": "Automático",
 

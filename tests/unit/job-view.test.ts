@@ -1424,6 +1424,8 @@ describe("the list's address", () => {
     expect(parseJobsQuery("/app/jobs?status=bogus&lang=%3Cscript%3E&area=everything&type=SHOP_POLICY&by=robot&since=1y&q=%20&after=7f3a2c10&p=0&started=x")).toEqual(parseJobsQuery("/app/jobs"));
     // Old links open the problems; `history` is the server's, not a tab.
     expect(parseJobsQuery("/app/jobs?status=failed").status).toBe("problems");
+    // The selects' "All …" options submit ALL ("all"): no filter, although "all" reads like a language code.
+    expect(parseJobsQuery("/app/jobs?lang=all&area=all&by=all&since=all")).toEqual(parseJobsQuery("/app/jobs"));
     expect(parseJobsQuery("/app/jobs?status=history").status).toBe("all");
     expect(parseJobsQuery(new URLSearchParams({ lang: "pt-BR", type: "MEDIA_IMAGE" }))).toMatchObject({ lang: "pt-BR", type: "MEDIA_IMAGE" });
     expect(parseJobsQuery(new URL("https://example.test/app/jobs?type=LINK&area=navigation"))).toMatchObject({ area: "navigation", type: "LINK" });

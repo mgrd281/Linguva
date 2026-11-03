@@ -24,6 +24,8 @@ const PAGES: Array<[string, string, UiShopKey?]> = [
   ["language", "/app/languages/de"],
   ["category", "/app/languages/de/products"],
   ["content", "/app/content"],
+  // The Jobs list's Completed tab (its jobs started on fixed hours of earlier store days).
+  ["jobs-completed", "/app/jobs?status=completed", "jobs"],
 ];
 
 // With the time where a page shows it, in the store's zone or with "UTC" ("Oct 30, 2026,
@@ -65,6 +67,15 @@ async function settle(page: Page) {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(300);
 }
+
+// A finished job's page: yesterday's pages, one failed for good (opened from its row, its id is the seed's).
+test("job looks as reviewed @responsive", async ({ page }) => {
+  await openApp(page, "jobs", "/app/jobs?status=completed&lang=fr&area=pages");
+  const href = await page.locator('section[aria-labelledby^="day-"] s-clickable[href^="/app/jobs/"]').first().getAttribute("href");
+  await openApp(page, "jobs", href!);
+  await settle(page);
+  await expect(page).toHaveScreenshot("job.png", { animations: "disabled", caret: "hide", maxDiffPixelRatio: 0.01 });
+});
 
 for (const [name, path, shop] of PAGES) {
   test(`${name} looks as reviewed @responsive`, async ({ page }) => {

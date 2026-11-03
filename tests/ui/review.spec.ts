@@ -290,7 +290,7 @@ test.describe("Review", () => {
 
   test("a job's texts: the scope chip, and Show all @responsive", async ({ page }) => {
     await open(page, "/app/jobs");
-    const job = await page.locator('s-link[href^="/app/jobs/"]').first().getAttribute("href");
+    const job = await page.locator('section[aria-labelledby^="day-"] s-clickable[href^="/app/jobs/"]').first().getAttribute("href");
     await open(page, job!);
     const review = await page.locator('s-button[href^="/app/review?job="]').getAttribute("href");
     await open(page, review!);

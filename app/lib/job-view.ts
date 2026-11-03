@@ -30,6 +30,7 @@ import { CATEGORIES, isCategoryId, languagePath, type CategoryId } from "./langu
 import { upperFirst } from "./name-lists";
 import { parseOwnKeyCode } from "./own-keys";
 import { CONTENT_TYPES, coverageTypeLabel, RESOURCE_KINDS } from "./resource-kinds";
+import { ALL } from "./select-all";
 import { SMART_REQUESTED_BY } from "./smart-auto";
 
 /**
@@ -1617,7 +1618,8 @@ export function parseJobsQuery(url: URL | URLSearchParams | string): JobsQuery {
   return {
     // Old links (?status=failed) open the problems.
     status: status === "failed" ? "problems" : (oneOf(JOB_TABS, status) ?? "all"),
-    lang: lang && lang.length <= 35 && LOCALE.test(lang) ? lang : null,
+    // A select's "All languages" option submits ALL ("all"), which would read as a code.
+    lang: lang && lang !== ALL && lang.length <= 35 && LOCALE.test(lang) ? lang : null,
     area: area && isCategoryId(area) ? area : null,
     type: oneOf(JOB_TYPES, type),
     by: oneOf(JOB_BY, get("by")),

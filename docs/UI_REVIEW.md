@@ -219,6 +219,15 @@ Plan:
 2. Deviations from the spec, kept for now: the meter names are h3 headings (spec: strong text); the hero section has no accessibility label (Polaris would add a second, hidden heading); a new key `plan.row.languages.detail`; at four columns "Fits your store" sits below the plan icon in German, French and Spanish (artboard: at the right).
 3. A plan change that keeps the plan handle (for example Pro monthly to Pro yearly at the cycle's end, if Shopify reports it so) would read "Changes to Pro on …" on a Pro store, because the app doesn't read the billing period. To check on the dev store (DEV_STORE_TEST_PLAN L14).
 
+## 3e. Redesign 3: the Jobs pages (owner request, 2026-11-02/03)
+
+The Jobs list and a job's page, rebuilt on the shared view logic (`app/lib/job-view.ts`, tested in `tests/unit/job-view.test.ts`) and the list's server queries (`app/.server/jobs/bulk-jobs.ts`, `tests/integration/jobs-page.test.ts`). The words, states and figures are the view logic's, so the list and the job's page always say the same.
+
+- **Jobs list** (`/app/jobs`): an attention card first (a stop that needs the merchant, with its fix and the way to the job; stops that go on by themselves; failed items; background jobs not running; translations to approve), only on the unfiltered first page of "All". Tabs with their figures (All, Running, Problems in the last 14 days, Completed, Cancelled), the search (a product's name or a job's reference) and four filters (language, content, who started it, when; behind "Filters (n)" on a phone). On "All": the jobs running now, updating by themselves, then the history by day in the store's time zone ("Today · Tuesday, November 3"), the jobs of one click or one schedule check together. Each row: the language's flag, the job's one name ("French · Products"), its origin badges, what came out in words with its icon (never colour alone), and its meta. Pages go both ways by keyset.
+- **A job's page** (`/app/jobs/:id`): the header with the state badge and who started it when; the hero like the language page's: the ring of what ended well (dashed while the job still finds its items, a clock while queued), the title, its lines (time left, the stop's reason, "Updates by itself") and the legend; beside it the Next panel with at most three numbered steps and one primary button (approve, try again, finish in the editor, fix the cause, resume), or "Nothing to do." The stats (time, AI characters, saved), the items that need the merchant by their names and pictures (each opens the editor), and the results in detail with the CSV report and the support reference, folded. Cancel asks first and says what stays.
+
+Status: **Implemented; content checked locally** (every state of `tests/ui/fixtures/jobs-store.ts` rendered from the production build). This development container can't load Polaris from Shopify's CDN (network policy), so the layout itself is checked in CI: `tests/ui/jobs.spec.ts` and the `jobs-completed` and `job` screenshot comparisons, whose `*-ci.png` images come from the first CI run.
+
 ## 4. Tests for the changes
 
 | Change | Test |

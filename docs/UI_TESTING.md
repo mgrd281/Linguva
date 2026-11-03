@@ -57,11 +57,12 @@ Nothing in `app/` knows about the tests: there is no test mode and no auth bypas
 | `timings.spec.ts` | Server response times of the main pages (PERFORMANCE.md) |
 | `language-page.spec.ts` | A language's page: breadcrumb, figure (ring and words), one next step with the page's only primary button (at least 44 px high on a phone), the three steps to live, the areas in the order customers meet them with loaded pictures and alt attributes, "View all" (also on a phone), what the percentage leaves out, the folded words, the confirm dialog (contents, Cancel starts nothing, confirming opens the job), not counted, hidden, no access, unknown and primary language |
 | `category-list.spec.ts` | One area of a language: figure and next step, filter chips that add up to "All", groups by state, rows with pictures, texts and the editor link, filters, paging (50 per page), search that keeps the filter, the confirm dialog, no access, not counted, unknown area or language |
-| `visual.spec.ts` | Screenshot comparison of 11 screens on desktop and phone (see below) |
+| `visual.spec.ts` | Screenshot comparison of 13 screens on desktop and phone (see below) |
 | `editor-states.spec.ts` | Every editor field starts with its state; the original description's preview fits its list |
 | `ui-review-screenshots.spec.ts` | On demand (`UI_REVIEW_SCREENSHOTS=<folder>`): full-page screenshots of the key screens for the design review (docs/UI_REVIEW.md) |
 | `i18n.spec.ts` | German interface from Shopify's `locale` parameter: 12 pages (with a language's page and its products) with axe, phone layout and no English interface text left; navigation stays German inside the app; the target language (`?lang=`) never changes the interface; German error page; browser language without the parameter |
 | `job-report.spec.ts` | Job page results by reason, timing and support reference; CSV report in English and German; another store's report is 404 |
+| `jobs.spec.ts` | The Jobs pages on the `jobs` store (a job in each state, `fixtures/jobs-store.ts`): the list's attention card, tabs and their figures, the live group, days and the click's cluster, the Problems tab, filters and the search by reference, German; a job's hero, legend and next steps (one primary), the cancel dialog, a stop's fix and Resume, a finished job's problems and report, a job with nothing to translate |
 
 `openApp(page, shop, path, { locale: "de" })` opens a page as a German admin user would (Shopify adds `locale` to the app's URL). The app's own language parameter for the translation target is `lang`.
 
@@ -71,9 +72,9 @@ Polaris web components set ARIA roles through `ElementInternals`, which axe-core
 
 ## Visual comparisons
 
-`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings, Plan and Content pages, the Plan page without a plan (`ui-empty` store), a language's page and one of its areas (German, Products), desktop and phone, with reference images (up to 1 % of pixels may differ). It uses the `ui-visual` store unless another is named, waits until the Inter web font is loaded, and replaces dates (with their time, where a page shows it, or a day without a year, like "on November 1") with a fixed one. Polaris text has no box of its own, so masking can't cover it.
+`visual.spec.ts` compares the Overview, Products, Editor, Review (empty), Glossary, Settings, Plan and Content pages, the Jobs list's Completed tab and a finished job's page (`jobs` store, `jobs-completed` and `job`), the Plan page without a plan (`ui-empty` store), a language's page and one of its areas (German, Products), desktop and phone, with reference images (up to 1 % of pixels may differ). It uses the `ui-visual` store unless another is named, waits until the Inter web font is loaded, and replaces dates (with their time, where a page shows it, or a day without a year, like "on November 1") with a fixed one. Polaris text has no box of its own, so masking can't cover it.
 
-Redesign 2 (2026-10-30) added `content` and `plan-none` and changed `products` (the breadcrumb back to Content, "French (hidden)"), `plan` and `review-empty`. Their `*-ci.png` images come from the first CI run after the merge (steps below); until then those comparisons fail in CI.
+Redesign 3 (2026-11-03) added `jobs-completed` and `job`; their `*-ci.png` images come from the first CI run after the change. Redesign 2 (2026-10-30) added `content` and `plan-none` and changed `products` (the breadcrumb back to Content, "French (hidden)"), `plan` and `review-empty`. Their `*-ci.png` images come from the first CI run after the merge (steps below); until then those comparisons fail in CI.
 
 **CI is the reference.** GitHub's Ubuntu runners render the committed images `tests/ui/visual.spec.ts-snapshots/*-ci.png`. Other machines can render text differently: this development container has Inter installed as a system font, which the browser uses instead of Shopify's web font, with slightly different glyph widths (2–4 % of pixels). So other machines compare against their own `*-local.png` images. Those are created on the first run and not committed.
 

@@ -7,15 +7,20 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
+/** The first job row of the list (the full store's seeded French job). */
+const firstJob = (page: import("@playwright/test").Page) => page.locator('section[aria-labelledby^="day-"] s-clickable[href^="/app/jobs/"]').first();
+
 test("a job page explains every result and offers a report @responsive", async ({ page }) => {
   await openApp(page, "full", "/app/jobs");
-  await page.locator("s-table s-link").first().click();
+  await firstJob(page).click();
   await expect(page).toHaveURL(/\/app\/jobs\/[0-9a-f-]{36}/);
-  const results = page.locator('s-section[heading="Results in detail"]');
+  // The results in detail are folded under the page's summary.
+  const results = page.locator("details", { hasText: "Results in detail" });
+  await results.locator("summary").click();
   // The seeded French job drafted every product for review.
   await expect(results.getByText("Saved as drafts for review")).toBeVisible();
   // In the store's time zone (Europe/Berlin in the fixtures), so without "UTC".
-  await expect(page.getByText(/^Started [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s?[AP]M( · |$)/)).toBeVisible();
+  await expect(page.getByText(/^Started (today|yesterday|on .+) at \d{1,2}:\d{2}\s?[AP]M( · |$)/)).toBeVisible();
   await expect(page.getByText(/^Started .+UTC/)).toHaveCount(0);
   await expect(results.getByText(/^Reference for support: [0-9a-f-]{36}$/)).toBeVisible();
   await expectAccessible(page);
@@ -33,10 +38,11 @@ test("a job page explains every result and offers a report @responsive", async (
 
 test("the job report is German for a German admin user", async ({ page }) => {
   await openApp(page, "full", "/app/jobs", { locale: "de" });
-  await page.locator("s-table s-link").first().click();
-  const results = page.locator('s-section[heading="Ergebnisse im Detail"]');
+  await firstJob(page).click();
+  const results = page.locator("details", { hasText: "Ergebnisse im Detail" });
+  await results.locator("summary").click();
   await expect(results.getByText("Als Entwurf zur Prüfung gespeichert")).toBeVisible();
-  await expect(page.locator("s-page")).toHaveAttribute("heading", "Massenübersetzung: Französisch");
+  await expect(page.locator("s-page")).toHaveAttribute("heading", "Französisch · Produkte");
   const download = page.waitForEvent("download");
   await results.locator("s-button", { hasText: "Bericht herunterladen (CSV)" }).click();
   const csv = await readFile((await (await download).path())!, "utf8");
@@ -46,7 +52,7 @@ test("the job report is German for a German admin user", async ({ page }) => {
 test("another store's job report can't be downloaded", async ({ page }) => {
   // The full store's job id, requested as the empty store.
   await openApp(page, "full", "/app/jobs");
-  await page.locator("s-table s-link").first().click();
+  await firstJob(page).click();
   await expect(page).toHaveURL(/\/app\/jobs\/[0-9a-f-]{36}/);
   const jobId = /\/app\/jobs\/([0-9a-f-]{36})/.exec(page.url())![1];
   await openApp(page, "empty", "/app");

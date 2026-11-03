@@ -343,10 +343,10 @@ The attention card and the way back to a job are drawn as Settings' tinted statu
 
 | Before | After | Why |
 |---|---|---|
-| "How often" as a select; the days as seven checkboxes in a column | Five square choice tiles (native radios in a fieldset, icon, name, one line; the chosen one framed in blue), the chosen way's time, days, zone and next checks in a panel under them; the days as one row of seven square toggles | The owner's square buttons, the same as Settings' choices |
+| "How often" as a list of radio buttons; the days as seven checkboxes in a column | Five square choice tiles (native radios in a fieldset, icon, name, one line; the chosen one framed in blue), the chosen way's time, days, zone and next checks in a panel under them; the days as one row of seven square toggles | The owner's square buttons, the same as Settings' choices |
 | A schedule the server refuses said so only after saving | It says why live where the next checks would be ("Checks need to be at least an hour apart."); after a refused save the field itself says so | The problem where it is made |
 | "Retry" for every failed check | Only for what a new try can fix, with the count ("Try 3 items again"), otherwise "See in the job"; the last 3 checks show, the others fold | No button that can't help |
-| Exclusions by Shopify id | By their title and picture (else the area's icon), the kind under the name | Says what is left out |
+| Exclusions by kind and Shopify number ("Product 8123456") | By their title and picture (else the area's icon), the kind under the name | Says what is left out |
 | "Only manually", "measure", budgets as bare numbers | "Only on demand" / "Nur auf Knopfdruck", "count", "At most per day / month" with "No limit" and a meter each; the next check as "today, 11:00 PM" | The app's words; the numbers as pictures |
 
 ### Plan & usage

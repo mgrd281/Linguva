@@ -45,7 +45,8 @@ test("Settings shows the smart schedule as the current way changes are translate
   await expect(smart.getByText("Business", { exact: true })).toBeVisible();
   // The current way's summary and actions, in the panel under the choices.
   const schedule = card.getByRole("group", { name: "Your schedule", exact: true });
-  await expect(schedule.getByText("Every day at 23:00 · French and German")).toBeVisible();
+  // The time in the interface language's clock, as the next checks ("11:00 PM" in English).
+  await expect(schedule.getByText(/^Every day at 11:00\sPM · French and German$/)).toBeVisible();
   await expect(schedule.getByRole("button", { name: "Check now" })).toBeVisible();
   await expect(schedule.getByRole("link", { name: "Schedule and options" })).toHaveAttribute("href", "/app/settings/automatic");
   // The other way that would follow the same changes says it would replace this one.
@@ -165,7 +166,7 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   const order = await page.locator("[id^='smart-']:is(section)").evaluateAll((sections) => sections.map((s) => s.id));
   expect(order.slice(0, 4)).toEqual(["smart-status", "smart-activity", "smart-exclusions", "smart-schedule"]);
   const status = page.locator("#smart-status");
-  await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Every day at 23:00$/);
+  await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Every day at 11:00\sPM$/);
   // The next check as a day and a time; the zone is the store's own, so it isn't repeated.
   await expect(status.getByText(/^Next check: (today|tomorrow), 11:00\s?PM$/)).toBeVisible();
   await expect(status.getByText("3 changes in 12 fields")).toBeVisible();
@@ -213,7 +214,7 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Not set up yet$/);
   await expect(status.getByText("The suggestions below suit most stores. Adjust them, or turn the schedule on right away.")).toBeVisible();
   // The suggestion itself, in the summary: what "Turn on with these settings" would use, and the first check's characters.
-  await expect(status.getByText("Every day at 03:00")).toBeVisible();
+  await expect(status.getByText(/^Every day at 3:00\sAM$/)).toBeVisible();
   await expect(status.getByText("Products, Collections, Pages, Blog posts, and Blogs")).toBeVisible();
   await expect(status.getByText("At the first check")).toBeVisible();
   // "Adjust" goes to the form's first card.
@@ -235,14 +236,14 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await expect(next).toHaveCount(3);
   for (const text of await next.allInnerTexts()) expect(text).toMatch(/^(Mon|Thu), .*9:00\s?AM \(Europe\/Berlin\)$/);
   // The summary's suggestion follows the form.
-  await expect(status.getByText("Every Monday and Thursday at 09:00")).toBeVisible();
+  await expect(status.getByText(/^Every Monday and Thursday at 9:00\sAM$/)).toBeVisible();
   // The save bar saves and turns on in this state too.
   await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
   await expect(page.locator("ui-save-bar#smart-auto-save-bar button").first()).toHaveText("Save and turn on");
 
   await status.getByRole("button", { name: "Turn on with these settings" }).click();
   await expectToast(page, "Saved. The smart schedule is on.");
-  await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Every Monday and Thursday at 09:00$/);
+  await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Every Monday and Thursday at 9:00\sAM$/);
   await expect(status.locator("s-badge").first()).toHaveText("On");
   await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(false);
   await page.reload();

@@ -39,7 +39,8 @@ import { useResultToast, useSaveBar } from "../components/app-bridge";
 import { categoryName, IconTile } from "../components/CategoryCard";
 import { BackToJob } from "../components/jobs/BackToJob";
 import { CARD } from "../components/ContentTiles";
-import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
+import { Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
+import { PageHeader } from "../components/PageHeader";
 import { SUB_HEADING } from "../components/plan/styles";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
 import { Disclosure } from "../components/Disclosure";
@@ -92,9 +93,9 @@ const MODE_LOOK: Record<Mode, { icon: IconName; tint: Tint }> = {
 const RUNS_SHOWN = 3;
 /** Settings' section of the ways changes are translated: where this page is opened from, and leads back to. */
 const SETTINGS_CHANGES = "/app/settings?section=changes";
-/** Times offered in the selects: every 15 minutes. */
-const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => formatTime(i * 15));
-/** The summary card's schedule ("Every day at 23:00"): smaller than the Plan page's plan name, as it can be a sentence. */
+/** Times offered in the selects, every 15 minutes: the form's value "HH:MM", shown in the interface language's clock ("11:00 PM", "23:00"). */
+const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => ({ value: formatTime(i * 15), minute: i * 15 }));
+/** The summary card's schedule ("Every day at 11:00 PM"): smaller than the Plan page's plan name, as it can be a sentence. */
 const HERO_NAME = { margin: 0, fontSize: 20, lineHeight: "26px", fontWeight: 700, letterSpacing: "-0.01em" } as const;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -636,8 +637,8 @@ export default function SmartAutomatic() {
         <s-query-container>
           <s-stack direction="block" gap="base">
             <Breadcrumbs i18n={i18n} trail={trail} current={t("automatic.page.heading")} touch />
-            {/* No subtitle: the card says what it would do. */}
-            <h1 style={BIG_HEADING}>{t("automatic.page.heading")}</h1>
+            {/* No lead: the card says what it would do. */}
+            <PageHeader page="smart" title={t("automatic.page.heading")} />
             <SettingCard id="smart-status" icon="calendar-time" heading={t("automatic.locked.heading")} extra={<s-badge icon="lock">{t("automatic.business")}</s-badge>} lead={t("automatic.locked.body")}>
               <FactList
                 label={t("automatic.page.heading")}
@@ -751,10 +752,7 @@ export default function SmartAutomatic() {
       <s-query-container>
         <s-stack direction="block" gap="base">
           <Breadcrumbs i18n={i18n} trail={trail} current={t("automatic.page.heading")} touch />
-          <s-stack direction="block" gap="small-500">
-            <h1 style={BIG_HEADING}>{t("automatic.page.heading")}</h1>
-            <s-text color="subdued">{t("automatic.page.subtitle")}</s-text>
-          </s-stack>
+          <PageHeader page="smart" title={t("automatic.page.heading")} lead={t("automatic.page.subtitle")} />
 
           {/* The form's refusal, at the top, where focus moves when it appears. */}
           {error ? (
@@ -772,36 +770,32 @@ export default function SmartAutomatic() {
                 <s-stack direction="block" gap="base">
                   <s-query-container>
                     <s-grid gridTemplateColumns="@container (inline-size > 680px) 1fr auto, 1fr" gap="base" alignItems="start">
-                      <s-grid gridTemplateColumns="@container (inline-size > 520px) auto 1fr, 1fr" gap="base" alignItems="start">
-                        <s-box display="@container (inline-size > 520px) auto, none">
-                          <IconSquare icon="calendar-time" tint="violet" size={48} />
-                        </s-box>
-                        <s-stack direction="block" gap="small-300">
-                          <s-stack direction="block" gap="small-500">
-                            {/* The visual label; screen readers hear it inside the heading. */}
-                            <span aria-hidden="true">
-                              <s-text color="subdued">{t("automatic.hero.label")}</s-text>
-                            </span>
-                            <h2 id="smart-status-heading" tabIndex={-1} style={{ ...HERO_NAME, outline: "none" }}>
-                              <s-text accessibilityVisibility="exclusive">{`${t("automatic.hero.spokenLabel")} `}</s-text>
-                              {config ? scheduleSummary(i18n, config) : t("automatic.hero.notSetUp")}
-                            </h2>
-                          </s-stack>
-                          <s-stack direction="inline" gap="small-200" alignItems="center">
-                            <s-badge tone={stateBadge.tone === "neutral" ? undefined : stateBadge.tone} icon={stateBadge.icon}>
-                              {stateBadge.label}
-                            </s-badge>
-                            <s-badge {...(data.entitled ? {} : { icon: "lock" as const })}>{t("automatic.business")}</s-badge>
-                          </s-stack>
-                          {/* "today, 11:00 PM": the zone only where it isn't the store's own. */}
-                          {config && nextCheck !== undefined ? (
-                            <StateLine icon="clock">{t("automatic.hero.nextCheck", { time: whenIn(i18n, nextCheck, panel.zone, data.now, shopZone, true) })}</StateLine>
-                          ) : null}
-                          {config ? (
-                            <StateLine icon="language">{config.locales.length ? languageList(i18n, config.locales.map((l) => languageNames.get(l) ?? l), Infinity) : t("automatic.preview.none")}</StateLine>
-                          ) : null}
+                      {/* The page's header carries the schedule's sign; the card starts with what it is. */}
+                      <s-stack direction="block" gap="small-300">
+                        <s-stack direction="block" gap="small-500">
+                          {/* The visual label; screen readers hear it inside the heading. */}
+                          <span aria-hidden="true">
+                            <s-text color="subdued">{t("automatic.hero.label")}</s-text>
+                          </span>
+                          <h2 id="smart-status-heading" tabIndex={-1} style={{ ...HERO_NAME, outline: "none" }}>
+                            <s-text accessibilityVisibility="exclusive">{`${t("automatic.hero.spokenLabel")} `}</s-text>
+                            {config ? scheduleSummary(i18n, config) : t("automatic.hero.notSetUp")}
+                          </h2>
                         </s-stack>
-                      </s-grid>
+                        <s-stack direction="inline" gap="small-200" alignItems="center">
+                          <s-badge tone={stateBadge.tone === "neutral" ? undefined : stateBadge.tone} icon={stateBadge.icon}>
+                            {stateBadge.label}
+                          </s-badge>
+                          <s-badge {...(data.entitled ? {} : { icon: "lock" as const })}>{t("automatic.business")}</s-badge>
+                        </s-stack>
+                        {/* "today, 11:00 PM": the zone only where it isn't the store's own. */}
+                        {config && nextCheck !== undefined ? (
+                          <StateLine icon="clock">{t("automatic.hero.nextCheck", { time: whenIn(i18n, nextCheck, panel.zone, data.now, shopZone, true) })}</StateLine>
+                        ) : null}
+                        {config ? (
+                          <StateLine icon="language">{config.locales.length ? languageList(i18n, config.locales.map((l) => languageNames.get(l) ?? l), Infinity) : t("automatic.preview.none")}</StateLine>
+                        ) : null}
+                      </s-stack>
                       {/* Beside the summary on a wide card; on a phone under it, the main action at full width and the others side by side. */}
                       <div>
                         <div className="lv-smart-actions">{heroActions}</div>
@@ -982,8 +976,8 @@ export default function SmartAutomatic() {
                                       <s-grid key={slot.id} gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="end">
                                         <s-select id={`smart-slot-${slot.id}`} name="customTime" label={t("automatic.times.slot", { number: i + 1 })} value={slot.value} icon="clock" disabled={readOnly}>
                                           {TIME_OPTIONS.map((o) => (
-                                            <s-option key={o} value={o}>
-                                              {o}
+                                            <s-option key={o.value} value={o.value}>
+                                              {i18n.clock(o.minute)}
                                             </s-option>
                                           ))}
                                         </s-select>
@@ -1024,8 +1018,8 @@ export default function SmartAutomatic() {
                                 {...(timeError ? { error: timeError } : {})}
                               >
                                 {TIME_OPTIONS.map((o) => (
-                                  <s-option key={o} value={o}>
-                                    {o}
+                                  <s-option key={o.value} value={o.value}>
+                                    {i18n.clock(o.minute)}
                                   </s-option>
                                 ))}
                               </s-select>

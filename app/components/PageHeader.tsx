@@ -1,5 +1,5 @@
 /**
- * The header of the five menu pages (Overview, Content, Review, Jobs, Settings) and the Plan page: the page's icon in its
+ * The header of the five menu pages (Overview, Content, Review, Jobs, Settings), the Plan page and the smart schedule's page: the page's icon in its
  * tinted square, its heading (h1, the type scale's .lv-h1) and one line under it. The same pattern starts
  * a tools page (ToolHeader), an area's list and the editor, so every page of the app opens the same way.
  * The icons are the places' own: approving is eye-check-mark everywhere, Settings the gear.
@@ -8,7 +8,10 @@ import type { ReactNode } from "react";
 import type { IconName } from "../lib/icons";
 import { IconSquare, type Tint } from "./IconSquare";
 
-/** Each menu page's sign, and the Plan page's: the icon and tint of its tile in Settings ("Plan & usage"). */
+/**
+ * Each menu page's sign, the Plan page's (its tile in Settings, "Plan & usage") and the smart schedule's (its
+ * choice in Settings' "Translating changes").
+ */
 export const PAGE_LOOK = {
   overview: { icon: "home", tint: "blue" },
   content: { icon: "content", tint: "teal" },
@@ -16,6 +19,7 @@ export const PAGE_LOOK = {
   jobs: { icon: "clipboard-checklist", tint: "slate" },
   settings: { icon: "settings", tint: "grey" },
   plan: { icon: "gauge", tint: "rose" },
+  smart: { icon: "calendar-time", tint: "violet" },
 } as const satisfies Record<string, { icon: IconName; tint: Tint }>;
 
 export type HeaderPage = keyof typeof PAGE_LOOK;

@@ -14,7 +14,6 @@ import { kindLabel } from "../i18n/labels";
 import type { IconName } from "../lib/icons";
 import { useI18n } from "../i18n/react";
 import { languageList, upperFirst } from "../lib/name-lists";
-import { formatTime } from "../lib/schedule";
 import type { SmartStatus } from "../lib/smart-auto";
 import { usagePercent } from "../lib/plan-view";
 import { usageLevel } from "../lib/usage";
@@ -41,10 +40,13 @@ export interface SmartCardData {
   scheduleNote?: string | null;
 }
 
-/** "Every day at 23:00", "Every Monday and Thursday at 09:00", … */
+/**
+ * "Every day at 11:00 PM", "Every Monday and Thursday at 9:00 AM", "Jeden Tag um 23:00", "Cada día a la
+ * 1:00", …: the times in the interface language's clock, as the next checks and every other time in the app.
+ */
 export function scheduleSummary(i18n: I18n, config: { mode: string; times: readonly number[]; weekdays: readonly number[] }): string {
   const { t } = i18n;
-  const time = formatTime(config.times[0] ?? 0);
+  const time = i18n.clockRef(config.times[0] ?? 0);
   const days = (style: "long" | "short") => languageList(i18n, config.weekdays.map((d) => i18n.weekday(d, style)), Infinity);
   switch (config.mode) {
     case "realtime":
@@ -57,7 +59,7 @@ export function scheduleSummary(i18n: I18n, config: { mode: string; times: reado
       return upperFirst(
         t("automatic.schedule.custom", {
           days: config.weekdays.length === 7 ? t("automatic.schedule.everyDay") : days("short"),
-          times: languageList(i18n, config.times.map(formatTime), Infinity),
+          times: languageList(i18n, config.times.map((minute) => i18n.clockRef(minute)), Infinity),
         }),
       );
     default:

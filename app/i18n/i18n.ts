@@ -253,6 +253,18 @@ export function formatClock(locale: AppLocale, minuteOfDay: number): string {
 }
 
 /**
+ * A schedule's wall-clock time inside a sentence: `formatClock`, in Spanish
+ * with its article ("la 1:00" for 1:00 to 1:59, "las 23:00" otherwise), as
+ * `formatTimeRef`, so Spanish texts say "a {time}".
+ */
+export function formatClockRef(locale: AppLocale, minuteOfDay: number): string {
+  const text = formatClock(locale, minuteOfDay);
+  if (locale !== "es" || !text) return text;
+  const hour = Math.floor((((Math.round(minuteOfDay) % 1440) + 1440) % 1440) / 60);
+  return `${hour === 1 ? "la" : "las"} ${text}`;
+}
+
+/**
  * Date and time in a time zone ("Thu, Oct 29, 11:00 PM", "Do., 29. Okt.,
  * 23:00"): scheduled checks are shown in the schedule's zone. The time is
  * the interface language's clock (as `formatTime`). The zone is explicit, so
@@ -475,6 +487,8 @@ export function translator(locale: AppLocale, options: I18nOptions = {}) {
     timeRef: (value: Instant) => formatTimeRef(locale, value, zone),
     /** A schedule's wall-clock time from minutes after midnight (1380 → "11:00 PM" / "23:00"). */
     clock: (minuteOfDay: number) => formatClock(locale, minuteOfDay),
+    /** A schedule's time inside a sentence: `clock`, in Spanish with its article ("la 1:00", "las 23:00"). */
+    clockRef: (minuteOfDay: number) => formatClockRef(locale, minuteOfDay),
     /** A day's heading by calendar days in the store's zone ("Heute" · "Montag, 2. November"). */
     dayHeading: (value: Instant, now: Instant) => formatDayHeading(locale, value, now, zone),
     /** "today, 2:02 PM" / "30. Okt., 15:48", in the store's zone. */

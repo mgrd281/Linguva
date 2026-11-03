@@ -16,6 +16,7 @@ import {
   displayZone,
   formatAt,
   formatClock,
+  formatClockRef,
   formatDate,
   formatDateTime,
   formatDateTimeIn,
@@ -174,9 +175,20 @@ describe("times inside sentences", () => {
 
   it("Spanish messages carry no article of their own before a time ('a {time}', never 'a las {time}')", () => {
     expect(translate("es", "jobs.when.today", { time: formatTimeRef("es", "2026-11-02T00:00:00Z", BERLIN) })).toBe("hoy a la 1:00");
-    for (const [key, message] of Object.entries(NAMESPACES.jobs.es)) {
-      expect(JSON.stringify(message), key).not.toMatch(/\bla(s)? \{(time|from|to)\}/);
+    // The smart schedule's times too (formatClockRef: a wall-clock time, no instant).
+    for (const [key, message] of [...Object.entries(NAMESPACES.jobs.es), ...Object.entries(NAMESPACES.automatic.es)]) {
+      expect(JSON.stringify(message), key).not.toMatch(/\bla(s)? \{(time|times|from|to)\}/);
     }
+  });
+
+  it("a schedule's time in a sentence: the interface clock, in Spanish with its article", () => {
+    expect(formatClockRef("en", 1380)).toMatch(/^11:00\sPM$/);
+    expect(formatClockRef("de", 1380)).toBe("23:00");
+    expect(formatClockRef("es", 60)).toBe("la 1:00");
+    expect(formatClockRef("es", 119)).toBe("la 1:59");
+    expect(formatClockRef("es", 0)).toBe("las 0:00");
+    expect(formatClockRef("es", 1380)).toBe("las 23:00");
+    expect(translate("es", "automatic.schedule.daily", { time: formatClockRef("es", 60) })).toBe("Cada día a la 1:00");
   });
 
   it("at: today, yesterday or the date, with the time, in the store's zone (jobs.when.*)", () => {

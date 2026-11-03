@@ -53,11 +53,21 @@ const FOCUS_TARGET = { outline: "none" } as const;
  */
 export function focusSection(id: string) {
   if (typeof document === "undefined") return;
-  const heading = document.getElementById(`${id}-heading`);
-  if (!heading) return;
-  heading.focus({ preventScroll: true });
-  const top = heading.getBoundingClientRect().top;
-  if (top < 0 || top > window.innerHeight - 48) document.getElementById(id)?.scrollIntoView({ block: "start" });
+  let frames = 0;
+  const attempt = () => {
+    const heading = document.getElementById(`${id}-heading`);
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    // A section shown a moment ago (a Polaris box takes its new display a frame later, as on a phone
+    // where the list gives way to the section) can't take the focus yet: try again for a few frames.
+    if (document.activeElement !== heading && frames++ < 10) {
+      requestAnimationFrame(attempt);
+      return;
+    }
+    const top = heading.getBoundingClientRect().top;
+    if (top < 0 || top > window.innerHeight - 48) document.getElementById(id)?.scrollIntoView({ block: "start" });
+  };
+  attempt();
 }
 
 /** Focuses an element by id once it is on the page (after a switch, the newly current option). */

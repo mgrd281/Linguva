@@ -82,12 +82,17 @@ test("the next part is offered only for the language, content and choice of the 
     });
   });
   await openApp(page, "full", "/app/translations");
+  await expect(page.getByRole("heading", { level: 1, name: "Import & export" })).toBeVisible();
   const language = page.getByRole("combobox", { name: "Language" });
   const content = page.getByRole("combobox", { name: "Content" });
   const gaps = page.getByRole("checkbox", { name: "Only missing and outdated texts" });
   const next = page.getByRole("button", { name: "Download the next part" });
 
+  // German chosen, whichever language the list starts with.
+  await language.selectOption({ label: "German" });
+  const first = page.waitForResponse(/\/app\/translations\/export\?/);
   await page.getByRole("button", { name: "Download CSV" }).click();
+  expect(new URL((await first).url()).searchParams.get("lang")).toBe("de");
   await expect(page.getByText("Downloaded 3 texts to translate into German.")).toBeVisible();
   await expect(next).toBeVisible();
   // German's cursor would start French after German's first part: French starts with its own first part.

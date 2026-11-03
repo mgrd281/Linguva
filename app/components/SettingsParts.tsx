@@ -259,7 +259,8 @@ export function OptionCard({
         </span>
       ) : null}
       <span className="lv-option__top" style={icon ? { marginBottom: 0 } : undefined}>
-        <span id={id} tabIndex={-1} className="lv-option__title">
+        {/* The focus target after a switch is the current option's name, never one inside a button. */}
+        <span id={id} {...(choosable ? {} : { tabIndex: -1 })} className="lv-option__title">
           {title}
         </span>
         {icon ? null : marks}

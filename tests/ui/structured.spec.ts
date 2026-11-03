@@ -4,11 +4,11 @@
  * empty is pointed out and nothing incomplete is published.
  */
 import { expect, test } from "@playwright/test";
-import { expectAccessible, expectToast, openApp } from "./helpers";
+import { expectAccessible, expectToast, openApp, saveBarShown } from "./helpers";
 
 test("lists and links are translated item by item and keep their link addresses", async ({ page }) => {
   await openApp(page, "full", "/app/products/14?lang=de");
-  const panel = page.locator('s-section[heading="Images and custom fields"]');
+  const panel = page.locator('s-section[accessibilitylabel="Image descriptions and extra details"]');
   // The original is shown readably, with the addresses as plain text.
   await expect(panel.locator("s-list-item", { hasText: "Care guide" })).toHaveText("Care guide (https://example.com/care)");
   await expect(panel.getByText('[{"text"')).toHaveCount(0);
@@ -16,13 +16,15 @@ test("lists and links are translated item by item and keep their link addresses"
   const careLink = panel.locator('s-text-field[label="German, item 1"][details="Links to https://example.com/care"] input');
   const sizeLink = panel.locator('s-text-field[label="German, item 2"][details="Links to /pages/sizes"] input');
   await careLink.fill("Pflegehinweise");
-  // The second item is still empty: pointed out, and refused when publishing.
+  // What is typed here counts as unpublished, as the item's own texts do: the admin's save bar shows.
+  await expect.poll(() => saveBarShown(page, "linguva-editor-save-bar")).toBe(true);
+  // The second item is still empty: pointed out, and refused when publishing (the page's one Publish).
   await expect(panel.locator('s-text-field[label="German, item 2"][error]')).toHaveCount(1);
-  await page.getByRole("button", { name: "Publish alt text and fields" }).click();
+  await page.getByRole("button", { name: "Publish translations" }).click();
   await expect(panel.getByText("Translation is empty")).toBeVisible();
 
   await sizeLink.fill("Größentabelle");
-  await page.getByRole("button", { name: "Publish alt text and fields" }).click();
+  await page.getByRole("button", { name: "Publish translations" }).click();
   // Only the links: the untouched list's translation (written elsewhere) isn't saved again.
   await expectToast(page, "1 translation published");
   await expect(panel.locator('s-text-field[label="German, item 2"]:not([details]) input')).toHaveValue("Wasserdicht");
@@ -36,11 +38,13 @@ test("lists and links are translated item by item and keep their link addresses"
 
 test("AI fills each item of a list; nothing is published until the merchant does", async ({ page }) => {
   await openApp(page, "full", "/app/products/14?lang=fr");
-  const panel = page.locator('s-section[heading="Images and custom fields"]');
-  await page.getByRole("button", { name: "Translate missing alt text and fields with AI" }).click();
+  const panel = page.locator('s-section[accessibilitylabel="Image descriptions and extra details"]');
+  // The page's one AI button fills the extra details' open texts with the product's own.
+  await page.getByRole("button", { name: "Translate with AI" }).click();
   await expect(panel.locator('s-text-field[details="Links to https://example.com/care"] input')).toHaveValue("[fr] Care guide");
   await expect(panel.locator('s-text-field[label="French, item 2"]:not([details]) input')).toHaveValue("[fr] Waterproof");
-  await expect(panel.getByText("AI draft").first()).toBeVisible();
+  await expect(panel.locator("s-badge", { hasText: "AI draft" }).first()).toBeVisible();
+  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[fr] Product 14 jacket");
 });
 
 test("Review shows a list of links as a list and approves it as translated", async ({ page }) => {

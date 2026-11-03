@@ -4,36 +4,54 @@
  * Partner API are simulated; no charges can be created.
  */
 import { expect, test } from "@playwright/test";
-import { expectAccessible, openApp, expectToast } from "./helpers";
+import { expectAccessible, openApp, expectToast, saveBarShown } from "./helpers";
 
 test("translate with AI, edit and publish; the published value is read back from Shopify", async ({ page }) => {
-  await openApp(page, "full", "/app/products/5?lang=de");
+  // Product 13 has no German texts yet (products 1–10 have a German name).
+  await openApp(page, "full", "/app/products/13?lang=de");
   await page.getByRole("button", { name: "Translate with AI" }).click();
   await expect(page.getByText(/AI drafts are filled in below/)).toBeVisible();
 
   const title = page.locator('s-text-field[name="value:title"] input');
-  await expect(title).toHaveValue("[de] Product 5 jacket");
-  await title.fill("Warme Jacke Nummer 5");
+  await expect(title).toHaveValue("[de] Product 13 jacket");
+  await title.fill("Warme Jacke Nummer 13");
   await page.getByRole("button", { name: "Publish translations" }).click();
   await expectToast(page, /translations? published$/);
 
-  await openApp(page, "full", "/app/products/5?lang=de");
-  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Warme Jacke Nummer 5");
-  // The previous state is in the history and can be restored.
-  const history = page.getByRole("button", { name: /^Show history \(\d+\)$/ }).first();
+  await openApp(page, "full", "/app/products/13?lang=de");
+  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Warme Jacke Nummer 13");
+  // Nothing is open any more: AI offers to translate everything again, asking first.
+  await expect(page.getByText("Nothing is missing or outdated: every text is translated.")).toBeVisible();
+  // The previous state is in the history (the app's fold) and can be restored.
+  const history = page.locator("summary", { hasText: /^History \(\d+\)$/ }).first();
   await history.click();
-  await expect(page.getByRole("button", { name: "Hide history" }).first()).toBeVisible();
+  await expect(page.locator("details", { has: history })).toHaveAttribute("open", "");
   await expect(page.getByText(/· (Manual|AI|Before Linguva)/).first()).toBeVisible();
 });
 
-test("image alt text is translated and published separately", async ({ page }) => {
+test("AI fills only the open texts: a translation the merchant has stays", async ({ page }) => {
+  // Product 9's German name was written before (Produkt 9 Jacke); its description isn't translated.
+  await openApp(page, "full", "/app/products/9?lang=de");
+  await expect(page.getByRole("button", { name: "Translate with AI: 1 open text" })).toBeVisible();
+  await page.getByRole("button", { name: "Translate with AI" }).click();
+  await expect(page.locator('s-section[accessibilitylabel="Description"]').locator("s-badge").first()).toHaveText("AI draft");
+  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Produkt 9 Jacke");
+  await expect(page.locator('s-section[accessibilitylabel="Name"]').locator("s-badge").first()).toHaveText("Translated");
+});
+
+test("image descriptions are translated with the product's texts and published with them", async ({ page }) => {
   await openApp(page, "full", "/app/products/1?lang=de");
-  await page.getByRole("button", { name: "Translate missing alt text and fields with AI" }).click();
+  // One AI button for every open text of the page, the image's description and the custom field included.
+  await page.getByRole("button", { name: "Translate with AI" }).click();
   await expect(page.locator('s-text-field[name$=":alt"] input')).toHaveValue("[de] Red wool jacket, front view");
-  await page.getByRole("button", { name: "Publish alt text and fields" }).click();
-  // Alt text and the custom field, both saved: confirmed by a toast, no warning on the page.
-  await expectToast(page, "2 translations published");
-  await expect(page.locator('s-banner[heading="Some fields weren\'t saved"]')).toHaveCount(0);
+  // They count as unpublished: the admin's save bar shows, leaving would ask.
+  await expect.poll(() => saveBarShown(page, "linguva-editor-save-bar")).toBe(true);
+  await page.getByRole("button", { name: "Publish translations" }).click();
+  // The product's texts, the image's description and the custom field: one toast, no warning on the page.
+  await expectToast(page, /^\d+ translations published$/);
+  await expect(page.locator('s-banner[heading="Some texts weren\'t saved"]')).toHaveCount(0);
+  await openApp(page, "full", "/app/products/1?lang=de");
+  await expect(page.locator('s-text-field[name$=":alt"] input')).toHaveValue("[de] Red wool jacket, front view");
 });
 
 test.describe("plan page", () => {

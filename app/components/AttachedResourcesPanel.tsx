@@ -1,105 +1,126 @@
 /**
- * "Images and custom fields" section of the translation editor: image alt
- * text and translatable metafields of the edited resource. The server
- * decides which images and metafields belong to the resource; field names
- * here only label the values.
+ * "Image descriptions and extra details" in the translation editor: image alt text and translatable
+ * metafields of the edited resource. The server decides which images and metafields belong to the
+ * resource; field names here only label the values.
+ *
+ * The editor owns the state (ResourceTranslationEditor): one "Translate with AI" fills these open
+ * texts with the item's own, one "Publish translations" (and the admin's save bar) publishes them,
+ * and what is typed or drafted here counts as unpublished, so leaving asks first and Discard clears
+ * it. Each text's state comes first, as for the item's own texts.
  */
-import { useFetcher } from "react-router";
+import type { RefObject } from "react";
+import type { useFetcher } from "react-router";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 import { isStructuredValueType } from "../lib/structured-preview";
+import { textState } from "../lib/editor-view";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
-import { fieldName as fieldLabel, hasMessage, issueName } from "../i18n/labels";
-import { useResultToast } from "./app-bridge";
+import { hasMessage } from "../i18n/labels";
+import { HeadingRow, NoteBadges, StateBadge } from "./EditorParts";
 import { StructuredEditor, StructuredView } from "./StructuredValue";
-import { Button } from "./Button";
+import { Strong } from "./Type";
 
 type EditorData = Awaited<ReturnType<typeof loadEditorData>>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
+
+/** AI's drafts for these texts (ai-translate-attached), by ref. */
+export interface AttachedDrafts {
+  drafts: Record<string, string>;
+  rejected: Record<string, string>;
+  warnings: Record<string, string[]>;
+  provider: string;
+  providers?: Record<string, string>;
+  stopped?: string;
+  engine?: string;
+}
 
 // Mirrors attachedFieldName / attachedRef on the server.
 const fieldName = (part: string, id: string, key: string) => `${part}:${id}:${key}`;
 const refOf = (id: string, key: string) => `${id}:${key}`;
 
 export function AttachedResourcesPanel({
+  id,
   data,
   errorMessage,
+  ai,
+  aiError,
+  saved,
+  save,
+  formRef,
+  resetCount,
+  value,
+  onValue,
 }: {
+  /** The heading row's id (the section's tile jumps there). */
+  id: string;
   data: EditorData;
   /** Text for an AI error code, in the interface language (an own key's stop names its engine). */
   errorMessage: (code: string, engine?: string | null) => string;
+  ai: AttachedDrafts | null;
+  aiError: { code: string; engine?: string } | null;
+  saved: Array<{ ref: string; status: string; message?: string; code?: string }> | null;
+  save: ReturnType<typeof useFetcher<EditorAction>>;
+  formRef: RefObject<HTMLFormElement>;
+  /** Discard's count: the fields start again from what is published. */
+  resetCount: number;
+  /** What a text holds now (typed, drafted or published), by ref. */
+  value: (ref: string) => string;
+  /** What the merchant typed (or a list's rebuilt value), by ref. */
+  onValue: (ref: string, value: string) => void;
 }) {
   const i18n = useI18n();
   const sourceName = i18n.language(data.sourceLocale, data.sourceName);
   const targetName = i18n.language(data.target.locale, data.target.name);
   const { t } = i18n;
-  const aiFetcher = useFetcher<EditorAction>();
-  const saveFetcher = useFetcher<EditorAction>();
   const attached = data.attached;
-  const ai = aiFetcher.data?.kind === "attached-ai" ? aiFetcher.data : null;
-  const aiError = aiFetcher.data?.kind === "error" ? aiFetcher.data : null;
-  const saved = saveFetcher.data?.kind === "attached-saved" ? saveFetcher.data.outcomes : null;
+  const heading = t("editor.attached.heading");
   const saveStatus = new Map(saved?.map((o) => [o.ref, o]) ?? []);
-  // Success is confirmed with a toast; problems stay on the page.
-  useResultToast(
-    saveFetcher.data,
-    saved && saved.every((o) => o.status === "saved")
-      ? saved.length
-        ? t("editor.saved.toast", { count: saved.length })
-        : t("editor.saved.nothingHeading")
-      : null,
-  );
-  const canAi = data.ai.available && data.ai.consent;
   // Images are named by the app; metafields by their definition (merchant data).
   const itemLabel = (item: { kind: string; label: string }) => (item.kind === "IMAGE" ? t("editor.attached.image") : item.label);
-  const hasMachine = attached.items.some((i) => i.fields.some((f) => f.machine && (!f.translation || f.outdated)));
+  const onFormInput = (event: { target: EventTarget | null }) => {
+    const el = event.target as (Element & { value?: string }) | null;
+    const name = el?.getAttribute?.("name");
+    if (name?.startsWith("value:") && typeof el?.value === "string") onValue(name.slice("value:".length), el.value);
+  };
 
   if (!attached.available) {
     return (
-      <s-section heading={t("editor.attached.heading")}>
-        <s-paragraph>{t("editor.attached.unavailable")}</s-paragraph>
+      <s-section accessibilityLabel={heading}>
+        <s-stack direction="block" gap="base">
+          <HeadingRow id={id} title={heading} icon="image-alt" />
+          <s-paragraph>{t("editor.attached.unavailable")}</s-paragraph>
+        </s-stack>
       </s-section>
     );
   }
   if (!attached.items.length && !attached.imagesWithoutAlt && !attached.unsupported) return null;
 
   return (
-    <s-section heading={t("editor.attached.heading")}>
+    <s-section accessibilityLabel={heading}>
       <s-stack direction="block" gap="base">
+        <HeadingRow id={id} title={heading} icon="image-alt" />
         <s-paragraph>{t("editor.attached.intro")}</s-paragraph>
         {attached.imagesWithoutAlt ? (
           <s-banner tone="info" heading={t("editor.attached.noAlt", { count: attached.imagesWithoutAlt })}>
             <s-paragraph>{t("editor.attached.noAltBody")}</s-paragraph>
           </s-banner>
         ) : null}
-        {attached.unsupported ? (
-          <s-paragraph>{t("editor.attached.unsupported", { count: attached.unsupported })}</s-paragraph>
-        ) : null}
+        {attached.unsupported ? <s-paragraph>{t("editor.attached.unsupported", { count: attached.unsupported })}</s-paragraph> : null}
         {aiError || ai?.stopped ? (
           <s-banner tone="critical" heading={t("editor.aiError.heading")}>
             <s-paragraph>
-              {errorMessage(aiError?.code ?? ai?.stopped ?? "", (aiError && "engine" in aiError && typeof aiError.engine === "string" ? aiError.engine : null) ?? ai?.engine ?? null)}
+              {errorMessage(aiError?.code ?? ai?.stopped ?? "", (aiError && typeof aiError.engine === "string" ? aiError.engine : null) ?? ai?.engine ?? null)}
               {ai?.stopped && Object.keys(ai.drafts).length ? ` ${t("editor.attached.stoppedDrafts")}` : ""}
             </s-paragraph>
           </s-banner>
         ) : null}
         {saved && !saved.every((o) => o.status === "saved") ? (
           <s-banner tone="warning" heading={t("editor.saved.partialHeading")}>
-            <s-paragraph>
-              {t("editor.attached.savedCount", { saved: saved.filter((o) => o.status === "saved").length, total: saved.length })}
-            </s-paragraph>
+            <s-paragraph>{t("editor.attached.savedCount", { saved: saved.filter((o) => o.status === "saved").length, total: saved.length })}</s-paragraph>
           </s-banner>
         ) : null}
-        {hasMachine ? (
-          <aiFetcher.Form method="post">
-            <input type="hidden" name="intent" value="ai-translate-attached" />
-            <Button type="submit" disabled={!canAi} {...(aiFetcher.state !== "idle" ? { loading: true } : {})}>
-              {t("editor.attached.translateAi")}
-            </Button>
-          </aiFetcher.Form>
-        ) : null}
 
-        <saveFetcher.Form method="post">
+        <save.Form ref={formRef} method="post" onInput={onFormInput} onChange={onFormInput}>
           <input type="hidden" name="intent" value="save-attached" />
           {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
           {/* Each draft's own engine: items can be translated by different engines. */}
@@ -109,10 +130,8 @@ export function AttachedResourcesPanel({
               <s-box key={item.id} padding="base" borderWidth="base" borderRadius="base">
                 <s-stack direction="block" gap="small">
                   <s-stack direction="inline" gap="small" alignItems="center">
-                    {item.previewUrl ? (
-                      <s-thumbnail src={`${item.previewUrl}${item.previewUrl.includes("?") ? "&" : "?"}width=96`} alt="" size="small" />
-                    ) : null}
-                    <s-text type="strong">{item.kind === "IMAGE" ? fieldLabel(i18n, "alt") : item.label}</s-text>
+                    {item.previewUrl ? <s-thumbnail src={`${item.previewUrl}${item.previewUrl.includes("?") ? "&" : "?"}width=96`} alt="" size="small" /> : null}
+                    <Strong>{item.kind === "IMAGE" ? t("editor.attached.imageText") : item.label}</Strong>
                     {item.valueType ? <s-badge>{valueTypeLabel(i18n, item.valueType)}</s-badge> : null}
                     {item.detail ? <s-text color="subdued">{item.detail}</s-text> : null}
                   </s-stack>
@@ -140,14 +159,26 @@ export function AttachedResourcesPanel({
                       value: draft ?? field.translation,
                       ...(error ? { error } : {}),
                     };
-                    const fieldKey = `${ref}:${draft ?? "base"}`;
+                    const fieldKey = `${ref}:${draft ?? "base"}:${resetCount}`;
                     // Rich text, lists and links: shown readably, lists and links edited item by item.
                     const structured = isStructuredValueType(field.type);
+                    const state = textState({
+                      current: value(ref),
+                      translation: field.translation,
+                      outdated: field.outdated,
+                      draft: draft === undefined ? null : { from: "ai", value: draft },
+                      published: status?.status === "saved",
+                    });
                     return (
                       <s-stack key={ref} direction="block" gap="small">
                         <input type="hidden" name={fieldName("digest", item.id, field.key)} value={field.digest} />
                         <input type="hidden" name={fieldName("current", item.id, field.key)} value={field.currentDigest} />
                         {draft !== undefined ? <input type="hidden" name={fieldName("origin", item.id, field.key)} value="AI" /> : null}
+                        {/* The text's state first, as for the item's own texts. */}
+                        <s-stack direction="inline" gap="small" alignItems="center">
+                          <StateBadge i18n={i18n} state={state} />
+                          <NoteBadges i18n={i18n} warnings={warnings} machine={field.machine} />
+                        </s-stack>
                         <s-query-container>
                           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
                             <s-stack direction="block" gap="small">
@@ -158,6 +189,7 @@ export function AttachedResourcesPanel({
                                   value={field.source}
                                   title={t("editor.field.originalFrame", { field: itemLabel(item), language: sourceName })}
                                   lang={data.sourceLocale}
+                                  tone="subdued"
                                 />
                               ) : (
                                 <s-box padding="base" background="subdued" borderRadius="base">
@@ -178,6 +210,7 @@ export function AttachedResourcesPanel({
                                   locale={data.target.locale}
                                   rtl={data.target.rtl}
                                   {...(error ? { error } : {})}
+                                  onValue={(next) => onValue(ref, next)}
                                 />
                               ) : (
                                 <div lang={data.target.locale} {...(data.target.rtl ? { dir: "rtl" } : {})}>
@@ -185,24 +218,8 @@ export function AttachedResourcesPanel({
                                 </div>
                               )}
                               {field.outdated && draft === undefined && field.translation ? (
-                                <s-checkbox
-                                  name={fieldName("confirm", item.id, field.key)}
-                                  label={t("editor.field.stillCorrect")}
-                                />
+                                <s-checkbox name={fieldName("confirm", item.id, field.key)} label={t("editor.field.stillCorrect")} />
                               ) : null}
-                              <s-stack direction="inline" gap="small">
-                                {field.outdated && draft === undefined ? (
-                                  <s-badge tone="warning">{t("common.translationStatus.outdated")}</s-badge>
-                                ) : null}
-                                {draft !== undefined ? <s-badge tone="info">{t("editor.badge.aiDraft")}</s-badge> : null}
-                                {warnings?.length ? (
-                                  <s-badge tone="warning">
-                                    {t("editor.badge.review", { issues: warnings.map((code) => issueName(i18n, code)).join(", ") })}
-                                  </s-badge>
-                                ) : null}
-                                {status?.status === "saved" ? <s-badge tone="success">{t("common.state.published")}</s-badge> : null}
-                                {!field.machine ? <s-badge>{t("editor.badge.manualOnly")}</s-badge> : null}
-                              </s-stack>
                             </s-stack>
                           </s-grid>
                         </s-query-container>
@@ -212,13 +229,8 @@ export function AttachedResourcesPanel({
                 </s-stack>
               </s-box>
             ))}
-            {attached.items.length ? (
-              <Button type="submit" variant="primary" {...(saveFetcher.state !== "idle" ? { loading: true } : {})}>
-                {t("editor.attached.publish")}
-              </Button>
-            ) : null}
           </s-stack>
-        </saveFetcher.Form>
+        </save.Form>
       </s-stack>
     </s-section>
   );

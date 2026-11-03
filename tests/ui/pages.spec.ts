@@ -60,8 +60,9 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     path: "/app/products/1?lang=de",
     check: async (page) => {
       await expect(page.getByText("English → German")).toBeVisible();
-      await expect(page.getByText("Search engine listing")).toBeVisible();
-      await expect(page.getByText("Images and custom fields")).toBeVisible();
+      // Review's words: how it looks on Google, the image descriptions and extra details.
+      await expect(page.getByRole("heading", { name: "On Google", exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Image descriptions and extra details", exact: true })).toBeVisible();
       await expect(page.getByText("custom.care")).toBeVisible();
     },
   },

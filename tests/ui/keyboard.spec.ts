@@ -46,28 +46,35 @@ async function tabTo(page: Page, match: (f: Awaited<ReturnType<typeof focused>>)
 }
 
 test("translate, edit and publish a product with the keyboard only", async ({ page }) => {
-  await openApp(page, "full", "/app/products/6?lang=de");
+  // Product 12 has no German texts yet: AI fills its name and description.
+  await openApp(page, "full", "/app/products/12?lang=de");
   await page.locator("body").focus();
 
-  const ai = await tabTo(page, (f) => f.button && f.text === "Translate with AI");
+  // The button names how many open texts it translates ("Translate with AI" and its count).
+  const ai = await tabTo(page, (f) => f.button && f.text.startsWith("Translate with AI"));
   expect(ai.visible).toBe(true);
   await page.keyboard.press("Enter");
-  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[de] Product 6 jacket");
+  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[de] Product 12 jacket");
 
-  // Into the title field, replace the draft.
+  // Into the name field, replace the draft.
   const title = await tabTo(page, (f) => f.tag === "s-text-field" && f.name === "value:title");
   expect(title.visible).toBe(true);
   await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.type("Jacke Nummer 6");
+  await page.keyboard.type("Jacke Nummer 12");
 
   // Shift+Tab goes back the same way (no keyboard trap).
   const back = await tabTo(page, (f) => f.button, 10, "Shift+Tab");
   expect(back.visible).toBe(true);
 
+  // "Edit HTML" opens the description's code and moves into it.
+  await tabTo(page, (f) => f.button && f.text === "Edit HTML", 40);
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).name).toBe("value:body_html");
+
   await tabTo(page, (f) => f.button && f.text === "Publish translations", 80);
   await page.keyboard.press("Enter");
   await expectToast(page, /translations? published$/);
-  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Jacke Nummer 6");
+  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Jacke Nummer 12");
 });
 
 test("leaving with unpublished changes: focus is on Stay, Enter stays", async ({ page }) => {

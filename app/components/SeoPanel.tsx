@@ -1,7 +1,7 @@
 /**
- * Search engine listing for one language: live length checks for the SEO
- * title and description, and a preview of the search result. Values come
- * from the editor form as the merchant types.
+ * How an item looks on Google in one language: live length checks for its
+ * Google title and description, and a preview of the search result. Values
+ * come from the editor form as the merchant types.
  */
 import {
   checkSeoField,
@@ -24,7 +24,7 @@ export interface SeoPanelProps {
   hasField: (key: string) => boolean;
   shopDomain: string;
   locale: string;
-  /** "products" or "collections". */
+  /** The storefront path before the address: "products", "collections", "pages", "blogs", "blogs/…" (a post under its blog). */
   pathSegment: string;
 }
 

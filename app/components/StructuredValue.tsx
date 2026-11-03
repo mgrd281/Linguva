@@ -12,8 +12,9 @@ import { RICH_TEXT_TYPE, structuredItems, withTexts } from "../lib/structured-pr
 import { HtmlPreview } from "./HtmlPreview";
 
 /**
- * The original (or a read-only translation): rich text rendered, lists and links as a list. A list is grey like
- * an original; `tone="translation"` draws it white with an edge, as Review draws what goes live.
+ * The original (or a read-only translation): rich text rendered in the text-box look (`tone` "subdued": an
+ * original, grey like the plain ones), lists and links as a list. A list is grey like an original;
+ * `tone="translation"` draws it white with an edge, as Review draws what goes live.
  */
 export function StructuredView({
   type,
@@ -28,9 +29,10 @@ export function StructuredView({
   title: string;
   lang: string;
   dir?: "rtl" | "auto";
-  tone?: "translation";
+  tone?: "translation" | "subdued";
 }) {
-  if (type === RICH_TEXT_TYPE) return <HtmlPreview html={richTextPreviewOrNull(value) ?? ""} title={title} lang={lang} {...(dir ? { dir } : {})} />;
+  if (type === RICH_TEXT_TYPE)
+    return <HtmlPreview html={richTextPreviewOrNull(value) ?? ""} title={title} lang={lang} textBox {...(dir ? { dir } : {})} {...(tone === "subdued" ? { tone } : {})} />;
   const items = structuredItems(type, value);
   const look = tone === "translation" ? ({ border: "base" } as const) : ({ background: "subdued" } as const);
   return (
@@ -87,7 +89,7 @@ export function StructuredEditor({
       <s-stack direction="block" gap="small">
         <s-text color="subdued">{language}</s-text>
         {value ? (
-          <HtmlPreview html={richTextPreviewOrNull(value) ?? ""} title={title} lang={locale} dir={rtl ? "rtl" : "auto"} />
+          <HtmlPreview html={richTextPreviewOrNull(value) ?? ""} title={title} lang={locale} dir={rtl ? "rtl" : "auto"} textBox />
         ) : (
           <s-box padding="base" borderWidth="base" borderRadius="base">
             <s-text color="subdued">{t("editor.structured.notTranslated")}</s-text>

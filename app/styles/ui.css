@@ -871,6 +871,20 @@
   line-height: 20px;
 }
 
+/* ── Overview (app/routes/app._index.tsx, CountryCards, the welcome page): its own rules here, media queries included. ── */
+
+/* ── Content and language pages (app.content.*, app.languages*, ContentTiles, CategoryCard, CategoryList, LanguageLayout, StepStrip): its own rules here, media queries included. ── */
+
+/* ── Review (app.review*, Review* components): its own rules here, media queries included. ── */
+
+/* ── Jobs (app.jobs*, components/jobs): its own rules here, media queries included. ── */
+
+/* ── Plan (app.plan.tsx, components/plan): its own rules here, media queries included. ── */
+
+/* ── Editor, lists and tools (the editor, the content lists, glossary, memory, coverage, markets, import & export): its own rules here, media queries included. ── */
+
+/* ── Smart schedule (app.settings_.automatic.tsx, SmartAutoCard): its own rules here, media queries included. ── */
+
 @media (pointer: coarse) {
   .lv-btn {
     --lv-btn-height: 44px;

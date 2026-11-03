@@ -27,6 +27,7 @@ import { OpenWorkLine, stateSummary, StateKey, TextStateBar } from "./ItemStates
 import { BIG_HEADING, PLAIN_LIST, StepNumber } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
 import { Button } from "./Button";
+import { Strong } from "./Type";
 
 type Language = ContentPage["languages"][number];
 type Fetcher = ReturnType<typeof useFetcher>;
@@ -47,12 +48,6 @@ const SUMMARY = { display: "block", cursor: "pointer", listStyle: "none" } as co
 /** A card: on a phone too (Polaris draws sections flat there). */
 export const CARD = { background: "base", border: "base", borderRadius: "large-100" } as const;
 /** Semibold at the body size: s-text type="strong" keeps the body weight (450) in Polaris, so names wouldn't stand out. */
-const STRONG = { fontWeight: 600, lineHeight: "20px" } as const;
-
-/** A name that leads its card, row or fold ("Produkte", "Texte deines Designs"), as the language page's card titles. */
-function Strong({ children }: { children: ReactNode }) {
-  return <strong style={STRONG}>{children}</strong>;
-}
 
 /** "Products", "Legal texts": a content type in the merchant's words. */
 export function partName(i18n: I18n, type: HubType): string {
@@ -100,7 +95,7 @@ function ChipBody({ language, current, i18n }: { language: Language; current: bo
         )}
       </s-stack>
       {current ? (
-        <span style={{ ...STRONG, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{figure}</span>
+        <span className="lv-strong" style={{ lineHeight: "20px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{figure}</span>
       ) : (
         <s-text color="subdued" fontVariantNumeric="tabular-nums">
           {figure}

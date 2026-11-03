@@ -10,8 +10,10 @@
  * badge rules; inline styles only for type sizes, list resets and the
  * current option's ring. Every state is an icon and words.
  */
-import { Children, Fragment, isValidElement, useEffect, useRef, type CSSProperties, type ReactNode, type SyntheticEvent } from "react";
+import { Children, Fragment, isValidElement, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
+import { Disclosure } from "./Disclosure";
+import { IconSquare, type Tint } from "./IconSquare";
 import type { IconName } from "../lib/icons";
 import { IconTile } from "./CategoryCard";
 import { CARD, H2 } from "./ContentTiles";
@@ -27,18 +29,7 @@ export interface SettingState {
   tone: StateTone;
 }
 
-/** A section's or an option's colour behind its icon: names a place, never a state (ui.css, [data-tint]). */
-export type Tint = "blue" | "green" | "violet" | "amber" | "slate" | "teal" | "rose" | "grey";
-
-/** An icon in its tinted square (a section's tile, an option, a tool); 40 px unless `size` says otherwise. */
-export function IconSquare({ icon, tint, size = 40 }: { icon: IconName; tint: Tint; size?: number }) {
-  const style: CSSProperties | undefined = size === 40 ? undefined : { width: size, height: size, borderRadius: Math.round(size * 0.3) };
-  return (
-    <span className="lv-icon-square" data-tint={tint} aria-hidden="true" style={style}>
-      <s-icon type={icon} color="base" size={size < 32 ? "small" : "base"} />
-    </span>
-  );
-}
+export { IconSquare, type Tint } from "./IconSquare";
 
 export function StateBadge({ state }: { state: SettingState }) {
   return (
@@ -375,24 +366,8 @@ export function FactList({ label, facts }: { label: string; facts: Array<{ icon:
   );
 }
 
-/** More words on demand, closed at first (a native disclosure, 44 px high, like the Plan page's questions); `open`: open at first. */
-export function More({ summary, children, open, onToggle }: { summary: string; children: ReactNode; open?: boolean; onToggle?: (open: boolean) => void }) {
-  return (
-    <details className="lv-more" {...(open ? { open: true } : {})} {...(onToggle ? { onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => onToggle(event.currentTarget.open) } : {})}>
-      <summary className="lv-more__summary">
-        <span>{summary}</span>
-        <span className="lv-more__chevron" aria-hidden="true">
-          <s-icon type="chevron-down" color="subdued" size="small" />
-        </span>
-      </summary>
-      <div style={{ padding: "0 0 8px 18px" }}>
-        <s-stack direction="block" gap="small-200">
-          {children}
-        </s-stack>
-      </div>
-    </details>
-  );
-}
+/** More words on demand (the app's disclosure, app/components/Disclosure.tsx). */
+export const More = Disclosure;
 
 /**
  * A row of actions that never wraps into a ragged second line: side by side

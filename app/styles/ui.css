@@ -10,6 +10,74 @@
  * colour: the focus ring, the disabled opacity with its cursor, the spinner.
  */
 
+/*
+ * The app's design tokens: one source for its own type, edges, corners, shadows, the focus ring and the
+ * chosen look, matching the admin's (Polaris') light surfaces. Coverage and state colours stay in
+ * app/components/Coverage.tsx (STATE_COLOURS, TRACK_COLOUR).
+ */
+:root {
+  --lv-font: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --lv-text: #303030;
+  --lv-text-subdued: #616161;
+  --lv-surface: #ffffff;
+  --lv-surface-subdued: #f7f7f7;
+  --lv-border: #e3e3e3;
+  --lv-border-hover: #cccccc;
+  --lv-radius-control: 10px;
+  --lv-radius-card: 12px;
+  --lv-shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --lv-shadow-hover: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --lv-focus: #005bd3;
+  --lv-selected-ring: #005bd3;
+  --lv-selected-bg: #f5f9ff;
+  --lv-selected-shadow: inset 0 0 0 2px var(--lv-selected-ring), 0 1px 3px rgba(0, 91, 211, 0.12);
+}
+
+/*
+ * The type scale (Polaris' s-text has no size and draws type="strong" at the body weight): the page's
+ * heading, a section's, a card's, emphasis, a big figure, a figure in a row, a caption.
+ */
+.lv-h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 28px;
+}
+.lv-h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 24px;
+}
+.lv-h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+.lv-strong {
+  font-weight: 600;
+}
+.lv-figure {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.lv-figure-row {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lv-caption {
+  color: var(--lv-text-subdued);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+
 .lv-btn {
   --lv-btn-height: 32px;
   --lv-btn-radius: 10px;
@@ -25,7 +93,7 @@
   margin: 0;
   border: 1px solid transparent;
   border-radius: var(--lv-btn-radius);
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: var(--lv-font);
   font-size: 13px;
   font-weight: 600;
   line-height: 20px;
@@ -47,7 +115,7 @@
 }
 
 .lv-btn:focus-visible {
-  outline: 2px solid #005bd3;
+  outline: 2px solid var(--lv-focus);
   outline-offset: 2px;
 }
 
@@ -87,7 +155,7 @@
   background: #ffffff;
   color: #1f1f1f;
   border-color: #dedede;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  box-shadow: var(--lv-shadow-1);
 }
 .lv-btn--secondary:not(:disabled):not([aria-disabled="true"]):hover {
   background: #f7f7f7;
@@ -239,7 +307,7 @@
   min-height: 26px;
   padding: 0 12px;
   border-radius: 7px;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: var(--lv-font);
   font-size: 13px;
   font-weight: 550;
   line-height: 20px;
@@ -265,7 +333,7 @@
     0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 .lv-seg__option input:focus-visible + .lv-seg__text {
-  outline: 2px solid #005bd3;
+  outline: 2px solid var(--lv-focus);
   outline-offset: 1px;
 }
 .lv-seg__option input:disabled {
@@ -282,11 +350,9 @@
 .lv-selected-frame {
   position: absolute;
   inset: 0;
-  border-radius: 12px;
-  background: #f5f9ff;
-  box-shadow:
-    inset 0 0 0 2px #005bd3,
-    0 1px 3px rgba(0, 91, 211, 0.12);
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
 }
 
 /* A list of choices, one row each: the name, then its choice beside it once the list is wide enough. */
@@ -437,14 +503,14 @@
   min-width: 0;
   aspect-ratio: 1 / 1;
   padding: 10px 6px;
-  border: 1px solid #e3e3e3;
-  border-radius: 14px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
   background: #ffffff;
   color: #303030;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: var(--lv-font);
   text-align: center;
   text-decoration: none;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  box-shadow: var(--lv-shadow-1);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition:
@@ -454,8 +520,8 @@
     transform 0.15s ease;
 }
 .lv-tile:hover {
-  border-color: #cccccc;
-  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
   transform: translateY(-1px);
 }
 .lv-tile:active {
@@ -463,15 +529,13 @@
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
 }
 .lv-tile:focus-visible {
-  outline: 2px solid #005bd3;
+  outline: 2px solid var(--lv-focus);
   outline-offset: 2px;
 }
 .lv-tile[aria-current="page"] {
   border-color: transparent;
-  background: #f5f9ff;
-  box-shadow:
-    inset 0 0 0 2px #005bd3,
-    0 1px 3px rgba(0, 91, 211, 0.12);
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
   cursor: default;
   transform: none;
 }
@@ -538,14 +602,14 @@
     min-height: 116px;
   }
 }
-/* A phone: squares, three in a row. */
+/* A phone: squares, three in a row (a row grows a little where a name and its state both take two lines). */
 @container (max-width: 560px) {
   .lv-tilenav__list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .lv-tile {
     aspect-ratio: 1 / 1;
-    min-height: 0;
+    min-height: auto;
   }
 }
 
@@ -553,8 +617,8 @@
 .lv-status {
   container-type: inline-size;
   box-sizing: border-box;
-  border: 1px solid #e3e3e3;
-  border-radius: 14px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
   background: #ffffff;
   padding: 14px 16px;
 }
@@ -620,8 +684,8 @@
   flex-direction: column;
   box-sizing: border-box;
   min-width: 0;
-  border: 1px solid #e3e3e3;
-  border-radius: 14px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
   background: #ffffff;
   transition:
     border-color 0.15s ease,
@@ -629,14 +693,12 @@
 }
 .lv-option--current {
   border-color: transparent;
-  background: #f5f9ff;
-  box-shadow:
-    inset 0 0 0 2px #005bd3,
-    0 1px 3px rgba(0, 91, 211, 0.12);
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
 }
 .lv-option--choosable:hover {
-  border-color: #cccccc;
-  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
 }
 .lv-option__choose,
 .lv-option__head {
@@ -649,7 +711,7 @@
   margin: 0;
   padding: 16px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--lv-radius-card);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -661,7 +723,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .lv-option__choose:focus-visible {
-  outline: 2px solid #005bd3;
+  outline: 2px solid var(--lv-focus);
   outline-offset: 2px;
 }
 .lv-option__top {
@@ -715,7 +777,7 @@
     box-shadow 0.15s ease;
 }
 .lv-option--choosable:hover .lv-option__radio {
-  border-color: #005bd3;
+  border-color: var(--lv-selected-ring);
   box-shadow: inset 0 0 0 3px #ffffff, inset 0 0 0 9px #cfe3ff;
 }
 
@@ -735,7 +797,7 @@
   display: none;
 }
 .lv-more__summary:focus-visible {
-  outline: 2px solid #005bd3;
+  outline: 2px solid var(--lv-focus);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -746,10 +808,13 @@
 .lv-more[open] > .lv-more__summary .lv-more__chevron {
   transform: rotate(180deg);
 }
+.lv-more__body {
+  padding: 0 0 8px 18px;
+}
 /* What the current (or the chosen) way needs next: its languages, its summary, under the choices. */
 .lv-option-panel {
   box-sizing: border-box;
-  border-radius: 14px;
+  border-radius: var(--lv-radius-card);
   background: #f7f7f7;
   padding: 16px;
 }
@@ -775,8 +840,8 @@
   box-sizing: border-box;
   width: 100%;
   padding: 14px;
-  border: 1px solid #e3e3e3;
-  border-radius: 14px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
   background: #ffffff;
   color: #303030;
   text-decoration: none;
@@ -785,11 +850,11 @@
     box-shadow 0.15s ease;
 }
 .lv-link-tile:hover {
-  border-color: #cccccc;
-  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
 }
 .lv-link-tile:focus-visible {
-  outline: 2px solid #005bd3;
+  outline: 2px solid var(--lv-focus);
   outline-offset: 2px;
 }
 .lv-link-tile__text {

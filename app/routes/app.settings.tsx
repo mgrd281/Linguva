@@ -386,8 +386,12 @@ const SECTION_LOOK: Record<SectionKey, { icon: IconName; tint: Tint }> = {
  * soft hyphen, and "KI-" a non-breaking one, so no line ends in "KI-" (docs/I18N_REVIEW.md). Every other
  * word stays as it is.
  */
-const BREAKS: Record<string, string> = { Übersetzungsspeicher: "Übersetzungs\u00ADspeicher", Veröffentlichen: "Veröffent\u00ADlichen" };
-const breakable = (text: string) => text.replace(/\p{L}{14,}/gu, (word) => BREAKS[word] ?? word).replace(/(^|\s)KI-/g, "$1KI\u2011");
+const BREAKS: Record<string, string> = {
+  Übersetzungsspeicher: "Übersetzungs\u00ADspeicher",
+  Veröffentlichen: "Veröffent\u00ADlichen",
+  Übersetzungen: "Überset\u00ADzungen",
+};
+const breakable = (text: string) => text.replace(/\p{L}{12,}/gu, (word) => BREAKS[word] ?? word).replace(/(^|\s)KI-/g, "$1KI\u2011");
 
 // ─── States in words ──────────────────────────────────────────────────────────
 
@@ -682,7 +686,8 @@ function sectionTexts(data: Data, i18n: I18n): Record<SectionKey, SectionText> {
   const attention = changes.badge.tone === "warning" || changes.badge.tone === "critical" ? changes.badge.tone : null;
   const publish = effectivePublishMode({ mode: data.publishMode, inPlan: data.autoPublishInPlan });
   const publishTitle = publish === "AUTO_PUBLISH" ? t("settings.publish.auto.title") : t("settings.publish.review.title");
-  const memory = data.reuseMachineMemory ? t("settings.memory.machine.title") : t("settings.memory.approved.title");
+  // The tile's few words (the option's own name doesn't fit a tile in every language).
+  const memory = data.reuseMachineMemory ? t("settings.tile.memory.machine") : t("settings.memory.approved.title");
   const level = usageLevel(data.used, data.limit);
   // Own key plan: no allowance of Linguva's to run out.
   const planTone = data.ownKeys?.plan ? null : level === "exhausted" ? "critical" : level === "high" ? "warning" : null;
@@ -1184,7 +1189,7 @@ function ChangesCard({
       </OptionGrid>
       {/* The chosen way's details, under the choices: shortly after saving's languages, the schedule's summary. */}
       {showBasicForm ? (
-        <OptionPanel label={t("settings.auto.languages")} icon="automation" tint="blue" title={t("settings.changes.basic.title")}>
+        <OptionPanel label={t("settings.changes.basic.panel")} icon="automation" tint="blue" title={t("settings.changes.basic.title")}>
           {basicForm}
           {errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
         </OptionPanel>

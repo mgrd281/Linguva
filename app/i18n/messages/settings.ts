@@ -70,6 +70,7 @@ export const en = {
   "settings.changes.how": "How it works",
 
   "settings.auto.languages": "Languages to translate automatically",
+  "settings.changes.basic.panel": "Languages for “Shortly after saving”",
   "settings.auto.chosenOutside": {
     one: "{languages} is chosen but isn't translated: not in your plan.",
     other: "{languages} are chosen but aren't translated: not in your plan.",
@@ -271,6 +272,7 @@ export const en = {
   "settings.summary.plan.used": "{percent} used",
   "settings.tile.keys.problem": "Needs a look",
   "settings.tile.tools": "Glossary & more",
+  "settings.tile.memory.machine": "Also AI translations",
   "settings.changes.smart.summary": "Your schedule",
   "settings.plan.lead": "Your plan and the AI characters you used this month.",
   "settings.plan.lead.ownKey": "Your plan and what Linguva translated through your keys this month.",
@@ -355,6 +357,7 @@ export const de: Translation<typeof en> = {
   "settings.changes.how": "So funktioniert es",
 
   "settings.auto.languages": "Automatisch zu übersetzende Sprachen",
+  "settings.changes.basic.panel": "Sprachen für „Kurz nach dem Speichern“",
   "settings.auto.chosenOutside": {
     one: "{languages} ist ausgewählt, wird aber nicht übersetzt: nicht in deinem Tarif.",
     other: "{languages} sind ausgewählt, werden aber nicht übersetzt: nicht in deinem Tarif.",
@@ -555,6 +558,7 @@ export const de: Translation<typeof en> = {
   "settings.summary.plan.used": "{percent} genutzt",
   "settings.tile.keys.problem": "Bitte prüfen",
   "settings.tile.tools": "Glossar & mehr",
+  "settings.tile.memory.machine": "Auch von der KI",
   "settings.changes.smart.summary": "Dein Zeitplan",
   "settings.plan.lead": "Dein Tarif und die KI-Zeichen, die du diesen Monat genutzt hast.",
   "settings.plan.lead.ownKey": "Dein Tarif und was Linguva diesen Monat über deine Schlüssel übersetzt hat.",
@@ -641,6 +645,7 @@ export const fr: Translation<typeof en> = {
   "settings.changes.how": "Comment ça marche",
 
   "settings.auto.languages": "Langues à traduire automatiquement",
+  "settings.changes.basic.panel": "Langues pour « Peu après l'enregistrement »",
   "settings.auto.chosenOutside": {
     one: "{languages} est sélectionnée, mais n'est pas traduite : pas dans votre forfait.",
     other: "{languages} sont sélectionnées, mais ne sont pas traduites : pas dans votre forfait.",
@@ -845,6 +850,7 @@ export const fr: Translation<typeof en> = {
   "settings.summary.plan.used": "{percent} utilisés",
   "settings.tile.keys.problem": "À vérifier",
   "settings.tile.tools": "Glossaire et plus",
+  "settings.tile.memory.machine": "Aussi de l'IA",
   "settings.changes.smart.summary": "Votre planification",
   "settings.plan.lead": "Votre forfait et les caractères d'IA utilisés ce mois-ci.",
   "settings.plan.lead.ownKey": "Votre forfait et ce que Linguva a traduit ce mois-ci avec vos clés.",
@@ -928,6 +934,7 @@ export const es: Translation<typeof en> = {
   "settings.changes.how": "Cómo funciona",
 
   "settings.auto.languages": "Idiomas para traducir automáticamente",
+  "settings.changes.basic.panel": "Idiomas para «Poco después de guardar»",
   "settings.auto.chosenOutside": {
     one: "{languages} está elegido, pero no se traduce: no está en tu plan.",
     other: "{languages} están elegidos, pero no se traducen: no están en tu plan.",
@@ -1131,6 +1138,7 @@ export const es: Translation<typeof en> = {
   "settings.summary.plan.used": "{percent} usado",
   "settings.tile.keys.problem": "Por revisar",
   "settings.tile.tools": "Glosario y más",
+  "settings.tile.memory.machine": "También de la IA",
   "settings.changes.smart.summary": "Tu programación",
   "settings.plan.lead": "Tu plan y los caracteres de IA que has usado este mes.",
   "settings.plan.lead.ownKey": "Tu plan y lo que Linguva ha traducido este mes con tus claves.",

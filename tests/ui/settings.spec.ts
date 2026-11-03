@@ -1,11 +1,13 @@
 /**
  * Settings in sections, one shown at a time (`?section=<key>`): the status
  * row (all set up, or the one thing that needs the merchant with its fix),
- * the nav card beside the section on a wide page (each section's state in
- * one line, the current one marked) and the list of sections on a phone
- * (a back row above a chosen one), deep links and the cards' old
- * `#settings-*` addresses, switching without loading the page again with
- * focus on the section's heading, and every state as it really is:
+ * the sections as square tiles (icon, name, state in a few words, a dot
+ * where one needs the merchant) in one row above the section on a wide page
+ * (the current one marked) and as a grid of squares on a phone (a back row
+ * above a chosen one), deep links and the cards' old `#settings-*`
+ * addresses, switching without loading the page again with focus on the
+ * section's heading, the choices as tiles with their icons and the chosen
+ * way's details in a panel under them, and every state as it really is:
  * translating changes (off, on, paused, waiting for the permission,
  * stopped by the plan), publishing (with its dialog, and after a move to a
  * smaller plan), how AI writes under the admin's save bar, translation
@@ -19,17 +21,22 @@ import { UI_ENV, UI_SHOPS, type UiShopKey } from "./fixtures/shops";
 import { clickSaveBarButton, expectAccessible, expectNoHorizontalScroll, expectToast, openApp, saveBarShown, sessionToken } from "./helpers";
 import { stoppedJob } from "./stopped-jobs";
 
-/** The visible way between the sections: the nav card on a wide page, the list on a phone without a section. */
+/** The visible way between the sections: the tiles above the section on a wide page, the grid of tiles on a phone without a section. */
 const nav = (page: Page) => page.getByRole("navigation", { name: "Settings sections" });
 const navEntry = (page: Page, name: string) => nav(page).locator("li").filter({ hasText: name });
-/** The sections' names in the nav's order. */
-const navOrder = (page: Page) => nav(page).locator("li").evaluateAll((items) => items.map((li) => (li as HTMLElement).innerText.split("\n").map((line) => line.trim()).filter(Boolean)[0]));
+/** The sections' names in the tiles' order. */
+const navOrder = (page: Page) => tileNames(nav(page));
+/** Each tile's name as it is read (a long word's tile shows it with a soft hyphen and is read by the plain word). */
+const tileNames = (tiles: ReturnType<Page["locator"]>) =>
+  tiles.locator(".lv-tile").evaluateAll((links) => links.map((a) => (a.querySelector(".lv-sr") ?? a.querySelector(".lv-tile__name"))!.textContent!.trim()));
 const status = (page: Page) => page.locator("#settings-status");
 const section = (page: Page, key: string) => page.locator(`#settings-${key}`);
 const option = (page: Page, card: string, name: string) => page.locator(card).getByRole("group", { name, exact: true });
-/** Chooses an option: its whole header is one button. */
+/** Chooses an option: the whole tile is one button. */
 const choose = (page: Page, card: string, name: string) => option(page, card, name).getByRole("button").first().click();
 const isCurrent = (page: Page, card: string, name: string) => expect(option(page, card, name).getByText("Current setting")).toBeVisible();
+/** Shortly after saving's languages, in the panel under the choices. */
+const languagesPanel = (page: Page) => page.locator("#settings-changes").getByRole("group", { name: "Languages for “Shortly after saving”", exact: true });
 /** Primary buttons the merchant sees: not in a closed dialog, not in a section that isn't shown. */
 const primaries = (page: Page) =>
   page.locator('[data-button][data-variant="primary"]').evaluateAll((buttons) =>
@@ -46,25 +53,41 @@ const primaries = (page: Page) =>
 const post = (page: Page, shop: UiShopKey, path: string, form: Record<string, string>) =>
   page.request.post(new URL(path, UI_ENV.appUrl).toString(), { headers: { Authorization: `Bearer ${sessionToken(UI_SHOPS[shop].domain)}` }, form });
 
-test("the status row and the nav: every section with its state; a section opens without loading the page again, with focus on its heading @responsive", async ({ page }, info) => {
+test("the status row and the tiles: every section with its icon and state; a section opens without loading the page again, with focus on its heading @responsive", async ({ page }, info) => {
   await openApp(page, "full", "/app/settings");
   await expect(status(page)).toHaveText(/^Everything is set up$/, { useInnerText: true });
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   const desktop = info.project.name === "desktop";
-  // Two groups: how Linguva translates, then what it may use (no keys on this plan).
-  await expect(nav(page).locator("ul")).toHaveCount(2);
+  // One list of tiles; the second group (what Linguva may use; no keys on this plan) starts after a fine line.
+  await expect(nav(page).locator("ul")).toHaveCount(1);
   expect(await navOrder(page)).toEqual(["Translating changes", "Publishing", "How AI writes", "Translation memory", "AI permission", "Plan & usage", "Tools"]);
-  // Each with its state: one line beside the section, up to two in the phone list.
-  const expected: Array<[string, RegExp, RegExp]> = [
-    ["Translating changes", /^Translating changes\s*Start it yourself$/, /^Translating changes\s*Nothing runs by itself$/],
-    ["Publishing", /^Publishing\s*Review first$/, /^Publishing\s*Review first · Translations wait for your approval$/],
-    ["How AI writes", /^How AI writes\s*DeepL decides$/, /^How AI writes\s*DeepL decides · without a description of your store$/],
-    ["Translation memory", /^Translation memory\s*Also AI translations$/, /^Translation memory\s*Also AI translations$/],
-    ["AI permission", /^AI permission\s*Allowed$/, /^AI permission\s*DeepL SE \(Germany\)$/],
-    ["Plan & usage", /^Plan & usage\s*Pro · (<1%|\d+%) used$/, /^Plan & usage\s*Pro · (<1%|\d+%) used$/],
-    ["Tools", /^Tools\s*Glossary, languages and more$/, /^Tools\s*Glossary, languages and more$/],
+  await expect(nav(page).locator("li[data-group-start]")).toHaveText(/^AI permission/);
+  // Each with its icon and its state in a few words, the same on every width; nothing needs the merchant: no dot.
+  const expected: Array<[string, string, RegExp]> = [
+    ["Translating changes", "automation", /^Translating changes\s*Start it yourself$/],
+    ["Publishing", "send", /^Publishing\s*Review first$/],
+    ["How AI writes", "text-quote", /^How AI writes\s*DeepL decides$/],
+    ["Translation memory", "database", /^Translation memory\s*Also AI translations$/],
+    ["AI permission", "shield-check-mark", /^AI permission\s*Allowed$/],
+    ["Plan & usage", "gauge", /^Plan & usage\s*Pro · (<1%|\d+%) used$/],
+    ["Tools", "wrench", /^Tools\s*Glossary & more$/],
   ];
-  for (const [name, wide, narrow] of expected) await expect(navEntry(page, name)).toHaveText(desktop ? wide : narrow, { useInnerText: true });
+  for (const [name, icon, text] of expected) {
+    await expect(navEntry(page, name)).toHaveText(text, { useInnerText: true });
+    await expect(navEntry(page, name).locator(`s-icon[type='${icon}']`)).toHaveCount(1);
+  }
+  await expect(nav(page).locator(".lv-tile__dot")).toHaveCount(0);
+  // Square buttons: as high as wide (a little higher where a name and its state both take two lines), well above the touch size.
+  for (const box of await nav(page).getByRole("link").evaluateAll((links) => links.map((l) => l.getBoundingClientRect()))) {
+    expect(box.height - box.width).toBeGreaterThanOrEqual(-1);
+    expect(box.height - box.width).toBeLessThanOrEqual(24);
+    expect(box.height).toBeGreaterThanOrEqual(96);
+  }
+  if (desktop) {
+    // One row above the section.
+    const tops = await nav(page).getByRole("link").evaluateAll((links) => links.map((l) => Math.round(l.getBoundingClientRect().top)));
+    expect(new Set(tops).size).toBe(1);
+  }
   // The last line: when the running version went live (the build's time, in the store's zone); the tests' build has no commit.
   await expect(page.locator("#settings-version")).toHaveText(/^Linguva last updated (today|yesterday|on .+) at \d{1,2}:\d{2}\s?[AP]M$/);
   await expectAccessible(page);
@@ -76,7 +99,7 @@ test("the status row and the nav: every section with its state; a section opens 
     if (response.url().includes("/app/settings.data")) loads.push(response.text().catch(() => ""));
   });
   if (desktop) {
-    // Beside the nav: the first section (nothing needs the merchant), marked as the current one.
+    // Under the tiles: the first section (nothing needs the merchant), its tile marked as the current one.
     await expect(nav(page).locator('[aria-current="page"]')).toHaveText(/^Translating changes/);
     await expect(section(page, "changes")).toBeVisible();
     await expect(section(page, "publish")).toBeHidden();
@@ -85,12 +108,12 @@ test("the status row and the nav: every section with its state; a section opens 
     await expect(nav(page).locator('[aria-current="page"]')).toHaveText(/^Publishing/);
     await expect(section(page, "changes")).toBeHidden();
   } else {
-    // A phone: the list only, every row a link to its section.
+    // A phone: the tiles only, three in a row, every tile a link to its section.
     await expect(section(page, "changes")).toBeHidden();
     await expect(nav(page).getByRole("link")).toHaveCount(7);
     await nav(page).getByRole("link", { name: /^Publishing/ }).click();
     await expect(page).toHaveURL(/[?&]section=publish(&|$)/);
-    // The section alone under a back row: no page heading, status or list.
+    // The section alone under a back row: no page heading, status or tiles.
     await expect(page.getByRole("heading", { level: 1 })).toBeHidden();
     await expect(status(page)).toBeHidden();
     await expect(page.getByRole("navigation", { name: "Settings sections" })).toHaveCount(0);
@@ -102,17 +125,18 @@ test("the status row and the nav: every section with its state; a section opens 
   await expectAccessible(page);
 });
 
-test("a phone: the sections as two cards of rows; a chosen one opens alone under a 44 px back row @responsive", async ({ page }, info) => {
+test("a phone: the sections as a grid of squares, three in a row; a chosen one opens alone under a 44 px back row @responsive", async ({ page }, info) => {
   test.skip(info.project.name !== "mobile", "phone layout only");
   await openApp(page, "full", "/app/settings");
-  const cards = nav(page).locator("ul");
-  await expect(cards).toHaveCount(2);
-  await expect(cards.nth(0).getByRole("link")).toHaveCount(4);
-  await expect(cards.nth(1).getByRole("link")).toHaveCount(3);
-  // Each row: its icon, name, summary and chevron, the whole row one tap target.
-  for (const box of await nav(page).getByRole("link").evaluateAll((links) => links.map((l) => l.getBoundingClientRect().height))) expect(box).toBeGreaterThanOrEqual(44);
-  await expect(nav(page).locator("li").first().locator("s-icon[type='chevron-right']")).toHaveCount(1);
-  await expect(nav(page).locator("li").first().locator("s-icon[type='settings']")).toHaveCount(1);
+  const tiles = nav(page).getByRole("link");
+  await expect(tiles).toHaveCount(7);
+  // Three in a row: the first three on one line, the fourth below them.
+  const boxes = await tiles.evaluateAll((links) => links.map((l) => l.getBoundingClientRect()));
+  expect(Math.round(boxes[0]!.top)).toBe(Math.round(boxes[2]!.top));
+  expect(boxes[3]!.top).toBeGreaterThan(boxes[0]!.bottom);
+  // Each tile: its icon, name and state, the whole square one tap target; none is the current one (no section is shown).
+  await expect(nav(page).locator("li").first().locator("s-icon[type='automation']")).toHaveCount(1);
+  await expect(nav(page).locator('[aria-current="page"]')).toHaveCount(0);
 
   await nav(page).getByRole("link", { name: /^How AI writes/ }).click();
   const back = page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Settings" });
@@ -125,6 +149,15 @@ test("a phone: the sections as two cards of rows; a chosen one opens alone under
   await expect(page).not.toHaveURL(/section=/);
   await expect(nav(page).getByRole("link")).toHaveCount(7);
   await expect(section(page, "style")).toBeHidden();
+});
+
+test("the tiles say where a section needs the merchant: its state in the tone, with a dot @responsive", async ({ page }) => {
+  await openApp(page, "measure", "/app/settings");
+  // No permission yet: the permission's tile says so, the others don't.
+  await expect(navEntry(page, "AI permission")).toHaveText(/^AI permission\s*Not allowed$/, { useInnerText: true });
+  await expect(navEntry(page, "AI permission").locator('[data-tone="warning"] .lv-tile__dot')).toHaveCount(1);
+  await expect(nav(page).locator(".lv-tile__dot")).toHaveCount(1);
+  await expectAccessible(page);
 });
 
 test("deep links open their section; an unknown one or a section the store hasn't opens the first; the cards' old addresses open theirs @responsive", async ({ page }, info) => {
@@ -167,6 +200,7 @@ test("without a section, the first that needs the merchant opens; the permission
   await openApp(page, "measure", "/app/settings");
   await expect(status(page)).toHaveText(/^AI translation isn't allowed yet\s*Without permission, AI translates nothing$/, { useInnerText: true });
   await expect(nav(page).locator('[aria-current="page"]')).toHaveText(/^AI permission\s*Not allowed$/);
+  await expect(page.locator("#settings-status")).toHaveAttribute("data-tone", "warning");
   // The section beside the status row has the step itself; the status row needs no second button.
   await expect(status(page).locator('[data-button][href="/app/settings?section=ai"]')).toBeHidden();
   expect(await primaries(page)).toEqual(["Allow AI translation"]);
@@ -182,9 +216,10 @@ test("without a section, the first that needs the merchant opens; the permission
   await expect(page.locator("#settings-changes-heading")).toBeFocused();
   expect(await primaries(page)).toEqual(["Read and allow"]);
   await expect(status(page).locator('[data-button][href="/app/settings?section=ai"]')).toHaveText("Read and allow");
-  // What needs the permission says so, with the way to give it where it is.
+  // What needs the permission says so, with the permission's shield and the way to give it where it is.
   const basic = option(page, "#settings-changes", "Shortly after saving");
   await expect(basic.getByText("Allow AI translation first.")).toBeVisible();
+  await expect(basic.locator("s-icon[type='shield-check-mark']")).toHaveCount(1);
   await expect(basic.getByRole("button", { name: "Allow AI translation" })).toBeVisible();
   await status(page).locator('[data-button][href="/app/settings?section=ai"]').click();
   await expect(section(page, "ai")).toBeVisible();
@@ -212,7 +247,7 @@ test("how AI writes: the form of address per language, saved under the admin's s
   const context = style.getByRole("textbox", { name: "About your store" });
   await expect(context).toHaveAttribute("placeholder", "Outdoor clothing for families, friendly and simple");
   await expect(style.getByText("What you sell and how you speak. Helps AI choose its words; not translated.")).toBeVisible();
-  await expect(style.getByText("Fixed terms: 0 in the glossary")).toBeVisible();
+  await expect(style.getByText("Fixed terms in the glossary: 0")).toBeVisible();
   await expect(style.getByRole("link", { name: "Edit glossary" })).toHaveAttribute("href", "/app/glossary");
   // Saved by the admin's save bar only.
   await expect(style.getByRole("button", { name: /^Save/ })).toHaveCount(0);
@@ -262,8 +297,12 @@ test("publishing: choosing automatic asks first in a dialog; Cancel changes noth
   const card = "#settings-publish";
   await isCurrent(page, card, "Review first");
   await expect(option(page, card, "Review first").getByText("Recommended")).toBeVisible();
-  await expect(page.locator(`${card} s-badge`).first()).toHaveText("With review");
-  await expect(page.locator(card).getByText("Applies to whole areas and automatic translation. The smart schedule has its own setting.")).toBeVisible();
+  // Each choice with its icon; the one that can be chosen shows its radio mark.
+  await expect(option(page, card, "Review first").locator("s-icon[type='eye-check-mark']")).toHaveCount(1);
+  await expect(option(page, card, "Publish automatically").locator("s-icon[type='send']")).toHaveCount(1);
+  await expect(option(page, card, "Publish automatically").locator(".lv-option__radio")).toHaveCount(1);
+  await expect(option(page, card, "Review first").locator(".lv-option__radio")).toHaveCount(0);
+  await expect(page.locator(card).getByText("Applies when Linguva translates many texts at once (for example all products) and to automatic translation. The smart schedule has its own setting.")).toBeVisible();
   await expect(page.locator(card).getByRole("link", { name: "Go to Review" })).toHaveAttribute("href", "/app/review");
 
   const dialog = page.getByRole("dialog", { name: "Publish automatically?" });
@@ -280,7 +319,6 @@ test("publishing: choosing automatic asks first in a dialog; Cancel changes noth
   await expectToast(page, "Saved. Translations without warnings are published automatically.");
   await isCurrent(page, card, "Publish automatically");
   await expect(page.locator("#settings-publish-auto")).toBeFocused();
-  await expect(page.locator(`${card} s-badge`).first()).toHaveText("Automatic");
   await expect(navEntry(page, "Publishing")).toHaveText(/^Publishing\s*Publish automatically$/, { useInnerText: true });
 
   // Back to review first (no dialog for the safer choice).
@@ -298,7 +336,6 @@ test("publishing: choosing automatic asks first in a dialog; Cancel changes noth
 test("automatic publishing left on from a bigger plan: shows what really happens, and \"Review first\" can still be chosen", async ({ page }) => {
   await openApp(page, "planAutoPublish", "/app/settings?section=publish");
   const card = section(page, "publish");
-  await expect(card.locator("s-badge").first()).toHaveText("With review");
   await expect(card.getByText("Automatic publishing isn't in your plan. New translations therefore wait in Review.")).toBeVisible();
   await expect(card.getByText("publishing becomes automatic again unless you choose", { exact: false })).toBeVisible();
   // The saved setting stays marked; leaving it is one tap on "Review first" (not clicked here: the store is shared).
@@ -310,7 +347,7 @@ test("automatic publishing left on from a bigger plan: shows what really happens
   await expect(auto.getByText("In the Pro and Business plans.")).toBeVisible();
   await expect(auto.getByRole("link", { name: "See plans" })).toBeVisible();
   await expect(auto.getByRole("button")).toHaveCount(0);
-  // The nav says what really happens.
+  // The tile says what really happens.
   await expect(navEntry(page, "Publishing")).toHaveText(/^Publishing\s*Review first$/, { useInnerText: true });
 });
 
@@ -323,7 +360,6 @@ test("translation memory: the whole option chooses it, with a toast and focus on
   await expectToast(page, "Saved. Translation memory follows this choice.");
   await isCurrent(page, card, other);
   await expect(page.locator(approvedNow ? "#settings-memory-machine" : "#settings-memory-approved")).toBeFocused();
-  await expect(page.locator(`${card} s-badge`).first()).toHaveText(other);
   await expect(navEntry(page, "Translation memory")).toHaveText(new RegExp(`^Translation memory\\s*${other}$`), { useInnerText: true });
   await page.reload();
   await isCurrent(page, card, other);
@@ -360,7 +396,7 @@ test("the permission: withdrawing asks first in a dialog and the status row says
   await expect(changes.locator("s-badge").first()).toHaveText("Waiting");
   const waiting = changes.locator('s-banner[heading="Automatic translation is waiting for your permission"]');
   await expect(waiting).toContainText("As soon as you allow AI translation, Linguva translates everything that changed meanwhile.");
-  await expect(navEntry(page, "Translating changes")).toHaveText(/^Translating changes\s*Shortly after saving · Waiting$/, { useInnerText: true });
+  await expect(navEntry(page, "Translating changes")).toHaveText(/^Translating changes\s*Waiting$/, { useInnerText: true });
   await waiting.getByRole("button", { name: "Allow AI translation" }).click();
   await expectToast(page, "AI translation is allowed.");
   await expect(waiting).toHaveCount(0);
@@ -387,17 +423,29 @@ test("the permission given in its section moves on to translating changes", asyn
 test("translating shortly after saving: chosen with the plan's languages ticked, saved by its own button, off again @responsive", async ({ page }, info) => {
   await openApp(page, "full", "/app/settings?section=changes");
   const card = section(page, "changes");
-  await expect(card.locator("s-badge").first()).toHaveText("Off");
-  await expect(card.getByText("Changes are translated when you start a translation.")).toBeVisible();
+  // Off: the current choice says it; no badge or line repeats it.
   await isCurrent(page, "#settings-changes", "Start it yourself");
+  await expect(card.locator("h2 ~ s-badge")).toHaveCount(0);
+  // Three equally high choices in one row on a wide page (one under the other on a phone), each with its icon.
+  if (info.project.name === "desktop") {
+    const boxes = await card.locator(".lv-option").evaluateAll((tiles) => tiles.map((t) => t.getBoundingClientRect()));
+    expect(new Set(boxes.map((b) => Math.round(b.height))).size).toBe(1);
+    expect(new Set(boxes.map((b) => Math.round(b.top))).size).toBe(1);
+  }
+  for (const [name, icon] of [
+    ["Start it yourself", "play-circle"],
+    ["Shortly after saving", "automation"],
+    ["On a schedule", "calendar-time"],
+  ]) await expect(option(page, "#settings-changes", name!).locator(`s-icon[type='${icon}']`)).toHaveCount(1);
   // How it works, closed at first.
   await expect(card.locator("details")).not.toHaveAttribute("open", "");
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  // Chosen for the first time: every language of the plan is ticked.
+  // Chosen for the first time: its languages open in the panel under the choices, every language of the plan ticked.
+  await expect(languagesPanel(page)).toHaveCount(0);
   await choose(page, "#settings-changes", "Shortly after saving");
-  const basic = option(page, "#settings-changes", "Shortly after saving");
+  const basic = languagesPanel(page);
   for (const name of ["German", "French", "Arabic"]) await expect(basic.getByRole("checkbox", { name, exact: true })).toBeChecked();
   // Without a language it is refused, where the choice is made.
   for (const name of ["German", "French", "Arabic"]) await basic.getByRole("checkbox", { name, exact: true }).uncheck();
@@ -416,14 +464,15 @@ test("translating shortly after saving: chosen with the plan's languages ticked,
   await expect(basic.getByRole("checkbox", { name: "Arabic", exact: true })).not.toBeChecked();
   await expect(basic.getByRole("button", { name: "Save languages" })).toBeVisible();
   if (info.project.name === "mobile") {
-    // The phone list names its languages.
+    // The phone's tile says the way.
     await openApp(page, "full", "/app/settings");
-    await expect(navEntry(page, "Translating changes")).toHaveText(/^Translating changes\s*Shortly after saving · (German and French|French and German)$/, { useInnerText: true });
+    await expect(navEntry(page, "Translating changes")).toHaveText(/^Translating changes\s*Shortly after saving$/, { useInnerText: true });
     await openApp(page, "full", "/app/settings?section=changes");
   }
 
-  // Off again (other tests use this store).
+  // Off again (other tests use this store): the panel goes with it.
   await choose(page, "#settings-changes", "Start it yourself");
+  await expect(languagesPanel(page)).toHaveCount(0);
   await expectToast(page, "Automatic translation is off.");
   await isCurrent(page, "#settings-changes", "Start it yourself");
   await expect(page.locator("#settings-changes-manual")).toBeFocused();
@@ -433,11 +482,12 @@ test("translating shortly after saving says why it waits in the status row, and 
   await openApp(page, "autoLimits", "/app/settings");
   // Times in the store's zone (Europe/Berlin in the fixtures), so without "UTC".
   const row = status(page);
-  await expect(row).toHaveText(/^Translating changes\s*Paused\s*Continues from .+\d{1,2}:\d{2}\s?[AP]M · Daily limit reached/, { useInnerText: true });
+  await expect(row).toHaveText(/^Automatic translation is paused\s*Continues from .+\d{1,2}:\d{2}\s?[AP]M · Daily limit reached/, { useInnerText: true });
+  await expect(row).toHaveAttribute("data-tone", "warning");
   await expect(row).not.toContainText("UTC");
   if (info.project.name === "mobile") {
     // On a phone the status row leads to its section.
-    await expect(row.locator('[data-button][href="/app/settings?section=changes"]')).toHaveText("View");
+    await expect(row.locator('[data-button][href="/app/settings?section=changes"]')).toHaveText("Open setting");
     await row.locator('[data-button][href="/app/settings?section=changes"]').click();
     await expect(page).toHaveURL(/[?&]section=changes(&|$)/);
   } else {
@@ -451,7 +501,7 @@ test("translating shortly after saving says why it waits in the status row, and 
   await expect(paused).toContainText(/Today's AI characters are used up\. From .+\d{1,2}:\d{2}\s?[AP]M, Linguva continues by itself, including everything that changes until then\./);
   await expect(paused).not.toContainText("UTC");
   // The Starter plan's three languages; Spanish was chosen and is named, not offered.
-  const basic = option(page, "#settings-changes", "Shortly after saving");
+  const basic = languagesPanel(page);
   for (const name of ["French", "German", "Italian"]) await expect(basic.getByRole("checkbox", { name, exact: true })).toBeVisible();
   await expect(basic.getByRole("checkbox", { name: "Spanish", exact: true })).toHaveCount(0);
   await expect(basic.getByText("Spanish is chosen but isn't translated: not in your plan.")).toBeVisible();
@@ -466,7 +516,7 @@ test("a forged request can't add a language outside the plan or lift a pause", a
   expect((await post(page, "autoLimits", "/app/settings.data", { intent: "auto", enabled: "true", locale: "de,es" })).ok()).toBe(true);
   await page.reload();
   // Nothing was written: still German only, and still paused.
-  const basic = option(page, "#settings-changes", "Shortly after saving");
+  const basic = languagesPanel(page);
   await expect(basic.getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
   await expect(basic.getByRole("checkbox", { name: "French", exact: true })).not.toBeChecked();
   await expect(page.locator("#settings-changes s-badge").first()).toHaveText("Paused");
@@ -474,10 +524,12 @@ test("a forged request can't add a language outside the plan or lift a pause", a
 
 test("after a move to Free, translating shortly after saving is stopped, says why, and can be turned off", async ({ page }) => {
   await openApp(page, "downgraded", "/app/settings");
-  await expect(status(page)).toHaveText(/^Translating changes\s*Stopped\s*Not in your plan$/, { useInnerText: true });
+  await expect(status(page)).toHaveText(/^Automatic translation is stopped\s*Not in your plan$/, { useInnerText: true });
+  await expect(status(page)).toHaveAttribute("data-tone", "critical");
   const card = section(page, "changes");
   await expect(card.locator("s-badge").first()).toHaveText("Stopped");
-  await expect(navEntry(page, "Translating changes")).toHaveText(/^Translating changes\s*Shortly after saving · Stopped$/, { useInnerText: true });
+  await expect(navEntry(page, "Translating changes")).toHaveText(/^Translating changes\s*Stopped$/, { useInnerText: true });
+  await expect(navEntry(page, "Translating changes").locator('[data-tone="critical"] .lv-tile__dot')).toHaveCount(1);
   await expect(card.getByText("Your plan no longer includes automatic translation. Since the change, changes aren't translated. Your language choice stays saved.")).toBeVisible();
   await expect(card.getByRole("link", { name: "See plans" }).or(card.getByRole("button", { name: "See plans" })).first()).toBeVisible();
   // Locked features show the one lock, and nothing explains how a locked feature works.
@@ -503,7 +555,7 @@ test("plan & usage: the plan, this month's AI characters and the date new ones a
   // 31,000 of the trial's 100,000.
   await expect(plan.getByText("31%", { exact: true })).toBeVisible();
   await expect(plan.getByRole("progressbar", { name: "AI characters used this month" })).toHaveAttribute("aria-valuenow", "31");
-  await expect(plan.getByText(`31,000 of 100,000 · new on ${resets}`)).toBeVisible();
+  await expect(plan.getByText(`31,000 of 100,000 · new AI characters on ${resets}`)).toBeVisible();
   await expect(navEntry(page, "Plan & usage")).toHaveText(/^Plan & usage\s*Business · 31% used$/, { useInnerText: true });
   await expect(plan.locator('[data-button][href="/app/plan"]')).toHaveText("See plans");
   await expectAccessible(page);
@@ -528,7 +580,7 @@ test("an empty store: the status row asks for a language with the page's only pr
   await expectAccessible(page);
 });
 
-test("the tools outside the navigation: six links, the glossary and translation memory among them @responsive", async ({ page }, info) => {
+test("the tools outside the navigation: six link tiles with their icons, the glossary and translation memory among them @responsive", async ({ page }, info) => {
   await openApp(page, "full", "/app/settings?section=tools");
   const tools = section(page, "tools");
   const links: Array<[RegExp, string]> = [
@@ -540,10 +592,11 @@ test("the tools outside the navigation: six links, the glossary and translation 
     [/^Import & export/, "/app/translations"],
   ];
   await expect(tools.getByRole("link")).toHaveCount(6);
+  await expect(tools.getByRole("link", { name: /^Glossary/ }).locator("s-icon[type='book-open']")).toHaveCount(1);
   for (const [name, href] of links) await expect(tools.getByRole("link", { name })).toHaveAttribute("href", href);
   await expect(tools.getByRole("link", { name: /^Countries & markets\s*Which language customers read in each country/ })).toBeVisible();
   if (info.project.name === "desktop") {
-    // Two by two.
+    // Side by side.
     const [a, b] = await Promise.all([tools.getByRole("link", { name: /^Glossary/ }).boundingBox(), tools.getByRole("link", { name: /^Languages/ }).boundingBox()]);
     expect(Math.abs(a!.y - b!.y)).toBeLessThan(2);
   }
@@ -560,8 +613,11 @@ test("Settings is German for a German admin user, with one word for each thing, 
   await expect(sections).toBeVisible();
   await expect(status(page)).toHaveText(/^Alles ist eingerichtet$/, { useInnerText: true });
   await expect(sections.locator("li").first()).toHaveText(/^Änderungen übersetzen\s*Selbst starten$/, { useInnerText: true });
-  const names = await sections.locator("li").evaluateAll((items) => items.map((li) => (li as HTMLElement).innerText.split("\n").map((line) => line.trim()).filter(Boolean)[0]!));
+  const names = await tileNames(sections);
   expect(names).toEqual(["Änderungen übersetzen", "Veröffentlichen", "So schreibt die KI", "Übersetzungsspeicher", "KI-Erlaubnis", "Tarif & Nutzung", "Werkzeuge"]);
+  // A long word breaks with a hyphen where it must, and no line ends in "KI-"; the tile is read by its plain name.
+  await expect(sections.getByRole("link", { name: /^Übersetzungsspeicher/ }).locator(".lv-tile__name")).toHaveText("Übersetzungs\u00ADspeicher");
+  await expect(sections.getByRole("link", { name: /^KI-Erlaubnis/ }).locator(".lv-tile__name")).toHaveText("KI\u2011Erlaubnis");
   for (const name of names) {
     if (name !== names[0]) await sections.getByRole("link", { name: new RegExp(`^${name}`) }).click();
     // The section's own heading (a dialog in it has its heading too).

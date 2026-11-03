@@ -28,11 +28,11 @@ const post = async (page: Page, shop: UiShopKey, path: string, form: Record<stri
   return response.text();
 };
 
-test("Settings shows the smart schedule as the current way changes are translated, with real values @responsive", async ({ page }, info) => {
-  // The sections' list on a phone, the nav beside the section on a wide page: the schedule's summary.
+test("Settings shows the smart schedule as the current way changes are translated, with real values @responsive", async ({ page }) => {
+  // The sections' tiles (a grid on a phone, a row above the section on a wide page): the way changes are translated.
   await openApp(page, "business", "/app/settings");
   const entry = page.getByRole("navigation", { name: "Settings sections" }).locator("li").filter({ hasText: "Translating changes" });
-  await expect(entry).toHaveText(info.project.name === "desktop" ? /^Translating changes\s*On a schedule$/ : /^Translating changes\s*Every day at 23:00$/, { useInnerText: true });
+  await expect(entry).toHaveText(/^Translating changes\s*On a schedule$/, { useInnerText: true });
   await openApp(page, "business", "/app/settings?section=changes");
   const card = page.locator("#settings-changes");
   await expect(card.locator("s-badge").first()).toHaveText("On");
@@ -41,9 +41,11 @@ test("Settings shows the smart schedule as the current way changes are translate
   await isCurrent(page, "#settings-changes", "On a schedule");
   const smart = option(page, "#settings-changes", "On a schedule");
   await expect(smart.getByText("Business", { exact: true })).toBeVisible();
-  await expect(smart.getByText("Every day at 23:00 · French and German")).toBeVisible();
-  await expect(smart.getByRole("button", { name: "Check now" })).toBeVisible();
-  await expect(smart.getByRole("link", { name: "Schedule and options" })).toHaveAttribute("href", "/app/settings/automatic");
+  // The current way's summary and actions, in the panel under the choices.
+  const schedule = card.getByRole("group", { name: "Your schedule", exact: true });
+  await expect(schedule.getByText("Every day at 23:00 · French and German")).toBeVisible();
+  await expect(schedule.getByRole("button", { name: "Check now" })).toBeVisible();
+  await expect(schedule.getByRole("link", { name: "Schedule and options" })).toHaveAttribute("href", "/app/settings/automatic");
   // The other way that would follow the same changes says it would replace this one.
   await expect(option(page, "#settings-changes", "Shortly after saving").getByText("Current setting")).toHaveCount(0);
   await expectAccessible(page);
@@ -129,7 +131,7 @@ test("after a move to a plan without the schedule: paused with the plan named, i
   await expect(card.getByText("Your plan no longer includes the smart schedule. Since then, changes aren't translated automatically. Your settings stay saved.")).toBeVisible();
   await expect(card.getByRole("link", { name: "View schedule" })).toHaveAttribute("href", "/app/settings/automatic");
   // The status row says so too: the one thing that needs the merchant.
-  await expect(page.locator("#settings-status")).toHaveText(/^Translating changes\s*Paused\s*Not in your plan$/, { useInnerText: true });
+  await expect(page.locator("#settings-status")).toHaveText(/^Smart schedule is paused\s*Not in your plan$/, { useInnerText: true });
 
   // The page shows the kept settings, read-only, and no action that can't work.
   await openApp(page, "smartDowngraded", "/app/settings/automatic");

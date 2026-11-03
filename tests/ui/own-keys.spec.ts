@@ -22,7 +22,11 @@ const ENGLISH = /\b(the|your|and|Translate|Translated|Settings|Review|Save|Searc
 /** Settings' sections: the nav beside the section on a wide page, the list on a phone without one. */
 const nav = (page: Page) => page.getByRole("navigation", { name: "Settings sections" });
 const navEntry = (page: Page, name: string) => nav(page).locator("li").filter({ hasText: name });
-const navOrder = (page: Page) => nav(page).locator("li").evaluateAll((items) => items.map((li) => (li as HTMLElement).innerText.split("\n").map((line) => line.trim()).filter(Boolean)[0]));
+/** The tiles' names in their order (a long word's tile is read by the plain word). */
+const navOrder = (page: Page) =>
+  nav(page)
+    .locator(".lv-tile")
+    .evaluateAll((links) => links.map((a) => (a.querySelector(".lv-sr") ?? a.querySelector(".lv-tile__name"))!.textContent!.trim()));
 const status = (page: Page) => page.locator("#settings-status");
 /** Primary buttons the merchant sees: not in a closed dialog, not in a section that isn't shown. */
 const primaries = (page: Page) =>
@@ -281,7 +285,9 @@ test("a refused key: the Overview warns and the language page waits for a key th
   await openApp(page, "ownkeyRefused", "/app/settings");
   await expect(status(page)).toHaveText(/^A key needs your attention\s*Refused by Microsoft Azure$/, { useInnerText: true });
   await expect(status(page).locator("s-icon[type='alert-circle']")).toHaveCount(1);
-  await expect(navEntry(page, "Your keys")).toHaveText(/^Your keys\s*A key needs your attention$/, { useInnerText: true });
+  // The keys' tile: a short state in the critical tone, with its dot.
+  await expect(navEntry(page, "Your keys")).toHaveText(/^Your keys\s*Needs a look$/, { useInnerText: true });
+  await expect(navEntry(page, "Your keys").locator('[data-tone="critical"] .lv-tile__dot')).toHaveCount(1);
   await expect(page.locator("#settings-keys")).toBeVisible();
 });
 

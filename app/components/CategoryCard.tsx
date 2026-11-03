@@ -19,6 +19,7 @@ import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
 import { ProgressBar } from "./ProgressBar";
 import { Button } from "./Button";
+import { IconSquare, type Tint } from "./IconSquare";
 
 export type LanguageCategory = LanguagePage["categories"][number];
 
@@ -68,15 +69,12 @@ export function detailLine(i18n: I18n, category: { id: CategoryId; items: number
 /**
  * An icon in a soft square: an area's, a content type's or a notice's
  * picture, and the Plan page's plan, meter and feature tiles
- * (`color="base"`). Squares under 32 px take the small icon unless
+ * (`color="base"`). The app's one icon square (IconSquare), grey unless a
+ * `tint` names the place. Squares under 32 px take the small icon unless
  * `iconSize` says otherwise.
  */
-export function IconTile({ icon, size = 36, color = "subdued", iconSize }: { icon: IconName; size?: number; color?: "base" | "subdued"; iconSize?: "small" | "base" }) {
-  return (
-    <s-stack background="subdued" borderRadius="base" inlineSize={`${size}px`} blockSize={`${size}px`} alignItems="center" justifyContent="center">
-      <s-icon type={icon} color={color} size={iconSize ?? (size < 32 ? "small" : "base")} />
-    </s-stack>
-  );
+export function IconTile({ icon, size = 36, color = "subdued", iconSize, tint = "grey" }: { icon: IconName; size?: number; color?: "base" | "subdued"; iconSize?: "small" | "base"; tint?: Tint }) {
+  return <IconSquare icon={icon} size={size} color={color} tint={tint} {...(iconSize ? { iconSize } : {})} />;
 }
 
 interface PreviewProps {

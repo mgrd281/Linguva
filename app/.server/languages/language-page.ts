@@ -61,6 +61,9 @@ import {
 } from "../../lib/coverage-rules";
 import { headlineByLocale, measuredLocales, tally, type CountInput, type Tally } from "../../lib/coverage-view";
 import {
+  ATTACHED,
+  ATTACHED_AREAS,
+  attachedOpen,
   bulkTypesOf,
   CATEGORIES,
   CATEGORY_IDS,
@@ -68,7 +71,10 @@ import {
   categoryState,
   categoryTallies,
   EXTRA_IDS,
+  hasAttached,
+  isAttachedPart,
   isCategoryId,
+  isUnlockGate,
   ITEM_STATE_OF,
   ITEM_STATES,
   nextSteps,
@@ -76,6 +82,7 @@ import {
   stepCounts,
   textStates,
   tierOf,
+  type AttachedArea,
   type CategoryId,
   type ItemState,
 } from "../../lib/language-categories";
@@ -425,6 +432,7 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
     engineConsent: await engineConsentGap(translation, settings, locale),
   });
   const tallies = categoryTallies(summary.counts, locale);
+  const attached = attachedOpen(summary.counts, locale);
   const headline = headlineByLocale(summary.counts).get(locale) ?? tally(emptyCounts());
   const itemCount = (id: CategoryId) => {
     const types = CATEGORIES[id].itemTypes as readonly string[];
@@ -474,8 +482,11 @@ export async function loadLanguagePage(admin: Admin, shop: ShopRef, locale: stri
       measured,
       canCount,
       headline,
-      categories: categories.map((c) => ({ id: c.id, tally: c.tally, state: c.state, bulk: gate === null && c.bulk !== null })),
+      // Image descriptions and extra details go with their owners' step (a translation of the owner includes them on request).
+      categories: categories.map((c) => ({ id: c.id, tally: c.tally, state: c.state, bulk: gate === null && c.bulk !== null, ...(hasAttached(c.id) ? { attached: attached[c.id] } : {}) })),
       scanning,
+      // What the merchant can lift (the AI permission, a key, the plan) comes first when something could be translated then.
+      unlock: isUnlockGate(gate) && categories.some((c) => c.bulk !== null) ? gate : null,
     }),
     bulk: { gate, publishMode: publishModeOf(settings, billing.entitlements), aiRemaining: aiRemaining(billing, used, translation) },
     smart: note ? { status: note.status, mode: note.mode, zone: note.zone, nextCheck: note.nextCheck, inSchedule: note.scope.locales.includes(locale) } : null,
@@ -731,6 +742,8 @@ export async function loadCategoryItems(
   const jobsAvailable = options.jobsAvailable ?? getQueues() !== null;
   const { language, locales, targets } = await targetLanguage(admin, shop.id, locale, client, options.toOverview);
   const types = CATEGORIES[category].types as readonly string[];
+  // Image descriptions and extra details are translated with their owners (ATTACHED).
+  const part = isAttachedPart(category) ? category : null;
   const searchable = types.filter(isSearchableType);
   const state: ListState = (ITEM_STATES as readonly string[]).includes(query.state ?? "") ? (query.state as ItemState) : "all";
   const search = searchable.length ? (query.q ?? "").trim().slice(0, 100) : "";
@@ -760,7 +773,7 @@ export async function loadCategoryItems(
   const position = cursor
     ? Prisma.sql`(${cursor.rank}::int, COALESCE((SELECT "resourceGid" FROM "CoverageItem" WHERE "id" = ${cursor.id}::uuid AND "shopId" = ${shop.id}::uuid), ''))`
     : null;
-  const { totals, rows, estimate } = await withTenant(
+  const { totals, rows, estimate, owners, ownerEstimates } = await withTenant(
     shop.id,
     async (tx) => {
       // In one pass: items per type and state, how many come before this page (its position), and
@@ -796,7 +809,10 @@ export async function loadCategoryItems(
         open.set(g.resourceType, { items: sum.items + g.total, unsized: sum.unsized + g.unsized });
       }
       const estimate = (await bulkEstimates(tx, shop.id, locale, coverage.counts, [category], gids ? undefined : open)).get(category) ?? null;
-      return { totals, rows, estimate };
+      // Image descriptions and extra details are translated with their owners: what translating each owner would do.
+      const owners = part ? ATTACHED_AREAS.filter((owner) => (ATTACHED[owner][part] as readonly string[]).length > 0) : [];
+      const ownerEstimates = owners.length ? await bulkEstimates(tx, shop.id, locale, coverage.counts, owners) : new Map<CategoryId, BulkEstimate | null>();
+      return { totals, rows, estimate, owners, ownerEstimates };
     },
     client,
   );
@@ -820,6 +836,8 @@ export async function loadCategoryItems(
   const measurement = measurementState(coverage.report, { jobsAvailable, now: options.now ?? Date.now() });
   const scanning = scanningOf(coverage.report, measurement, locale);
   const figure = categoryTallies(coverage.counts, locale)[category];
+  // Image descriptions or extra details: this list's open texts per owner area.
+  const attached = part ? attachedOpen(coverage.counts, locale) : null;
   const counts = Object.fromEntries(ITEM_STATES.map((s, rank) => [s, totals.filter((t) => t.rank === rank).reduce((n, t) => n + t.total, 0)])) as Record<ItemState, number>;
   const shown = totals.filter((t) => stateRank === null || t.rank === stateRank);
   const before = shown.reduce((n, t) => n + t.before, 0);
@@ -894,6 +912,17 @@ export async function loadCategoryItems(
       }),
       publishMode: publishModeOf(settings, billing.entitlements),
       aiRemaining: aiRemaining(billing, used, translation),
+      /**
+       * Image descriptions' and extra details' lists: the areas their texts are translated with, in the
+       * areas' order, each with its open texts of this list, what translating it would do (null: nothing of
+       * its own to translate now, so they are translated one by one) and its running job. Empty elsewhere.
+       */
+      owners:
+        measured && attached && part
+          ? owners
+              .map((owner: AttachedArea) => ({ id: owner, open: attached[owner][part], estimate: ownerEstimates.get(owner) ?? null, job: categoryJob(jobs, owner) }))
+              .filter((owner) => owner.open > 0)
+          : [],
     },
     smart: note ? { nextCheck: note.nextCheck, zone: note.zone } : null,
     /** One key per page view: a repeated confirm starts nothing twice. */

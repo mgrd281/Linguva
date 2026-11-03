@@ -53,24 +53,36 @@ test("an area's items: figure, filters that add up, groups by state, pictures an
     { label: "Done", count: 7 },
   ]);
   expect(counts.slice(1).reduce((sum, c) => sum + c.count, 0)).toBe(counts[0]!.count);
-  await expect(filters(page).locator('[aria-current="true"]')).toHaveText("All 55");
+  // The shown group in the app's chosen look: the blue ring and tint.
+  const chosen = filters(page).locator('[aria-current="true"]');
+  await expect(chosen).toHaveText("All 55");
+  await expect(chosen).toHaveCSS("background-color", "rgb(245, 249, 255)");
+  await expect(chosen).toHaveCSS("box-shadow", /rgb\(0, 91, 211\)/);
 
   // Open work first, each group with what it means for customers; a group only partly on this page links to all of it.
   expect(await groups(page)).toEqual(["Outdated", "Missing", "Done"]);
-  await expect(page.getByRole("link", { name: "View all 7 ›" })).toHaveAttribute("href", "/app/languages/de/products?state=complete");
+  // A chevron, not a typed "›" (the name is the words alone).
+  await expect(page.getByRole("link", { name: /^View all 7$/ })).toHaveAttribute("href", "/app/languages/de/products?state=complete");
   await expect(page.getByText("You changed the original. Customers still see the old translation.")).toBeVisible();
 
-  // A row: picture, name, what customers see, each text with its state, and the editor.
+  // A row: picture, name, what customers see, each text with its state; the whole row opens the editor.
   const row = page.locator("li", { has: page.getByRole("link", { name: "Open: Product 8 jacket" }) });
   await expect(row.getByText("Changed in the original: Description.")).toBeVisible();
   await expect(row.getByText(/^In German:/)).toBeVisible();
   await expect(row.locator("s-chip[accessibilitylabel='Name, done']")).toHaveCount(1);
   await expect(row.locator("s-chip[accessibilitylabel='Description, outdated']")).toHaveCount(1);
   await expect(row.getByRole("link", { name: "Open: Product 8 jacket" })).toHaveAttribute("href", "/app/products/8?lang=de");
+  await expect(row.locator('s-icon[type="chevron-right"]')).toHaveCount(1);
+  // The row's link covers the row: a click beside the name opens the editor too.
+  const box = (await row.locator(".lv-row").boundingBox())!;
+  const link = (await row.getByRole("link", { name: "Open: Product 8 jacket" }).boundingBox())!;
+  expect(box.height).toBeGreaterThan(link.height);
   // Web addresses are never listed as a text.
   await expect(page.locator("s-chip", { hasText: "Web address" })).toHaveCount(0);
+  // Where nothing is translated the row doesn't repeat its name: its group says customers see English.
   const missing = page.locator("li", { has: page.getByRole("link", { name: "Open: Product 30 jacket" }) });
-  await expect(missing.getByText(/^Not in German yet – customers see/)).toBeVisible();
+  await expect(missing.getByText(/Not in German yet/)).toHaveCount(0);
+  await expect(page.getByText("Customers still see English here.")).toBeVisible();
 
   // Pictures beside their names (decorative: the name is written next to them).
   const pictures = page.locator("ul img");
@@ -143,13 +155,32 @@ test("translating the area asks first @responsive", async ({ page }) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("an area Linguva can't read says so, with the way to allow it", async ({ page }) => {
+test("an area Linguva can't read says so, with the way to allow it (Content's card)", async ({ page }) => {
   await openApp(page, "full", "/app/languages/de/checkout");
   await expect(page.getByRole("heading", { level: 1, name: "Store & checkout in German" })).toBeVisible();
   const hero = page.locator(labelled("Progress: Store & checkout"));
   await expect(hero.getByRole("img", { name: "No access" })).toBeVisible();
-  await expect(hero.locator('[data-button][href="/app/content/policies"]')).toHaveText("Allow access");
+  await expect(hero.locator('[data-button][href="/app/content?lang=de#content-access"]')).toHaveText("Allow access");
   await expectAccessible(page);
+});
+
+test("image descriptions are translated with their products: their list offers that, ticked in the dialog @responsive", async ({ page }) => {
+  await openApp(page, "demo", "/app/languages/de/images");
+  await expect(page.getByRole("heading", { level: 1, name: "Image descriptions in German" })).toBeVisible();
+  const first = page.locator(labelled("Progress: Image descriptions")).locator("ol > li").first();
+  await expect(first.getByText(/^\d+ image descriptions? to translate$/)).toBeVisible();
+  await expect(first.getByText("You translate image descriptions together with your products.")).toBeVisible();
+  // The page's one primary button.
+  const button = first.locator('[data-button][data-variant="primary"]');
+  await expect(button).toHaveText("Translate with products");
+  await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
+  await button.click();
+  await expect(page.getByRole("dialog", { name: /^Translate \d+ products? into German\?$/ })).toBeVisible();
+  const dialog = page.locator("s-modal#category-translate");
+  await expect(dialog.getByRole("checkbox", { name: "Also translate image descriptions and extra details" })).toBeChecked();
+  await expectAccessible(page);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("an area of a language not counted yet offers counting", async ({ page }) => {

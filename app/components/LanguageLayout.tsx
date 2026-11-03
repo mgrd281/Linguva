@@ -110,6 +110,11 @@ export interface StepView {
   title: ReactNode;
   detail?: string;
   action?: ReactNode;
+  /**
+   * In place of the step's number: what kind of step it is (an icon square, as on the language pages,
+   * where numbers are left to the steps to live). The list keeps its order for screen readers.
+   */
+  icon?: ReactNode;
 }
 
 /** A step's title given as text: semibold, since Polaris draws s-text type="strong" at the body weight (450). */
@@ -124,7 +129,7 @@ export function NumberedSteps({ steps }: { steps: StepView[] }) {
           <s-stack direction="block" gap="base">
             {i > 0 ? <s-divider /> : null}
             <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="start">
-              <StepNumber n={i + 1} first={i === 0} />
+              {step.icon !== undefined ? step.icon : <StepNumber n={i + 1} first={i === 0} />}
               <s-stack direction="block" gap="small-200">
                 <s-stack direction="block" gap="small-500">
                   {typeof step.title === "string" ? <strong style={STEP_TITLE}>{step.title}</strong> : step.title}

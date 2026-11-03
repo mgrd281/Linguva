@@ -5,26 +5,28 @@
  * with the theme's and the notifications' parts, and the folds of what
  * can't be translated now.
  *
- * Polaris web components; inline styles only where Polaris has nothing (list
- * resets, the picture pile, the summary reset, single-line and semibold names,
- * even line breaks), colours from Coverage.tsx only. Every state is an icon
- * and words.
+ * Polaris web components and the app's own chips (ui.css, the Content
+ * section); inline styles only where Polaris has nothing (list resets, the
+ * picture pile, the summary reset, single-line names, even line breaks),
+ * colours from Coverage.tsx only. Every state is an icon and words; every
+ * area's icon sits in its own tinted square (CATEGORIES).
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Form, type useFetcher } from "react-router";
+import { Form, Link, type useFetcher } from "react-router";
 import type { ContentArea, ContentGroup, ContentPage } from "../.server/content/content-page";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
-import { hasAttached, PART_ICON, showsFigure, TILE_AREAS, type AttachedArea, type AttachedPart, type GroupId, type HubType } from "../lib/content-areas";
+import { hasAttached, PART_ICON, SCOPE_ICON, showsFigure, TILE_AREAS, type AttachedArea, type AttachedPart, type GroupId, type HubType } from "../lib/content-areas";
 import { chipName, chipOrder, switcherKind } from "../lib/content-language";
 import type { IconName } from "../lib/icons";
-import { CATEGORIES, categoryOf, languagePath, TIERS } from "../lib/language-categories";
+import { categoryOf, languagePath, TIERS, withOrigin } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
-import { BIG_FIGURE, detailLine, IconTile, ITEM_COUNT_KEYS } from "./CategoryCard";
+import { AreaIcon, BIG_FIGURE, cardGrid, detailLine, IconTile, ITEM_COUNT_KEYS } from "./CategoryCard";
 import { percentLabel, SURFACE_COLOUR, TRACK_COLOUR } from "./Coverage";
 import { Flag } from "./Flag";
+import { IconSquare, type Tint } from "./IconSquare";
 import { OpenWorkLine, stateSummary, StateKey, TextStateBar } from "./ItemStates";
-import { BIG_HEADING, PLAIN_LIST, StepNumber } from "./LanguageLayout";
+import { BIG_HEADING, PLAIN_LIST } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
 import { Button } from "./Button";
 import { Strong } from "./Type";
@@ -32,11 +34,12 @@ import { Strong } from "./Type";
 type Language = ContentPage["languages"][number];
 type Fetcher = ReturnType<typeof useFetcher>;
 
-/** A card's heading (15/22, as the language page's tier headings) and the areas' heading (17/24). */
+/** A card's heading (15/22; Settings' cards use it too). The page's own headings take the type scale (ui.css .lv-h2, .lv-h3). */
 export const H2 = { ...BIG_HEADING, fontSize: 15, lineHeight: "22px", fontWeight: 650 } as const;
-const AREAS_HEADING = { ...BIG_HEADING, fontSize: 17, lineHeight: "24px", fontWeight: 650 } as const;
 /** A row's percentage, aligned for scanning down the rows. */
 const ROW_FIGURE = { fontWeight: 650, fontVariantNumeric: "tabular-nums", textAlign: "end", whiteSpace: "nowrap" } as const;
+/** Content's links into the language pages keep where they came from: those pages' trail starts at "Content". */
+const FROM_CONTENT = "content" as const;
 /** A name that stays on one line (cut with "…" where it can't). */
 const ONE_LINE = { display: "block", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
 /** Lines of a tile's sentence broken evenly, without a last word alone ("… und / FAQ"). */
@@ -106,23 +109,13 @@ function ChipBody({ language, current, i18n }: { language: Language; current: bo
 }
 
 /**
- * A chip is 40 px high on a wide page and 44 px on a phone (touch): min-height
- * can't change with the width in Polaris' public props, the padding can.
- */
-const CHIP_PADDING = "@container (inline-size > 640px) small-200, small";
-
-/**
- * A chip is as wide as its words, at least 168 px (two short ones share a
- * phone's row): a long name or "100 %" never cuts the name ("Französis…" in
- * equal 168 px columns). The chips of a row are equally tall (a hidden
- * language's chip has two lines).
- */
-const CHIP_ITEM = { display: "grid", flex: "0 0 auto", minWidth: "min(168px, 100%)", maxWidth: "100%" } as const;
-
-/**
  * The store's languages with how far each is: visible ones first, each
- * group by its name; the current one isn't a link. More than six: one
- * select with a "Show" button (nothing changes until it is pressed).
+ * group by its name. The current one isn't a link and wears the app's chosen
+ * look (the blue ring and tint of the current Settings section and plan);
+ * each chip is as wide as its words, at least 168 px, 40 px high (44 px on a
+ * touch screen), the chips of a row equally tall (ui.css .lv-lang). More
+ * than six: one select with a "Show" button (nothing changes until it is
+ * pressed).
  */
 export function LanguageChips({ languages, current, i18n }: { languages: Language[]; current: string; i18n: I18n }) {
   const { t } = i18n;
@@ -149,40 +142,21 @@ export function LanguageChips({ languages, current, i18n }: { languages: Languag
     <nav aria-label={t("content.language.nav")}>
       <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr, 1fr" gap="small-200 base" alignItems="center">
         <Strong>{t("content.language.label")}</Strong>
-        <ul style={{ ...PLAIN_LIST, display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <ul className="lv-langs">
           {ordered.map((l) => (
-            <li key={l.locale} style={CHIP_ITEM}>
+            <li key={l.locale} className="lv-langs__item">
               {l.locale === current ? (
-                <span aria-current="page" style={{ display: "grid" }}>
-                  <s-stack
-                    direction="block"
-                    justifyContent="center"
-                    background="strong"
-                    border="base strong"
-                    borderRadius="large-200"
-                    paddingInline="base"
-                    paddingBlock={CHIP_PADDING}
-                    minBlockSize="40px"
-                    blockSize="100%"
-                  >
-                    <ChipBody language={l} current i18n={i18n} />
-                  </s-stack>
+                <span className="lv-lang" aria-current="page">
+                  <ChipBody language={l} current i18n={i18n} />
                 </span>
               ) : (
-                <s-clickable href={`/app/content?lang=${encodeURIComponent(l.locale)}`} background="base" border="base" borderRadius="large-200" inlineSize="100%" blockSize="100%">
-                  <s-text accessibilityVisibility="exclusive">{chipLabel(i18n, l)}</s-text>
-                  <s-stack
-                    direction="block"
-                    justifyContent="center"
-                    paddingInline="base"
-                    paddingBlock={CHIP_PADDING}
-                    minBlockSize="40px"
-                    blockSize="100%"
-                    accessibilityVisibility="hidden"
-                  >
+                // The link's own text is its name for screen readers; the words inside are hidden from them (nothing read twice).
+                <Link className="lv-lang" to={`/app/content?lang=${encodeURIComponent(l.locale)}`}>
+                  <span className="lv-sr">{chipLabel(i18n, l)}</span>
+                  <span aria-hidden="true">
                     <ChipBody language={l} current={false} i18n={i18n} />
-                  </s-stack>
-                </s-clickable>
+                  </span>
+                </Link>
               )}
             </li>
           ))}
@@ -213,7 +187,7 @@ export function LanguageMeta({ data, i18n }: { data: ContentPage; i18n: I18n }) 
             </span>
           </s-box>
         ) : null}
-        <s-link href={languagePath(language.locale)}>
+        <s-link href={withOrigin(languagePath(language.locale), FROM_CONTENT)}>
           {t("content.language.next", { language: inSentence })}
           <span style={INLINE_ICON}>
             <s-icon type="chevron-right" size="small" />
@@ -239,8 +213,11 @@ export function LanguageMeta({ data, i18n }: { data: ContentPage; i18n: I18n }) 
 
 // ─── Cards above the areas ──────────────────────────────────────────────────
 
-/** A card with a picture on the left (hidden on a phone), its words, and its action. */
-function NoticeCard({ id, icon, heading, children, action, wide = 640 }: { id: string; icon: IconName; heading: string; children?: ReactNode; action?: ReactNode; wide?: 560 | 640 }) {
+/**
+ * A card with a picture on the left (hidden on a phone), its words, and its action. The picture's tint
+ * names the place it is about (counting: the coverage's green); a problem stays grey.
+ */
+function NoticeCard({ id, icon, tint = "grey", heading, children, action, wide = 640 }: { id: string; icon: IconName; tint?: Tint; heading: string; children?: ReactNode; action?: ReactNode; wide?: 560 | 640 }) {
   const grid = wide === 560 ? "@container (inline-size > 560px) auto 1fr auto, 1fr" : "@container (inline-size > 640px) auto 1fr auto, 1fr";
   const picture = wide === 560 ? "@container (inline-size > 560px) auto, none" : "@container (inline-size > 640px) auto, none";
   return (
@@ -248,7 +225,7 @@ function NoticeCard({ id, icon, heading, children, action, wide = 640 }: { id: s
       <s-box {...CARD} padding="base">
         <s-grid gridTemplateColumns={grid} gap="base" alignItems="center">
           <s-box display={picture}>
-            <IconTile icon={icon} />
+            <IconSquare icon={icon} tint={tint} />
           </s-box>
           <s-stack direction="block" gap="small-300">
             <h2 id={id} style={H2}>
@@ -264,8 +241,10 @@ function NoticeCard({ id, icon, heading, children, action, wide = 640 }: { id: s
 }
 
 /**
- * Everything Linguva may not read yet, as permissions ("Legal texts"), and
- * one button that asks Shopify for all of them on one screen.
+ * Everything Linguva may not read yet, as permissions ("Legal texts", each
+ * with the picture of what it unlocks), and one button that asks Shopify
+ * for all of them on one screen. The language pages' "Allow access" leads
+ * here (#content-access).
  */
 export function AccessCard({ rows, fetcher, i18n, primary }: { rows: ContentPage["access"]; fetcher: Fetcher; i18n: I18n; primary: boolean }) {
   const { t } = i18n;
@@ -278,7 +257,7 @@ export function AccessCard({ rows, fetcher, i18n, primary }: { rows: ContentPage
       <s-box {...CARD} padding="large">
         <s-grid gridTemplateColumns="@container (inline-size > 560px) auto 1fr, 1fr" gap="base">
           <s-box display="@container (inline-size > 560px) auto, none">
-            <IconTile icon="lock" />
+            <IconSquare icon="lock" tint="slate" />
           </s-box>
           <s-stack direction="block" gap="base">
             <s-stack direction="block" gap="small-300">
@@ -291,7 +270,7 @@ export function AccessCard({ rows, fetcher, i18n, primary }: { rows: ContentPage
               {rows.map((row) => (
                 <li key={row.scope}>
                   <s-chip>
-                    <s-icon slot="graphic" type="lock" />
+                    <s-icon slot="graphic" type={SCOPE_ICON[row.scope] ?? "lock"} />
                     {scopeName(row.scope)}
                   </s-chip>
                 </li>
@@ -351,7 +330,8 @@ export function CountCard({ data, i18n, counter, primary }: { data: ContentPage;
       <counter.Form method="post">
         <input type="hidden" name="intent" value="run" />
         <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-        <Button type="submit" variant={primary ? "primary" : "secondary"} {...(counter.state !== "idle" ? { loading: true } : {})}>
+        {/* Counting the store has one picture app-wide (refresh means "outdated"). */}
+        <Button type="submit" variant={primary ? "primary" : "secondary"} icon="chart-donut" {...(counter.state !== "idle" ? { loading: true } : {})}>
           {label}
         </Button>
       </counter.Form>
@@ -359,7 +339,7 @@ export function CountCard({ data, i18n, counter, primary }: { data: ContentPage;
   switch (kind) {
     case "notCounted":
       return (
-        <NoticeCard id="content-count" icon="chart-donut" heading={t("content.count.heading", { language: upperFirst(inSentence) })} action={button(t("language.next.count.action"))}>
+        <NoticeCard id="content-count" icon="chart-donut" tint="green" heading={t("content.count.heading", { language: upperFirst(inSentence) })} action={button(t("language.next.count.action"))}>
           <s-paragraph color="subdued">
             {t("language.hero.notCountedHelp")} {t("language.next.count.detail", { language: inSentence })}
           </s-paragraph>
@@ -367,7 +347,7 @@ export function CountCard({ data, i18n, counter, primary }: { data: ContentPage;
       );
     case "counting":
       return (
-        <NoticeCard id="content-count" icon="chart-donut" heading={t("language.hero.counting")}>
+        <NoticeCard id="content-count" icon="chart-donut" tint="green" heading={t("language.hero.counting")}>
           <s-paragraph color="subdued">{t("language.hero.countingHelp")}</s-paragraph>
           {m.state === "running" ? (
             <s-stack direction="block" gap="small-300">
@@ -379,14 +359,16 @@ export function CountCard({ data, i18n, counter, primary }: { data: ContentPage;
       );
     case "stalled":
     case "failed":
+      // A problem looks like one: the warning sign, not the count's picture.
       return (
-        <NoticeCard id="content-count" icon="chart-donut" heading={kind === "stalled" ? t("language.hero.stalled") : t("language.hero.countFailed")} action={button(t("language.next.recount.action"))} />
+        <NoticeCard id="content-count" icon="alert-triangle" heading={kind === "stalled" ? t("language.hero.stalled") : t("language.hero.countFailed")} action={button(t("language.next.recount.action"))} />
       );
     case "recount":
       return (
         <NoticeCard
           id="content-count"
           icon="unlock"
+          tint="green"
           heading={t("content.recount.heading", { parts: languageList(i18n, data.recount.map((type) => partName(i18n, type))) })}
           action={button(t("language.next.recount.action"))}
         >
@@ -404,6 +386,7 @@ export function NoLanguagesCard({ i18n, body }: { i18n: I18n; body?: string }) {
     <NoticeCard
       id="content-no-languages"
       icon="language"
+      tint="blue"
       heading={t("content.noLanguages.heading")}
       wide={560}
       action={
@@ -423,7 +406,7 @@ export function NothingCard({ i18n }: { i18n: I18n }) {
     <s-box {...CARD} padding="base">
       <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr, 1fr" gap="base" alignItems="center">
         <s-box display="@container (inline-size > 640px) auto, none">
-          <IconTile icon="product-add" />
+          <IconSquare icon="product-add" tint="blue" />
         </s-box>
         <s-paragraph>{i18n.t("content.ready.none")}</s-paragraph>
       </s-grid>
@@ -469,7 +452,8 @@ const ATTACHED_PART: Record<AttachedPart, MessageKey> = {
   images: "content.tile.attachedPart.images",
   customFields: "content.tile.attachedPart.customFields",
 };
-const ATTACHED_ICON: Record<AttachedPart, IconName> = { images: "image", customFields: "metafields" };
+/** Alt text has its own picture (a plain image would read as the product photos beside it). */
+const ATTACHED_ICON: Record<AttachedPart, IconName> = { images: "image-alt", customFields: "metafields" };
 
 /** A line under a tile's head: what keeps it from a figure, or what to do. */
 interface TileLine {
@@ -586,7 +570,7 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
       <s-stack direction="block" gap="small-200" blockSize="100%" justifyContent="space-between" accessibilityVisibility={linked ? "hidden" : "visible"}>
         <s-stack direction="block" gap="small-200">
           <s-grid gridTemplateColumns={linked ? "auto minmax(0, 1fr) auto auto" : "auto minmax(0, 1fr)"} gap="base" alignItems="start">
-            <IconTile icon={CATEGORIES[area.id].icon} />
+            <AreaIcon id={area.id} />
             <s-stack direction="block" gap="small-500">
               <Strong>{name}</Strong>
               {wideDetail ? (
@@ -613,7 +597,7 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
                 )}
                 {figure && figure.total > 0 ? (
                   <s-box display="@container (inline-size > 420px) auto, none">
-                    <s-text color="subdued">{t("language.card.figure", { complete: figure.complete, total: figure.total })}</s-text>
+                    <s-text color="subdued">{t("language.card.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</s-text>
                   </s-box>
                 ) : null}
               </s-stack>
@@ -665,7 +649,7 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
     </s-query-container>
   );
   return linked ? (
-    <s-clickable href={area.href!} {...CARD} padding="base" blockSize="100%">
+    <s-clickable href={withOrigin(area.href!, FROM_CONTENT)} {...CARD} padding="base" blockSize="100%">
       <s-text accessibilityVisibility="exclusive">{tileLabel(i18n, area)}</s-text>
       {body}
     </s-clickable>
@@ -678,8 +662,10 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
 
 /**
  * "Area by area": the tiles in the language page's tiers, the order
- * customers meet them, two columns (one on a phone), with the key to the
- * states while a language is shown.
+ * customers meet them, with the key to the states while a language is
+ * shown. A tier is a group, not a step: its heading has no number (numbers
+ * are for the steps to live). Its tiles fill their rows (cardGrid): one
+ * tile the full width, two or three side by side, four as two by two.
  */
 export function Areas({ areas, i18n, picturesOf, withKey }: { areas: ContentArea[]; i18n: I18n; picturesOf: (area: ContentArea) => TilePictures; withKey: boolean }) {
   const { t } = i18n;
@@ -689,24 +675,23 @@ export function Areas({ areas, i18n, picturesOf, withKey }: { areas: ContentArea
     <s-stack direction="block" gap="base">
       <s-grid gridTemplateColumns="@container (inline-size > 760px) 1fr auto, 1fr" gap="small-200 base" alignItems="end">
         <s-stack direction="block" gap="small-500">
-          <h2 style={AREAS_HEADING}>{t("language.areas.heading")}</h2>
+          <h2 className="lv-h2">{t("language.areas.heading")}</h2>
           <s-text color="subdued">{t("language.areas.introNoPercent")}</s-text>
         </s-stack>
         {withKey ? <StateKey i18n={i18n} /> : null}
       </s-grid>
-      {tiers.map((tier, n) => (
+      {tiers.map((tier) => (
         <section key={tier.id} aria-labelledby={`tier-${tier.id}`}>
           <s-stack direction="block" gap="small-200">
             <s-stack direction="inline" gap="small-200" alignItems="center">
-              <StepNumber n={n + 1} first />
-              <h3 id={`tier-${tier.id}`} style={H2}>
+              <h3 id={`tier-${tier.id}`} className="lv-h3">
                 {t(`language.tier.${tier.id}.name`)}
               </h3>
               <s-box display="@container (inline-size > 500px) auto, none">
                 <s-text color="subdued">– {t(`language.tier.${tier.id}.why`)}</s-text>
               </s-box>
             </s-stack>
-            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
+            <s-grid gridTemplateColumns={cardGrid(tier.areas.length)} gap="base">
               {tier.areas.map((area) => (
                 <AreaTile key={area.id} area={area} i18n={i18n} pictures={picturesOf(area)} />
               ))}
@@ -841,9 +826,10 @@ function RefusedRow({ id, group, i18n }: { id: GroupId; group: ContentGroup; i18
 }
 
 /**
- * "More texts": what the language's percentage leaves out. The theme's and
- * the notifications' texts open their parts (a requested one is open and
- * scrolled to); the web addresses are a link.
+ * "More texts" (the language page's name for them too): what the language's
+ * percentage leaves out. The theme's and the notifications' texts open their
+ * parts (a requested one is open and scrolled to); the web addresses are a
+ * link.
  */
 export function MoreTexts({ extras, open, i18n }: { extras: ContentPage["extras"]; open: ContentPage["open"]; i18n: I18n }) {
   const { t } = i18n;
@@ -860,9 +846,9 @@ export function MoreTexts({ extras, open, i18n }: { extras: ContentPage["extras"
         <s-box padding="base">
           <s-stack direction="block" gap="small-500">
             <h2 id="content-more" style={H2}>
-              {t("content.more.heading")}
+              {t("language.extras.heading")}
             </h2>
-            <s-text color="subdued">{t("language.extras.intro")}</s-text>
+            <s-text color="subdued">{t("language.extras.introNoPercent")}</s-text>
           </s-stack>
         </s-box>
         <ul style={PLAIN_LIST}>
@@ -900,23 +886,28 @@ export function MoreTexts({ extras, open, i18n }: { extras: ContentPage["extras"
 
 // ─── Folds ───────────────────────────────────────────────────────────────────
 
+/** A fold: its heading, its count and (closed) the first names, the chevron at its end (down when closed, up when open), as every fold of the app. */
 function Fold({ heading, note, types, i18n }: { heading: string; note: string; types: HubType[]; i18n: I18n }) {
   const [open, setOpen] = useState(false);
   const names = types.map((type) => partName(i18n, type));
   return (
     <details onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary style={SUMMARY}>
-        <s-stack direction="inline" gap="small-200" alignItems="center" padding="small-200 base" minBlockSize="52px">
-          <s-icon type={open ? "chevron-down" : "chevron-right"} size="small" />
-          <Strong>{heading}</Strong>
-          <s-badge>{i18n.number(types.length)}</s-badge>
-          {open ? null : <s-text color="subdued">{languageList(i18n, names, 4)}</s-text>}
+        <s-stack direction="block" justifyContent="center" padding="small-200 base" minBlockSize="52px">
+          <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="center">
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <Strong>{heading}</Strong>
+              <s-badge>{i18n.number(types.length)}</s-badge>
+              {open ? null : <s-text color="subdued">{languageList(i18n, names, 4)}</s-text>}
+            </s-stack>
+            <s-icon type={open ? "chevron-up" : "chevron-down"} color="subdued" />
+          </s-grid>
         </s-stack>
       </summary>
       <s-box padding="none base base">
         <s-stack direction="block" gap="small-200">
           <s-paragraph color="subdued">{note}</s-paragraph>
-          {/* Columns wide enough for the longest "Gemeinsame Abschnitte · Texte deines Designs" on one line: two on a wide page. */}
+          {/* Columns wide enough for the longest "Gemeinsame Abschnitte · Texte deines Themes" on one line: two on a wide page. */}
           <ul style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: "4px 16px" }}>
             {types.map((type, i) => {
               const area = areaName(i18n, type);

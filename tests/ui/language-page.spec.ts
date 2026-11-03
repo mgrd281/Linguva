@@ -55,24 +55,31 @@ test("how far a language is, one next step, and each area with pictures @respons
   await expect(hero.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts are done and live$/ })).toBeVisible();
   await expect(hero.getByText(/^\d+ of \d+ texts are done and live$/)).toBeVisible();
   await expect(hero.getByText("Where nothing is translated yet, customers see English.")).toBeVisible();
-  // Up to three numbered steps; the first one's button is the page's only primary button.
+  // Up to three steps, each with its icon square (no numbers: those are the steps to live); the first one's button is the page's only primary button.
   await expect(hero.getByText("Next", { exact: true })).toBeVisible();
   await expect(hero.locator("ol > li")).not.toHaveCount(0);
   expect((await hero.locator("ol > li").count()) <= 3).toBe(true);
+  for (const step of await hero.locator("ol > li").all()) await expect(step.locator(".lv-icon-square")).toHaveCount(1);
   expect(await primaryButtons(page)).toHaveLength(1);
   const primary = hero.locator("ol > li").first().locator('[data-button][data-variant="primary"]');
   await expect(primary).toHaveCount(1);
   // Easy to hit with a thumb.
   if (info.project.name === "mobile") expect((await primary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  // Image descriptions go with their products' step, never a step of their own.
+  await expect(hero.locator("ol > li").first()).toContainText("Translate products");
+  await expect(hero.locator("ol > li").first()).toContainText(/plus \d+ image descriptions?/);
+  await expect(hero.getByText("Translate image descriptions")).toHaveCount(0);
 
-  // Why the percentage rises only after approving.
-  const strip = page.getByRole("region", { name: "How English becomes German" });
-  for (const step of ["to translate", "you approve", "customers see it"]) await expect(strip.getByText(step, { exact: true }).or(strip.getByText(new RegExp(`^\\d · ${step}`, "i")))).not.toHaveCount(0);
+  // Nothing waits for approval in German: the steps to live aren't shown (they explain waiting texts).
+  await expect(page.getByRole("region", { name: "How English becomes German" })).toHaveCount(0);
 
   // The areas in the order customers meet them.
   expect(await areaOrder(page)).toEqual(["Products", "Collections", "Extra details", "Image descriptions"]);
   const products = page.locator(labelled("Products"));
-  await expect(products.getByRole("link", { name: "Products", exact: true })).toHaveAttribute("href", "/app/languages/de/products");
+  // The name is the card's heading; its one link is "View all".
+  await expect(products.getByRole("heading", { name: "Products", exact: true })).toBeVisible();
+  await expect(products.getByRole("link", { name: "Products", exact: true })).toHaveCount(0);
+  await expect(products.locator('.lv-icon-square[data-tint="blue"] s-icon[type="product"]')).toHaveCount(1);
   await expect(products.getByText(/^\d+% ?$|^<1%$/).first()).toBeVisible();
   await expect(products.getByText(/^\d+ of \d+ texts$/)).toBeVisible();
   // The way to every item stays visible on a phone too.
@@ -83,8 +90,9 @@ test("how far a language is, one next step, and each area with pictures @respons
   await expectPictures(products, info.project.name === "mobile" ? 3 : 6);
   await expectPictures(page.locator(labelled("Collections")), info.project.name === "mobile" ? 0 : 2);
 
-  // What the percentage leaves out comes last.
-  await expect(page.getByRole("heading", { name: /^Not part of the \d+%$/ })).toBeVisible();
+  // What the percentage leaves out comes last, as "More texts" (Content's name for them too).
+  await expect(page.getByRole("heading", { name: "More texts" })).toBeVisible();
+  await expect(page.getByText(/^They don't count toward the \d+%: /)).toBeVisible();
   await expect(page.getByRole("link", { name: /^Web addresses/ })).toHaveAttribute("href", /^\/app\/coverage\/items\?/);
 
   await expectAccessible(page);
@@ -92,13 +100,41 @@ test("how far a language is, one next step, and each area with pictures @respons
   expect(errors).toEqual([]);
 });
 
-test("the words, folded until asked for", async ({ page }) => {
+test("the words, folded until asked for, with the app's one fold", async ({ page }) => {
   await openApp(page, "demo", "/app/languages/de");
   const words = page.locator("details", { hasText: "What do these words mean?" });
   await expect(words).not.toHaveAttribute("open");
+  // A chevron at the summary's end, no browser triangle.
+  await expect(words).toHaveClass(/lv-more/);
+  await expect(words.locator("summary s-icon[type='chevron-down']")).toHaveCount(1);
   await words.locator("summary").click();
   await expect(words.getByText("You changed the original. Customers still see the old translation.")).toBeVisible();
   await expect(words.getByText("Customers still see English here.")).toBeVisible();
+});
+
+test("why the percentage rises only after approving: the steps to live, while texts wait for it", async ({ page }) => {
+  // French in the demo store has AI drafts waiting.
+  await openApp(page, "demo", "/app/languages/fr");
+  const strip = page.getByRole("region", { name: "How English becomes French" });
+  for (const step of ["to translate", "you approve", "customers see it"]) await expect(strip.getByText(step, { exact: true }).or(strip.getByText(new RegExp(`^\\d · ${step}`, "i")))).not.toHaveCount(0);
+  // Approving comes first, with its icon square.
+  const first = page.locator(labelled("How far French is")).locator("ol > li").first();
+  await expect(first).toContainText(/^Approve \d+ translations?/);
+  await expect(first.locator('s-icon[type="eye-check-mark"]')).toHaveCount(1);
+});
+
+test("a step's Translate ticks the image descriptions and extra details it names; a card's starts without them", async ({ page }) => {
+  await openApp(page, "demo", "/app/languages/de");
+  const dialog = page.locator("s-modal#language-translate");
+  const attached = dialog.getByRole("checkbox", { name: "Also translate image descriptions and extra details" });
+  await page.locator(labelled("How far German is")).locator("ol > li").first().getByRole("button", { name: "Translate: Products" }).click();
+  await expect(page.getByRole("dialog", { name: /^Translate \d+ products? into German\?$/ })).toBeVisible();
+  await expect(attached).toBeChecked();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page.locator(labelled("Products")).getByRole("button", { name: "Translate: Products" }).click();
+  await expect(attached).not.toBeChecked();
 });
 
 test("translating an area asks first, says what happens, and Cancel starts nothing @responsive", async ({ page }) => {
@@ -165,15 +201,19 @@ test("a hidden language says so, with the way to publish it, and reads right to 
   await expectAccessible(page);
 });
 
-test("an area Linguva can't read shows no figure, and the way to allow it", async ({ page }) => {
+test("an area Linguva can't read shows no figure, and the way to allow it: Content's card, which asks for every permission at once", async ({ page }) => {
   // Policies need read_legal_policies, which this store didn't grant.
   await openApp(page, "full", "/app/languages/de");
   const checkout = page.locator(labelled("Store & checkout"));
   await expect(checkout.getByText("No access")).toBeVisible();
   await expect(checkout.getByText("—")).toBeVisible();
-  await expect(checkout.getByRole("link", { name: "Allow access" })).toHaveAttribute("href", "/app/content/policies");
+  const allow = checkout.getByRole("link", { name: "Allow access" });
+  await expect(allow).toHaveAttribute("href", "/app/content?lang=de#content-access");
   // Nothing is called done while it can't be read.
   await expect(page.getByText("Everything is translated")).toHaveCount(0);
+  await allow.click();
+  await expect(page).toHaveURL(/\/app\/content\?lang=de.*#content-access$/);
+  await expect(page.getByRole("heading", { name: "Linguva can't read everything yet" })).toBeVisible();
 });
 
 test("the theme's texts open their group on the Content page, in this language", async ({ page }) => {

@@ -1,32 +1,38 @@
 /**
  * An area's items in a language (the list on /app/languages/:locale/:category):
- * filters by each item's one state that add up to "All", a name search
- * where Shopify can search, then the items in groups by state, open work
- * first, each group saying in one line what its state means. A row shows
- * the item's picture, its name, what customers see in the language, and
- * each of its texts as an icon and a word; "Open" leads to the editor.
- * Rows are a plain list (no row is a button), 50 a page.
+ * filters by each item's one state that add up to "All" (the shown one in
+ * the app's chosen look), a name search where Shopify can search, then the
+ * items in groups by state, open work first, each group saying in one line
+ * what its state means. A row shows the item's picture, its name, what
+ * customers see in the language, and each of its texts as an icon and a
+ * word; the whole row opens the editor (its name is the link, stretched over
+ * the row, so what the row says stays readable), 50 a page.
  */
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 import type { CategoryItems, CategoryRow, ListState } from "../.server/languages/language-page";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { itemErrorMessage, itemKindLabel, jobErrorMessage } from "../i18n/labels";
 import { isMetafieldCoverageType, type FieldGroup } from "../lib/coverage-rules";
-import { CATEGORIES, categoryPath, ITEM_STATES, type CategoryId, type ItemState } from "../lib/language-categories";
+import { CATEGORIES, categoryPath, ITEM_STATES, type CategoryId, type ItemState, type Origin } from "../lib/language-categories";
 import { TRACK_COLOUR } from "./Coverage";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { StateIcon } from "./ItemStates";
 import { Button } from "./Button";
+import { Strong } from "./Type";
 
-/** A list's address with its filter, search and position. */
-export function listHref(locale: string, category: CategoryId, query: { state?: ListState; q?: string; after?: string | null }): string {
+/** A list's address with its filter, search and position, and where the list was opened from. */
+export function listHref(locale: string, category: CategoryId, query: { state?: ListState; q?: string; after?: string | null; from?: Origin }): string {
   const params = new URLSearchParams();
   if (query.state && query.state !== "all") params.set("state", query.state);
   if (query.q) params.set("q", query.q);
   if (query.after) params.set("after", query.after);
+  if (query.from) params.set("from", query.from);
   const search = params.toString();
   return `${categoryPath(locale, category)}${search ? `?${search}` : ""}`;
 }
+
+/** An icon inside a line of text (a link's chevron). */
+const INLINE_ICON = { display: "inline-flex", verticalAlign: "middle", marginInlineStart: 2 } as const;
 
 /** Each text of an item by what it is, in the merchant's words (URL handles are never listed). */
 const TEXT_NAMES: Record<Exclude<FieldGroup, "url">, MessageKey> = {
@@ -46,7 +52,10 @@ function textName(i18n: I18n, group: FieldGroup, type: string): string {
   return i18n.t(TEXT_NAMES[group === "url" ? "other" : group]);
 }
 
-/** What one item is, for areas with things of several kinds ("Menu item", "Shipping method"). */
+/**
+ * What one item is, for areas with things of several kinds ("Menu item", "Shipping method"): the words of
+ * the lists, also on the language page's cards (one word per thing).
+ */
 const KIND_WORDS: Partial<Record<string, MessageKey>> = {
   MENU: "language.list.kind.MENU",
   LINK: "language.list.kind.LINK",
@@ -70,7 +79,7 @@ const KIND_WORDS: Partial<Record<string, MessageKey>> = {
   ARTICLE_METAFIELD: "language.list.kind.field",
 };
 
-function kindWord(i18n: I18n, type: string): string | null {
+export function kindWord(i18n: I18n, type: string): string | null {
   const key = KIND_WORDS[type];
   return key ? i18n.t(key) : null;
 }
@@ -105,10 +114,13 @@ export interface ListNames {
   locale: string;
   /** The store's own language, what customers see where nothing is translated. */
   primary: string;
-  primaryLocale: string | null;
 }
 
-/** What customers see of the item in the language: its translated name, or that they still see the original. */
+/**
+ * What customers see of the item in the language: its translated name. Where
+ * nothing is translated they see the name above, which its group already
+ * says ("Customers still see English here"), so the row doesn't repeat it.
+ */
 function CustomerLine({ row, i18n, names }: { row: CategoryRow; i18n: I18n; names: ListNames }) {
   const { t } = i18n;
   const quoted = (text: string) => t("language.preview.quoted", { text });
@@ -119,22 +131,12 @@ function CustomerLine({ row, i18n, names }: { row: CategoryRow; i18n: I18n; name
       </s-text>
     ) : null;
   }
-  if (row.translated) {
-    return (
-      <s-text color="subdued">
-        {t("language.list.row.translated", { language: names.language })}{" "}
-        <span lang={names.locale} dir="auto" style={BREAK}>
-          {quoted(row.translated)}
-        </span>
-      </s-text>
-    );
-  }
-  if (!row.title || row.state === "complete") return null;
+  if (!row.translated) return null;
   return (
     <s-text color="subdued">
-      {t("language.list.row.notYet", { language: names.language })}{" "}
-      <span lang={names.primaryLocale ?? undefined} style={BREAK}>
-        {quoted(row.title)}
+      {t("language.list.row.translated", { language: names.language })}{" "}
+      <span lang={names.locale} dir="auto" style={BREAK}>
+        {quoted(row.translated)}
       </span>
     </s-text>
   );
@@ -170,11 +172,13 @@ function RowNotes({ row, i18n, smart }: { row: CategoryRow; i18n: I18n; smart: C
       {failure ? <s-text tone="critical">{failure}</s-text> : null}
       {row.smart === "translating" ? (
         <s-stack direction="inline">
-          <s-badge tone="info">{t("coverage.items.smart.translating")}</s-badge>
+          <s-badge tone="info" icon="in-progress">
+            {t("coverage.items.smart.translating")}
+          </s-badge>
         </s-stack>
       ) : row.smart === "excluded" ? (
         <s-stack direction="inline">
-          <s-badge>{t("coverage.items.smart.excluded")}</s-badge>
+          <s-badge icon="minus-circle">{t("coverage.items.smart.excluded")}</s-badge>
         </s-stack>
       ) : row.smart === "waiting" && smart?.nextCheck && smart.zone ? (
         <s-text color="subdued">
@@ -185,36 +189,46 @@ function RowNotes({ row, i18n, smart }: { row: CategoryRow; i18n: I18n; smart: C
   );
 }
 
+/**
+ * One item. With an editor, the whole row opens it: its name is the link
+ * (read "Open: <name>"), stretched over the row (ui.css, .lv-row), with a
+ * chevron at the end; the rest of the row stays text, read in its order.
+ */
 function ItemRow({ row, data, i18n, names }: { row: CategoryRow; data: CategoryItems; i18n: I18n; names: ListNames }) {
   const { t } = i18n;
   const name = rowName(i18n, row);
   // Areas with things of several kinds say which kind each one is.
   const kind = CATEGORIES[data.category.id].types.length > 1 && !isMetafieldCoverageType(row.type) ? kindWord(i18n, row.type) : null;
-  const open = t("language.list.row.open");
   return (
-    <s-box padding="base">
-      <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="start">
+    <div className="lv-row" {...(row.href ? { "data-linked": "" } : {})}>
+      <s-grid gridTemplateColumns={row.href ? "auto minmax(0, 1fr) auto" : "auto minmax(0, 1fr)"} gap="base" alignItems="start">
         <Thumbnail image={row.image} icon={CATEGORIES[data.category.id].icon} />
         <s-stack direction="block" gap="small-200">
           <s-stack direction="block" gap="small-500">
             {kind ? <s-text color="subdued">{kind}</s-text> : null}
-            <span style={BREAK}>
-              <s-text type="strong">{name}</s-text>
-            </span>
+            {row.href ? (
+              <Link to={row.href} className="lv-row__link">
+                <span className="lv-sr">{t("language.list.row.open")}: </span>
+                {name}
+              </Link>
+            ) : (
+              <span style={BREAK}>
+                <Strong>{name}</Strong>
+              </span>
+            )}
             <CustomerLine row={row} i18n={i18n} names={names} />
           </s-stack>
           <TextChips row={row} i18n={i18n} />
           <RowNotes row={row} i18n={i18n} smart={data.smart} />
         </s-stack>
         {row.href ? (
-          <span style={{ whiteSpace: "nowrap" }}>
-            <s-link href={row.href} accessibilityLabel={`${open}: ${name}`}>
-              {open} ›
-            </s-link>
-          </span>
+          // Beside the picture's middle (its height follows the screen width).
+          <div style={{ display: "flex", alignItems: "center", height: THUMB }}>
+            <s-icon type="chevron-right" color="subdued" />
+          </div>
         ) : null}
       </s-grid>
-    </s-box>
+    </div>
   );
 }
 
@@ -248,8 +262,11 @@ function GroupHeading({ state, count, data, i18n, names }: { state: ItemState; c
   );
 }
 
-/** "All 48 · Failed 1 · Outdated 3 …": the shown one is the current filter, the others links. */
-function Filters({ data, i18n }: { data: CategoryItems; i18n: I18n }) {
+/**
+ * "All 48 · Failed 1 · Outdated 3 …": the shown one is the current filter, in the app's chosen look (the
+ * blue ring and tint, ui.css .lv-filter), the others links.
+ */
+function Filters({ data, i18n, origin }: { data: CategoryItems; i18n: I18n; origin: Origin }) {
   const { t } = i18n;
   const { locale } = data.language;
   const chosen = data.filter.state;
@@ -260,24 +277,22 @@ function Filters({ data, i18n }: { data: CategoryItems; i18n: I18n }) {
   ];
   return (
     <nav aria-label={t("language.list.filter.label")}>
-      <ul style={{ ...PLAIN_LIST, display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <ul className="lv-filters">
         {options.map((option) => {
           const text = `${option.label} ${i18n.number(option.count)}`;
-          const icon = option.state === "all" ? null : <StateIcon slot="graphic" state={option.state} size="small" />;
+          const icon = option.state === "all" ? null : <StateIcon state={option.state} size="small" />;
           return (
             <li key={option.state}>
               {option.state === chosen ? (
-                <span aria-current="true">
-                  <s-chip color="strong">
-                    {icon}
-                    {text}
-                  </s-chip>
-                </span>
-              ) : (
-                <s-clickable-chip href={listHref(locale, data.category.id, { state: option.state, q: data.filter.q })}>
+                <span className="lv-filter" aria-current="true">
                   {icon}
                   {text}
-                </s-clickable-chip>
+                </span>
+              ) : (
+                <Link className="lv-filter" to={listHref(locale, data.category.id, { state: option.state, q: data.filter.q, from: origin })}>
+                  {icon}
+                  {text}
+                </Link>
               )}
             </li>
           );
@@ -288,12 +303,13 @@ function Filters({ data, i18n }: { data: CategoryItems; i18n: I18n }) {
 }
 
 /** Search by name (a GET form: the filter stays, the list starts again from the top). */
-function Search({ data, i18n }: { data: CategoryItems; i18n: I18n }) {
+function Search({ data, i18n, origin }: { data: CategoryItems; i18n: I18n; origin: Origin }) {
   const { t } = i18n;
   const label = t("language.list.search.label");
   return (
     <Form method="get" action={listHref(data.language.locale, data.category.id, {})}>
       {data.filter.state !== "all" ? <input type="hidden" name="state" value={data.filter.state} /> : null}
+      {origin ? <input type="hidden" name="from" value={origin} /> : null}
       <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="end">
         <s-search-field name="q" label={label} labelAccessibilityVisibility="exclusive" placeholder={label} value={data.filter.q} />
         <Button type="submit">{t("language.list.search.submit")}</Button>
@@ -302,11 +318,12 @@ function Search({ data, i18n }: { data: CategoryItems; i18n: I18n }) {
   );
 }
 
-export function CategoryList({ data, i18n, names }: { data: CategoryItems; i18n: I18n; names: ListNames }) {
+export function CategoryList({ data, i18n, names, origin = null }: { data: CategoryItems; i18n: I18n; names: ListNames; origin?: Origin }) {
   const { t } = i18n;
   const { locale } = data.language;
   const id = data.category.id;
   const query = data.filter.q;
+  const from = origin;
   const quotedQuery = t("language.preview.quoted", { text: query });
   // Rows come in state order: consecutive rows of one state are its group.
   const groups: Array<{ state: ItemState; rows: CategoryRow[] }> = [];
@@ -321,16 +338,16 @@ export function CategoryList({ data, i18n, names }: { data: CategoryItems; i18n:
       <s-box padding="none base base">
         <s-stack direction="block" gap="base">
           <s-text color="subdued">{t("language.list.rows.intro")}</s-text>
-          {data.category.searchable ? <Search data={data} i18n={i18n} /> : null}
+          {data.category.searchable ? <Search data={data} i18n={i18n} origin={from} /> : null}
           {query ? (
             <s-stack direction="inline" gap="small-200 base" alignItems="center">
               <s-text>
                 {data.counts.all ? t("language.list.search.results", { count: data.counts.all, query: quotedQuery }) : t("language.list.search.none", { query: quotedQuery })}
               </s-text>
-              <s-link href={listHref(locale, id, { state: data.filter.state })}>{t("language.list.search.clear")}</s-link>
+              <s-link href={listHref(locale, id, { state: data.filter.state, from })}>{t("language.list.search.clear")}</s-link>
             </s-stack>
           ) : null}
-          {data.counts.all ? <Filters data={data} i18n={i18n} /> : null}
+          {data.counts.all ? <Filters data={data} i18n={i18n} origin={from} /> : null}
           {data.titlesUnavailable ? <s-text color="subdued">{i18n.t("language.card.previewError")}</s-text> : null}
         </s-stack>
       </s-box>
@@ -349,7 +366,12 @@ export function CategoryList({ data, i18n, names }: { data: CategoryItems; i18n:
           {/* The whole group is on its own filter when this page shows only part of it. */}
           {data.filter.state === "all" && group.rows.length < data.counts[group.state] ? (
             <s-box padding="none base base">
-              <s-link href={listHref(locale, id, { state: group.state, q: query })}>{t("language.card.allCount", { count: data.counts[group.state] })} ›</s-link>
+              <s-link href={listHref(locale, id, { state: group.state, q: query, from })}>
+                {t("language.card.allCount", { count: data.counts[group.state] })}
+                <span style={INLINE_ICON}>
+                  <s-icon type="chevron-right" size="small" />
+                </span>
+              </s-link>
             </s-box>
           ) : null}
         </s-stack>
@@ -367,9 +389,9 @@ export function CategoryList({ data, i18n, names }: { data: CategoryItems; i18n:
             <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
               <s-text color="subdued">{t("language.list.page.position", { page: page.number, from: page.from, to: page.to, total: page.total })}</s-text>
               <s-stack direction="inline" gap="small-200">
-                {page.number > 1 ? <Button href={listHref(locale, id, { state: data.filter.state, q: query })}>{t("language.list.page.first")}</Button> : null}
+                {page.number > 1 ? <Button href={listHref(locale, id, { state: data.filter.state, q: query, from })}>{t("language.list.page.first")}</Button> : null}
                 {page.nextCursor ? (
-                  <Button href={listHref(locale, id, { state: data.filter.state, q: query, after: page.nextCursor })}>{t("language.list.page.next")}</Button>
+                  <Button href={listHref(locale, id, { state: data.filter.state, q: query, after: page.nextCursor, from })}>{t("language.list.page.next")}</Button>
                 ) : null}
               </s-stack>
             </s-grid>

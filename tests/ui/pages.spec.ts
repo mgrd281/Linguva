@@ -23,9 +23,13 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Languages",
     path: "/app/languages",
     check: async (page) => {
-      await expect(page.getByText("Arabic (RTL)")).toBeVisible();
-      await expect(page.getByText("Unpublished")).toBeVisible();
-      await expect(page.getByText(/4 of 20 languages enabled, 3 published/)).toBeVisible();
+      // One row per language, the main one first; the hidden one and the right-to-left one say so in words.
+      const rows = page.getByRole("list", { name: "Languages" }).getByRole("listitem");
+      await expect(rows.first()).toContainText("Main language · your originals");
+      const arabic = rows.filter({ hasText: "Arabic" });
+      await expect(arabic.getByText(/written right to left/)).toBeVisible();
+      await expect(arabic.locator("s-badge", { hasText: "Hidden" })).toBeVisible();
+      await expect(page.getByText(/4 of 20 languages in your store, 3 visible to customers/)).toBeVisible();
       // Each additional language opens its own page; the original has none.
       await expect(page.getByRole("link", { name: "German" })).toHaveAttribute("href", "/app/languages/de");
       await expect(page.getByRole("link", { name: /^Arabic/ })).toHaveAttribute("href", "/app/languages/ar");

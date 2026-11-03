@@ -228,7 +228,7 @@ test.describe("Review", () => {
     await chips.getByRole("link", { name: /^Image descriptions \d+$/ }).click();
     await expect(page).toHaveURL(/area=images/);
     await expect(texts(page)).toHaveCount(count);
-    for (const text of await texts(page).allTextContents()) expect(text.trim()).toMatch(/^Image text/);
+    for (const text of await texts(page).allTextContents()) expect(text.trim()).toMatch(/^Image description/);
     for (const name of await page.locator("s-section[accessibilitylabel]").evaluateAll((els) => els.map((el) => el.getAttribute("accessibilitylabel")))) {
       expect(name).toMatch(/^Product \d jacket, German$/);
     }

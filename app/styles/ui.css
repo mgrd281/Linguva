@@ -875,6 +875,169 @@
 
 /* ── Content and language pages (app.content.*, app.languages*, ContentTiles, CategoryCard, CategoryList, LanguageLayout, StepStrip): its own rules here, media queries included. ── */
 
+/*
+ * Content's language chips: flag, name and percentage, as wide as their words (at least 168 px, so two
+ * share a phone's row), the chips of a row equally tall (a hidden language's chip has two lines). The
+ * current language isn't a link and wears the app's chosen look (the blue ring and tint of the current
+ * Settings section and plan).
+ */
+.lv-langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-langs__item {
+  display: grid;
+  flex: 0 0 auto;
+  min-width: min(168px, 100%);
+  max-width: 100%;
+}
+.lv-lang {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-surface);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  text-decoration: none;
+  box-shadow: var(--lv-shadow-1);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-lang > [aria-hidden="true"] {
+  display: grid;
+}
+a.lv-lang:hover {
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
+}
+a.lv-lang:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-lang[aria-current="page"] {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+}
+
+/*
+ * An area list's filters ("All 55 · Outdated 1 · Missing 47"): pills of links with each state's icon; the
+ * shown one in the chosen look, so it is clear which group the list shows.
+ */
+.lv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-filter {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--lv-border);
+  border-radius: 999px;
+  background: var(--lv-surface);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+a.lv-filter:hover {
+  border-color: var(--lv-border-hover);
+  background: var(--lv-surface-subdued);
+}
+a.lv-filter:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-filter[aria-current] {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+  font-weight: 650;
+}
+
+/*
+ * A row of an area's list: the item's name is its link, stretched over the whole row (the row opens the
+ * editor), so the rest of the row stays text that is read in its order; a soft background under the
+ * pointer, the focus ring around the row.
+ */
+.lv-row {
+  position: relative;
+  padding: 16px;
+  transition: background-color 0.15s ease;
+}
+.lv-row[data-linked]:hover {
+  background: var(--lv-surface-subdued);
+}
+.lv-row__link {
+  display: block;
+  padding-block: 2px;
+  color: var(--lv-text);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.lv-row__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Above the row's chips and badges, which Polaris may position. */
+  z-index: 1;
+}
+.lv-row__link:focus-visible {
+  outline: none;
+}
+.lv-row__link:focus-visible::after {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: -2px;
+}
+
+@media (pointer: coarse) {
+  .lv-lang {
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+  .lv-filter {
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-lang,
+  .lv-filter,
+  .lv-row {
+    transition: none;
+  }
+}
+
 /* ── Review (app.review*, Review* components): its own rules here, media queries included. ── */
 
 /* ── Jobs (app.jobs*, components/jobs): its own rules here, media queries included. ── */

@@ -16,6 +16,9 @@ import type { IconName } from "./icons";
 import { categoryOf, TIERS, type CategoryId, type CategoryState } from "./language-categories";
 import type { TranslatableKind } from "./resource-kinds";
 
+// Image descriptions and custom fields, translated with their owner: one map for both pages (the language page's steps use it too).
+export { ATTACHED, hasAttached, type AttachedArea, type AttachedPart } from "./language-categories";
+
 /** The 26 types of the page, area by area in the areas' order, each area's types in their own order. */
 export const HUB_TYPES = [
   "PRODUCT",
@@ -91,7 +94,8 @@ export const PART_ICON: Readonly<Record<HubType, IconName>> = {
   PAYMENT_GATEWAY: "payment",
   SELLING_PLAN_GROUP: "order-repeat",
   SELLING_PLAN: "order-repeat",
-  METAOBJECT: "table",
+  // Shopify's own pictures for metaobjects and for a theme's settings (a gear would read as Linguva's Settings).
+  METAOBJECT: "metaobject",
   PAGE: "page",
   BLOG: "blog",
   ARTICLE: "blog",
@@ -99,29 +103,30 @@ export const PART_ICON: Readonly<Record<HubType, IconName>> = {
   ONLINE_STORE_THEME_JSON_TEMPLATE: "theme-template",
   ONLINE_STORE_THEME_SECTION_GROUP: "layout-header",
   ONLINE_STORE_THEME_SETTINGS_DATA_SECTIONS: "layout-section",
-  ONLINE_STORE_THEME_SETTINGS_CATEGORY: "settings",
+  ONLINE_STORE_THEME_SETTINGS_CATEGORY: "paint-brush-flat",
   ONLINE_STORE_THEME_APP_EMBED: "app-extension",
-  ONLINE_STORE_THEME: "theme",
+  // Not the theme's own picture: that is its group's row ("Texts of your theme").
+  ONLINE_STORE_THEME: "text-block",
   EMAIL_TEMPLATE: "email",
   PACKING_SLIP_TEMPLATE: "package",
 };
 
+/** What each optional permission unlocks, as the permission card's chips show it (a lock on the card itself). */
+export const SCOPE_ICON: Readonly<Record<string, IconName>> = {
+  read_legal_policies: "contract",
+  read_shipping: "delivery",
+  read_online_store_navigation: "menu",
+  read_metaobjects: "metaobject",
+  read_themes: "theme",
+};
+
 /**
- * Image descriptions and custom fields, translated with their owner: the
- * coverage types of each owner's tile note (not page types of their own).
+ * Columns for a row of `count` cards, so no row ends half empty: one card
+ * the full width, two or three side by side, four as two by two.
  */
-export const ATTACHED = {
-  products: { images: ["MEDIA_IMAGE"], customFields: ["PRODUCT_METAFIELD"] },
-  collections: { images: ["COLLECTION_IMAGE"], customFields: ["COLLECTION_METAFIELD"] },
-  pages: { images: [], customFields: ["PAGE_METAFIELD"] },
-  blog: { images: ["ARTICLE_IMAGE"], customFields: ["ARTICLE_METAFIELD"] },
-} as const satisfies Partial<Record<CategoryId, { images: readonly string[]; customFields: readonly string[] }>>;
-
-export type AttachedArea = keyof typeof ATTACHED;
-export type AttachedPart = "images" | "customFields";
-
-export function hasAttached(area: CategoryId): area is AttachedArea {
-  return Object.hasOwn(ATTACHED, area);
+export function cardColumns(count: number): 1 | 2 | 3 {
+  if (count <= 1) return 1;
+  return count % 3 === 0 || (count % 2 !== 0 && count > 3) ? 3 : 2;
 }
 
 /** Areas whose tiles show pictures of their items (from the language page's previews). */

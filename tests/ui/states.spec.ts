@@ -98,7 +98,7 @@ test.describe("loading states", () => {
     await openApp(page, "demo", "/app/languages/de");
     // The page is there before its examples: grey shapes where the pictures will be.
     const products = page.locator('s-section[accessibilitylabel="Products"]');
-    await expect(products.getByRole("link", { name: "Products", exact: true })).toBeVisible();
+    await expect(products.getByRole("heading", { name: "Products", exact: true })).toBeVisible();
     await expect(products.locator("img")).toHaveCount(0);
     release();
     await expect.poll(() => products.locator("img").count()).toBeGreaterThan(0);

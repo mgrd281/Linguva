@@ -338,6 +338,474 @@
   white-space: nowrap;
 }
 
+/* Read by assistive technology only (a tile's full name, where the visible one breaks a long word). */
+.lv-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * Soft tints behind an icon (a section's tile, an option's icon): one per section, light enough for the
+ * admin's dark icon colour on top (contrast above 10:1). They name a place, never a state: states are
+ * words, badges and the tile's dot.
+ */
+[data-tint] {
+  --lv-tint: #f1f1f1;
+}
+[data-tint="blue"] {
+  --lv-tint: #e6f0ff;
+}
+[data-tint="green"] {
+  --lv-tint: #e1f5ea;
+}
+[data-tint="violet"] {
+  --lv-tint: #efe9ff;
+}
+[data-tint="amber"] {
+  --lv-tint: #fdf0d9;
+}
+[data-tint="slate"] {
+  --lv-tint: #e9edf2;
+}
+[data-tint="teal"] {
+  --lv-tint: #daf3f1;
+}
+[data-tint="rose"] {
+  --lv-tint: #fde8ed;
+}
+.lv-icon-square {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--lv-tint, #f1f1f1);
+}
+
+/*
+ * Settings' sections as square buttons: the icon in its tinted square, the name, the state in a few
+ * words, a dot where the section needs the merchant. On a wide page one row in two groups (how Linguva
+ * translates · what it may use), the current one framed in blue; narrower, four in a row; on a phone
+ * three in a row, every tile opening its section.
+ */
+.lv-tilenav {
+  container-type: inline-size;
+}
+.lv-tilenav__list {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-tilenav__item {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* The second group: a little more room and a fine line before it. */
+.lv-tilenav__item[data-group-start] {
+  margin-inline-start: 10px;
+}
+.lv-tilenav__item[data-group-start]::before {
+  content: "";
+  position: absolute;
+  inset-block: 16px;
+  inset-inline-start: -11px;
+  width: 1px;
+  background: #e3e3e3;
+}
+.lv-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  padding: 10px 6px;
+  border: 1px solid #e3e3e3;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #303030;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+.lv-tile:hover {
+  border-color: #cccccc;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  transform: translateY(-1px);
+}
+.lv-tile:active {
+  transform: none;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+.lv-tile:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}
+.lv-tile[aria-current="page"] {
+  border-color: transparent;
+  background: #f5f9ff;
+  box-shadow:
+    inset 0 0 0 2px #005bd3,
+    0 1px 3px rgba(0, 91, 211, 0.12);
+  cursor: default;
+  transform: none;
+}
+.lv-tile__name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 16px;
+  letter-spacing: -0.006em;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.lv-tile__state {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: #616161;
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 16px;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.lv-tile[data-tone="warning"] .lv-tile__state {
+  color: #8a4b00;
+  font-weight: 550;
+}
+.lv-tile[data-tone="critical"] .lv-tile__state {
+  color: #b5141f;
+  font-weight: 550;
+}
+/* Where the section needs the merchant: a dot in the state's colour (the state says it in words). */
+.lv-tile__dot {
+  position: absolute;
+  top: 9px;
+  inset-inline-end: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e9a23b;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+.lv-tile[data-tone="critical"] .lv-tile__dot {
+  background: #e22c38;
+}
+/* Narrower than one row of squares: four in a row (the groups line up), as wide tiles. */
+@container (max-width: 880px) {
+  .lv-tilenav__list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .lv-tilenav__item[data-group-start] {
+    margin-inline-start: 0;
+  }
+  .lv-tilenav__item[data-group-start]::before {
+    display: none;
+  }
+  .lv-tile {
+    aspect-ratio: auto;
+    min-height: 116px;
+  }
+}
+/* A phone: squares, three in a row. */
+@container (max-width: 560px) {
+  .lv-tilenav__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .lv-tile {
+    aspect-ratio: 1 / 1;
+    min-height: 0;
+  }
+}
+
+/* The status row under the page's heading: all set up (green), or what needs the merchant in its tone. */
+.lv-status {
+  container-type: inline-size;
+  box-sizing: border-box;
+  border: 1px solid #e3e3e3;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 14px 16px;
+}
+.lv-status[data-tone="success"] {
+  border-color: #c9ebd9;
+  background: #f2fbf6;
+}
+.lv-status[data-tone="warning"] {
+  border-color: #f6dfb2;
+  background: #fff9ee;
+}
+.lv-status[data-tone="critical"] {
+  border-color: #f6c9cd;
+  background: #fff5f5;
+}
+.lv-status__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.lv-status__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+.lv-status__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px 16px;
+  align-items: center;
+  justify-items: start;
+}
+.lv-status__title {
+  font-weight: 650;
+  line-height: 20px;
+}
+@container (min-width: 560px) {
+  .lv-status__body {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+/*
+ * One choice of a setting, as a tile: its icon in a tinted square, its badges, name and what it means;
+ * the current one framed in blue like the current section's tile. A choice that can be chosen is one
+ * button as a whole. Tiles in a row are equally high; what belongs to one (a lock) sits at its foot.
+ */
+.lv-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--lv-min, 220px)), 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.lv-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 0;
+  border: 1px solid #e3e3e3;
+  border-radius: 14px;
+  background: #ffffff;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-option--current {
+  border-color: transparent;
+  background: #f5f9ff;
+  box-shadow:
+    inset 0 0 0 2px #005bd3,
+    0 1px 3px rgba(0, 91, 211, 0.12);
+}
+.lv-option--choosable:hover {
+  border-color: #cccccc;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+}
+.lv-option__choose,
+.lv-option__head {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+}
+.lv-option__choose {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lv-option__choose:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}
+.lv-option__top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.lv-option__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.lv-option__title {
+  display: block;
+  color: #303030;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+  outline: none;
+}
+.lv-option__body {
+  display: block;
+  color: #616161;
+  font-size: 13px;
+  line-height: 20px;
+}
+.lv-option__foot {
+  padding: 0 16px 16px;
+}
+/* A choice that can be chosen: an empty radio ring (filled blue under the pointer). */
+.lv-option__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+.lv-option__radio {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #8a8a8a;
+  border-radius: 50%;
+  background: #ffffff;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-option--choosable:hover .lv-option__radio {
+  border-color: #005bd3;
+  box-shadow: inset 0 0 0 3px #ffffff, inset 0 0 0 9px #cfe3ff;
+}
+
+/* More words on demand: the summary in semibold with a chevron at its end that turns when open. */
+.lv-more__summary {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 12px 0;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.lv-more__summary::-webkit-details-marker {
+  display: none;
+}
+.lv-more__summary:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.lv-more__chevron {
+  display: inline-flex;
+  transition: transform 0.15s ease;
+}
+.lv-more[open] > .lv-more__summary .lv-more__chevron {
+  transform: rotate(180deg);
+}
+/* What the current (or the chosen) way needs next: its languages, its summary, under the choices. */
+.lv-option-panel {
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: #f7f7f7;
+  padding: 16px;
+}
+
+/* Tiles of links (Settings › Tools): the icon in its square, the name, what it is for, the chevron. */
+.lv-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-links__item {
+  display: flex;
+  min-width: 0;
+}
+.lv-link-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #e3e3e3;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #303030;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-link-tile:hover {
+  border-color: #cccccc;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+}
+.lv-link-tile:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}
+.lv-link-tile__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.lv-link-tile__name {
+  font-weight: 650;
+  line-height: 20px;
+}
+.lv-link-tile__detail {
+  color: #616161;
+  line-height: 20px;
+}
+
 @media (pointer: coarse) {
   .lv-btn {
     --lv-btn-height: 44px;
@@ -356,8 +824,16 @@
 
 @media (prefers-reduced-motion: reduce) {
   .lv-btn,
-  .lv-seg__text {
+  .lv-seg__text,
+  .lv-tile,
+  .lv-option,
+  .lv-option__radio,
+  .lv-link-tile,
+  .lv-more__chevron {
     transition: none;
+  }
+  .lv-tile:hover {
+    transform: none;
   }
   .lv-btn__spinner {
     animation-duration: 1.6s;

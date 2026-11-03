@@ -173,6 +173,9 @@ export function OwnKeysCard({ data, i18n, fetchers, primary, top }: OwnKeysCardP
   return (
     <SettingSection
       id={KEYS_CARD}
+      // The keys' tile: its icon and colour (app.settings.tsx, SECTION_LOOK).
+      icon="key"
+      tint="slate"
       heading={t("settings.section.keys")}
       state={manage ? keysState(i18n, data.keys) : null}
       lead={data.access === "plan" ? t("settings.keys.lead") : undefined}

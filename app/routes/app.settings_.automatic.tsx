@@ -39,7 +39,7 @@ import { SUB_HEADING } from "../components/plan/styles";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
 import { FactList, focusById, InlineNotice, SETTING_NAME, SettingCard, StateLine, useFreshResult, type SettingState } from "../components/SettingsParts";
 import { scheduleSummary, smartErrorText, SmartPreview, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
-import { groupLabel, itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
+import { itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { effectivePublishMode } from "../lib/automation-state";
 import { consentLead, enginesText, isDeepLOnly } from "../lib/engine-texts";
@@ -963,7 +963,8 @@ export default function SmartAutomatic() {
                     <s-choice-list name="group" label={t("automatic.fields.groups")} multiple disabled={readOnly}>
                       {SMART_FIELD_GROUPS.map((g) => (
                         <s-choice key={g} value={g} defaultSelected={config?.fieldGroups.includes(g) ?? false}>
-                          {groupLabel(i18n, g)}
+                          {/* The Coverage page's names for the field groups ("Titles and names", "SEO titles"), never the codes. */}
+                          {t(`coverage.group.${g}`)}
                         </s-choice>
                       ))}
                     </s-choice-list>

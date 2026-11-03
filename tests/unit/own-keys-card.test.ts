@@ -116,8 +116,9 @@ describe("Your translation keys", () => {
     expect(words).toContain("On the Own key plan, Linguva translates only with your own keys.");
     expect(words).toContain("No key yet. Add at least one to translate with AI.");
     expect(words).toContain("DeepL, Microsoft Azure, and Google Cloud bill you for every character");
-    expect(html).toMatch(/<details open="">/);
-    expect(html.match(/<details open/g)).toHaveLength(1);
+    // Open at first (the disclosure carries its class before the attribute).
+    expect(html).toMatch(/<details[^>]*\sopen=""/);
+    expect(html.match(/<details[^>]*\sopen=""/g)).toHaveLength(1);
     expect(html.match(/variant="primary"/g)).toHaveLength(1);
     expect(words).toContain("Nothing translated through your keys this calendar month (UTC) yet.");
     // A saved key: the cost note names its service; usage and DeepL's own figure.

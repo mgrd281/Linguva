@@ -64,7 +64,7 @@ import { BIG_HEADING, Breadcrumbs } from "../components/LanguageLayout";
 import { STAT, SUB_HEADING } from "../components/plan/styles";
 import { ProgressBar } from "../components/ProgressBar";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
-import { NARROW_ONLY, SectionList, SectionNav, StatusRow, WIDE_ONLY, type SectionEntry, type StatusView } from "../components/SettingsNav";
+import { NARROW_ONLY, SectionTiles, StatusRow, WIDE_ONLY, type SectionEntry, type StatusView, type Tint } from "../components/SettingsNav";
 import {
   Actions,
   FactList,
@@ -76,6 +76,7 @@ import {
   More,
   OptionCard,
   OptionGrid,
+  OptionPanel,
   SETTING_NAME,
   SettingSection,
   StateBadge,
@@ -360,13 +361,33 @@ const PAUSE_SHORT: Record<string, string> = {
 
 /** The pages beside the settings that aren't in the navigation (the glossary and memory also open from their sections). */
 const TOOLS = [
-  { href: "/app/glossary", icon: "book-open", label: "common.nav.glossary", detail: "settings.tools.glossary.detail" },
-  { href: "/app/languages", icon: "language", label: "common.languages", detail: "settings.tools.languages.detail" },
-  { href: "/app/markets", icon: "globe", label: "settings.tools.markets.label", detail: "settings.tools.markets.detail" },
-  { href: "/app/memory", icon: "database", label: "common.nav.memory", detail: "settings.tools.memory.detail" },
-  { href: "/app/coverage", icon: "chart-donut", label: "settings.tools.coverage.label", detail: "settings.tools.coverage.detail" },
-  { href: "/app/translations", icon: "transfer", label: "transfer.page.heading", detail: "settings.tools.transfer.detail" },
+  { href: "/app/glossary", icon: "book-open", tint: "violet", label: "common.nav.glossary", detail: "settings.tools.glossary.detail" },
+  { href: "/app/languages", icon: "language", tint: "blue", label: "common.languages", detail: "settings.tools.languages.detail" },
+  { href: "/app/markets", icon: "globe", tint: "teal", label: "settings.tools.markets.label", detail: "settings.tools.markets.detail" },
+  { href: "/app/memory", icon: "database", tint: "amber", label: "common.nav.memory", detail: "settings.tools.memory.detail" },
+  { href: "/app/coverage", icon: "chart-donut", tint: "green", label: "settings.tools.coverage.label", detail: "settings.tools.coverage.detail" },
+  { href: "/app/translations", icon: "transfer", tint: "slate", label: "transfer.page.heading", detail: "settings.tools.transfer.detail" },
 ] as const;
+
+/** Each section's icon and the colour of its square, the same on its tile and wherever it is named. */
+const SECTION_LOOK: Record<SectionKey, { icon: IconName; tint: Tint }> = {
+  changes: { icon: "automation", tint: "blue" },
+  publish: { icon: "send", tint: "green" },
+  style: { icon: "text-quote", tint: "violet" },
+  memory: { icon: "database", tint: "amber" },
+  keys: { icon: "key", tint: "slate" },
+  ai: { icon: "shield-check-mark", tint: "teal" },
+  plan: { icon: "gauge", tint: "rose" },
+  tools: { icon: "wrench", tint: "grey" },
+};
+
+/**
+ * A tile's words as they may break (a tile is about 100 px wide): German compounds that fit no line get a
+ * soft hyphen, and "KI-" a non-breaking one, so no line ends in "KI-" (docs/I18N_REVIEW.md). Every other
+ * word stays as it is.
+ */
+const BREAKS: Record<string, string> = { Übersetzungsspeicher: "Übersetzungs\u00ADspeicher", Veröffentlichen: "Veröffent\u00ADlichen" };
+const breakable = (text: string) => text.replace(/\p{L}{14,}/gu, (word) => BREAKS[word] ?? word).replace(/(^|\s)KI-/g, "$1KI\u2011");
 
 // ─── States in words ──────────────────────────────────────────────────────────
 
@@ -519,7 +540,7 @@ export default function Settings() {
   ];
 
   const texts = sectionTexts(data, i18n);
-  const entry = (key: SectionKey): SectionEntry => ({ key, href: sectionHref(key), ...texts[key] });
+  const entry = (key: SectionKey): SectionEntry => ({ key, href: sectionHref(key), ...texts[key], tileName: breakable(texts[key].name), state: breakable(texts[key].state), ...SECTION_LOOK[key] });
   const groups = [available.filter((key) => FIRST_GROUP.includes(key)).map(entry), available.filter((key) => !FIRST_GROUP.includes(key)).map(entry)];
 
   // The status row's fix: the page's primary button where it is the next step. Where its section is
@@ -551,24 +572,24 @@ export default function Settings() {
               <StatusRow id="settings-status" status={status} action={statusAction} />
             </s-stack>
           </s-box>
-          <s-grid gridTemplateColumns="@container (inline-size > 640px) 260px 1fr, 1fr" gap="base" alignItems="start">
-            <s-box display={WIDE_ONLY}>
-              <SectionNav label={t("settings.section.nav")} groups={groups} current={current} />
+          {/* The sections as square buttons: on a wide page one row above the chosen section (framed in
+              blue); on a phone the grid of all of them, each opening its section alone. */}
+          <s-box display={WIDE_ONLY}>
+            <SectionTiles label={t("settings.section.nav")} groups={groups} current={current} />
+          </s-box>
+          {requested ? null : (
+            <s-box display={NARROW_ONLY}>
+              <SectionTiles label={t("settings.section.nav")} groups={groups} current={null} />
             </s-box>
-            {requested ? null : (
-              <s-box display={NARROW_ONLY}>
-                <SectionList label={t("settings.section.nav")} groups={groups} />
-              </s-box>
-            )}
-            {/* Every section stays on the page; only the chosen one is shown (a phone without one shows the list). */}
-            <s-box display={requested ? "auto" : WIDE_ONLY} minInlineSize="0">
-              {sections.map(([key, node]) => (
-                <div key={key} hidden={key !== current}>
-                  {node}
-                </div>
-              ))}
-            </s-box>
-          </s-grid>
+          )}
+          {/* Every section stays on the page; only the chosen one is shown (a phone without one shows the tiles). */}
+          <s-box display={requested ? "auto" : WIDE_ONLY} minInlineSize="0">
+            {sections.map(([key, node]) => (
+              <div key={key} hidden={key !== current}>
+                {node}
+              </div>
+            ))}
+          </s-box>
           {/* When the running version went live: under the sections (on a phone, under the list). */}
           <s-box display={requested ? WIDE_ONLY : "auto"}>
             <AppVersionLine version={data.version} now={data.now} />
@@ -599,12 +620,11 @@ function hasFormalityChoice(data: Data, locale: string): boolean {
 
 // ─── The sections in the nav and the status row ───────────────────────────────
 
-/** A section's name, icon and state: one line for the wide nav, up to two for the phone list. */
+/** A section's name and its state in a few words (its tile shows up to two lines), in a tone where it needs the merchant. */
 interface SectionText {
   name: string;
-  icon: IconName;
-  summary: string;
-  detail: string;
+  state: string;
+  tone?: "warning" | "critical" | null;
 }
 
 /** The form of address in a few words: DeepL decides, formal, informal, per language, or no language yet. */
@@ -620,15 +640,20 @@ function addressSummary(data: Data, i18n: I18n): string {
   return t("settings.summary.style.mixed");
 }
 
-/** The keys in a few words: they work, one needs attention, none yet, or unused on this plan. */
-function keysSummary(data: Data, i18n: I18n): string {
+/** The keys in a few words: they work, one needs a look, none yet, or unused on this plan; in a tone where they need the merchant. */
+function keysSummary(data: Data, i18n: I18n): Omit<SectionText, "name"> {
   const { t } = i18n;
   const own = data.ownKeys;
-  if (!own) return "";
-  if (own.access === "off") return t("settings.keys.offPlan.heading");
-  if (own.keys.some((k) => k.status !== "OK")) return t("settings.summary.keys.problem");
+  if (!own) return { state: "", tone: null };
+  if (own.access === "off") return { state: t("settings.changes.line.notInPlan"), tone: null };
+  if (own.keys.some((k) => k.status !== "OK")) {
+    const refused = own.keys.some((k) => k.status === "REFUSED" || k.status === "UNREADABLE");
+    return { state: t("settings.tile.keys.problem"), tone: refused ? "critical" : "warning" };
+  }
   const usable = own.keys.filter(usableOwnKey).length;
-  return usable ? t("settings.summary.keys.ok", { count: usable }) : t("settings.summary.keys.none");
+  if (usable) return { state: t("settings.summary.keys.ok", { count: usable }), tone: null };
+  // On the Own key plan nothing translates with AI before the first key.
+  return { state: t("settings.summary.keys.none"), tone: own.plan ? "warning" : null };
 }
 
 /** The plan's name as the Plan page's hero names it ("Pro", "Owner access", "No plan chosen"). */
@@ -653,39 +678,23 @@ function sectionTexts(data: Data, i18n: I18n): Record<SectionKey, SectionText> {
   const { t } = i18n;
   const changes = changesView(data, i18n);
   const way = changes.mode === "basic" ? t("settings.changes.basic.title") : changes.mode === "smart" ? t("settings.changes.smart.title") : t("settings.changes.manual.title");
-  // Paused, stopped or waiting: said in the nav too.
-  const attention = changes.badge.tone === "warning" || changes.badge.tone === "critical";
+  // Paused, stopped or waiting: the tile says that, in its tone (its section says the rest).
+  const attention = changes.badge.tone === "warning" || changes.badge.tone === "critical" ? changes.badge.tone : null;
   const publish = effectivePublishMode({ mode: data.publishMode, inPlan: data.autoPublishInPlan });
   const publishTitle = publish === "AUTO_PUBLISH" ? t("settings.publish.auto.title") : t("settings.publish.review.title");
-  const publishLine =
-    data.publishMode === "AUTO_PUBLISH" && !data.autoPublishInPlan
-      ? t("settings.summary.publish.notInPlan")
-      : publish === "AUTO_PUBLISH"
-        ? t("settings.summary.publish.auto")
-        : t("settings.summary.publish.review");
-  const address = addressSummary(data, i18n);
   const memory = data.reuseMachineMemory ? t("settings.memory.machine.title") : t("settings.memory.approved.title");
-  const keys = keysSummary(data, i18n);
-  const tokens = data.engines.text;
-  const ai = data.consent ? t("common.state.allowed") : t("settings.ai.notAllowed");
-  // Allowed: who translates (one service by its legal name, several by their names).
-  const aiDetail = !data.consent ? t("settings.summary.ai.missing") : tokens.length === 1 ? processorsText(i18n, tokens) : tokens.length ? enginesText(i18n, tokens) : ai;
-  const plan = planSummary(data, i18n);
-  const tools = t("settings.summary.tools");
+  const level = usageLevel(data.used, data.limit);
+  // Own key plan: no allowance of Linguva's to run out.
+  const planTone = data.ownKeys?.plan ? null : level === "exhausted" ? "critical" : level === "high" ? "warning" : null;
   return {
-    changes: { name: t("settings.changes.heading"), icon: "settings", summary: attention ? `${way} · ${changes.badge.label}` : way, detail: changes.line },
-    publish: { name: t("settings.publish.heading"), icon: "send", summary: publishTitle, detail: `${publishTitle} · ${publishLine}` },
-    style: {
-      name: t("settings.section.style"),
-      icon: "chat",
-      summary: address,
-      detail: `${address} · ${data.style.storeContext ? t("settings.summary.style.withContext") : t("settings.summary.style.withoutContext")}`,
-    },
-    memory: { name: t("common.nav.memory"), icon: "database", summary: memory, detail: memory },
-    keys: { name: t("settings.section.keys"), icon: "key", summary: keys, detail: keys },
-    ai: { name: t("settings.ai.heading"), icon: "shield-check-mark", summary: ai, detail: aiDetail },
-    plan: { name: t("settings.section.plan"), icon: "gauge", summary: plan, detail: plan },
-    tools: { name: t("settings.tools.heading"), icon: "wrench", summary: tools, detail: tools },
+    changes: { name: t("settings.changes.heading"), state: attention ? changes.badge.label : way, tone: attention },
+    publish: { name: t("settings.publish.heading"), state: publishTitle },
+    style: { name: t("settings.section.style"), state: addressSummary(data, i18n) },
+    memory: { name: t("common.nav.memory"), state: memory },
+    keys: { name: t("settings.section.keys"), ...keysSummary(data, i18n) },
+    ai: data.consent ? { name: t("settings.ai.heading"), state: t("common.state.allowed") } : { name: t("settings.ai.heading"), state: t("settings.ai.notAllowed"), tone: "warning" },
+    plan: { name: t("settings.section.plan"), state: planSummary(data, i18n), tone: planTone },
+    tools: { name: t("settings.tools.heading"), state: t("settings.tile.tools") },
   };
 }
 
@@ -740,14 +749,23 @@ function pageStatus(data: Data, i18n: I18n): PageStatus {
   if (changes.badge.tone === "warning" || changes.badge.tone === "critical") {
     return {
       tone: changes.badge.tone,
-      title: t("settings.changes.heading"),
-      badge: changes.badge,
+      title: changesStatusTitle(changes, i18n),
       detail: changes.line,
       section: "changes",
       action: { label: t("settings.status.changes.action"), href: sectionHref("changes") },
     };
   }
   return { tone: "success", title: t("settings.status.ok"), section: null, action: null };
+}
+
+/** What is wrong with translating changes, as a sentence ("Automatic translation is paused"). */
+function changesStatusTitle(view: ReturnType<typeof changesView>, i18n: I18n): string {
+  const { t } = i18n;
+  if (view.mode === "smart") return view.smart === "waiting" ? t("settings.status.smart.waiting") : t("automatic.paused.heading");
+  if (view.basic === "plan") return t("settings.status.changes.stopped");
+  if (view.basic === "paused") return t("settings.auto.paused.heading");
+  if (view.basic === "consent") return t("settings.auto.waitingConsent.heading");
+  return t("settings.status.changes.waiting");
 }
 
 // ─── Plan and tools ───────────────────────────────────────────────────────────
@@ -765,7 +783,7 @@ function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
         ? { label: t("settings.usage.high"), icon: "alert-triangle", tone: "warning" }
         : null;
   return (
-    <SettingSection id="settings-plan" heading={t("settings.section.plan")} lead={own ? t("settings.plan.lead.ownKey") : t("settings.plan.lead")}>
+    <SettingSection id="settings-plan" {...SECTION_LOOK.plan} heading={t("settings.section.plan")} lead={own ? t("settings.plan.lead.ownKey") : t("settings.plan.lead")}>
       <s-stack direction="block" gap="small-500">
         <s-text color="subdued">{t("common.nav.plan")}</s-text>
         <strong style={STAT}>{planLabel(data, i18n)}</strong>
@@ -795,8 +813,8 @@ function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
 function ToolsCard({ i18n }: { i18n: I18n }) {
   const { t } = i18n;
   return (
-    <SettingSection id="settings-tools" heading={t("settings.tools.heading")} lead={t("settings.tools.lead")}>
-      <LinkTiles label={t("settings.tools.heading")} links={TOOLS.map((tool) => ({ href: tool.href, icon: tool.icon, name: t(tool.label), detail: t(tool.detail) }))} />
+    <SettingSection id="settings-tools" {...SECTION_LOOK.tools} heading={t("settings.tools.heading")} lead={t("settings.tools.lead")}>
+      <LinkTiles label={t("settings.tools.heading")} links={TOOLS.map((tool) => ({ href: tool.href, icon: tool.icon, tint: tool.tint, name: t(tool.label), detail: t(tool.detail) }))} />
     </SettingSection>
   );
 }
@@ -817,7 +835,7 @@ function ownKeyMissing(data: Data): boolean {
 /** "Add your translation key first.", leading to the keys section. */
 function NoKeyLine({ i18n }: { i18n: I18n }) {
   return (
-    <StateLine icon="connect">
+    <StateLine icon="key">
       <s-link href={sectionHref("keys")}>{i18n.t("settings.changes.line.noKey")}</s-link>
     </StateLine>
   );
@@ -874,7 +892,7 @@ function changesView(data: Data, i18n: I18n): { mode: ReturnType<typeof changesM
                 : t("settings.changes.line.basic", { languages: languageList(i18n, names, 2) });
     // Own key plan without a key: it needs the merchant's key, not the installation.
     const badge: SettingState =
-      basic === "unavailable" && ownKeyMissing(data) ? { label: t("settings.changes.badge.noKey"), icon: "connect", tone: "warning" } : basicBadge(i18n, basic);
+      basic === "unavailable" && ownKeyMissing(data) ? { label: t("settings.changes.badge.noKey"), icon: "key", tone: "warning" } : basicBadge(i18n, basic);
     return { mode, basic, smart, badge, line };
   }
   return { mode, basic, smart, badge: { label: t("common.state.off"), icon: "minus-circle", tone: "neutral" }, line: t("settings.changes.line.manual") };
@@ -923,7 +941,7 @@ function ChangesCard({
   );
   const needsConsent = (
     <s-stack direction="block" gap="small-200">
-      <StateLine icon="lock">{t("settings.changes.needsConsent")}</StateLine>
+      <StateLine icon="shield-check-mark">{t("settings.changes.needsConsent")}</StateLine>
       <s-stack direction="inline">{grantButton()}</s-stack>
     </s-stack>
   );
@@ -1066,7 +1084,8 @@ function ChangesCard({
       state = <SmartStateBanner status={data.smart.status} zone={data.smart.zone} consentAction={<s-stack direction="inline">{grantButton()}</s-stack>} />;
     }
   } else {
-    state = <StateLine icon="play-circle">{t("settings.auto.offBody")}</StateLine>;
+    // Off: the current option says it already.
+    state = null;
   }
 
   const smartSummary =
@@ -1076,21 +1095,28 @@ function ChangesCard({
   const locked = !data.auto.planIncludes && !entitled && !smartConfig;
   // A refused language choice is shown where it was made.
   const errorInBasic = mode === "basic" || choosingBasic;
+  // Shortly after saving's languages: while it is the way (and the plan still has it), or while it is being chosen.
+  const showBasicForm =
+    data.auto.planIncludes && data.auto.available && (data.consent || mode === "basic") && ((mode === "basic" && basic !== "plan") || choosingBasic);
   // Business with a lock: the plan doesn't include the schedule (kept, and stopped, after a move to another plan).
   const lockedBusiness = <s-badge icon="lock">{t("automatic.business")}</s-badge>;
 
   return (
     <SettingSection
       id="settings-changes"
+      {...SECTION_LOOK.changes}
       heading={t("settings.changes.heading")}
-      state={view.badge}
+      // "Off" is the current option's own word; any other state adds to it.
+      state={mode === "manual" ? null : view.badge}
       extra={mode === "smart" && smart === "plan" ? lockedBusiness : null}
       lead={t("settings.changes.lead")}
     >
       {state}
-      <OptionGrid label={t("settings.changes.heading")} min={240}>
+      <OptionGrid label={t("settings.changes.heading")} min={220}>
         <OptionCard
           id="settings-changes-manual"
+          icon="play-circle"
+          tint="slate"
           title={t("settings.changes.manual.title")}
           body={t("settings.changes.manual.body")}
           current={mode === "manual"}
@@ -1099,6 +1125,8 @@ function ChangesCard({
         />
         <OptionCard
           id="settings-changes-basic"
+          icon="automation"
+          tint="blue"
           title={t("settings.changes.basic.title")}
           body={t("settings.changes.basic.body")}
           current={mode === "basic"}
@@ -1109,6 +1137,7 @@ function ChangesCard({
               : undefined
           }
         >
+          {/* What stands in its way, at its foot; its languages are in the panel below. */}
           {!data.auto.planIncludes ? (
             mode === "basic" ? null : (
               <LockLine plan="Starter" text={t("settings.changes.basic.plan")} {...(lockLink ? { link: lockLink } : {})} />
@@ -1117,13 +1146,12 @@ function ChangesCard({
             mode === "basic" ? null : ownKeyMissing(data) ? <NoKeyLine i18n={i18n} /> : <StateLine icon="disabled">{t("settings.changes.line.unavailable")}</StateLine>
           ) : !data.consent && mode !== "basic" ? (
             needsConsent
-          ) : (mode === "basic" && basic !== "plan") || choosingBasic ? (
-            basicForm
           ) : null}
-          {errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
         </OptionCard>
         <OptionCard
           id="settings-changes-smart"
+          icon="calendar-time"
+          tint="violet"
           title={t("settings.changes.smart.title")}
           body={t("settings.changes.smart.body")}
           current={mode === "smart"}
@@ -1140,24 +1168,8 @@ function ChangesCard({
                   : undefined
           }
         >
-          {mode === "smart" && smartSummary ? (
-            <s-stack direction="block" gap="small-200">
-              <StateLine icon="calendar-time">{smartSummary}</StateLine>
-              {/* Stopped by the plan: the notice above has the way on. */}
-              {smart === "plan" ? null : (
-                <Actions wide={300}>
-                  {data.smart?.status.state === "on" ? (
-                    <Button onClick={() => smartAct("check-now", { key: data.smartCheckKey })} {...(smartFetcher.state !== "idle" ? { loading: true } : {})}>
-                      {t("automatic.action.checkNow")}
-                    </Button>
-                  ) : null}
-                  <Button href="/app/settings/automatic">
-                    {t("automatic.action.options")}
-                  </Button>
-                </Actions>
-              )}
-            </s-stack>
-          ) : !entitled ? (
+          {/* Its summary and actions are in the panel below once it is the current way. */}
+          {mode === "smart" && smartSummary ? null : !entitled ? (
             <LockLine plan="Business" text={t("settings.changes.smart.plan")} {...(lockLink ? { link: lockLink } : {})} />
           ) : !smartConfig ? (
             <StateLine icon="info">{t("settings.changes.smart.setUp")}</StateLine>
@@ -1170,7 +1182,30 @@ function ChangesCard({
           ) : null}
         </OptionCard>
       </OptionGrid>
-      {!errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
+      {/* The chosen way's details, under the choices: shortly after saving's languages, the schedule's summary. */}
+      {showBasicForm ? (
+        <OptionPanel label={t("settings.auto.languages")} icon="automation" tint="blue" title={t("settings.changes.basic.title")}>
+          {basicForm}
+          {errorInBasic && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
+        </OptionPanel>
+      ) : null}
+      {mode === "smart" && smartSummary ? (
+        <OptionPanel label={t("settings.changes.smart.summary")} icon="calendar-time" tint="violet" title={t("settings.changes.smart.title")}>
+          <StateLine icon="clock">{smartSummary}</StateLine>
+          {/* Stopped by the plan: the notice above has the way on. */}
+          {smart === "plan" ? null : (
+            <Actions wide={300}>
+              {data.smart?.status.state === "on" ? (
+                <Button onClick={() => smartAct("check-now", { key: data.smartCheckKey })} {...(smartFetcher.state !== "idle" ? { loading: true } : {})}>
+                  {t("automatic.action.checkNow")}
+                </Button>
+              ) : null}
+              <Button href="/app/settings/automatic">{t("automatic.action.options")}</Button>
+            </Actions>
+          )}
+        </OptionPanel>
+      ) : null}
+      {(!errorInBasic || !showBasicForm) && autoError ? <AutoError i18n={i18n} error={autoError} tokens={data.engines.text} /> : null}
       {/* Own key plan: nothing limits automatic translation through the keys but the services' own budgets. */}
       {data.ownKeys?.plan && data.ownKeys.keys.some(usableOwnKey) && data.auto.planIncludes ? (
         <StateLine icon="cash-dollar" tone="caution">
@@ -1247,12 +1282,7 @@ function PublishingCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetch
   const choose = (next: PublishMode, confirmed: boolean) =>
     fetcher.submit({ intent: "publish-mode", mode: next, ...(confirmed ? { confirm: "on" } : {}) }, { method: "post" });
   return (
-    <SettingSection
-      id="settings-publish"
-      heading={t("settings.publish.heading")}
-      state={mode === "AUTO_PUBLISH" ? { label: t("settings.publish.state.auto"), icon: "bolt", tone: "warning" } : { label: t("settings.publish.state.review"), icon: "eye-check-mark", tone: "success" }}
-      lead={t("settings.publish.scope")}
-    >
+    <SettingSection id="settings-publish" {...SECTION_LOOK.publish} heading={t("settings.publish.heading")} lead={t("settings.publish.scope")}>
       {downgraded ? <StateLine icon="lock">{t("settings.publish.notInPlan")}</StateLine> : null}
       <PublishingChoice id="settings-publish" mode={mode} stored={downgraded} inPlan={data.autoPublishInPlan} onChoose={choose} busy={fetcher.state !== "idle"} lockLink={data.style.languages.length > 0} />
       {error === "PLAN_AUTO_PUBLISH" ? (
@@ -1294,7 +1324,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
   // No DeepL at all (Azure, Google or both): no service in use reads the store context.
   const contextUnused = !data.engines.text.includes("deepl");
   return (
-    <SettingSection id="settings-style" heading={t("settings.section.style")} lead={t("settings.style.lead")}>
+    <SettingSection id="settings-style" {...SECTION_LOOK.style} heading={t("settings.section.style")} lead={t("settings.style.lead")}>
       <ui-save-bar id={STYLE_SAVE_BAR}>
         <button variant="primary" onClick={() => formRef.current?.requestSubmit()} {...(fetcher.state !== "idle" ? { loading: "" } : {})}>
           {t("automatic.action.save")}
@@ -1332,7 +1362,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
             rows={2}
           />
           <StateLine icon="book-open">
-            {t("settings.style.glossary", { count: data.glossaryTerms })} <s-link href="/app/glossary">{t("settings.style.glossaryLink")}</s-link>
+            {t("settings.style.glossary", { count: data.glossaryTerms })} · <s-link href="/app/glossary">{t("settings.style.glossaryLink")}</s-link>
           </StateLine>
         </s-stack>
       </fetcher.Form>
@@ -1429,15 +1459,12 @@ function MemoryCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: 
   const busy = fetcher.state !== "idle";
   const choose = (enabled: boolean) => fetcher.submit({ intent: "reuse-memory", enabled: String(enabled) }, { method: "post" });
   return (
-    <SettingSection
-      id="settings-memory"
-      heading={t("common.nav.memory")}
-      state={data.reuseMachineMemory ? { label: t("settings.memory.machine.title"), icon: "wand", tone: "neutral" } : { label: t("settings.memory.approved.title"), icon: "check-circle", tone: "neutral" }}
-      lead={t("settings.memory.lead")}
-    >
+    <SettingSection id="settings-memory" {...SECTION_LOOK.memory} heading={t("common.nav.memory")} lead={t("settings.memory.lead")}>
       <OptionGrid label={t("common.nav.memory")}>
         <OptionCard
           id="settings-memory-approved"
+          icon="eye-check-mark"
+          tint="green"
           title={t("settings.memory.approved.title")}
           body={t("settings.memory.approved.details")}
           current={!data.reuseMachineMemory}
@@ -1446,6 +1473,8 @@ function MemoryCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: 
         />
         <OptionCard
           id="settings-memory-machine"
+          icon="wand"
+          tint="violet"
           title={t("settings.memory.machine.title")}
           body={t("settings.memory.machine.details")}
           current={data.reuseMachineMemory}
@@ -1499,6 +1528,7 @@ function PermissionCard({
   return (
     <SettingSection
       id="settings-ai"
+      {...SECTION_LOOK.ai}
       heading={t("settings.ai.heading")}
       state={data.consent ? { label: t("common.state.allowed"), icon: "check-circle", tone: "success" } : { label: t("settings.ai.notAllowed"), icon: "minus-circle", tone: "warning" }}
       // Since when: "Allowed  since November 3, 2026".
@@ -1506,35 +1536,20 @@ function PermissionCard({
       lead={noKey ? undefined : lead(tokens)}
       top={top}
     >
+      {/* The operator's engines only: an own-key shop without a key adds one instead (the keys card). */}
+      {!data.aiAvailable && !data.ownKeys?.plan ? (
+        <s-banner tone="warning" heading={t("settings.ai.notConfigured.heading")}>
+          <s-paragraph>{t("settings.ai.notConfigured.body")}</s-paragraph>
+        </s-banner>
+      ) : null}
       {changed ? (
         <s-banner tone="warning">
           <s-paragraph>{t("settings.ai.changed")}</s-paragraph>
         </s-banner>
       ) : null}
-      <More summary={t("settings.ai.detailsSummary")}>
-        <s-paragraph>{deeplOnly ? t("settings.ai.personal") : t("settings.ai.personal.multi")}</s-paragraph>
-        <s-paragraph>{t("settings.ai.details")}</s-paragraph>
-      </More>
-      <s-stack direction="inline">
-        {data.consent ? (
-          <Button commandFor={REVOKE_MODAL} command="--show" {...(busy ? { loading: true } : {})}>
-            {t("settings.ai.withdraw")}
-          </Button>
-        ) : noKey ? (
-          <StateLine icon="connect">{t("settings.ai.noKey")}</StateLine>
-        ) : (
-          <fetcher.Form method="post">
-            <input type="hidden" name="intent" value="grant-consent" />
-            <ConsentTokensInput data={data} />
-            <Button type="submit" variant={primary ? "primary" : "secondary"} {...(busy ? { loading: true } : {})}>
-              {t("settings.ai.allow")}
-            </Button>
-          </fetcher.Form>
-        )}
-      </s-stack>
       {data.consent && data.engines.missing.length ? (
         // Engines added after the shop's consent: used only once the merchant allows them too.
-        <s-box padding="base" border="base" borderRadius="base">
+        <s-box padding="base" border="base" borderRadius="large-100">
           <s-stack direction="block" gap="small-200">
             <s-heading>{t("settings.ai.extra.heading")}</s-heading>
             <s-paragraph>
@@ -1558,12 +1573,28 @@ function PermissionCard({
           </s-stack>
         </s-box>
       ) : null}
-      {/* The operator's engines only: an own-key shop without a key adds one instead (the keys card). */}
-      {!data.aiAvailable && !data.ownKeys?.plan ? (
-        <s-banner tone="warning" heading={t("settings.ai.notConfigured.heading")}>
-          <s-paragraph>{t("settings.ai.notConfigured.body")}</s-paragraph>
-        </s-banner>
-      ) : null}
+      <More summary={t("settings.ai.detailsSummary")}>
+        <s-paragraph>{deeplOnly ? t("settings.ai.personal") : t("settings.ai.personal.multi")}</s-paragraph>
+        <s-paragraph>{t("settings.ai.details")}</s-paragraph>
+      </More>
+      <s-stack direction="inline">
+        {data.consent ? (
+          // Stops all AI translation: the critical tone, as its dialog's button.
+          <Button tone="critical" commandFor={REVOKE_MODAL} command="--show" {...(busy ? { loading: true } : {})}>
+            {t("settings.ai.withdraw")}
+          </Button>
+        ) : noKey ? (
+          <StateLine icon="key">{t("settings.ai.noKey")}</StateLine>
+        ) : (
+          <fetcher.Form method="post">
+            <input type="hidden" name="intent" value="grant-consent" />
+            <ConsentTokensInput data={data} />
+            <Button type="submit" variant={primary ? "primary" : "secondary"} {...(busy ? { loading: true } : {})}>
+              {t("settings.ai.allow")}
+            </Button>
+          </fetcher.Form>
+        )}
+      </s-stack>
       <s-modal id={REVOKE_MODAL} heading={t("settings.ai.revoke.heading")} accessibilityLabel={t("settings.ai.revoke.heading")}>
         <s-paragraph>{deeplOnly ? t("settings.ai.revoke.body") : t("settings.ai.revoke.body.multi", { engines: enginesText(i18n, tokens) })}</s-paragraph>
         <s-button slot="primary-action" variant="primary" tone="critical" commandFor={REVOKE_MODAL} command="--hide" onClick={revoke}>

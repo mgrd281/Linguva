@@ -10,7 +10,8 @@
  * badge rules; inline styles only for type sizes, list resets and the
  * current option's ring. Every state is an icon and words.
  */
-import { Children, Fragment, isValidElement, useEffect, useRef, type ReactNode, type SyntheticEvent } from "react";
+import { Children, Fragment, isValidElement, useEffect, useRef, type CSSProperties, type ReactNode, type SyntheticEvent } from "react";
+import { Link } from "react-router";
 import type { IconName } from "../lib/icons";
 import { IconTile } from "./CategoryCard";
 import { CARD, H2 } from "./ContentTiles";
@@ -24,6 +25,19 @@ export interface SettingState {
   label: string;
   icon: IconName;
   tone: StateTone;
+}
+
+/** A section's or an option's colour behind its icon: names a place, never a state (ui.css, [data-tint]). */
+export type Tint = "blue" | "green" | "violet" | "amber" | "slate" | "teal" | "rose" | "grey";
+
+/** An icon in its tinted square (a section's tile, an option, a tool); 40 px unless `size` says otherwise. */
+export function IconSquare({ icon, tint, size = 40 }: { icon: IconName; tint: Tint; size?: number }) {
+  const style: CSSProperties | undefined = size === 40 ? undefined : { width: size, height: size, borderRadius: Math.round(size * 0.3) };
+  return (
+    <span className="lv-icon-square" data-tint={tint} aria-hidden="true" style={style}>
+      <s-icon type={icon} color="base" size={size < 32 ? "small" : "base"} />
+    </span>
+  );
 }
 
 export function StateBadge({ state }: { state: SettingState }) {
@@ -79,6 +93,8 @@ export function useFreshResult<T>(fetcher: { state: string; data?: T }, onResult
  */
 export function SettingSection({
   id,
+  icon,
+  tint = "grey",
   heading,
   state,
   extra,
@@ -87,6 +103,9 @@ export function SettingSection({
   children,
 }: {
   id: string;
+  /** Its tile's icon and colour, beside the heading (hidden on a narrow screen). */
+  icon?: IconName;
+  tint?: Tint;
   heading: string;
   state?: SettingState | null;
   /** Beside the state (the plan's badge). */
@@ -99,16 +118,25 @@ export function SettingSection({
   return (
     <section id={id} aria-labelledby={`${id}-heading`} style={{ scrollMarginTop: 16 }}>
       <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-400">
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <h2 id={`${id}-heading`} tabIndex={-1} style={{ ...SECTION_HEADING, ...FOCUS_TARGET }}>
-              {heading}
-            </h2>
-            {state ? <StateBadge state={state} /> : null}
-            {extra}
-          </s-stack>
-          {lead ? <s-text color="subdued">{lead}</s-text> : null}
-        </s-stack>
+        <s-query-container>
+          <s-grid gridTemplateColumns={icon ? "@container (inline-size > 520px) auto 1fr, 1fr" : "1fr"} gap="small-200 base" alignItems="center">
+            {icon ? (
+              <s-box display="@container (inline-size > 520px) auto, none">
+                <IconSquare icon={icon} tint={tint} />
+              </s-box>
+            ) : null}
+            <s-stack direction="block" gap="small-500">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <h2 id={`${id}-heading`} tabIndex={-1} style={{ ...SECTION_HEADING, ...FOCUS_TARGET }}>
+                  {heading}
+                </h2>
+                {state ? <StateBadge state={state} /> : null}
+                {extra}
+              </s-stack>
+              {lead ? <s-text color="subdued">{lead}</s-text> : null}
+            </s-stack>
+          </s-grid>
+        </s-query-container>
         {top}
         {Children.toArray(children).length ? (
           <s-box {...CARD} padding="base">
@@ -183,14 +211,18 @@ export interface OptionSelect {
 }
 
 /**
- * One choice, drawn like the Plan page's plan cards: its name, badges and
- * what it means. The current one carries "Current setting" and the ring in
- * the text's colour. Any other one that can be chosen is one tap target as a
- * whole (its header); what belongs to it (languages, a lock, a summary)
- * follows below.
+ * One choice, as a tile (styles in ui.css, .lv-option): its icon in a tinted
+ * square, its badges, name and what it means. The current one carries
+ * "Current setting" and the blue frame of the current section's tile. Any
+ * other one that can be chosen is one button as a whole (a link when
+ * choosing it opens a page, a dialog's opener when it asks first); what
+ * belongs to it (a lock, what it needs first) sits at its foot. Tiles in a
+ * row are equally high.
  */
 export function OptionCard({
   id,
+  icon,
+  tint = "grey",
   title,
   body,
   current,
@@ -200,6 +232,8 @@ export function OptionCard({
   children,
 }: {
   id: string;
+  icon?: IconName;
+  tint?: Tint;
   title: string;
   body: ReactNode;
   current: boolean;
@@ -208,54 +242,101 @@ export function OptionCard({
   select?: OptionSelect;
   children?: ReactNode;
 }) {
+  const choosable = Boolean(!current && select && !select.disabled && (select.onClick || select.href || select.commandFor));
+  const marks = (
+    <span className="lv-option__badges">
+      {current ? (
+        <s-badge tone="info" color="strong" icon="check-circle">
+          {currentLabel}
+        </s-badge>
+      ) : null}
+      {badges}
+      {/* Can be chosen: an empty radio mark (a chevron where choosing opens its own page). */}
+      {choosable ? (
+        <span className="lv-option__mark" aria-hidden="true">
+          {select?.href ? <s-icon type="chevron-right" color="subdued" /> : <span className="lv-option__radio" />}
+        </span>
+      ) : null}
+    </span>
+  );
   const head = (
-    <s-stack direction="block" gap="small-400">
-      <s-stack direction="inline" gap="small-200" alignItems="center" justifyContent="space-between">
-        <span id={id} tabIndex={-1} style={{ ...SETTING_NAME, ...FOCUS_TARGET, fontSize: 14 }}>
+    <>
+      {icon ? (
+        <span className="lv-option__top">
+          <IconSquare icon={icon} tint={tint} />
+          {marks}
+        </span>
+      ) : null}
+      <span className="lv-option__top" style={icon ? { marginBottom: 0 } : undefined}>
+        <span id={id} tabIndex={-1} className="lv-option__title">
           {title}
         </span>
-        <s-stack direction="inline" gap="small-200" alignItems="center">
-          {current ? (
-            <s-badge tone="info" color="strong" icon="check-circle">
-              {currentLabel}
-            </s-badge>
-          ) : null}
-          {badges}
-        </s-stack>
-      </s-stack>
-      <s-text color="subdued">{body}</s-text>
-    </s-stack>
+        {icon ? null : marks}
+      </span>
+      <span className="lv-option__body">{body}</span>
+    </>
   );
-  const choosable = !current && select && !select.disabled && (select.onClick || select.href || select.commandFor);
+  let control: ReactNode;
+  if (choosable && select?.href) {
+    control = (
+      <Link to={select.href} className="lv-option__choose">
+        {head}
+      </Link>
+    );
+  } else if (choosable && select) {
+    control = (
+      <button
+        type="button"
+        className="lv-option__choose"
+        onClick={() => {
+          select.onClick?.();
+          if (select.commandFor) openDialog(select.commandFor);
+        }}
+      >
+        {head}
+      </button>
+    );
+  } else {
+    control = <div className="lv-option__head">{head}</div>;
+  }
+  const className = ["lv-option", current ? "lv-option--current" : null, choosable ? "lv-option--choosable" : null].filter(Boolean).join(" ");
   return (
-    <div role="group" aria-labelledby={id} style={{ position: "relative", isolation: "isolate", minWidth: 0 }}>
-      <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: -1 }}>
-        {current ? <div className="lv-selected-frame" /> : <s-box background="base" border="base" borderRadius="large-100" blockSize="100%" />}
-      </div>
-      {choosable ? (
-        <s-clickable
-          padding="base"
-          borderRadius="large-100"
-          inlineSize="100%"
-          {...(select.href ? { href: select.href } : {})}
-          {...(select.onClick ? { onClick: select.onClick } : {})}
-          {...(select.commandFor ? { commandFor: select.commandFor, command: "--show" as const } : {})}
-        >
-          {head}
-        </s-clickable>
-      ) : (
-        <div style={{ padding: 16 }}>{head}</div>
-      )}
-      {Children.toArray(children).length ? <div style={{ padding: "0 16px 16px" }}>{children}</div> : null}
+    <div role="group" aria-labelledby={id} className={className} data-option={id}>
+      {control}
+      {Children.toArray(children).length ? <div className="lv-option__foot">{children}</div> : null}
     </div>
   );
 }
 
-/** Option cards side by side where there is room, each as high as its own content. */
+/** Opens a Polaris dialog (s-modal) by its own method, as s-button's invoker command does. */
+function openDialog(id: string) {
+  (document.getElementById(id) as (HTMLElement & { showOverlay?: () => void }) | null)?.showOverlay?.();
+}
+
+/** Option tiles side by side where there is room, equally high in a row. */
 export function OptionGrid({ label, children, min = 220 }: { label: string; children: ReactNode; min?: number }) {
   return (
-    <div role="group" aria-label={label} style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}px), 1fr))`, gap: 12, alignItems: "start" }}>
+    <div role="group" aria-label={label} className="lv-options" style={{ "--lv-min": `${min}px` } as CSSProperties}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * What the current (or the chosen) way needs next, under the choices: its
+ * languages and their button, or its summary with its actions. A group named
+ * by `label`, its icon and title as its heading line.
+ */
+export function OptionPanel({ label, icon, tint = "grey", title, children }: { label: string; icon: IconName; tint?: Tint; title: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="lv-option-panel">
+      <s-stack direction="block" gap="small-300">
+        <s-stack direction="inline" gap="small-200" alignItems="center">
+          <IconSquare icon={icon} tint={tint} size={28} />
+          <span style={SETTING_NAME}>{title}</span>
+        </s-stack>
+        {children}
+      </s-stack>
     </div>
   );
 }
@@ -297,8 +378,13 @@ export function FactList({ label, facts }: { label: string; facts: Array<{ icon:
 /** More words on demand, closed at first (a native disclosure, 44 px high, like the Plan page's questions); `open`: open at first. */
 export function More({ summary, children, open, onToggle }: { summary: string; children: ReactNode; open?: boolean; onToggle?: (open: boolean) => void }) {
   return (
-    <details {...(open ? { open: true } : {})} {...(onToggle ? { onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => onToggle(event.currentTarget.open) } : {})}>
-      <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", fontWeight: 600 }}>{summary}</summary>
+    <details className="lv-more" {...(open ? { open: true } : {})} {...(onToggle ? { onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => onToggle(event.currentTarget.open) } : {})}>
+      <summary className="lv-more__summary">
+        <span>{summary}</span>
+        <span className="lv-more__chevron" aria-hidden="true">
+          <s-icon type="chevron-down" color="subdued" size="small" />
+        </span>
+      </summary>
       <div style={{ padding: "0 0 8px 18px" }}>
         <s-stack direction="block" gap="small-200">
           {children}
@@ -371,22 +457,20 @@ export function InlineNotice({
   );
 }
 
-/** Tiles of links, two by two: icon, name, what it is for, and the chevron (the whole row is the link). */
-export function LinkTiles({ label, links }: { label: string; links: Array<{ href: string; icon: IconName; name: string; detail: string }> }) {
+/** Tiles of links, two or three in a row: the icon in its tinted square, the name, what it is for, and the chevron (the whole tile is the link). */
+export function LinkTiles({ label, links }: { label: string; links: Array<{ href: string; icon: IconName; tint?: Tint; name: string; detail: string }> }) {
   return (
-    <ul aria-label={label} style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(240px, 40%), 1fr))", gap: 4 }}>
+    <ul aria-label={label} className="lv-links">
       {links.map((link) => (
-        <li key={link.href} style={{ display: "flex", minWidth: 0 }}>
-          <s-clickable href={link.href} padding="small-100" borderRadius="large-100" inlineSize="100%">
-            <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" columnGap="small-100" alignItems="center">
-              <IconTile icon={link.icon} size={32} color="base" iconSize="base" />
-              <s-stack direction="block">
-                <span style={SETTING_NAME}>{link.name}</span>
-                <s-text color="subdued">{link.detail}</s-text>
-              </s-stack>
-              <s-icon type="chevron-right" color="subdued" />
-            </s-grid>
-          </s-clickable>
+        <li key={link.href} className="lv-links__item">
+          <Link to={link.href} className="lv-link-tile">
+            <IconSquare icon={link.icon} tint={link.tint ?? "grey"} />
+            <span className="lv-link-tile__text">
+              <span className="lv-link-tile__name">{link.name}</span>
+              <span className="lv-link-tile__detail">{link.detail}</span>
+            </span>
+            <s-icon type="chevron-right" color="subdued" />
+          </Link>
         </li>
       ))}
     </ul>

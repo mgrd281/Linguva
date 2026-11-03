@@ -8,7 +8,9 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { testEnv } from "../support/env";
+import { productFields } from "../support/fake-store";
 import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
+import { digest } from "./fixtures/demo-store";
 import { UI_SHOPS, type UiShopKey } from "./fixtures/shops";
 
 const shop = (): UiShopKey => (test.info().project.name === "mobile" ? "reviewPhone" : "review");
@@ -34,11 +36,18 @@ const numberIn = async (locator: Locator) => Number(((await locator.textContent(
 const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Languages" }).locator("s-clickable", { hasText: name });
 /** A chip as shown (a wide card wraps its chips; a phone swipes through one row: the other copy is hidden). */
 const chip = (page: Page, name: string) => page.locator("s-clickable-chip", { hasText: name }).filter({ visible: true });
-const primaryHost = (page: Page) => page.locator('[data-button][data-command-for="review-approve"]');
+/**
+ * The control card's strip with the page's count and its two actions. While it is scrolled out of view, a copy
+ * floats at the window's foot ([data-review-bar]), so these look in the strip itself.
+ */
+const strip = (page: Page) => page.locator("[data-review-strip]");
+const primaryHost = (page: Page) => strip(page).locator('[data-button][data-command-for="review-approve"]');
 const languages = (page: Page) => page.getByRole("navigation", { name: "Languages" });
 const areas = (page: Page) => page.getByRole("navigation", { name: "Areas" });
-const primary = (page: Page) => page.getByRole("button", { name: /^Approve all \d+( on this page)?$/ });
-const summary = (page: Page) => page.getByText(/^\d+ translations? on this page/);
+const primary = (page: Page) => strip(page).getByRole("button", { name: /^Approve all \d+( on this page)?$/ });
+const rejectAll = (page: Page) => strip(page).getByRole("button", { name: "Reject all", exact: true });
+/** "6 translations on this page" until the first decision, then "4 of 6 still open". */
+const summary = (page: Page) => strip(page).getByText(/^\d+ (translations? on this page|of \d+ still open)/);
 /** Texts shown in cards. */
 const texts = (page: Page) => page.locator("s-section[accessibilitylabel] li");
 
@@ -66,7 +75,9 @@ test.describe("Review", () => {
     await expect(german).toHaveAccessibleName(`German ${before.german - 1}`);
     await expect(products).toHaveAccessibleName(`Products ${before.products - 1}`);
     await expect(primary(page)).toHaveAccessibleName(new RegExp(`^Approve all ${before.primary - 1}`));
-    await expect(summary(page)).toHaveText(new RegExp(`^${before.summary - 1} `));
+    // After the first decision the strip counts what is still open, with the share decided as a bar.
+    await expect(summary(page)).toHaveText(`${before.summary - 1} of ${before.summary} still open`);
+    await expect(strip(page).locator('[role="progressbar"]')).toHaveAttribute("aria-valuenow", String(Math.round(100 / before.summary)));
     // Nothing else moved in: the page didn't reload.
     await expect(button(product, "Approve: Description – Product 2 jacket (German)")).toBeVisible();
   });
@@ -97,8 +108,10 @@ test.describe("Review", () => {
     await expect(modal.getByText("Customers see them right away – in German.")).toBeVisible();
     await expect(modal.getByText(/^Still hidden: Arabic\./)).toBeVisible();
     await expect(modal.getByText("1 of them has a note. You'll find it next to the text.")).toBeVisible();
+    // With a note among them, a second answer approves only the texts without one.
+    await expect(modal.getByRole("button", { name: "Approve only the 3 without notes", exact: true })).toBeVisible();
     await expectAccessible(page);
-    await modal.getByRole("button", { name: "Approve 4", exact: true }).click();
+    await modal.getByRole("button", { name: "Approve all 4", exact: true }).click();
     await expectToast(page, "4 translations approved");
     await expect(page.locator("#review-done-heading")).toBeVisible();
 
@@ -114,12 +127,17 @@ test.describe("Review", () => {
     expect(await toasts()).toBe(shown);
   });
 
-  test("rejecting one text asks in place, says it can't be undone, and Escape cancels @responsive", async ({ page }) => {
+  test("rejecting one text asks in place, says what it does and that it can't be undone, and Escape cancels @responsive", async ({ page }) => {
     await open(page, "/app/review?lang=de");
     const text = "Description – Product 4 jacket";
+    // The ✕ says its word on every width.
+    await expect(button(page, `Reject: ${text}`)).toHaveText("Reject");
     await button(page, `Reject: ${text}`).click();
     const question = page.locator('s-banner[heading="Reject this translation?"]');
+    await expect(question).toContainText("Nothing changes in your store, and Linguva won't translate this text again by itself while the original stays the same.");
     await expect(question).toContainText("This can't be undone.");
+    // Its answers are the app's own buttons, the confirming one in red.
+    await expect(question.locator('[data-button][data-variant="primary"][data-tone="critical"]')).toHaveText("Reject");
     // Focus moves to the question's Reject; Escape answers Cancel and returns to ✕.
     await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe("Reject");
     await page.keyboard.press("Escape");
@@ -154,9 +172,9 @@ test.describe("Review", () => {
     await expect(button(page, "Approve: Name – Product 4 jacket")).toBeDisabled();
     await expect(button(card(page, "Product 4 jacket, German"), /^Approve all \d+: Product 4 jacket/)).toBeDisabled();
     await expect(primary(page)).toBeDisabled();
-    await expect(page.getByText("Fill in or reject the empty text first.")).toBeVisible();
+    await expect(strip(page).getByText("Fill in or reject the empty text first.")).toBeVisible();
     // Rejecting sends no edited text: it doesn't wait for the empty one.
-    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeEnabled();
+    await expect(rejectAll(page)).toBeEnabled();
 
     await button(page, "Cancel: Name – Product 4 jacket").click();
     await expect(button(page, "Approve: Name – Product 4 jacket")).toBeEnabled();
@@ -206,8 +224,12 @@ test.describe("Review", () => {
     await expect(row(page, "Web address – Product 1 jacket").getByText(/^New web address: old links to this page in German stop working afterwards\.$/)).toBeVisible();
 
     await button(page, "Edit: Web address – Product 1 jacket").click();
-    await page.getByRole("textbox", { name: "Web address in German" }).fill("Neue Jacke");
+    const address = page.getByRole("textbox", { name: "Web address in German" });
+    await address.fill("Neue Jacke");
     await expect(button(page, "Approve: Web address – Product 1 jacket")).toBeDisabled();
+    // An emptied one says so in the row's own word (not "URL handle").
+    await address.fill("");
+    await expect(row(page, "Web address – Product 1 jacket").getByText("Enter a web address.")).toBeVisible();
     await button(page, "Cancel: Web address – Product 1 jacket").click();
 
     await button(page, "Approve: Web address – Product 1 jacket").click();
@@ -323,7 +345,7 @@ test.describe("Review", () => {
     const heading = page.locator("#review-done-heading");
     await expect(heading).toBeVisible();
     await expect(heading).toBeFocused();
-    await expect(page.getByText(/^2 approved\. \d+ more (is|are) waiting\.$/)).toBeVisible();
+    await expect(page.getByText(/^2 approved\. \d+ more translations? (is|are) waiting\.$/)).toBeVisible();
     // The folded card's tally sits beside its picture, and Continue beside or under the words (not under the tick).
     const folded = card(page, "About us 1, German");
     const picture = (await folded.locator('div[style*="border-radius"]').first().boundingBox())!;
@@ -443,10 +465,10 @@ test.describe("Review", () => {
     await button(page, "Approve: Name – Product 1 jacket").click();
     // The page's request would send the same text a second time (and report it as not published).
     await expect(primary(page)).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeDisabled();
+    await expect(rejectAll(page)).toBeDisabled();
     await expect(card(page, "Product 1 jacket, German").getByText("Approved – customers see it now.")).toBeVisible();
     await expect(primary(page)).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeEnabled();
+    await expect(rejectAll(page)).toBeEnabled();
   });
 
   test("a job's texts, all decided: no claim about the rest of the store, and the way to every text @responsive", async ({ page }) => {
@@ -555,10 +577,72 @@ test.describe("Review", () => {
       await new Promise((resolve) => setTimeout(resolve, 2_000));
       await route.fulfill({ response });
     });
-    await page.locator("[data-button]", { hasText: "Reject all" }).click();
-    await page.locator("s-modal#review-reject").getByRole("button", { name: "Reject 1", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeDisabled();
+    await rejectAll(page).click();
+    const reject = page.locator("s-modal#review-reject");
+    // The question says what rejecting does: nothing changes in the store, and it isn't translated again by itself.
+    await expect(reject.getByText(/^Nothing changes in your store, and Linguva won't translate this text again by itself/)).toBeVisible();
+    await reject.getByRole("button", { name: "Reject 1", exact: true }).click();
+    await expect(rejectAll(page)).toBeDisabled();
     await expect(page.getByText("Approving – this can take a moment.")).toHaveCount(0);
     await expectToast(page, "1 translation rejected. It won't be published.");
+  });
+
+  test("after the cards, the page's count and actions float at the window's foot, never beside the strip's @responsive", async ({ page }) => {
+    await open(page, "/app/review?lang=de");
+    const bar = page.locator("[data-review-bar]");
+    await expect(bar).toHaveCount(0);
+    const count = await numberIn(primaryHost(page));
+    const approveAll = bar.getByRole("button", { name: `Approve all ${count}`, exact: true });
+    // Past the last card: the strip is out of view, the bar holds its count and both buttons.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect(bar).toBeVisible();
+    await expect(approveAll).toBeInViewport();
+    await expect(bar.getByRole("button", { name: "Reject all", exact: true })).toBeInViewport();
+    await expect(bar.getByText(new RegExp(`^${await numberIn(summary(page))} translations on this page$`))).toBeVisible();
+    // Never two primary buttons on the screen: the strip's is out of view while the bar shows.
+    await expect(primary(page)).not.toBeInViewport();
+    // The bar's button asks the page's question.
+    await approveAll.click();
+    const modal = page.locator("s-modal#review-approve");
+    await expect(page.getByRole("dialog", { name: `Approve ${count} translations?` })).toBeVisible();
+    await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+    // Back at the strip: the bar goes.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(bar).toHaveCount(0);
+    await expectAccessible(page);
+  });
+
+  test("approving only the texts without a note leaves the noted ones waiting @responsive", async ({ page }) => {
+    // French names of two products of the store (as made from their current originals), the second with a note.
+    const title = (n: number) => productFields(n).find((f) => f.key === "title")!.value;
+    await inStore((shopId) =>
+      owner.translationDraft.createMany({
+        data: [3, 4].map((n) => ({
+          shopId,
+          resourceGid: `gid://shopify/Product/${n}`,
+          resourceTitle: title(n),
+          locale: "fr",
+          key: "title",
+          sourceDigest: digest(title(n)),
+          sourceValue: title(n),
+          value: `Veste kiosque ${n}`,
+          provider: "deepl",
+          ...(n === 4 ? { issues: [{ code: "UNTRANSLATED", severity: "warning" }] } : {}),
+        })),
+      }),
+    );
+    await open(page, "/app/review?lang=fr&q=kiosque");
+    await expect(summary(page)).toHaveText(/^2 translations on this page/);
+    await primary(page).click();
+    const modal = page.locator("s-modal#review-approve");
+    await expect(modal.getByText("1 of them has a note. You'll find it next to the text.")).toBeVisible();
+    await expect(modal.getByRole("button", { name: "Approve all 2", exact: true })).toBeVisible();
+    await modal.getByRole("button", { name: "Approve only the one without a note", exact: true }).click();
+    await expectToast(page, "1 translation approved");
+    await expect(card(page, "Product 3 jacket, French").getByText("Approved – customers see it now.")).toBeVisible();
+    // The noted one still waits, and the strip counts what is left.
+    await expect(button(page, "Approve: Name – Product 4 jacket")).toBeVisible();
+    await expect(summary(page)).toHaveText("1 of 2 still open");
+    await expect(page.locator("#review-done-heading")).toHaveCount(0);
   });
 });

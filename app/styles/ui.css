@@ -877,6 +877,153 @@
 
 /* ── Review (app.review*, Review* components): its own rules here, media queries included. ── */
 
+/* A text's actions on a phone: "Bearbeiten" at the start, "Ablehnen" and "Freigeben" together at the end,
+   "Freigeben" last (the thumb's side); a narrow phone wraps the row instead of squeezing it, the two then on a line
+   of their own. */
+.lv-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* (A tertiary button's own padding keeps its words apart from the next button: 4 px between them is enough.) */
+.lv-review-actions__decide {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
+/* The language tabs: they wrap on a wide card; on a phone one row that swipes sideways (like the area chips). */
+.lv-review-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-review-tabs > li {
+  display: grid;
+  flex: none;
+}
+/* (2 px of room around the row, so a tab's focus ring isn't cut at the row's edges.) */
+.lv-review-tabs--swipe {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px;
+}
+
+/* The share of the page already decided, under the strip's count. */
+.lv-review-progress {
+  max-width: 240px;
+}
+
+/* "Diese Seite ist erledigt" and "Alles geprüft": Settings' green status row with a heading of their own, and the
+   way on beside the words, or under them at the end on a phone. */
+.lv-review-done__title {
+  margin: 0;
+  font-size: inherit;
+}
+.lv-review-done__action {
+  justify-self: end;
+}
+
+/* "Deine Sprachen" as link tiles: the name with its hidden marker, the figure and its bar. */
+.lv-review-tile__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.lv-review-hidden {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--lv-text-subdued);
+}
+.lv-review-tile__bar {
+  margin-top: 6px;
+}
+
+/* The page's decision at the window's foot while the strip with "Alle N freigeben" is scrolled out of view. */
+.lv-review-bar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+.lv-review-bar__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 760px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--lv-border);
+  border-radius: 14px;
+  background: var(--lv-surface);
+  box-shadow:
+    0 12px 32px rgba(16, 24, 40, 0.14),
+    0 2px 6px rgba(16, 24, 40, 0.06);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  line-height: 20px;
+  pointer-events: auto;
+  animation: lv-review-bar-in 0.18s ease-out;
+}
+.lv-review-bar__text {
+  display: grid;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.lv-review-bar__summary {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.lv-review-bar__note {
+  color: var(--lv-text-subdued);
+}
+.lv-review-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+/* Room for the bar under the page's last line, and a focused control is scrolled above it, never under it
+   (WCAG 2.4.11): both from the bar's height as drawn (--lv-review-bar-h, set by FloatingBar). */
+.lv-review-bar-space {
+  height: calc(var(--lv-review-bar-h, 64px) + 24px + env(safe-area-inset-bottom, 0px));
+}
+:root.lv-review-bar-on {
+  scroll-padding-bottom: calc(var(--lv-review-bar-h, 64px) + 32px + env(safe-area-inset-bottom, 0px));
+}
+@keyframes lv-review-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv-review-bar__inner {
+    animation: none;
+  }
+}
+
 /* ── Jobs (app.jobs*, components/jobs): its own rules here, media queries included. ── */
 
 /* ── Plan (app.plan.tsx, components/plan): its own rules here, media queries included. ── */

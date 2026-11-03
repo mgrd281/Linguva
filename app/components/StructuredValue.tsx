@@ -11,13 +11,31 @@ import { richTextPreviewOrNull } from "../lib/rich-text-preview";
 import { RICH_TEXT_TYPE, structuredItems, withTexts } from "../lib/structured-preview";
 import { HtmlPreview } from "./HtmlPreview";
 
-/** The original (or a read-only translation): rich text rendered, lists and links as a list. */
-export function StructuredView({ type, value, title, lang, dir }: { type: string; value: string; title: string; lang: string; dir?: "rtl" | "auto" }) {
+/**
+ * The original (or a read-only translation): rich text rendered, lists and links as a list. A list is grey like
+ * an original; `tone="translation"` draws it white with an edge, as Review draws what goes live.
+ */
+export function StructuredView({
+  type,
+  value,
+  title,
+  lang,
+  dir,
+  tone,
+}: {
+  type: string;
+  value: string;
+  title: string;
+  lang: string;
+  dir?: "rtl" | "auto";
+  tone?: "translation";
+}) {
   if (type === RICH_TEXT_TYPE) return <HtmlPreview html={richTextPreviewOrNull(value) ?? ""} title={title} lang={lang} {...(dir ? { dir } : {})} />;
   const items = structuredItems(type, value);
+  const look = tone === "translation" ? ({ border: "base" } as const) : ({ background: "subdued" } as const);
   return (
     <div lang={lang || undefined} {...(dir === "rtl" ? { dir: "rtl" } : {})}>
-      <s-box padding="base" background="subdued" borderRadius="base">
+      <s-box padding="base" {...look} borderRadius="base">
         {items ? <StructuredList items={items} /> : <s-paragraph>{value}</s-paragraph>}
       </s-box>
     </div>

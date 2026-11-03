@@ -2,15 +2,18 @@
  * One card of Review ("Übersetzungen prüfen"): an item in one language with
  * its picture, name, area and language, and each of its texts in reading
  * order: the original (grey) beside the translation (white), the quality
- * hints next to the text's name, and three actions per text ("Bearbeiten",
- * ✕ that asks first, "✓ Freigeben"). After an action each text says what
- * happened, in words and an icon; a card whose texts are all decided folds
- * to one line. The card's own request (a text or "Alle 4 freigeben") runs
- * on its own fetcher, so several cards can be in flight.
+ * hints next to the text's name, and three actions per text ("✎ Bearbeiten",
+ * "✕ Ablehnen" that asks first, "✓ Freigeben"). The two questions in place
+ * (rejecting, a new web address) answer with the app's own buttons. After an
+ * action each text says what happened, in words and an icon; a card whose
+ * texts are all decided folds to one line. The card's own request (a text or
+ * "Alle 4 freigeben") runs on its own fetcher, so several cards can be in
+ * flight.
  *
  * Wide cards show the actions in the text's label row and the texts side
  * by side; narrow ones (a phone) stack the texts and put the same actions,
- * in the same order, under them (hidden copies are display:none).
+ * in the same order, under them in a row that wraps, "Freigeben" last, on
+ * the thumb side (hidden copies are display:none).
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
@@ -19,6 +22,7 @@ import type { ReviewPreview } from "../.server/review/previews";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { fieldName, hasMessage, issueName, itemKindLabel } from "../i18n/labels";
 import { localeCountry } from "../lib/flags";
+import { MAX_HANDLE_LENGTH } from "../lib/handles";
 import { CATEGORIES, EXTRAS, isCategoryId } from "../lib/language-categories";
 import { upperFirst } from "../lib/name-lists";
 import type { AreaKey } from "../lib/review-areas";
@@ -104,6 +108,16 @@ export function cardTitle(i18n: I18n, card: ReviewCard, liveTitle: string | null
   return i18n.t("review.draft.untitled");
 }
 
+/**
+ * Why a new web address can't be approved ("Gib eine Webadresse ein."): the editor's words for a handle's
+ * problem, except an empty one, which Review names by its own word for the row ("Webadresse", not "URL-Handle").
+ */
+export function handleProblemText(i18n: I18n, problem: string): string | null {
+  if (problem === "EMPTY") return i18n.t("review.field.handleEmpty");
+  const key = `editor.handle.problem.${problem}`;
+  return hasMessage(key) ? i18n.t(key as MessageKey, { max: MAX_HANDLE_LENGTH }) : null;
+}
+
 /** The words of a text's outcome ("Freigegeben – Kunden sehen es jetzt."). */
 export function outcomeText(i18n: I18n, outcome: ClientOutcome, language: string, hidden: boolean): string {
   const { t } = i18n;
@@ -118,8 +132,8 @@ export function outcomeText(i18n: I18n, outcome: ClientOutcome, language: string
       return t("review.result.changed");
     case "failed": {
       if (outcome.reason === "HANDLE_INVALID") {
-        const problem = outcome.detail ? `editor.handle.problem.${outcome.detail}` : null;
-        return problem && hasMessage(problem) ? t("review.result.failed.HANDLE_INVALID", { problem: t(problem, { max: 255 }) }) : t("review.result.failed.generic");
+        const problem = outcome.detail ? handleProblemText(i18n, outcome.detail) : null;
+        return problem ? t("review.result.failed.HANDLE_INVALID", { problem }) : t("review.result.failed.generic");
       }
       if (outcome.reason === "SHOPIFY_REJECTED") return t("review.result.failed.SHOPIFY_REJECTED", { detail: outcome.detail ?? "" });
       const key = `review.result.failed.${outcome.reason}`;
@@ -391,18 +405,18 @@ function TextActions({ draft, title, ctx, cardBusy, approve, copy }: RowProps & 
       </Button>
     )
   ) : null;
+  // Its word on every width: a ✕ alone reads as "close".
   const rejectButton = (
-    <>
-      <Button
-        variant="tertiary"
-        icon="x"
-        tooltip={t("review.field.reject")}
-        data-review-reject={draft.id}
-        accessibilityLabel={t("review.field.rejectLabel", { field: label, title })}
-        onClick={() => ctx.ask(draft.id, "reject")}
-        {...(disabled ? { disabled: true } : {})}
-      />
-    </>
+    <Button
+      variant="tertiary"
+      icon="x"
+      data-review-reject={draft.id}
+      accessibilityLabel={t("review.field.rejectLabel", { field: label, title })}
+      onClick={() => ctx.ask(draft.id, "reject")}
+      {...(disabled ? { disabled: true } : {})}
+    >
+      {t("review.field.reject")}
+    </Button>
   );
   const problem = ctx.problemOf(draft);
   const approveButton = (
@@ -425,19 +439,29 @@ function TextActions({ draft, title, ctx, cardBusy, approve, copy }: RowProps & 
       {approveButton}
     </s-stack>
   ) : (
-    <s-grid gridTemplateColumns="minmax(0, 1fr) auto auto" gap="base" alignItems="center">
-      <s-stack direction="inline">{editButton ?? <span />}</s-stack>
-      {rejectButton}
-      {approveButton}
-    </s-grid>
+    // A phone: "Bearbeiten" at the start, "Ablehnen" and "Freigeben" together at the end, "Freigeben" last (the
+    // thumb's side); a narrow phone wraps the row instead of squeezing it, the two then on a line of their own
+    // (ui.css, .lv-review-actions).
+    <div className="lv-review-actions">
+      {editButton}
+      <span className="lv-review-actions__decide">
+        {rejectButton}
+        {approveButton}
+      </span>
+    </div>
   );
 }
 
-/** The inline question before rejecting (it can't be undone) or before a new web address goes live. */
+/**
+ * The inline question before rejecting (it says what rejecting does, and that it can't be undone) or before a new
+ * web address goes live. Its answers are the app's buttons in the banner's body, like the leave question's, so the
+ * card keeps one look of buttons; the answer waits with a spinner while its request runs.
+ */
 function Question({ card, draft, title, ctx, approve, reject, label }: RowProps & { label: string }) {
   const { t } = ctx.i18n;
   const kind = ctx.asking?.kind;
   const language = ctx.i18n.language(card.locale, ctx.names[card.locale]);
+  const sending = ctx.busy.has(draft.id);
   useEffect(() => {
     focusSoon(() => visible(`[data-review-confirm="${draft.id}"]`));
   }, [draft.id]);
@@ -458,32 +482,46 @@ function Question({ card, draft, title, ctx, approve, reject, label }: RowProps 
     el.addEventListener("keydown", onKey);
     return () => el.removeEventListener("keydown", onKey);
   });
+  const cancelButton = (
+    <Button onClick={cancel} {...(sending ? { disabled: true } : {})}>
+      {t("common.action.cancel")}
+    </Button>
+  );
   return (
     <div ref={box}>
       {kind === "reject" ? (
         <s-banner tone="critical" heading={t("review.field.rejectQuestion")}>
-          <s-paragraph>{t("review.field.rejectNote")}</s-paragraph>
-          <s-button slot="secondary-actions" tone="critical" data-review-confirm={draft.id} accessibilityLabel={t("review.field.rejectLabel", { field: label, title })} onClick={() => reject(draft)}>
-            {t("review.field.reject")}
-          </s-button>
-          <s-button slot="secondary-actions" onClick={cancel}>
-            {t("common.action.cancel")}
-          </s-button>
+          <s-paragraph>{t("review.reject.body", { count: 1 })}</s-paragraph>
+          <s-stack direction="inline" gap="small-200">
+            <Button
+              variant="primary"
+              tone="critical"
+              data-review-confirm={draft.id}
+              accessibilityLabel={t("review.field.rejectLabel", { field: label, title })}
+              onClick={() => reject(draft)}
+              {...(sending ? { loading: true } : {})}
+            >
+              {t("review.field.reject")}
+            </Button>
+            {cancelButton}
+          </s-stack>
         </s-banner>
       ) : (
         <s-banner tone="warning" heading={t("review.field.handleQuestion", { language })}>
-          <s-button
-            slot="secondary-actions"
-            data-review-confirm={draft.id}
-            accessibilityLabel={t("review.field.approveLabel", { field: label, title })}
-            onClick={() => approve([draft], [draft.id])}
-            {...(ctx.problemOf(draft) ? { disabled: true } : {})}
-          >
-            {t("review.field.approve")}
-          </s-button>
-          <s-button slot="secondary-actions" onClick={cancel}>
-            {t("common.action.cancel")}
-          </s-button>
+          <s-stack direction="inline" gap="small-200">
+            <Button
+              variant="primary"
+              icon="check"
+              data-review-confirm={draft.id}
+              accessibilityLabel={t("review.field.approveLabel", { field: label, title })}
+              onClick={() => approve([draft], [draft.id])}
+              {...(ctx.problemOf(draft) ? { disabled: true } : {})}
+              {...(sending ? { loading: true } : {})}
+            >
+              {t("review.field.approve")}
+            </Button>
+            {cancelButton}
+          </s-stack>
         </s-banner>
       )}
     </div>
@@ -509,7 +547,7 @@ function Texts({ card, draft, title, ctx }: RowProps) {
   useEffect(() => {
     if (editing) focusSoon(() => area.current ?? field.current);
   }, [editing]);
-  const problemText = problem ? (draft.kind === "handle" ? t(`editor.handle.problem.${problem}` as MessageKey, { max: 255 }) : t("review.field.empty")) : undefined;
+  const problemText = problem ? (draft.kind === "handle" ? (handleProblemText(i18n, problem) ?? undefined) : t("review.field.empty")) : undefined;
   const onInput = (event: Event) => ctx.setValue(draft.id, (event.currentTarget as HTMLInputElement).value);
 
   if (draft.kind === "html" || draft.kind === "richText") {
@@ -567,7 +605,15 @@ function Texts({ card, draft, title, ctx }: RowProps) {
             <s-box display={NARROW}>
               <s-text color="subdued">{language}</s-text>
             </s-box>
-            <StructuredView type={draft.listType} value={draft.value} title={t("review.draft.previewTitle", { title, field: label })} lang={card.locale} {...(card.rtl ? { dir: "rtl" as const } : {})} />
+            {/* What goes live: white with an edge, like every other translation (the original beside it is grey). */}
+            <StructuredView
+              type={draft.listType}
+              value={draft.value}
+              title={t("review.draft.previewTitle", { title, field: label })}
+              lang={card.locale}
+              tone="translation"
+              {...(card.rtl ? { dir: "rtl" as const } : {})}
+            />
           </s-stack>
         </s-grid>
         <s-text color="subdued">{t("review.field.asShown")}</s-text>
@@ -802,14 +848,15 @@ export function ReviewCardView({ card, ctx }: { card: ReviewCard; ctx: CardConte
                   <s-stack direction="inline">{hintCount}</s-stack>
                 </s-box>
               ) : null}
+              {/* Where the rest of a long card is: up on the previous page, down on the next one. */}
               {card.continued ? (
                 <s-stack direction="inline">
-                  <s-badge>{t("review.card.continued")}</s-badge>
+                  <s-badge icon="arrow-up">{t("review.card.continued")}</s-badge>
                 </s-stack>
               ) : null}
               {card.continues ? (
                 <s-stack direction="inline">
-                  <s-badge>{t("review.card.continues")}</s-badge>
+                  <s-badge icon="arrow-down">{t("review.card.continues")}</s-badge>
                 </s-stack>
               ) : null}
             </s-stack>

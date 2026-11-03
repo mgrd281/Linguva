@@ -8,7 +8,7 @@ import { expectAccessible, expectToast, openApp, saveBarShown } from "./helpers"
 
 test("lists and links are translated item by item and keep their link addresses", async ({ page }) => {
   await openApp(page, "full", "/app/products/14?lang=de");
-  const panel = page.locator('s-section[accessibilitylabel="Image descriptions and extra details"]');
+  const panel = page.locator('s-section[data-text="Image descriptions and extra details"]');
   // The original is shown readably, with the addresses as plain text.
   await expect(panel.locator("s-list-item", { hasText: "Care guide" })).toHaveText("Care guide (https://example.com/care)");
   await expect(panel.getByText('[{"text"')).toHaveCount(0);
@@ -38,7 +38,7 @@ test("lists and links are translated item by item and keep their link addresses"
 
 test("AI fills each item of a list; nothing is published until the merchant does", async ({ page }) => {
   await openApp(page, "full", "/app/products/14?lang=fr");
-  const panel = page.locator('s-section[accessibilitylabel="Image descriptions and extra details"]');
+  const panel = page.locator('s-section[data-text="Image descriptions and extra details"]');
   // The page's one AI button fills the extra details' open texts with the product's own.
   await page.getByRole("button", { name: "Translate with AI" }).click();
   await expect(panel.locator('s-text-field[details="Links to https://example.com/care"] input')).toHaveValue("[fr] Care guide");

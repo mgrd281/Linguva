@@ -16,7 +16,7 @@ test("the editor shows HTML rendered and safe beside the original, the code one 
     void d.dismiss();
   });
   await openApp(page, "full", "/app/products/5?lang=fr");
-  const description = page.locator('s-section[accessibilitylabel="Description"]');
+  const description = page.locator('s-section[data-text="Description"]');
 
   // The original, rendered: bold text is bold, no tags as text.
   const source = page.frameLocator(SOURCE_FRAME);

@@ -256,6 +256,30 @@ The owner, looking at Settings in the admin: the English flag was missing, and t
 
 Status: **Implemented; buttons and the segmented choice checked in a browser** (their CSS doesn't need Polaris). The pages around them are checked in CI (`visual.spec.ts`, new `settings-style`).
 
+## 3h. Redesign 4: square buttons, one design system, every page (owner request, 2026-11-03)
+
+The owner: "Raise everything to 10/10 in modernity, user experience, ease of understanding, icons and order, above all in Settings: square buttons." Asked what "square buttons" meant, the owner chose **square tiles above the content**: on a desktop every section of Settings a square button with a big icon, its name and its state in one row, the chosen one framed in blue and its section right under the row; on a phone a grid of squares that opens each section; inside a section the choices as equal tiles with icons. Before building, eight readers audited every page (modernity, UX, clarity, icons, order, buttons) against the CI screenshots; their findings are the work list of this redesign.
+
+### Settings
+
+| Before | After | Why |
+|---|---|---|
+| A 260 px nav card of text (name and a grey line) beside the section; no icons on a desktop, a list of rows on a phone | **Square tiles** (`SectionTiles`, `.lv-tile`): the section's icon in a tinted square, its name, its state in a few words, a dot in the state's tone where it needs the merchant. One row above the section on a wide page (the groups apart by a fine line, the current one framed in blue, `aria-current`), four in a row on a tablet, three in a row on a phone, where a tile opens its section alone under the 44 px back row | The owner's square buttons; every section recognisable by its picture, its state in view on every width |
+| States cut at the end of a line ("Kurz nach dem Speichern · Braucht deinen Schl…"); everything grey | A tile says one state in up to two lines; one that needs the merchant ("Pausiert", "Nicht erlaubt", "Bitte prüfen") in its tone with a dot; long German words break at a soft hyphen ("Übersetzungs-/speicher"), "KI-" never ends a line | What is wrong is the part that was cut |
+| Option cards that looked like information; three cards in 2 + 1 rows of different heights | Equally high **option tiles** with the feature's icon (the Plan page's: play-circle, automation, calendar-time, eye-check-mark, send, wand), an empty radio mark where one can be chosen, a chevron where choosing opens a page; the chosen way's details (shortly after saving's languages, the schedule's summary with Check now) in a panel under the choices | One look for "this is a choice", one place for its details |
+| A gear for "Translating changes", a speech bubble for "How AI writes", a lock for "allow AI first", `connect` for a missing key | `automation`, `text-quote`, `shield-check-mark` (the lock means "not in your plan"), `key`; each section's heading carries its tile's icon | One icon per concept app-wide |
+| Badges repeating the current option ("Mit Prüfung" beside "Erst prüfen"), "Aus" plus a line plus the option | No badge or line repeats the current option; the heading's badge only where it adds (On, Paused, Waiting, Stopped) | Calmer, nothing said twice |
+| Status row "Änderungen übersetzen [Pausiert]" | A sentence in a tinted row: "Die automatische Übersetzung ist pausiert", the fix "Einstellung öffnen" | Says what is wrong |
+| The browser's triangle on folds | A chevron that turns (`Disclosure`) | The one control that wasn't drawn like the rest |
+
+Texts: publishing's scope in plain words ("wenn Linguva viele Texte auf einmal übersetzt"), "neue KI‑Zeichen am …", "Feste Begriffe im Glossar: 0 · Glossar bearbeiten", "Noch keine Sprache"; withdrawing the AI permission is a critical button; the permission section names what can't work first. The smart schedule's field groups showed their codes ("seo_title"); they use the Coverage page's names.
+
+### One design system
+
+`app/styles/ui.css` starts with the app's tokens (`--lv-font`, text and border colours, `--lv-radius-card` 12 px, shadows, `--lv-focus`, the chosen look `--lv-selected-*`) and a type scale (`.lv-h1` 22/28/700, `.lv-h2` 17/24/650, `.lv-h3` 14/20/650, `.lv-strong` 600, `.lv-figure`, `.lv-figure-row`, `.lv-caption`), because Polaris' `s-text` has no size and draws `type="strong"` at the body weight. Shared components: `IconSquare` (the one icon square, tinted by place; `IconTile` draws it), `Strong`, `Disclosure`. Each area keeps its own rules in its section of `ui.css`.
+
+Status: **Implemented; Settings checked in CI's browser** (the `settings` and `settings-style` screenshots, desktop and phone). The other pages follow below as they are built.
+
 ## 4. Tests for the changes
 
 | Change | Test |

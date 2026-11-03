@@ -170,8 +170,8 @@ test("confirming starts the area's translation and opens its job", async ({ page
   await expect(page.getByRole("dialog", { name: "Translate 55 products into French?" })).toBeVisible();
   await page.locator("s-modal#language-translate").getByRole("button", { name: "Translate 55 products" }).click();
   await expect(page).toHaveURL(/\/app\/jobs\/[0-9a-f-]{36}(\?|$)/);
-  // Queued: no worker runs in these tests, so it waits for background jobs (or starts shortly).
-  await expect(page.getByRole("heading", { level: 2, name: /^(Waiting for background jobs|Starts shortly)$/ })).toBeVisible();
+  // Queued: no worker runs in these tests, so it starts with a delay (or shortly).
+  await expect(page.getByRole("heading", { level: 2, name: /^(Starts with a delay|Starts shortly)$/ })).toBeVisible();
 
   // Back on the language page, the area shows its job instead of the button.
   await openApp(page, "catalog", "/app/languages/fr");

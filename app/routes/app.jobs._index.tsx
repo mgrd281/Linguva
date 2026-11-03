@@ -1,14 +1,16 @@
 /**
- * The Jobs list (Redesign 3): what needs the merchant first (the attention
- * card), then the tabs with their figures, the filters and the search; on
- * "All" the jobs running now (they update by themselves), then the history
- * by day in the store's time zone, with the jobs of one check or one click
- * together. A row says what came out in words (app/lib/job-view.ts
- * rowResult, rowMeta); pages go both ways by keyset.
+ * The Jobs list (Redesign 3, Redesign 4): what needs the merchant first (the
+ * attention card, tinted as Settings' status row), then the tabs as compact
+ * tiles with their figures, the search and four filters that apply at once
+ * (behind "Filter" on a phone); on "All" the jobs running now (they update
+ * by themselves), then the history by day in the store's time zone, with
+ * the jobs of one check or one click together. A row says what came out in
+ * words (app/lib/job-view.ts rowResult, rowMeta); pages go both ways by
+ * keyset. Styles in app/styles/ui.css (the Jobs section).
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Form, useFetcher, useLoaderData, useNavigate, useRevalidator, useSubmit } from "react-router";
+import { Form, Link, useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
 import type { TranslationJob } from "@prisma/client";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { shopBilling } from "../.server/billing/billing";
@@ -24,21 +26,27 @@ import { requireShop } from "../.server/shopify/require-shop";
 import { shopTimeZone } from "../.server/shopify/shop-time-zone";
 import { nextCheck } from "../.server/smart/config";
 import { showToast } from "../components/app-bridge";
+import { Button } from "../components/Button";
 import { categoryName } from "../components/CategoryCard";
 import { CARD } from "../components/ContentTiles";
 import { STATE_COLOURS } from "../components/Coverage";
 import { Flag } from "../components/Flag";
-import { GroupBar, GroupIcon, OriginBadges, useJobWords, type JobWords } from "../components/jobs/JobLooks";
+import { IconSquare } from "../components/IconSquare";
+import { GroupBar, GroupIcon, OriginBadges, StatusPanel, useJobWords, type JobWords } from "../components/jobs/JobLooks";
 import { TintMark } from "../components/jobs/TintMark";
-import { BIG_HEADING, PLAIN_LIST } from "../components/LanguageLayout";
-import { InlineNotice } from "../components/SettingsParts";
+import { PLAIN_LIST } from "../components/LanguageLayout";
+import { Actions, InlineNotice } from "../components/SettingsParts";
+import { Strong } from "../components/Type";
 import { reliableEta } from "../lib/eta";
 import { localeCountry } from "../lib/flags";
+import type { IconName } from "../lib/icons";
 import {
   attentionVerdict,
+  clearedHref,
   clusters,
   dayGroups,
   filterCount,
+  filterHref,
   JOB_BY,
   JOB_PERIODS,
   JOB_TABS,
@@ -53,7 +61,9 @@ import {
   rowResult,
   stopGroup,
   type AttentionModel,
+  type FeaturedStop,
   type JobCluster,
+  type JobFilter,
   type JobRowView,
   type JobTab,
   type RowOutcomeCounts,
@@ -61,7 +71,6 @@ import {
 } from "../lib/job-view";
 import { CATEGORIES, CATEGORY_IDS } from "../lib/language-categories";
 import { ALL } from "../lib/select-all";
-import { Button } from "../components/Button";
 
 /** Jobs per page of the history; the live group shows up to 20 (one more says there are others). */
 const PAGE_SIZE = 25;
@@ -186,15 +195,10 @@ type Data = ReturnType<typeof useLoaderData<typeof loader>>;
 type Row = Data["rows"][number];
 type Resumer = ReturnType<typeof useFetcher<typeof action>>;
 
-const STRONG = { fontWeight: 600 } as const;
-const SUB_HEADING = { margin: 0, fontSize: 14, lineHeight: "20px", fontWeight: 650 } as const;
-const CARD_HEADING = { margin: 0, fontSize: 16, lineHeight: "24px", fontWeight: 650 } as const;
-const COUNT = { fontVariantNumeric: "tabular-nums" } as const;
 const LIVE_DOT = { display: "inline-block", width: 8, height: 8, borderRadius: 4, background: STATE_COLOURS.complete, flex: "none" } as const;
 /** One copy of a row for each width (only one is displayed, so only one is read). */
 const WIDE = "@container (inline-size > 640px) auto, none";
 const NARROW = "@container (inline-size > 640px) none, auto";
-const MARK_COLOUR = { critical: STATE_COLOURS.failed, warning: STATE_COLOURS.outdated, caution: STATE_COLOURS.outdated, info: STATE_COLOURS.draft } as const;
 
 function rowView(row: Row): JobRowView {
   const groups = rowCounts(row.job, row.outcomes as RowOutcomeCounts | null);
@@ -219,7 +223,7 @@ function Result({ view, words, workerDown }: { view: JobRowView; words: JobWords
     <s-stack direction="block" gap="small-500">
       {result.fragments.map((fragment, i) => (
         <s-stack key={i} direction="inline" gap="small-200" alignItems="center">
-          <GroupIcon group={fragment.look} />
+          <GroupIcon group={fragment.look} tone={fragment.tone} />
           <s-text color={fragment.tone === "subdued" ? "subdued" : "base"}>{words.say(fragment.text)}</s-text>
         </s-stack>
       ))}
@@ -239,7 +243,7 @@ function JobRow({ row, data, words, inCluster = false }: { row: Row; data: Data;
           {flag}
           <s-stack direction="block" gap="small-500">
             <s-stack direction="inline" gap="small-200" alignItems="center">
-              <span style={STRONG}>{name}</span>
+              <Strong>{name}</Strong>
               <OriginBadges job={row.job} words={words} skipOrigin={inCluster} />
             </s-stack>
             <s-text color="subdued">{meta(false)}</s-text>
@@ -252,7 +256,7 @@ function JobRow({ row, data, words, inCluster = false }: { row: Row; data: Data;
         <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="start">
           {flag}
           <s-stack direction="block" gap="small-300">
-            <span style={STRONG}>{name}</span>
+            <Strong>{name}</Strong>
             <Result view={view} words={words} workerDown={data.workerDown} />
             <s-text color="subdued">{meta(true)}</s-text>
           </s-stack>
@@ -279,7 +283,7 @@ function Cluster({ cluster, data, words }: { cluster: JobCluster<Row["job"] & { 
           ) : null}
         </s-stack>
       </s-box>
-      <div style={{ borderInlineStart: "3px solid var(--p-color-border, #e3e3e3)", marginInlineStart: 16 }}>
+      <div className="lv-jobs-cluster">
         <ul style={PLAIN_LIST}>
           {cluster.rows.map((entry) => (
             <li key={entry.id}>
@@ -295,10 +299,10 @@ function Cluster({ cluster, data, words }: { cluster: JobCluster<Row["job"] & { 
 /** "Today · Monday, November 2": the day's name, then its date in the subdued colour. */
 function DayTitle({ id, heading }: { id: string; heading: { title: string; detail: string } }) {
   return (
-    <h3 id={id} style={SUB_HEADING}>
+    <h3 id={id} className="lv-h3">
       {heading.title}
       {heading.detail ? (
-        <span style={{ fontWeight: 450, color: "var(--p-color-text-secondary, #616161)" }}>
+        <span className="lv-jobs-day__date">
           {" · "}
           {heading.detail}
         </span>
@@ -318,7 +322,7 @@ function Days({ rows, data, words }: { rows: Row[]; data: Data; words: JobWords 
             <s-box padding="none base">
               <DayTitle id={`day-${day.day}`} heading={words.i18n.dayHeading(day.at, data.now)} />
             </s-box>
-            <ul style={{ ...PLAIN_LIST, display: "grid", gap: 2 }}>
+            <ul className="lv-jobs-rows">
               {clusters(day.rows).map((entry) =>
                 entry.kind === "row" ? (
                   <li key={entry.row.id}>
@@ -338,7 +342,8 @@ function Days({ rows, data, words }: { rows: Row[]; data: Data; words: JobWords 
   );
 }
 
-function LiveGroup({ data, words }: { data: Data; words: JobWords }) {
+/** The jobs running now; "Updates by itself" only while the page follows them (never while a search is shown). */
+function LiveGroup({ data, words, updating }: { data: Data; words: JobWords; updating: boolean }) {
   const { t } = words.i18n;
   if (!data.live.length) return null;
   return (
@@ -346,14 +351,18 @@ function LiveGroup({ data, words }: { data: Data; words: JobWords }) {
       <s-stack direction="block" gap="small-200">
         <s-box padding="none base">
           <s-stack direction="inline" gap="small-200" alignItems="center">
-            <h3 id="jobs-live" style={SUB_HEADING}>
+            <h3 id="jobs-live" className="lv-h3">
               {t("jobs.group.live")}
             </h3>
-            <span aria-hidden="true" style={LIVE_DOT} />
-            <s-text color="subdued">{t("jobs.group.liveNote")}</s-text>
+            {updating ? (
+              <>
+                <span aria-hidden="true" style={LIVE_DOT} />
+                <s-text color="subdued">{t("jobs.group.liveNote")}</s-text>
+              </>
+            ) : null}
           </s-stack>
         </s-box>
-        <ul style={{ ...PLAIN_LIST, display: "grid", gap: 2 }}>
+        <ul className="lv-jobs-rows">
           {data.live.map((row) => (
             <li key={row.job.id}>
               <JobRow row={row} data={data} words={words} />
@@ -385,77 +394,64 @@ function attentionOf(data: Data): AttentionModel | null {
   });
 }
 
+/** The featured stop: its flag, name and why; its one primary (the fix, resume or reopen) and the way to the job, side by side where they fit. */
+function Featured({ featured, data, words, resumer }: { featured: FeaturedStop; data: Data; words: JobWords; resumer: Resumer }) {
+  const primary = featured.primary;
+  const resuming = resumer.state !== "idle";
+  return (
+    <s-box {...CARD} padding="base">
+      <s-stack direction="block" gap="small-300">
+        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
+          <Flag country={localeCountry(featured.locale, data.marketCountries)} fallback={featured.locale} size={20} />
+          <s-stack direction="block" gap="small-500">
+            <Strong>{words.say(featured.title)}</Strong>
+            {featured.text.map((text, i) => (
+              <s-text key={i} color="subdued">
+                {words.say(text)}
+              </s-text>
+            ))}
+          </s-stack>
+        </s-grid>
+        <Actions wide={380}>
+          {primary?.kind === "link" ? (
+            <Button variant="primary" href={primary.href}>
+              {words.say(primary.label)}
+            </Button>
+          ) : primary?.kind === "reload" ? (
+            <Button variant="primary" onClick={() => window.location.reload()}>
+              {words.say(primary.label)}
+            </Button>
+          ) : primary?.kind === "resume" ? (
+            <Button variant="primary" onClick={() => void resumer.submit({ intent: "resume", job: primary.jobId }, { method: "post" })} {...(resuming ? { loading: true } : {})}>
+              {words.say(primary.label)}
+            </Button>
+          ) : null}
+          <Button variant={featured.view.variant} href={featured.view.href}>
+            {words.say(featured.view.label)}
+          </Button>
+        </Actions>
+      </s-stack>
+    </s-box>
+  );
+}
+
+/** What needs the merchant, as Settings' status row: tinted by its tone, the featured stop and up to two quiet rows inside. */
 function Attention({ model, data, words, resumer }: { model: AttentionModel; data: Data; words: JobWords; resumer: Resumer }) {
   const { t } = words.i18n;
   const featured = model.featured;
-  const primary = featured?.primary ?? null;
-  return (
-    <s-section accessibilityLabel={t("jobs.attention.label")}>
-      <s-stack direction="block" gap="base">
-        <s-query-container>
-          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-            <TintMark icon={model.mark.icon} tone={model.mark.tone} colour={MARK_COLOUR[model.mark.tone]} size={40} />
-            <s-grid gridTemplateColumns="@container (inline-size > 520px) 1fr auto, 1fr" gap="small-200 base" alignItems="center" justifyItems="start">
-              <s-stack direction="block" gap="small-500">
-                <h2 style={CARD_HEADING}>{words.say(model.heading)}</h2>
-                {model.text.length ? <s-text color="subdued">{model.text.map(words.say).join(" ")}</s-text> : null}
-              </s-stack>
-              {model.headAction ? (
-                <Button variant="primary" href={model.headAction.href}>
-                  {words.say(model.headAction.label)}
-                </Button>
-              ) : null}
-            </s-grid>
-          </s-grid>
-        </s-query-container>
-        {featured ? (
-          <s-box {...CARD} padding="base">
-            <s-stack direction="block" gap="small-200">
-              <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-                <Flag country={localeCountry(featured.locale, data.marketCountries)} fallback={featured.locale} size={20} />
-                <s-stack direction="block" gap="small-500">
-                  <span style={STRONG}>{words.say(featured.title)}</span>
-                  {featured.text.map((text, i) => (
-                    <s-text key={i} color="subdued">
-                      {words.say(text)}
-                    </s-text>
-                  ))}
-                </s-stack>
-              </s-grid>
-              <s-stack direction="inline" gap="small-200" alignItems="center">
-                {primary?.kind === "link" ? (
-                  <Button variant="primary" href={primary.href}>
-                    {words.say(primary.label)}
-                  </Button>
-                ) : primary?.kind === "reload" ? (
-                  <Button variant="primary" onClick={() => window.location.reload()}>
-                    {words.say(primary.label)}
-                  </Button>
-                ) : primary?.kind === "resume" ? (
-                  <resumer.Form method="post">
-                    <input type="hidden" name="intent" value="resume" />
-                    <input type="hidden" name="job" value={primary.jobId} />
-                    <Button type="submit" variant="primary" {...(resumer.state !== "idle" ? { loading: true } : {})}>
-                      {words.say(primary.label)}
-                    </Button>
-                  </resumer.Form>
-                ) : null}
-                <Button variant={featured.view.variant} href={featured.view.href}>
-                  {words.say(featured.view.label)}
-                </Button>
-              </s-stack>
-            </s-stack>
-          </s-box>
-        ) : null}
+  const more =
+    featured || model.rows.length ? (
+      <>
+        {featured ? <Featured featured={featured} data={data} words={words} resumer={resumer} /> : null}
         {model.rows.length ? (
-          <ul style={{ ...PLAIN_LIST, display: "grid", gap: 2 }}>
+          <ul className="lv-jobs-rows">
             {model.rows.map((row) => (
               <li key={row.href + row.title.key}>
                 <s-clickable href={row.href} padding="small-200" borderRadius="base">
                   <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
                     <s-icon type={row.mark.icon} tone={row.mark.tone} />
                     <s-stack direction="block" gap="small-500">
-                      <span style={STRONG}>{words.say(row.title)}</span>
+                      <Strong>{words.say(row.title)}</Strong>
                       <s-text color="subdued">{row.text.map(words.say).join(" ")}</s-text>
                     </s-stack>
                     <s-icon type="chevron-right" color="subdued" size="small" />
@@ -465,48 +461,76 @@ function Attention({ model, data, words, resumer }: { model: AttentionModel; dat
             ))}
           </ul>
         ) : null}
-      </s-stack>
-    </s-section>
+      </>
+    ) : null;
+  return (
+    <StatusPanel
+      label={t("jobs.attention.label")}
+      tone={model.mark.tone}
+      icon={model.mark.icon}
+      title={<h2 className="lv-h2">{words.say(model.heading)}</h2>}
+      text={model.text.length ? model.text.map(words.say).join(" ") : undefined}
+      action={
+        model.headAction ? (
+          <Button variant="primary" href={model.headAction.href}>
+            {words.say(model.headAction.label)}
+          </Button>
+        ) : undefined
+      }
+    >
+      {more}
+    </StatusPanel>
   );
 }
 
 // ─── Tabs, filters and the search ────────────────────────────────────────────
 
-const TAB_COUNT: Readonly<Record<JobTab, keyof Data["counts"]>> = { all: "all", active: "active", problems: "problems", completed: "completed", cancelled: "cancelled" };
+const TAB_COUNT: Readonly<Record<JobTab, "all" | "active" | "problems" | "completed" | "cancelled">> = {
+  all: "all",
+  active: "active",
+  problems: "problems",
+  completed: "completed",
+  cancelled: "cancelled",
+};
+/** Each tab's icon, in a grey square (a tint names a place, never a state): the app's icons for running, failed, done. */
+const TAB_ICON: Readonly<Record<JobTab, IconName>> = { all: "list-bulleted", active: "in-progress", problems: "alert-circle", completed: "check-circle", cancelled: "x-circle" };
 
+/**
+ * The tabs as compact tiles (ui.css .lv-jobtabs, Settings' .lv-tile): the icon and the figure, the name
+ * under them; the current one framed in blue. Problems carries a dot while it has jobs, critical only
+ * when one needs the merchant (said to assistive technology too). Five in a row, two rows on a phone.
+ */
 function Tabs({ data, words }: { data: Data; words: JobWords }) {
   const { t, number } = words.i18n;
+  const problems = data.counts.problems > 0 ? (data.counts.problemsNeedYou > 0 ? "critical" : "warning") : null;
   return (
-    <nav aria-label={t("jobs.tabs.label")}>
-      <ul style={{ ...PLAIN_LIST, display: "flex", gap: 4, overflowX: "auto", scrollbarWidth: "none" }}>
+    <nav aria-label={t("jobs.tabs.label")} className="lv-jobtabs">
+      <ul className="lv-jobtabs__list">
         {JOB_TABS.map((tab) => {
           const current = data.query.status === tab;
-          const count = data.counts[TAB_COUNT[tab]];
-          const content = (
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <span style={{ ...(current ? STRONG : {}), whiteSpace: "nowrap" }}>{t(`jobs.tab.${tab}`)}</span>
-              {tab === "problems" && count > 0 ? (
-                <s-badge tone="critical">{number(count)}</s-badge>
-              ) : (
-                <s-text color="subdued">
-                  <span style={COUNT}>{number(count)}</span>
-                </s-text>
-              )}
-            </s-stack>
-          );
+          const name = t(`jobs.tab.${tab}`);
+          const figure = number(data.counts[TAB_COUNT[tab]]);
+          const tone = tab === "problems" ? problems : null;
           return (
-            <li key={tab} style={{ flex: "none" }}>
-              {current ? (
-                <span aria-current="page">
-                  <s-box padding="small-200 base" borderRadius="base" background="strong" minBlockSize="44px">
-                    {content}
-                  </s-box>
+            <li key={tab} className="lv-jobtabs__item">
+              <Link
+                to={jobsHref(data.query, { status: tab })}
+                preventScrollReset
+                className="lv-tile lv-jobtab"
+                {...(tone ? { "data-tone": tone } : {})}
+                {...(current ? { "aria-current": "page" as const } : {})}
+              >
+                {/* Read as "Problems 3": the name first (WCAG 2.5.3); drawn with the figure on top. */}
+                <span className="lv-sr">{[`${name} ${figure}`, tone === "critical" ? t("jobs.attention.label") : null].filter(Boolean).join(", ")}</span>
+                <span className="lv-jobtab__top" aria-hidden="true">
+                  <IconSquare icon={TAB_ICON[tab]} size={32} />
+                  <span className="lv-jobtab__figure">{figure}</span>
                 </span>
-              ) : (
-                <s-clickable href={jobsHref(data.query, { status: tab })} padding="small-200 base" borderRadius="base" minBlockSize="44px">
-                  {content}
-                </s-clickable>
-              )}
+                <span className="lv-tile__name" aria-hidden="true">
+                  {name}
+                </span>
+                {tone ? <span className="lv-tile__dot" aria-hidden="true" /> : null}
+              </Link>
             </li>
           );
         })}
@@ -515,70 +539,85 @@ function Tabs({ data, words }: { data: Data; words: JobWords }) {
   );
 }
 
+const FILTER_PANEL = "jobs-filters";
+
+/**
+ * The search and the four filters. A filter's choice applies at once: React 18 calls no onChange for a web
+ * component, so its input event navigates (and React 19's change event, once, to the same address). The
+ * search applies with "Search". On a phone the filters fold behind "Filter (n)".
+ */
 function Filters({ data, words }: { data: Data; words: JobWords }) {
   const { t } = words.i18n;
-  const submit = useSubmit();
-  const form = useRef<HTMLFormElement>(null);
+  const navigate = useNavigate();
   const q = data.query;
   const set = filterCount(q);
-  const onChange = () => {
-    if (form.current) void submit(form.current, { replace: true });
+  const [open, setOpen] = useState(false);
+  // The address a choice went to: its second event (input, then change) goes nowhere new.
+  const chosen = useRef<string | null>(null);
+  useEffect(() => {
+    chosen.current = null;
+  }, [q]);
+  const choose = (filter: JobFilter, value: string) => {
+    const href = filterHref(q, filter, value);
+    if (href === chosen.current || href === jobsHref(q)) return;
+    chosen.current = href;
+    void navigate(href, { replace: true, preventScrollReset: true });
   };
   const languages = [...new Set([...data.targets, ...(q.lang ? [q.lang] : [])])]
     .map((code) => ({ code, name: words.i18n.language(code, data.names[code]) }))
     .sort((a, b) => a.name.localeCompare(b.name, words.i18n.locale));
-  const fields = (
-    <s-grid gridTemplateColumns="@container (inline-size > 300px) 1fr 1fr, (inline-size > 760px) 1fr 1fr 1fr 1fr, 1fr" gap="small-200 base">
-      <s-select name="lang" label={t("common.language")} value={q.lang ?? ALL} onChange={onChange}>
-        <s-option value={ALL}>{t("common.allLanguages")}</s-option>
-        {languages.map((l) => (
-          <s-option key={l.code} value={l.code}>
-            {l.name}
-          </s-option>
-        ))}
-      </s-select>
-      <s-select name="area" label={t("jobs.filter.area")} value={q.area ?? ALL} onChange={onChange}>
-        <s-option value={ALL}>{t("jobs.filter.anyArea")}</s-option>
-        {AREAS.map((id) => (
-          <s-option key={id} value={id}>
-            {categoryName(words.i18n, id)}
-          </s-option>
-        ))}
-      </s-select>
-      <s-select name="by" label={t("jobs.filter.by")} value={q.by ?? ALL} onChange={onChange}>
-        <s-option value={ALL}>{t("jobs.filter.anyone")}</s-option>
-        {JOB_BY.map((by) => (
-          <s-option key={by} value={by}>
-            {t(`jobs.filter.by.${by}`)}
-          </s-option>
-        ))}
-      </s-select>
-      <s-select name="since" label={t("jobs.filter.period")} value={q.since ?? ALL} onChange={onChange}>
-        <s-option value={ALL}>{t("jobs.filter.anyTime")}</s-option>
-        {JOB_PERIODS.map((period) => (
-          <s-option key={period} value={period}>
-            {t(`jobs.filter.period.${period}`)}
-          </s-option>
-        ))}
-      </s-select>
-    </s-grid>
-  );
   return (
-    <Form method="get" ref={form} role="search" aria-label={t("jobs.search.label")}>
+    <Form method="get" role="search" aria-label={t("jobs.search.label")} className="lv-jobs-filters">
       {q.status !== "all" ? <input type="hidden" name="status" value={q.status} /> : null}
       {q.type && !q.area ? <input type="hidden" name="type" value={q.type} /> : null}
-      <s-stack direction="block" gap="small-200">
-        <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="center">
-          <s-search-field name="q" label={t("jobs.search.label")} labelAccessibilityVisibility="exclusive" placeholder={t("jobs.search.placeholder")} value={q.q ?? ""} />
-          <Button type="submit">{t("common.action.search")}</Button>
-        </s-grid>
-        {fields}
-        {set || q.q ? (
-          <s-stack direction="inline">
-            <s-link href={jobsHref({ ...q, lang: null, area: null, type: null, by: null, since: null, q: null }, { page: 1 })}>{t("jobs.filter.clear")}</s-link>
-          </s-stack>
-        ) : null}
-      </s-stack>
+      <div className="lv-jobs-filters__search">
+        <s-search-field name="q" label={t("jobs.search.label")} labelAccessibilityVisibility="exclusive" placeholder={t("jobs.search.placeholder")} value={q.q ?? ""} />
+        <Button type="submit">{t("common.action.search")}</Button>
+        <div className="lv-jobs-filters__toggle">
+          <Button icon={set ? "filter-active" : "filter"} expanded={open} controls={FILTER_PANEL} onClick={() => setOpen(!open)}>
+            {set ? t("jobs.filter.toggleCount", { count: set }) : t("jobs.filter.toggle")}
+          </Button>
+        </div>
+      </div>
+      <div id={FILTER_PANEL} className="lv-jobs-filters__fields" {...(open ? { "data-open": "" } : {})}>
+        <s-select name="lang" label={t("common.language")} value={q.lang ?? ALL} onInput={(e) => choose("lang", e.currentTarget.value)} onChange={(e) => choose("lang", e.currentTarget.value)}>
+          <s-option value={ALL}>{t("common.allLanguages")}</s-option>
+          {languages.map((l) => (
+            <s-option key={l.code} value={l.code}>
+              {l.name}
+            </s-option>
+          ))}
+        </s-select>
+        <s-select name="area" label={t("jobs.filter.area")} value={q.area ?? ALL} onInput={(e) => choose("area", e.currentTarget.value)} onChange={(e) => choose("area", e.currentTarget.value)}>
+          <s-option value={ALL}>{t("jobs.filter.anyArea")}</s-option>
+          {AREAS.map((id) => (
+            <s-option key={id} value={id}>
+              {categoryName(words.i18n, id)}
+            </s-option>
+          ))}
+        </s-select>
+        <s-select name="by" label={t("jobs.filter.by")} value={q.by ?? ALL} onInput={(e) => choose("by", e.currentTarget.value)} onChange={(e) => choose("by", e.currentTarget.value)}>
+          <s-option value={ALL}>{t("jobs.filter.anyone")}</s-option>
+          {JOB_BY.map((by) => (
+            <s-option key={by} value={by}>
+              {t(`jobs.filter.by.${by}`)}
+            </s-option>
+          ))}
+        </s-select>
+        <s-select name="since" label={t("jobs.filter.period")} value={q.since ?? ALL} onInput={(e) => choose("since", e.currentTarget.value)} onChange={(e) => choose("since", e.currentTarget.value)}>
+          <s-option value={ALL}>{t("jobs.filter.anyTime")}</s-option>
+          {JOB_PERIODS.map((period) => (
+            <s-option key={period} value={period}>
+              {t(`jobs.filter.period.${period}`)}
+            </s-option>
+          ))}
+        </s-select>
+      </div>
+      {set || q.q ? (
+        <div>
+          <s-link href={clearedHref(q)}>{t("jobs.filter.clear")}</s-link>
+        </div>
+      ) : null}
     </Form>
   );
 }
@@ -606,25 +645,42 @@ function Pager({ data, words }: { data: Data; words: JobWords }) {
   );
 }
 
-/** No job at all: where jobs start. No match: say so, with the way back. */
+/** A store without any job yet: nothing to filter, only the list itself. */
+function storeIsEmpty(data: Data): boolean {
+  return data.counts.all === 0 && filterCount(data.query) === 0 && !data.query.q;
+}
+
+/** No job at all: where jobs come from, and the way there. No match: say so, with the way back. An empty tab: say so. */
 function Empty({ data, words }: { data: Data; words: JobWords }) {
   const { t } = words.i18n;
   const filtered = filterCount(data.query) > 0 || Boolean(data.query.q);
-  const nothingYet = data.counts.all === 0 && !filtered;
-  const text = nothingYet ? null : filtered ? t("jobs.list.noMatches") : t(`jobs.tab.empty.${data.query.status}`);
   return (
     <s-box padding="large base">
-      <s-stack direction="block" gap="base" alignItems="center">
-        <TintMark icon={filtered ? "search" : "check-circle"} tone={filtered ? "info" : "success"} colour={filtered ? STATE_COLOURS.draft : STATE_COLOURS.complete} size={56} />
-        {nothingYet ? (
-          <s-stack direction="block" gap="small-200" alignItems="center">
-            <s-text color="subdued">{t("jobs.list.emptyStart")}</s-text>
-            <Button href="/app">{t("jobs.list.emptyAction")}</Button>
-          </s-stack>
+      <div className="lv-jobs-empty">
+        {storeIsEmpty(data) ? (
+          <>
+            <TintMark icon="language-translate" tone="neutral" size={56} />
+            <s-stack direction="block" gap="small-200" alignItems="center">
+              <h2 className="lv-h2">{t("jobs.list.emptyHeading")}</h2>
+              <s-text color="subdued">{t("jobs.list.emptyStart")}</s-text>
+            </s-stack>
+            <Button variant="primary" href="/app">
+              {t("jobs.list.emptyAction")}
+            </Button>
+          </>
+        ) : filtered ? (
+          <>
+            <TintMark icon="search" tone="info" colour={STATE_COLOURS.draft} size={56} />
+            <s-text color="subdued">{t("jobs.list.noMatches")}</s-text>
+            <Button href={clearedHref(data.query)}>{t("jobs.filter.clear")}</Button>
+          </>
         ) : (
-          <s-text color="subdued">{text}</s-text>
+          <>
+            <TintMark icon="check-circle" tone="success" colour={STATE_COLOURS.complete} size={56} />
+            <s-text color="subdued">{t(`jobs.tab.empty.${data.query.status}`)}</s-text>
+          </>
         )}
-      </s-stack>
+      </div>
     </s-box>
   );
 }
@@ -638,15 +694,16 @@ export default function Jobs() {
   const resumer = useFetcher<typeof action>();
   const attention = attentionOf(data);
 
-  // Running jobs update by themselves: the page follows them.
-  const live = data.counts.active > 0;
+  // Running jobs update by themselves: the page follows them. Not while a search is shown: it asks
+  // Shopify for names, never on a timer (app/.server/jobs/job-search.ts).
+  const updating = data.counts.active > 0 && !data.query.q;
   useEffect(() => {
-    if (!live) return;
+    if (!updating) return;
     const timer = setInterval(() => {
       if (revalidator.state === "idle" && document.visibilityState === "visible") revalidator.revalidate();
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [live, revalidator]);
+  }, [updating, revalidator]);
 
   // Jobs just started by one click: a toast, once; the address forgets it.
   const started = data.query.started;
@@ -668,7 +725,7 @@ export default function Jobs() {
     <s-page heading={t("jobs.list.heading")}>
       <s-stack direction="block" gap="base">
         <s-stack direction="block" gap="small-500">
-          <h1 style={BIG_HEADING}>{t("jobs.list.heading")}</h1>
+          <h1 className="lv-h1">{t("jobs.list.heading")}</h1>
           <s-text color="subdued">{t("jobs.list.subtitle")}</s-text>
         </s-stack>
 
@@ -685,17 +742,19 @@ export default function Jobs() {
         <s-section padding="none">
           <s-query-container>
             <s-stack direction="block" gap="base">
-              <s-box padding="base base none base">
-                <s-stack direction="block" gap="base">
-                  <Tabs data={data} words={words} />
-                  <Filters data={data} words={words} />
-                  {data.search?.short ? <s-text color="subdued">{t("jobs.search.short")}</s-text> : null}
-                  {data.search?.partial ? <s-banner tone="warning">{t("jobs.search.partial")}</s-banner> : null}
-                </s-stack>
-              </s-box>
+              {storeIsEmpty(data) ? null : (
+                <s-box padding="base base none base">
+                  <s-stack direction="block" gap="base">
+                    <Tabs data={data} words={words} />
+                    <Filters data={data} words={words} />
+                    {data.search?.short ? <s-text color="subdued">{t("jobs.search.short")}</s-text> : null}
+                    {data.search?.partial ? <s-banner tone="warning">{t("jobs.search.partial")}</s-banner> : null}
+                  </s-stack>
+                </s-box>
+              )}
               {hasRows ? (
                 <s-stack direction="block" gap="base">
-                  {showsLive ? <LiveGroup data={data} words={words} /> : null}
+                  {showsLive ? <LiveGroup data={data} words={words} updating={updating} /> : null}
                   {rows.length ? <Days rows={rows} data={data} words={words} /> : null}
                 </s-stack>
               ) : (

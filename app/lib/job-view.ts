@@ -17,18 +17,21 @@
  *   order (DISPLAY_ORDER), and one figure: what ended well (ringFigure).
  * - The list: a row's result and meta, the store-zone days and the clusters
  *   of one check or one click, the attention card's verdict, the addresses of
- *   tabs, filters and pages (parseJobsQuery, jobsHref).
+ *   tabs, filters and pages (parseJobsQuery, jobsHref, filterHref).
  * - A job's page: the hero by state with its numbered steps (heroModel), the
- *   problems card's heading, the cancel dialog's sentences, the stats.
+ *   one item the editor finishes (finishTarget), the problems card's heading
+ *   and its unnamed items (itemName), the cancel dialog's sentences, the
+ *   stats, when a stop's wait for the reset is looked at again
+ *   (resumeCheckDelay).
  */
 import { calendarDay, INTL_LOCALE, type I18n, type MessageKey, type MessageVars } from "../i18n/i18n";
 import { MESSAGES } from "../i18n/messages";
 import { coveragePercent } from "./coverage-rules";
-import { ENGINE_NAMES } from "./engines";
+import { ENGINE_IDS, ENGINE_NAMES } from "./engines";
 import type { IconType } from "./icons";
 import { CATEGORIES, isCategoryId, languagePath, type CategoryId } from "./language-categories";
 import { upperFirst } from "./name-lists";
-import { parseOwnKeyCode } from "./own-keys";
+import { ownKeyStopCode, parseOwnKeyCode } from "./own-keys";
 import { CONTENT_TYPES, coverageTypeLabel, RESOURCE_KINDS } from "./resource-kinds";
 import { ALL } from "./select-all";
 import { SMART_REQUESTED_BY } from "./smart-auto";
@@ -141,6 +144,15 @@ export function stopLook(group: StopGroup): StopLook | null {
   if (group === "SHOP_INACTIVE") return null;
   return NEEDS_YOU.has(group) ? "needsYou" : "waits";
 }
+
+/**
+ * Every error code of a stop that needs the merchant (stopLook "needsYou"),
+ * an own key's with each engine: the list's Problems tile counts them on the
+ * server (jobCounts' problemsNeedYou), so its dot is critical only then.
+ */
+export const NEEDS_YOU_CODES: readonly string[] = [...NEEDS_YOU].flatMap((group) =>
+  group === "OWN_KEY_QUOTA" || group === "OWN_KEY_AUTH" ? [group, ...ENGINE_IDS.map((engine) => ownKeyStopCode(group === "OWN_KEY_QUOTA" ? "quota" : "auth", engine))] : [group],
+);
 
 /**
  * Where each fixable cause is fixed: Settings sections by `?section=<key>`
@@ -324,6 +336,15 @@ export function jobItems(i18n: I18n, type: string, count: number): string {
 export function jobName(i18n: I18n, job: JobNaming, names?: LanguageNames): string {
   const language = upperFirst(i18n.language(job.targetLocale, names?.[job.targetLocale]));
   return i18n.t("jobs.name", { language, kind: jobKindLabel(i18n, job.resourceType) });
+}
+
+/**
+ * An item whose name Shopify didn't give (its id's number): its kind's noun and the number, "Seite 4",
+ * "Produkt 12" ("Page 4", "Produit 12"); a kind without a noun of its own: "Eintrag 4".
+ */
+export function itemName(i18n: I18n, type: string, id: string): string {
+  const noun = `common.kind.${type}.singular`;
+  return known(noun) ? `${upperFirst(i18n.t(noun))} ${id}` : i18n.t("jobs.problems.unnamed", { id });
 }
 
 /** requestedBy of automatic translation's jobs (AUTO_REQUESTED_BY in app/.server/jobs/bulk-jobs.ts). */
@@ -701,7 +722,10 @@ export interface JobRowView {
   groups: JobGroups;
 }
 
-/** A fragment's icon: an outcome group's (the legend's), or a stop that goes on (pause-circle, warning). */
+/**
+ * A fragment's icon: an outcome group's (the legend's), or a stop's pause-circle in its tone (critical
+ * while it needs the merchant, warning when it goes on): the same icon as its badge and the attention card.
+ */
 export type FragmentLook = OutcomeGroup | "paused";
 export type FragmentTone = "critical" | "caution" | "warning" | "subdued" | null;
 
@@ -760,7 +784,7 @@ export function rowResult(row: JobRowView, options: { workerDown?: boolean } = {
     case "queued":
       return { live: true, text: { key: options.workerDown ? "jobs.result.waitingWorker" : "jobs.result.startsSoon" }, subdued: true, bar: null };
     case "stopped":
-      return { live: false, fragments: [{ look: "failed", tone: "critical", text: stopText(job, "short") }] };
+      return { live: false, fragments: [{ look: "paused", tone: "critical", text: stopText(job, "short") }] };
     case "stoppedWait":
       return { live: false, fragments: [{ look: "paused", tone: "warning", text: stopText(job, "short") }] };
     case "cancelled":
@@ -950,9 +974,9 @@ export interface PendingDrafts {
   items: number;
 }
 
-/** A step's button: a link, Retry (posts intent=retry, only the retryable items), Resume (the same), or opening the app again. */
+/** A step's button: a link (with its icon, if any), Retry (posts intent=retry, only the retryable items), Resume (the same), or opening the app again. */
 export type StepAction =
-  | { kind: "link"; href: string; label: JobText }
+  | { kind: "link"; href: string; label: JobText; icon?: IconType }
   | { kind: "retry"; label: JobText; accessibilityLabel: JobText }
   | { kind: "resume"; label: JobText }
   | { kind: "reload"; label: JobText };
@@ -993,10 +1017,15 @@ export interface NextPanel {
  */
 export type HeroStrip = { kind: "nothing"; icon: "done" | "active"; title: JobText; text: JobText; action: CancelAction | LinkAction | null } | { kind: "foot"; foot: PanelFoot };
 
-/** A line under the hero's title: subdued, or the stop's reason (pause-circle in its tone); `live` is the "updates by itself" line with the live dot. */
+/**
+ * A line under the hero's title: subdued, or with its icon in its tone (a stop's reason: pause-circle,
+ * critical or warning; its cause fixed or the allowance back: check-circle in success, as the way back
+ * to the job shows it); `live` is the "updates by itself" line with the live dot.
+ */
 export interface HeroLine {
   text: JobText[];
-  tone: "critical" | "warning" | null;
+  tone: "critical" | "warning" | "success" | null;
+  icon: IconType | null;
   live: boolean;
 }
 
@@ -1020,6 +1049,8 @@ export interface HeroOptions {
   settling?: boolean;
   /** The store is on the Own key plan: no plan upsell. */
   ownKeyPlan?: boolean;
+  /** The editor of the one item only the editor finishes (finishTarget): its step opens it directly. */
+  finishHref?: string | null;
 }
 
 type HeroJob = Pick<JobFields, "id" | "resourceType" | "targetLocale" | "status" | "discoveryDone" | "failedItems" | "errorCode" | "requestedBy" | "smartRunId" | "publishMode">;
@@ -1033,8 +1064,8 @@ function withPrimary(drafts: ReadonlyArray<StepDraft | null>): Step[] {
   return steps.map(({ mayLead, ...step }, index) => ({ ...step, primary: index === lead && mayLead }));
 }
 
-const line = (...text: JobText[]): HeroLine => ({ text, tone: null, live: false });
-const LIVE: HeroLine = { text: [{ key: "jobs.group.liveNote" }], tone: null, live: true };
+const line = (...text: JobText[]): HeroLine => ({ text, tone: null, icon: null, live: false });
+const LIVE: HeroLine = { text: [{ key: "jobs.group.liveNote" }], tone: null, icon: null, live: true };
 const CANCEL: CancelAction = { kind: "cancel", label: { key: "jobs.detail.cancel" } };
 const CANCEL_FOOT: PanelFoot = { text: { key: "jobs.next.cancelFoot" }, action: CANCEL, wide: 280 };
 const PLANS_FOOT: PanelFoot = { text: { key: "jobs.next.plansFoot" }, action: { kind: "link", href: "/app/plan", label: { key: "jobs.action.plans" } }, wide: 540 };
@@ -1068,12 +1099,17 @@ function retryStep(job: HeroJob, groups: JobGroups): StepDraft {
   };
 }
 
-function finishStep(job: HeroJob, count: number): StepDraft {
+/** One item: its editor, opened directly; several: the list of them below the hero. */
+function finishStep(job: HeroJob, count: number, href: string | null): StepDraft {
+  const action: StepAction =
+    count === 1 && href
+      ? { kind: "link", href, label: { key: "jobs.action.openEditor" }, icon: "edit" }
+      : { kind: "link", href: "#problems-heading", label: { key: "jobs.action.showItems" } };
   return {
     id: "finish",
     title: { key: "jobs.next.finish.title", vars: { count, items: { items: count, type: job.resourceType } } },
     text: [{ key: "jobs.next.finish.text" }],
-    action: { kind: "link", href: "#problems-heading", label: { key: "jobs.action.view" } },
+    action,
     mayLead: true,
   };
 }
@@ -1147,7 +1183,7 @@ function activeEnd(job: HeroJob, steps: Step[]): HeroEnd {
 
 type HeroBody = Pick<HeroModel, "title" | "mark" | "lines"> & HeroEnd;
 
-function finishedHero(job: HeroJob, groups: JobGroups, review: StepDraft | null): HeroBody {
+function finishedHero(job: HeroJob, groups: JobGroups, review: StepDraft | null, finishHref: string | null): HeroBody {
   const kind: TextValue = { kind: job.resourceType };
   const autoPublish = job.publishMode === "AUTO_PUBLISH";
   const ok = endedWell(groups);
@@ -1172,7 +1208,7 @@ function finishedHero(job: HeroJob, groups: JobGroups, review: StepDraft | null)
   const title: JobText = { key: "jobs.hero.title", vars: { kind, ok, total: groups.total } };
   // The items only the editor finishes: incomplete ones, and failed ones a new try doesn't help (a smart job's changed originals are its schedule's).
   const finish = groups.counts.look + groups.counts.failed - groups.retryable;
-  const steps = withPrimary([review, groups.retryable > 0 ? retryStep(job, groups) : null, finish > 0 ? finishStep(job, finish) : null]);
+  const steps = withPrimary([review, groups.retryable > 0 ? retryStep(job, groups) : null, finish > 0 ? finishStep(job, finish, finishHref) : null]);
   const lines = [line(...(review ? [{ key: "jobs.hero.draftsText" } as const] : []), { key: "jobs.hero.missingBelow" })];
   return { title, mark: ringMark(groups, title, autoPublish), lines, ...(steps.length ? panelOf("language.next.heading", steps) : { panel: null, strip: OVER }) };
 }
@@ -1180,9 +1216,10 @@ function finishedHero(job: HeroJob, groups: JobGroups, review: StepDraft | null)
 function stoppedHero(job: HeroJob, groups: JobGroups, review: StepDraft | null, stop: StopFacts | null, state: JobState, options: HeroOptions): Pick<HeroModel, "lines"> & HeroEnd {
   const group = stopGroup(job.errorCode);
   const fixed = stop?.fixed === true;
+  // Good news in its own look (check-circle, success), the stop's reason with the stop's pause-circle.
   const reason: HeroLine = fixed
-    ? { text: [{ key: ALLOWANCE_GROUPS.has(group) ? "jobs.hero.allowanceBack" : "jobs.hero.fixed" }], tone: "warning", live: false }
-    : { text: [stopText(job, "help", stop)], tone: state === "stopped" ? "critical" : "warning", live: false };
+    ? { text: [{ key: ALLOWANCE_GROUPS.has(group) ? "jobs.hero.allowanceBack" : "jobs.hero.fixed" }], tone: "success", icon: "check-circle", live: false }
+    : { text: [stopText(job, "help", stop)], tone: state === "stopped" ? "critical" : "warning", icon: "pause-circle", live: false };
   const lines = [reason, line({ key: "jobs.hero.kept" })];
   // The app isn't installed: nothing to resume.
   if (group === "SHOP_INACTIVE") return { lines, panel: null, strip: OVER };
@@ -1251,7 +1288,7 @@ export function heroModel(job: HeroJob, groups: JobGroups, pending: PendingDraft
     };
   }
   const shown = legend(groups, autoPublish);
-  if (state === "done" || state === "doneLook" || state === "doneErrors") return { state, legend: shown, ...finishedHero(job, groups, review) };
+  if (state === "done" || state === "doneLook" || state === "doneErrors") return { state, legend: shown, ...finishedHero(job, groups, review, options.finishHref ?? null) };
   const title: JobText = { key: "jobs.hero.title", vars: { kind, ok: endedWell(groups), total: groups.total } };
   const mark = ringMark(groups, title, autoPublish);
   if (state === "running") {
@@ -1262,6 +1299,49 @@ export function heroModel(job: HeroJob, groups: JobGroups, pending: PendingDraft
   }
   if (state === "cancelled") return { state, mark, title, legend: shown, ...cancelledHero(job, groups, review, options.settling ?? false) };
   return { state, mark, title, legend: shown, ...stoppedHero(job, groups, review, stop, state, options) };
+}
+
+/** What finishTarget reads of a problem item (listProblemItems, with its editor's address). */
+export interface ProblemItem {
+  status: string;
+  errorCode: string | null;
+  href: string | null;
+}
+
+/**
+ * The editor of the one item only the editor finishes, by outcomeGroups' rule: an incomplete item
+ * (partly translated, no field passed the checks, a changed original of a job that isn't smart) or a
+ * failed one a new try doesn't help. Null when there are none or several, or it has no editor: the
+ * finish step then shows the list (heroModel's finishHref).
+ */
+export function finishTarget(job: Pick<JobFields, "requestedBy">, problems: readonly ProblemItem[]): string | null {
+  const smart = isSmart(job);
+  const editorFinishes = ({ status, errorCode }: ProblemItem) => {
+    if (status === "FAILED" || status === "DEAD") return !retryHelps(status, errorCode);
+    if (status === "SUCCEEDED") return errorCode === "PARTIAL";
+    if (status === "SKIPPED") return errorCode === "ALL_FIELDS_REJECTED" || (errorCode === "SOURCE_CHANGED" && !smart);
+    return false;
+  };
+  const items = problems.filter(editorFinishes);
+  return items.length === 1 ? (items[0]!.href ?? null) : null;
+}
+
+/** The header's "Gestartet heute um 14:02"; a job that hasn't started yet (queued): "Erstellt heute um 14:02". */
+export function startedText(job: Pick<JobFields, "createdAt" | "startedAt">): JobText {
+  return job.startedAt ? { key: "jobs.detail.startedAt", vars: { when: { at: job.startedAt } } } : { key: "jobs.detail.createdAt", vars: { when: { at: job.createdAt } } };
+}
+
+/** How a stop's wait for the daily reset is looked at again: a little after the reset, then every minute; never longer than a timer can wait. */
+export const RESUME_CHECK = { margin: 5_000, every: 60_000, longest: 2_147_483_647 } as const;
+
+/**
+ * The time until the page looks again whether a stop waiting for the daily reset can go on (the wait
+ * step's "the button to resume appears here by itself"): until `resumesAt` and a few seconds, once it
+ * has passed (or can't be read) a minute.
+ */
+export function resumeCheckDelay(resumesAt: When, now: number): number {
+  const wait = new Date(resumesAt).getTime() - now + RESUME_CHECK.margin;
+  return Math.min(wait > 0 ? wait : RESUME_CHECK.every, RESUME_CHECK.longest);
 }
 
 /**
@@ -1301,8 +1381,9 @@ export function cancelBody(job: Pick<JobFields, "resourceType" | "requestedBy">,
   return text;
 }
 
-/** One of the hero's stats: its name, its value and an optional note. */
+/** One of the job's stats: its icon (a grey square), its name, its value and an optional note. */
 export interface JobStat {
+  icon: IconType;
   name: JobText;
   value: TextValue;
   note: JobText | null;
@@ -1311,33 +1392,34 @@ export interface JobStat {
 const msOf = (value: When) => new Date(value).getTime();
 
 /**
- * The stats under the hero (time, AI characters, saved), in three fixed
- * columns: only when the job sent or saved characters, a stat whose value is
- * 0 left out (null keeps its column). The time is how long the job has run
- * (active), took (finished, stopped, cancelled), or, for a job that collects
- * changes, the span of the changes.
+ * The job's stats (time, AI characters, saved), each with the icon of its
+ * feature (the Plan page's: gauge for AI characters, database for the
+ * translation memory that saved them): only when the job sent or saved
+ * characters, a stat whose value is 0 left out, so the others share the row.
+ * The time is how long the job has run (active), took (finished, stopped,
+ * cancelled), or, for a job that collects changes, the span of the changes.
  */
 export function visibleStats(
   job: Pick<JobFields, "status" | "requestedBy" | "smartRunId" | "charsBilled" | "charsSaved" | "createdAt" | "startedAt" | "finishedAt" | "updatedAt">,
   options: { now: When; ownKeyPlan?: boolean },
-): [JobStat, JobStat | null, JobStat | null] | null {
+): JobStat[] | null {
   if (job.charsBilled + job.charsSaved <= 0) return null;
   const started = msOf(job.startedAt ?? job.createdAt);
   const time: JobStat = isAutomatic(job)
-    ? { name: { key: "jobs.stats.window" }, value: { join: [{ time: job.createdAt }, { time: job.updatedAt }], separator: "–" }, note: null }
+    ? { icon: "clock", name: { key: "jobs.stats.window" }, value: { join: [{ time: job.createdAt }, { time: job.updatedAt }], separator: "–" }, note: null }
     : ACTIVE.has(job.status)
-      ? { name: { key: "jobs.stats.runningFor" }, value: { duration: Math.max(0, msOf(options.now) - started) }, note: null }
-      : { name: { key: "jobs.stats.duration" }, value: { duration: Math.max(0, msOf(job.finishedAt ?? job.updatedAt) - started) }, note: null };
+      ? { icon: "clock", name: { key: "jobs.stats.runningFor" }, value: { duration: Math.max(0, msOf(options.now) - started) }, note: null }
+      : { icon: "clock", name: { key: "jobs.stats.duration" }, value: { duration: Math.max(0, msOf(job.finishedAt ?? job.updatedAt) - started) }, note: null };
   const own = options.ownKeyPlan ?? false;
   const ai: JobStat | null =
     job.charsBilled > 0
-      ? { name: { key: own ? "jobs.stats.ownKey" : "jobs.stats.ai" }, value: job.charsBilled, note: { key: own ? "jobs.stats.ownKeyNote" : "jobs.stats.aiNote" } }
+      ? { icon: "gauge", name: { key: own ? "jobs.stats.ownKey" : "jobs.stats.ai" }, value: job.charsBilled, note: { key: own ? "jobs.stats.ownKeyNote" : "jobs.stats.aiNote" } }
       : null;
   const saved: JobStat | null =
     job.charsSaved > 0
-      ? { name: { key: "jobs.stats.saved" }, value: { key: "jobs.stats.savedValue", vars: { count: job.charsSaved } }, note: { key: "jobs.stats.savedNote" } }
+      ? { icon: "database", name: { key: "jobs.stats.saved" }, value: { key: "jobs.stats.savedValue", vars: { count: job.charsSaved } }, note: { key: "jobs.stats.savedNote" } }
       : null;
-  return [time, ai, saved];
+  return [time, ai, saved].filter((stat): stat is JobStat => stat !== null);
 }
 
 // ─── The attention card ──────────────────────────────────────────────────────
@@ -1505,7 +1587,7 @@ export function attentionVerdict(input: AttentionInput): AttentionModel | null {
       stopRow = {
         mark: { icon: "pause-circle", tone },
         title: { key: "jobs.attention.moreStops", vars: { count: restCount } },
-        text: [{ key: "jobs.attention.moreText" }],
+        text: [{ key: "jobs.attention.moreText", vars: { count: restCount } }],
         href: "/app/jobs?status=problems",
       };
     }
@@ -1662,6 +1744,34 @@ export function jobsHref(query: JobsQuery, change: JobsChange = {}): string {
   }
   const search = params.toString();
   return search ? `/app/jobs?${search}` : "/app/jobs";
+}
+
+/** The list's four filters, by their selects' names: language, content, who started it, the period. */
+export const JOB_FILTERS = ["lang", "area", "by", "since"] as const;
+export type JobFilter = (typeof JOB_FILTERS)[number];
+
+/**
+ * The list's address once a filter's select chose `value`, at once (no "Search" first): the value read
+ * by parseJobsQuery's own rules (the "All …" option's ALL and anything unknown mean no filter), the
+ * rest of the address as jobsHref keeps it, from the first page; an area replaces a legacy type.
+ */
+export function filterHref(query: JobsQuery, filter: JobFilter, value: string): string {
+  const chosen = parseJobsQuery(new URLSearchParams([[filter, value]]));
+  switch (filter) {
+    case "lang":
+      return jobsHref(query, { lang: chosen.lang });
+    case "area":
+      return jobsHref(query, { area: chosen.area });
+    case "by":
+      return jobsHref(query, { by: chosen.by });
+    case "since":
+      return jobsHref(query, { since: chosen.since });
+  }
+}
+
+/** "Filter zurücksetzen": the tab's first page without filters or a search. */
+export function clearedHref(query: JobsQuery): string {
+  return jobsHref(query, { lang: null, area: null, type: null, by: null, since: null, q: null });
 }
 
 /** The filters set (the phone's "Filter (2)"): language, content, starter, period. */

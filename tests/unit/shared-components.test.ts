@@ -256,18 +256,22 @@ describe("BackToJob (Jobs SPEC §5.5, the way back)", () => {
 
   it("names the job in its line and says how it goes on, with a success mark", () => {
     const en = back("en");
-    expect(en).toContain('<s-icon type="check-circle" tone="success"></s-icon>');
-    expect(en).toContain('<strong style="font-weight:600">Italian · Collections can go on</strong><s-text color="subdued">On its page, you resume the job with one click.</s-text>');
+    expect(en).toContain('<span class="lv-status__mark" aria-hidden="true"><s-icon type="check-circle" tone="success"></s-icon></span>');
+    expect(en).toContain('<strong class="lv-status__title">Italian · Collections can go on</strong><s-text color="subdued">On its page, you resume the job with one click.</s-text>');
     const de = back("de");
     expect(de).toContain(">Italienisch · Kollektionen kann weiterlaufen</strong>");
     expect(de).toContain(">Auf seiner Seite setzt du den Auftrag mit einem Klick fort.</s-text>");
     expect(de).toContain(">Zurück zum Auftrag</span></a>");
   });
 
-  it("is a framed card whose button sits beside the line when the card is wide enough and under it on a phone", () => {
+  it("is Settings' green status row: its button beside the line when the row is wide enough (ui.css .lv-status__body), under it on a phone", () => {
     const markup = back("en");
-    expect(markup.startsWith('<s-box background="base" border="base" borderRadius="large-100" padding="base"><s-query-container>')).toBe(true);
-    expect(tags(markup, "s-grid").map((g) => attr(g, "gridTemplateColumns"))).toEqual(["auto minmax(0, 1fr)", "@container (inline-size &gt; 560px) 1fr auto, 1fr"]);
+    expect(markup.startsWith('<div class="lv-status" data-tone="success"><div class="lv-status__row"><span class="lv-status__mark" aria-hidden="true">')).toBe(true);
+    // The line, then the button, in the body that puts them side by side.
+    expect(markup).toMatch(/<div class="lv-status__body"><s-stack direction="block" gap="small-500"><strong[^>]*>[^<]*<\/strong><s-text[^>]*>[^<]*<\/s-text><\/s-stack><a [^>]*class="lv-btn lv-btn--primary"/);
+    // A row, not a section of its own: the page around it names its place.
+    expect(tags(markup, "section")).toHaveLength(0);
+    expect(tags(markup, "s-grid")).toHaveLength(0);
   });
 });
 
@@ -286,6 +290,12 @@ describe("TintMark (Jobs SPEC §3.4, §4.3)", () => {
     expect(markup.startsWith('<span aria-hidden="true" style="display:flex;flex:none;box-sizing:border-box;width:40px;height:40px;border-radius:20px;')).toBe(true);
     expect(markup).toContain(`background:${STATE_COLOURS.failed}14;border:1px solid ${STATE_COLOURS.failed}40`);
     expect(markup).toContain('<s-icon type="pause-circle" tone="critical"></s-icon>');
+  });
+
+  it("is neutral without a colour (no job yet): the app's subdued surface and edge", () => {
+    const markup = html(createElement(TintMark, { icon: "language-translate", tone: "neutral", size: 56 }));
+    expect(markup).toContain("background:var(--lv-surface-subdued);border:1px solid var(--lv-border)");
+    expect(markup).toContain('<s-icon type="language-translate" tone="neutral"></s-icon>');
   });
 });
 

@@ -31,6 +31,7 @@ import { getConfig } from "../.server/lib/config";
 import { prisma } from "../.server/lib/db";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { openShopTranslation, shopTranslationFacts } from "../.server/providers/shop-translation";
+import { appVersion } from "../.server/lib/app-version";
 import { formalityEngines } from "../.server/providers/language-support";
 import { getQueues } from "../.server/queue/client";
 import {
@@ -58,6 +59,7 @@ import { BackToJob } from "../components/jobs/BackToJob";
 import { KEYS_CARD, keysState, ownKeyCostNote, OwnKeysCard, type KeyFetcher } from "../components/OwnKeysCard";
 import { Flag } from "../components/Flag";
 import { Segmented } from "../components/Segmented";
+import { AppVersionLine } from "../components/AppVersion";
 import { BIG_HEADING, Breadcrumbs } from "../components/LanguageLayout";
 import { STAT, SUB_HEADING } from "../components/plan/styles";
 import { ProgressBar } from "../components/ProgressBar";
@@ -197,6 +199,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
     aiAvailable: facts.available,
     now: now.toISOString(),
+    // The running version: when it went live and its commit (the page's last line).
+    version: appVersion(),
     resetsOn: (trialRise ?? nextMonth).toISOString(),
     used: await getMonthlyUsage(shop.id, period),
     limit: limits.limit,
@@ -565,6 +569,10 @@ export default function Settings() {
               ))}
             </s-box>
           </s-grid>
+          {/* When the running version went live: under the sections (on a phone, under the list). */}
+          <s-box display={requested ? WIDE_ONLY : "auto"}>
+            <AppVersionLine version={data.version} now={data.now} />
+          </s-box>
         </s-stack>
       </s-query-container>
     </s-page>

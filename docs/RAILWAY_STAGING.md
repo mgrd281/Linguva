@@ -246,6 +246,7 @@ Plan as prepared:
 Not there yet, each one needs the owner's approval:
 
 - **Background jobs** run inside the `web` service since the commit after `a53c718` (§8b); no `worker` service is needed in production. Until that deploy, "Messen" (coverage), bulk jobs and automatic translation waited in the queue (KARINEX's first measurement waited from 2026-10-28; it continues by itself after the deploy).
+- **Which version runs**: the last line of Settings in the app says when the running version went live (its build's time, in the store's time zone) and its commit ("Linguva zuletzt aktualisiert … · Version 183028e"), from Railway's `RAILWAY_GIT_COMMIT_SHA`.
 - **New code**: production runs `969ad79` until the next deploy. Railway deploys the connected branch `claude/gallant-pasteur-8opy75` itself once GitHub CI is green (auto deploy plus "Wait for CI"; found on 2026-10-28, switched off while the owner decided, switched on again by the owner the same night). Every commit of this branch that passes CI therefore reaches KARINEX; the owner can stop it with "Disable" under web, Settings, Source.
 - **Countries on the Overview** need the optional permission `read_markets`: the button "Show countries" asks for it in KARINEX (read-only, Linguva never changes markets).
 - **KARINEX's languages are already published.** Anything published from Linguva is visible to customers immediately; drafts stay invisible until published.

@@ -283,6 +283,8 @@ export const en = {
   "settings.style.autoHint": "“DeepL decides” uses the usual form for each language.",
   "settings.style.noChoiceFor": "No choice needed for {languages}.",
   "settings.style.engineNoChoiceFor": "Translated with {engine}, without a choice: {languages}.",
+  "settings.version.updated": "Linguva last updated {when}",
+  "settings.version.commit": "Version {commit}",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -568,6 +570,8 @@ export const de: Translation<typeof en> = {
   "settings.style.autoHint": "„DeepL entscheidet“ wählt für jede Sprache die übliche Form.",
   "settings.style.noChoiceFor": "Keine Wahl nötig für {languages}.",
   "settings.style.engineNoChoiceFor": "Mit {engine} übersetzt, ohne Wahl: {languages}.",
+  "settings.version.updated": "Linguva zuletzt aktualisiert {when}",
+  "settings.version.commit": "Version {commit}",
 };
 
 export const fr: Translation<typeof en> = {
@@ -859,6 +863,8 @@ export const fr: Translation<typeof en> = {
   "settings.style.autoHint": "« DeepL décide » utilise la forme habituelle de chaque langue.",
   "settings.style.noChoiceFor": "Aucun choix nécessaire pour {languages}.",
   "settings.style.engineNoChoiceFor": "Traduit avec {engine}, sans choix : {languages}.",
+  "settings.version.updated": "Linguva mis à jour {when}",
+  "settings.version.commit": "Version {commit}",
 };
 
 export const es: Translation<typeof en> = {
@@ -1146,4 +1152,6 @@ export const es: Translation<typeof en> = {
   "settings.style.autoHint": "«DeepL decide» usa la forma habitual de cada idioma.",
   "settings.style.noChoiceFor": "No hace falta elegir para {languages}.",
   "settings.style.engineNoChoiceFor": "Se traduce con {engine}, sin elección: {languages}.",
+  "settings.version.updated": "Linguva actualizado {when}",
+  "settings.version.commit": "Versión {commit}",
 };

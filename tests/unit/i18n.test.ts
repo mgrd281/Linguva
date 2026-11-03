@@ -14,12 +14,12 @@ const placeholders = (m: Message) =>
 // Words that are the same in English and German, French or Spanish.
 const SAME_IN_BOTH = new Set([
   ...["Original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—", "Region {region}"],
-  ...["{language} · {kind}", "{name}: {reason}", "{figure} {caption}. {title}. {states}."],
+  ...["{language} · {kind}", "{name}: {reason}", "{figure} {caption}. {title}. {states}.", "Version {commit}"],
 ]);
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
-  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—", "Page {page}"],
+  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—", "Page {page}", "Version {commit}"],
   ...["{language} · {kind}", "{figure} {caption}. {title}. {states}."],
 ]);
 const SAME_IN_SPANISH = new Set([

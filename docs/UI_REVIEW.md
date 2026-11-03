@@ -251,6 +251,7 @@ The owner, looking at Settings in the admin: the English flag was missing, and t
 - **The form of address** ("So schreibt die KI"): instead of a select per language, one row per language that has a choice, with a segmented choice ("DeepL entscheidet · Sie · Du", `app/components/Segmented.tsx`, native radio buttons); the languages without a choice in one line with their flags. All rows line up.
 - **English's flag**: the United Kingdom's when the store's markets name no English-speaking country (`localeCountry`); Arabic and Chinese still show their code.
 - **The chosen card** of a set (Settings' current setting, the Plan page's current plan): a 2 px blue ring with a light blue tint, the colour of its "Current" badge (`.lv-selected-frame`), instead of the dark ring.
+- **When Linguva was last updated**: Settings' last line, quiet, under the sections (on a phone under the list): "Linguva zuletzt aktualisiert heute um 12:41 · Version 183028e", in the store's time zone (owner request, 2026-11-03).
 - **Form fields keep Polaris' darker edge** (text fields, selects, the search): a field's edge is how it is recognised, so it needs a contrast of 3:1 (WCAG 1.4.11, non-text contrast); a button is recognised by its words and needs none.
 
 Status: **Implemented; buttons and the segmented choice checked in a browser** (their CSS doesn't need Polaris). The pages around them are checked in CI (`visual.spec.ts`, new `settings-style`).

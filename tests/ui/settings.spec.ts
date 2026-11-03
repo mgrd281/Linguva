@@ -65,6 +65,8 @@ test("the status row and the nav: every section with its state; a section opens 
     ["Tools", /^Tools\s*Glossary, languages and more$/, /^Tools\s*Glossary, languages and more$/],
   ];
   for (const [name, wide, narrow] of expected) await expect(navEntry(page, name)).toHaveText(desktop ? wide : narrow, { useInnerText: true });
+  // The last line: when the running version went live (the build's time, in the store's zone); the tests' build has no commit.
+  await expect(page.locator("#settings-version")).toHaveText(/^Linguva last updated (today|yesterday|on .+) at \d{1,2}:\d{2}\s?[AP]M$/);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 

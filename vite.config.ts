@@ -44,6 +44,11 @@ if (host === "localhost") {
 }
 
 export default defineConfig({
+  // When this build was made: the image is built on every deploy, so Settings' last line says when the
+  // running version went live (app/.server/lib/app-version.ts).
+  define: {
+    __LINGUVA_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+  },
   server: {
     allowedHosts: [host],
     cors: {

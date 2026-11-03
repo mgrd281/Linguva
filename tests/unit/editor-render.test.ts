@@ -1,18 +1,20 @@
 /**
  * The translation editor as the server renders it (React Router's static router, the interface
- * language's provider): the way back to the area list, the item's header with what is open, one tile
- * per text, the toolbar's counts (only open texts), the texts in Review's order with their state
- * first, HTML shown rendered with "Edit HTML", the image descriptions in the same publish, and one
- * "Publish translations". The browser behaviour is in tests/ui (editor-states, preview, structured,
- * unsaved, keyboard, flows).
+ * language's provider): the way back to the area list (keeping where that list was opened from), the
+ * item's header with what is open, one tile per text, the toolbar's counts (only open texts, those of
+ * one AI request) and what they leave, the texts in Review's order with their state first, HTML shown
+ * rendered with "Edit HTML", the image descriptions in the same publish, and one "Publish
+ * translations"; and the area list's rows that open it. The browser behaviour is in tests/ui
+ * (editor-states, preview, structured, unsaved, keyboard, flows).
  */
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createStaticHandler, createStaticRouter, StaticRouterProvider } from "react-router";
+import { createStaticHandler, createStaticRouter, StaticRouter, StaticRouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { AttachedResourcesPanel, type AttachedDrafts } from "../../app/components/AttachedResourcesPanel";
-import { ResourceTranslationEditor } from "../../app/components/ResourceTranslationEditor";
-import type { AppLocale } from "../../app/i18n/i18n";
+import { CategoryList } from "../../app/components/CategoryList";
+import { attachedForAi, ResourceTranslationEditor } from "../../app/components/ResourceTranslationEditor";
+import { translator, type AppLocale } from "../../app/i18n/i18n";
 import { I18nProvider } from "../../app/i18n/react";
 
 const DIGEST = "a".repeat(64);
@@ -76,9 +78,9 @@ function product(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function render(data: Record<string, unknown>, locale: AppLocale = "en"): Promise<string> {
+async function render(data: Record<string, unknown>, locale: AppLocale = "en", url = "http://localhost/app/products/2?lang=de"): Promise<string> {
   const handler = createStaticHandler([{ id: "editor", path: "/app/products/:id", loader: () => data, Component: ResourceTranslationEditor }]);
-  const context = await handler.query(new Request("http://localhost/app/products/2?lang=de"));
+  const context = await handler.query(new Request(url));
   if (context instanceof Response) throw new Error("unexpected response");
   const router = createStaticRouter(handler.dataRoutes, context);
   return renderToStaticMarkup(
@@ -114,6 +116,17 @@ describe("the editor's page", () => {
     const none = await render(product({ picture: null }));
     expect(none).not.toContain("<img");
     expect(none).toContain('<div class="lv-ed-header"><span class="lv-icon-square" data-tint="grey" aria-hidden="true" style="width:48px;height:48px;border-radius:14px"><s-icon type="product"');
+  });
+
+  it("opened from a list that came from Content, leads back to it and to the language page keeping that; its pages keep it too", async () => {
+    const fromContent = "http://localhost/app/products/2?lang=de&from=content";
+    const html = await render(product(), "en", fromContent);
+    expect(html).toContain('<s-link slot="breadcrumb-actions" href="/app/languages/de/products?from=content">Products in German</s-link>');
+    expect(html).toContain('<s-link href="/app/languages/de?from=content">German</s-link>');
+    expect(html).toContain('<s-link href="/app/languages/de/products?from=content">Products</s-link>');
+    const paged = await render(product({ paging: { total: 120, matching: 120, page: 1, pages: 3, query: "", pageSize: 50 } }), "en", fromContent);
+    expect(paged).toMatch(/href="\/app\/products\/2\?lang=de&amp;page=2&amp;from=content"/);
+    expect(paged).toContain('<input type="hidden" name="from" value="content"/>');
   });
 
   it("says it in German for a German admin user", async () => {
@@ -204,6 +217,43 @@ describe("the editor's page", () => {
     expect(html).toContain("In German · its text is translated");
   });
 
+  it("says that open texts AI can't write are translated by hand, never that every text is translated", async () => {
+    // A metaobject entry: its name is translated, its link is a web address AI never translates.
+    const entry = product({
+      kind: { type: "METAOBJECT", label: "Metaobjects", singular: "entry", path: "/app/content/metaobjects", plural: "entries" },
+      title: "Care guide",
+      picture: null,
+      seoPreview: false,
+      attached: { available: true, imagesWithoutAlt: 0, unsupported: 0, items: [] },
+      fields: [field("title", "SINGLE_LINE_TEXT_FIELD", "Care guide", "Pflegehinweise"), { ...field("link", "URL", "https://example.com/care"), machine: false }],
+    });
+    const html = await render(entry);
+    expect(html).toContain("In German · 1 of 2 texts to translate");
+    expect(html).toContain("1 text is missing or outdated and can only be translated by hand: it&#x27;s marked “Manual only” below.");
+    expect(html).toMatch(/<s-badge icon="edit">Manual only<\/s-badge>/);
+    expect(html).not.toContain("every text is translated");
+    expect(html).not.toContain("Translate with AI");
+  });
+
+  it("counts the image descriptions one AI request drafts (25 items), and says the rest come after publishing", async () => {
+    const image = (n: number) => ({
+      id: `gid://shopify/MediaImage/${n}`,
+      kind: "IMAGE",
+      label: "Image",
+      detail: null,
+      previewUrl: null,
+      valueType: null,
+      fields: [{ key: "alt", type: "SINGLE_LINE_TEXT_FIELD", source: `Red wool jacket, view ${n}`, digest: DIGEST, translation: "", currentDigest: "none", outdated: false, machine: true }],
+    });
+    const html = await render(product({ attached: { available: true, imagesWithoutAlt: 0, unsupported: 0, items: Array.from({ length: 27 }, (_, i) => image(i + 1)) } }));
+    // The description, the Google description and 25 of the 27 image descriptions.
+    expect(html).toContain('aria-label="Translate with AI: 27 open texts"');
+    expect(html).toContain("In German · 29 of 31 texts to translate");
+    expect(html).toContain(
+      "29 texts are missing or outdated: only these get drafts. Texts you&#x27;ve already translated stay as they are. AI translates up to 25 image descriptions and extra details at a time: publish these drafts, then translate the 2 remaining ones with AI.",
+    );
+  });
+
   it("shows HTML rendered beside its rendered original, with the code one click away", async () => {
     const html = await render(product());
     expect(tags(html, "iframe").map((tag) => attr(tag, "title"))).toEqual(["Description, English original", "Description, German preview"]);
@@ -280,5 +330,62 @@ describe("the image descriptions' section", () => {
 
   it("says the request's own error the top doesn't say", () => {
     expect(panel(null, { code: "PROVIDER_RETRYABLE" })).toContain('<s-paragraph>Error PROVIDER_RETRYABLE.</s-paragraph>');
+  });
+});
+
+describe("attachedForAi", () => {
+  const item = (...texts: Array<{ translation?: string; machine?: boolean }>) => ({
+    fields: texts.map((text, i) => ({ key: `k${i}`, translation: text.translation ?? "", outdated: false, machine: text.machine ?? true })),
+  });
+  const done = item({ translation: "Rote Wolljacke" });
+
+  it("takes the open texts of the first 25 items with any, as one AI request does; the others wait for the next", () => {
+    expect(attachedForAi([done, ...Array.from({ length: 26 }, () => item({})), done])).toEqual({ now: 25, later: 1 });
+    // An item with nothing AI can write takes no place.
+    expect(attachedForAi([item({ machine: false }), item({}, {}), done])).toEqual({ now: 2, later: 0 });
+    expect(attachedForAi([])).toEqual({ now: 0, later: 0 });
+  });
+});
+
+describe("the area list's rows", () => {
+  const list = {
+    category: { id: "products", searchable: false, review: null },
+    language: { locale: "de" },
+    filter: { state: "all", q: "" },
+    counts: { all: 1, failed: 0, outdated: 0, missing: 1, waiting: 0, complete: 0 },
+    rows: [
+      {
+        id: "item-8",
+        type: "PRODUCT",
+        reference: "8",
+        state: "missing",
+        texts: [{ group: "title", state: "missing" }],
+        failureCode: null,
+        href: "/app/products/8?lang=de",
+        smart: null,
+        title: "Product 8 jacket",
+        translated: null,
+        label: null,
+        image: null,
+      },
+    ],
+    page: { from: 1, to: 1, total: 1, number: 1, nextCursor: null },
+    titlesUnavailable: false,
+    smart: null,
+  };
+  const rowLink = (origin: "content" | null) => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        StaticRouter,
+        { location: "/app/languages/de/products" },
+        createElement(CategoryList, { data: list as never, i18n: translator("en"), names: { language: "German", locale: "de", primary: "English" }, origin }),
+      ),
+    );
+    return attr(tags(markup, "a").find((tag) => tag.includes('class="lv-row__link"'))!, "href");
+  };
+
+  it("open the editor saying where the list was opened from, so its way back keeps it", () => {
+    expect(rowLink("content")).toBe("/app/products/8?lang=de&amp;from=content");
+    expect(rowLink(null)).toBe("/app/products/8?lang=de");
   });
 });

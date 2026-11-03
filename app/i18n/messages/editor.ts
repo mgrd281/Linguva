@@ -71,6 +71,14 @@ export const en = {
     other: "{count} texts are missing or outdated: only these get drafts. Texts you've already translated stay as they are.",
   },
   "editor.toolbar.allDone": "Nothing is missing or outdated: every text is translated.",
+  "editor.toolbar.manualOpen": {
+    one: "{count} text is missing or outdated and can only be translated by hand: it's marked “Manual only” below.",
+    other: "{count} texts are missing or outdated and can only be translated by hand: they're marked “Manual only” below.",
+  },
+  "editor.toolbar.attachedLater": {
+    one: "AI translates up to {max} image descriptions and extra details at a time: publish these drafts, then translate the {count} remaining one with AI.",
+    other: "AI translates up to {max} image descriptions and extra details at a time: publish these drafts, then translate the {count} remaining ones with AI.",
+  },
   "editor.toolbar.again": "Translate everything again",
   "editor.again.heading": "Translate every text again with AI?",
   "editor.again.body": {
@@ -267,6 +275,14 @@ export const de: Translation<typeof en> = {
     other: "{count} Texte fehlen oder sind veraltet: Nur diese bekommen Entwürfe. Texte, die du schon übersetzt hast, bleiben, wie sie sind.",
   },
   "editor.toolbar.allDone": "Nichts fehlt, nichts ist veraltet: Jeder Text ist übersetzt.",
+  "editor.toolbar.manualOpen": {
+    one: "{count} Text fehlt oder ist veraltet und lässt sich nur von Hand übersetzen: Er ist unten mit „Nur manuell“ markiert.",
+    other: "{count} Texte fehlen oder sind veraltet und lassen sich nur von Hand übersetzen: Sie sind unten mit „Nur manuell“ markiert.",
+  },
+  "editor.toolbar.attachedLater": {
+    one: "Die KI übersetzt höchstens {max} Bildbeschreibungen und Zusatzinfos auf einmal: Veröffentliche diese Entwürfe und übersetze dann den {count} übrigen Text mit KI.",
+    other: "Die KI übersetzt höchstens {max} Bildbeschreibungen und Zusatzinfos auf einmal: Veröffentliche diese Entwürfe und übersetze dann die {count} übrigen Texte mit KI.",
+  },
   "editor.toolbar.again": "Alles neu übersetzen",
   "editor.again.heading": "Jeden Text neu mit KI übersetzen?",
   "editor.again.body": {
@@ -316,7 +332,7 @@ export const de: Translation<typeof en> = {
   "editor.field.previewFrame": "{field}, Vorschau ({language})",
   "editor.field.editHtml": "HTML bearbeiten",
   "editor.field.hideHtml": "HTML ausblenden",
-  "editor.field.htmlDetails": "Ändere die Wörter zwischen den Tags; die Tags (<p>, <strong> …) bleiben wie im Original.",
+  "editor.field.htmlDetails": "Ändere nur die Wörter zwischen den Tags; lass die Tags (<p>, <strong> …) so, wie sie im Original sind.",
   "editor.field.handleDetails": "Freiwillig. Eine neue Webadresse ändert den Link der Seite in dieser Sprache; ohne sie gilt die Adresse des Originals.",
   "editor.field.conflict": "Der Originaltext wurde in Shopify geändert. Lade neu und übersetze erneut.",
   "editor.field.translationChanged":
@@ -467,6 +483,14 @@ export const fr: Translation<typeof en> = {
     other: "{count} textes manquent ou sont obsolètes : seuls ceux-ci reçoivent des brouillons. Les textes que vous avez déjà traduits restent tels quels.",
   },
   "editor.toolbar.allDone": "Rien ne manque, rien n'est obsolète : chaque texte est traduit.",
+  "editor.toolbar.manualOpen": {
+    one: "{count} texte manque ou est obsolète et ne se traduit qu'à la main : il est marqué « Manuel uniquement » ci-dessous.",
+    other: "{count} textes manquent ou sont obsolètes et ne se traduisent qu'à la main : ils sont marqués « Manuel uniquement » ci-dessous.",
+  },
+  "editor.toolbar.attachedLater": {
+    one: "L'IA traduit au plus {max} descriptions d'images et informations complémentaires à la fois : publiez ces brouillons, puis traduisez avec l'IA le {count} texte restant.",
+    other: "L'IA traduit au plus {max} descriptions d'images et informations complémentaires à la fois : publiez ces brouillons, puis traduisez avec l'IA les {count} textes restants.",
+  },
   "editor.toolbar.again": "Tout retraduire",
   "editor.again.heading": "Retraduire chaque texte avec l'IA ?",
   "editor.again.body": {
@@ -668,6 +692,14 @@ export const es: Translation<typeof en> = {
     other: "Faltan {count} textos o están desactualizados: solo esos reciben borradores. Los textos que ya tradujiste se quedan como están.",
   },
   "editor.toolbar.allDone": "No falta nada ni hay nada desactualizado: cada texto está traducido.",
+  "editor.toolbar.manualOpen": {
+    one: "Falta {count} texto o está desactualizado, y solo se traduce a mano: abajo está marcado como «Solo manual».",
+    other: "Faltan {count} textos o están desactualizados, y solo se traducen a mano: abajo están marcados como «Solo manual».",
+  },
+  "editor.toolbar.attachedLater": {
+    one: "La IA traduce como máximo {max} descripciones de imágenes e información adicional a la vez: publica estos borradores y luego traduce con IA el {count} texto restante.",
+    other: "La IA traduce como máximo {max} descripciones de imágenes e información adicional a la vez: publica estos borradores y luego traduce con IA los {count} textos restantes.",
+  },
   "editor.toolbar.again": "Volver a traducir todo",
   "editor.again.heading": "¿Volver a traducir cada texto con IA?",
   "editor.again.body": {

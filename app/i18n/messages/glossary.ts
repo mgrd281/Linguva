@@ -139,7 +139,7 @@ export const de: Translation<typeof en> = {
   "glossary.terms.empty": "Noch keine Begriffe. Füge deine Marken- und Produktnamen hinzu, damit sie nie übersetzt werden.",
   "glossary.terms.market": "Markt",
   "glossary.terms.actions": "Aktionen",
-  "glossary.terms.caseSensitive": "(genaue Schreibweise)",
+  "glossary.terms.caseSensitive": "(Groß-/Kleinschreibung beachten)",
   "glossary.search.label": "Begriffe suchen",
   "glossary.search.placeholder": "Begriff oder Übersetzung",
   "glossary.search.none": "Kein Begriff passt zu deiner Suche.",

@@ -148,7 +148,7 @@ export function stopLook(group: StopGroup): StopLook | null {
 /**
  * Every error code of a stop that needs the merchant (stopLook "needsYou"),
  * an own key's with each engine: the list's Problems tile counts them on the
- * server (jobCounts' problemsNeedYou), so its dot is critical only then.
+ * server (jobCounts' problemsNeedYou), so it carries its dot only then.
  */
 export const NEEDS_YOU_CODES: readonly string[] = [...NEEDS_YOU].flatMap((group) =>
   group === "OWN_KEY_QUOTA" || group === "OWN_KEY_AUTH" ? [group, ...ENGINE_IDS.map((engine) => ownKeyStopCode(group === "OWN_KEY_QUOTA" ? "quota" : "auth", engine))] : [group],

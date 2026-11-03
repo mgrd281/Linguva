@@ -42,7 +42,7 @@ Same file and the same 50,000 pending drafts, of which 5 % are image description
 
 Per query: the page 47–55 ms, the matching count 14 ms, the position 33 ms, the tab and chip counts 55–62 ms. The page query stays under 100 ms, so no index was added for the card order. The tab and chip counts are the largest part of every load: if CI comes close to its limit, keeping them for a short time or an expression index would cut it. `tests/integration/review-cards.test.ts` also opens pages with 20,000 waiting texts (under 3 s each, a generous bound).
 
-The pictures load after the page (`app/routes/app.review_.previews.tsx`): one `nodes()` read per 100 items, kept a minute per shop and item.
+The pictures load after the page (`app/routes/app.review_.previews.tsx`): one `nodes()` read per 100 items, kept a minute per shop and item. The smart schedule's exclusions are named the same way (`app/.server/smart/exclusion-names.ts`): one `nodes()` read per 100, kept a minute per shop and item, so the page's refresh every 10 s while a check runs asks Shopify at most once a minute.
 
 ### The Jobs list (Redesign 3, 2026-11-02)
 

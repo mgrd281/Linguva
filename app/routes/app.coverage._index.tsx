@@ -562,7 +562,13 @@ export default function Coverage() {
             </s-table>
             <s-box padding="base">
               <s-stack direction="block" gap="small-200">
-                {!data.canTranslate ? <s-text color="subdued">{t("coverage.items.cantTranslate")}</s-text> : null}
+                {/* Why the AI buttons are off, with the way to the fix: a key on the Own key plan, else the AI permission. */}
+                {!data.canTranslate ? (
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <s-text color="subdued">{t(data.ownKeyMissing ? "coverage.items.noKey" : "coverage.items.cantTranslate")}</s-text>
+                    <s-link href={data.ownKeyMissing ? "/app/settings?section=keys" : "/app/settings?section=ai"}>{t(data.ownKeyMissing ? "language.unlock.keyMissing.action" : "language.unlock.consent.action")}</s-link>
+                  </s-stack>
+                ) : null}
                 {hiddenTypes > 0 ? <s-text color="subdued">{t("coverage.types.hideEmpty", { count: hiddenTypes })}</s-text> : null}
                 {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "theme") ? <s-text color="subdued">{t("coverage.types.excludedHelp.theme")}</s-text> : null}
                 {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "notifications") ? (

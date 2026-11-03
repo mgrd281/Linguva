@@ -3,6 +3,8 @@
  * or not translated, so a merchant sees what needs work without reading
  * every input; one square tile per text says the same and leads to it. The
  * texts come in Review's order, and the original description shows in full.
+ * The way back leads to the area list the item is opened from, as that list
+ * was opened (from Content: its trail starts there).
  */
 import { expect, test } from "@playwright/test";
 import { expectAccessible, openApp } from "./helpers";
@@ -67,4 +69,17 @@ test("the way back leads to the area list the item is opened from", async ({ pag
   const trail = page.getByRole("navigation", { name: "Breadcrumb" });
   await expect(trail.getByRole("link", { name: "Products" })).toHaveAttribute("href", "/app/languages/de/products");
   await expect(trail.getByRole("link", { name: "German" })).toHaveAttribute("href", "/app/languages/de");
+});
+
+test("opened from a list that came from Content, the way back keeps that", async ({ page }) => {
+  await openApp(page, "full", "/app/languages/de/products?from=content");
+  const item = page.getByRole("link", { name: /^Open: / }).first();
+  await expect(item).toHaveAttribute("href", /^\/app\/products\/\d+\?lang=de&from=content$/);
+  await item.click();
+  await expect(page).toHaveURL(/\/app\/products\/\d+\?lang=de&from=content/);
+  // Back to the list and the language page as they were opened: their trail starts at Content.
+  await expect(page.locator('s-link[slot="breadcrumb-actions"]')).toHaveAttribute("href", "/app/languages/de/products?from=content");
+  const trail = page.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(trail.getByRole("link", { name: "Products" })).toHaveAttribute("href", "/app/languages/de/products?from=content");
+  await expect(trail.getByRole("link", { name: "German" })).toHaveAttribute("href", "/app/languages/de?from=content");
 });

@@ -46,15 +46,36 @@ function problems(i18n: I18n, messages: MessageRef[]): string {
   return messages.map(i18n.msg).join("; ");
 }
 
+type MarketChoice = { id: string; name: string; active: boolean };
+
+/**
+ * Adding, deleting and importing revalidate the page, and markets rarely change: they are read at most
+ * once a minute per shop (per process), as on Coverage. A missing grant isn't kept, so the choice appears
+ * as soon as the merchant allows access (as on the Overview); a failed read isn't kept either.
+ */
+const MARKETS_CACHE_MS = 60_000;
+const marketsCache = new Map<string, { at: number; value: MarketChoice[] }>();
+
 /**
  * The store's markets by name, for a term that applies in one market only. Markets need the optional
  * read_markets scope; without it (or when Shopify doesn't answer) the form has no market choice and a
  * term applies everywhere.
  */
-async function readMarkets(admin: Parameters<typeof fetchMarkets>[0], scopes: Awaited<ReturnType<typeof requireShop>>["scopes"]) {
+async function readMarkets(
+  shopId: string,
+  admin: Parameters<typeof fetchMarkets>[0],
+  scopes: Awaited<ReturnType<typeof requireShop>>["scopes"],
+  now = Date.now(),
+): Promise<MarketChoice[]> {
+  const cached = marketsCache.get(shopId);
+  if (cached && now - cached.at < MARKETS_CACHE_MS) return cached.value;
   try {
     if (!(await scopes.query()).granted.includes(MARKETS_SCOPE)) return [];
-    return (await fetchMarkets(admin)).map((m) => ({ id: m.id, name: m.name, active: m.status === "ACTIVE" }));
+    const value = (await fetchMarkets(admin)).map((m) => ({ id: m.id, name: m.name, active: m.status === "ACTIVE" }));
+    marketsCache.delete(shopId);
+    marketsCache.set(shopId, { at: now, value });
+    if (marketsCache.size > 1000) marketsCache.delete(marketsCache.keys().next().value!);
+    return value;
   } catch {
     return [];
   }
@@ -66,7 +87,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     listTerms(shop.id),
     fetchAndSyncShopLocales(admin, shop.id),
     shopBilling(admin, shop),
-    readMarkets(admin, scopes),
+    readMarkets(shop.id, admin, scopes),
   ]);
   return {
     /** Free and Starter have no glossary to edit (the action refuses it too): the page says so before the form. */

@@ -158,7 +158,13 @@ export default function CoverageItems() {
               ) : data.bulk ? (
                 <>
                   <s-paragraph>{t("coverage.items.bulkHelp", { type: typeName, language: languageName })}</s-paragraph>
-                  {!data.canTranslate ? <s-text color="subdued">{t("coverage.items.cantTranslate")}</s-text> : null}
+                  {/* Why the AI buttons are off, with the way to the fix: a key on the Own key plan, else the AI permission. */}
+                  {!data.canTranslate ? (
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <s-text color="subdued">{t(data.ownKeyMissing ? "coverage.items.noKey" : "coverage.items.cantTranslate")}</s-text>
+                      <s-link href={data.ownKeyMissing ? "/app/settings?section=keys" : "/app/settings?section=ai"}>{t(data.ownKeyMissing ? "language.unlock.keyMissing.action" : "language.unlock.consent.action")}</s-link>
+                    </s-stack>
+                  ) : null}
                   <s-stack direction="inline" gap="base" alignItems="center">
                     {/* Asks first, as everywhere bulk translation starts (what, approval or live, AI characters). */}
                     <Button

@@ -428,7 +428,8 @@ export async function listJobsPage(shopId: string, filter: JobPageFilter = {}, c
 /**
  * The figures of the tabs (with the filters, without a status): history = everything not active (tab
  * All's pages); problemsNeedYou = the problems that need the merchant (a completed job's failed items, or
- * a stop whose cause needs them: NEEDS_YOU_CODES), so the Problems tile's dot is critical only then.
+ * a stop whose cause needs them: NEEDS_YOU_CODES), so the Problems tile carries its dot only then (the
+ * list leaves out the stops fixed by now: needsYouStops).
  */
 export interface JobCounts {
   all: number;
@@ -441,10 +442,13 @@ export interface JobCounts {
   cancelled: number;
 }
 
+/** A stop whose cause needs the merchant (job-view's stopLook "needsYou"), by its code. */
+const NEEDS_YOU_STOP_SQL = Prisma.sql`(j."status" = 'FAILED' AND j."errorCode" = ANY(${[...NEEDS_YOU_CODES]}::text[]))`;
+
 /** Every tab's count in one statement, with the list's filters (status left out). */
 export async function jobCounts(shopId: string, filter: JobListFilter = {}, now: Date = filter.now ?? new Date(), client: PrismaClient = defaultClient): Promise<JobCounts> {
   const where = Prisma.join(filterConditions(shopId, filter, now), " AND ");
-  const needsYou = Prisma.sql`(j."status" = 'COMPLETED' OR j."errorCode" = ANY(${[...NEEDS_YOU_CODES]}::text[]))`;
+  const needsYou = Prisma.sql`(j."status" = 'COMPLETED' OR ${NEEDS_YOU_STOP_SQL})`;
   const [row] = await withTenant(
     shopId,
     (tx) =>
@@ -465,17 +469,50 @@ export async function jobCounts(shopId: string, filter: JobListFilter = {}, now:
   return { ...counts, history: counts.all - counts.active };
 }
 
+/** At most this many of problemsNeedYou's stops are checked for a fix; any others still count as needing the merchant. */
+export const NEEDS_YOU_STOPS_MAX = 100;
+
+/**
+ * The stops problemsNeedYou counts (the problem rule and a NEEDS_YOU code), with the list's filters (status
+ * left out), newest first: the list asks stopFix which are fixed by now, since a fixed stop only waits for
+ * one click (jobState "stoppedWait"), as its row and the attention card say.
+ */
+export async function needsYouStops(shopId: string, filter: JobListFilter = {}, now: Date = filter.now ?? new Date(), client: PrismaClient = defaultClient): Promise<TranslationJob[]> {
+  const where = Prisma.join([...filterConditions(shopId, filter, now), problemSql(now), NEEDS_YOU_STOP_SQL], " AND ");
+  return withTenant(
+    shopId,
+    (tx) =>
+      tx.$queryRaw<TranslationJob[]>`
+        ${problemWith(shopId)} SELECT j.* FROM "TranslationJob" j WHERE ${where}
+        ORDER BY COALESCE(j."finishedAt", j."updatedAt") DESC, j."id" DESC
+        LIMIT ${NEEDS_YOU_STOPS_MAX}`,
+    client,
+  );
+}
+
+/** How long the language filter's choices are kept per shop (per process): the list reloads every 5 s while a job runs. */
+export const JOB_LANGUAGES_CACHE_MS = 60_000;
+const jobLanguagesCache = new Map<string, { at: number; locales: string[] }>();
+
 /**
  * The languages the shop's jobs translated into, sorted: the list's language filter offers each of them,
- * also one no longer in the store, and needs no Shopify call for it.
+ * also one no longer in the store, and needs no Shopify call for it. Read at most once a minute per shop,
+ * so the list's polling doesn't read every job again for them (the store's own languages are offered anyway).
  */
-export async function jobLanguages(shopId: string, client: PrismaClient = defaultClient): Promise<string[]> {
+export async function jobLanguages(shopId: string, client: PrismaClient = defaultClient, now: number = Date.now()): Promise<string[]> {
+  const cached = jobLanguagesCache.get(shopId);
+  if (cached && now - cached.at < JOB_LANGUAGES_CACHE_MS) return cached.locales;
   const rows = await withTenant(
     shopId,
     (tx) => tx.$queryRaw<Array<{ locale: string }>>`SELECT DISTINCT j."targetLocale" AS "locale" FROM "TranslationJob" j WHERE j."shopId" = ${shopId}::uuid`,
     client,
   );
-  return rows.map((r) => r.locale).sort();
+  const locales = rows.map((r) => r.locale).sort();
+  // The newest read goes last, so past 1,000 shops the one read longest ago goes first.
+  jobLanguagesCache.delete(shopId);
+  jobLanguagesCache.set(shopId, { at: now, locales });
+  if (jobLanguagesCache.size > 1000) jobLanguagesCache.delete(jobLanguagesCache.keys().next().value!);
+  return locales;
 }
 
 /** The live group: active jobs with the list's filters, running first, then finding, then queued; newest first within each. */

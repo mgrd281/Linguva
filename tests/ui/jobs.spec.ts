@@ -101,6 +101,16 @@ test.describe("the Jobs list", () => {
     await expect(page.getByRole("navigation", { name: "Show jobs" }).locator('[aria-current="page"]')).toContainText("Problems");
   });
 
+  test("the Problems tile carries its dot only while a problem needs the merchant", async ({ page }) => {
+    // Spanish: only the stop for today's AI allowance, which goes on by itself after midnight UTC.
+    await openApp(page, "jobs", "/app/jobs?lang=es");
+    const tabs = page.getByRole("navigation", { name: "Show jobs" });
+    const problems = tabs.getByRole("link", { name: "Problems 1", exact: true });
+    await expect(problems).toBeVisible();
+    await expect(problems).not.toHaveAttribute("data-tone");
+    await expect(tabs.locator(".lv-tile__dot")).toHaveCount(0);
+  });
+
   test("a filter applies as soon as it is chosen, without Search", async ({ page }) => {
     await openApp(page, "jobs", "/app/jobs");
     await page.getByRole("combobox", { name: "Language" }).selectOption({ label: "French" });

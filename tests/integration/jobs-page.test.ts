@@ -14,6 +14,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { findEngineKey, markEngineKey } from "../../app/.server/credentials/store";
 import {
   AUTO_REQUESTED_BY,
+  JOB_LANGUAGES_CACHE_MS,
   jobCounts,
   jobLanguages,
   jobPendingDrafts,
@@ -21,6 +22,7 @@ import {
   latestJobTitles,
   listActiveJobs,
   listJobsPage,
+  needsYouStops,
   retryJobItems,
   rowOutcomesByJob,
 } from "../../app/.server/jobs/bulk-jobs";
@@ -173,6 +175,10 @@ describe("jobCounts and the problem rule", () => {
 
     // Problems that need the merchant: the engine's consent, the failed items, the two plan stops (not the limits that reset).
     expect(await jobCounts(s.id, {}, NOW, app)).toEqual({ all: 15, active: 2, queued: 1, history: 13, completed: 4, cancelled: 1, problems: 6, problemsNeedYou: 4 });
+    // Its stops, newest first, for the list to check which are fixed by now; with the list's filters too.
+    expect(ids(await needsYouStops(s.id, {}, NOW, app))).toEqual(ids([stop, linkNew, linkOld]));
+    expect(ids(await needsYouStops(s.id, { types: ["MENU", "LINK", "FILTER"], status: "cancelled" }, NOW, app))).toEqual(ids([linkNew, linkOld]));
+    expect(await needsYouStops(s.id, { types: ["MENU", "SHOP"] }, NOW, app)).toEqual([]);
     const problems = await listJobsPage(s.id, { status: "problems", now: NOW, take: 100 }, app);
     expect(ids(problems.jobs).sort()).toEqual(ids([stop, failed, edge, menu, linkOld, linkNew]).sort());
     // A day later the edge job has left the window.
@@ -183,8 +189,12 @@ describe("jobCounts and the problem rule", () => {
     // Only stops that wait for a reset: problems, none of them the merchant's.
     expect(await jobCounts(s.id, { types: ["MENU", "SHOP"] }, NOW, app)).toMatchObject({ problems: 2, problemsNeedYou: 0 });
     // The language filter's choices: every language a job translated into, once each, sorted; another shop's none.
-    expect(await jobLanguages(s.id, app)).toEqual(["de", "fr", "it"]);
-    expect(await jobLanguages((await newShop("no-jobs")).id, app)).toEqual([]);
+    expect(await jobLanguages(s.id, app, NOW.getTime())).toEqual(["de", "fr", "it"]);
+    expect(await jobLanguages((await newShop("no-jobs")).id, app, NOW.getTime())).toEqual([]);
+    // Read once a minute per shop (the list polls every few seconds): a new language shows after that minute.
+    await job(s.id, { resourceType: "PAGE", targetLocale: "es" });
+    expect(await jobLanguages(s.id, app, NOW.getTime() + JOB_LANGUAGES_CACHE_MS - 1)).toEqual(["de", "fr", "it"]);
+    expect(await jobLanguages(s.id, app, NOW.getTime() + JOB_LANGUAGES_CACHE_MS)).toEqual(["de", "es", "fr", "it"]);
   });
 });
 

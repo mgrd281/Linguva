@@ -14,7 +14,7 @@ import { Form, Link, useFetcher, useLoaderData, useNavigate, useRevalidator } fr
 import type { TranslationJob } from "@prisma/client";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { shopBilling } from "../.server/billing/billing";
-import { getJobForShop, jobCounts, jobLanguages, jobsAttention, listActiveJobs, listJobsPage, rowOutcomesByJob } from "../.server/jobs/bulk-jobs";
+import { getJobForShop, jobCounts, jobLanguages, jobsAttention, listActiveJobs, listJobsPage, needsYouStops, rowOutcomesByJob } from "../.server/jobs/bulk-jobs";
 import { searchJobIds } from "../.server/jobs/job-search";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
 import { stopFix, stopFixContext, stopResumesAt } from "../.server/jobs/stop-fix";
@@ -131,12 +131,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
   const shown = [...live.slice(0, LIVE_SHOWN), ...page.jobs];
   const stops = attention?.stops.jobs ?? [];
-  const outcomes = await rowOutcomesByJob(shop.id, [...new Set([...shown, ...stops].map((j) => j.id))]);
+  // With the rows' outcomes: the stops the Problems tile counts as needing the merchant (each checked below).
+  const [outcomes, needsYou] = await Promise.all([
+    rowOutcomesByJob(shop.id, [...new Set([...shown, ...stops].map((j) => j.id))]),
+    counts.problemsNeedYou > 0 ? needsYouStops(shop.id, filter, now) : Promise.resolve<TranslationJob[]>([]),
+  ]);
 
-  // Each stop on screen: whether its cause is fixed by now (one shared context), when it goes on by itself.
+  // Each stop on screen or behind the Problems tile's dot: whether its cause is fixed by now (one shared context), when it goes on by itself.
   const context = stopFixContext({ shopId: shop.id, billing, now });
   const facts: Record<string, StopFacts> = {};
-  for (const job of [...shown, ...stops]) {
+  for (const job of [...shown, ...stops, ...needsYou]) {
     if (job.status !== "FAILED" || facts[job.id]) continue;
     const group = stopGroup(job.errorCode);
     const ctx = context(job);
@@ -147,6 +151,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       nextCheckAt: config ? (nextCheck(config, now)?.toISOString() ?? null) : null,
     };
   }
+  // A stop whose cause is fixed by now waits for one click (its row and the attention card in warning): the tile says so too.
+  const problemsNeedYou = counts.problemsNeedYou - needsYou.filter((job) => facts[job.id]?.fixed === true).length;
   const eta = (job: TranslationJob) =>
     job.status === "RUNNING" && job.discoveryDone
       ? reliableEta({ done: job.succeededItems + job.skippedItems + job.failedItems, total: job.totalItems, startedAt: job.startedAt, now })
@@ -161,7 +167,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     targets: locales.targets ?? [],
     jobLanguages: languages,
     marketCountries: peekMarketCountries(shop.id),
-    counts,
+    counts: { ...counts, problemsNeedYou },
     workerDown: !workerRunning,
     search: search ? { partial: search.partial, short: search.ids === null } : null,
     live: live.slice(0, LIVE_SHOWN).map(row),
@@ -501,12 +507,12 @@ const TAB_ICON: Readonly<Record<JobTab, IconName>> = { all: "list-bulleted", act
 
 /**
  * The tabs as compact tiles (ui.css .lv-jobtabs, Settings' .lv-tile): the icon and the figure, the name
- * under them; the current one framed in blue. Problems carries a dot while it has jobs, critical only
- * when one needs the merchant (said to assistive technology too). Five in a row, two rows on a phone.
+ * under them; the current one framed in blue. Problems carries a red dot only while one of its jobs
+ * needs the merchant (said to assistive technology too). Five in a row, two rows on a phone.
  */
 function Tabs({ data, words }: { data: Data; words: JobWords }) {
   const { t, number } = words.i18n;
-  const problems = data.counts.problems > 0 ? (data.counts.problemsNeedYou > 0 ? "critical" : "warning") : null;
+  const problems = data.counts.problemsNeedYou > 0 ? "critical" : null;
   return (
     <nav aria-label={t("jobs.tabs.label")} className="lv-jobtabs">
       <ul className="lv-jobtabs__list">

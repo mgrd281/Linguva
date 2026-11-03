@@ -58,7 +58,7 @@ export const en = {
   "common.jobError.DAILY_LIMIT": "Today's AI translation allowance is used up. Resume the job tomorrow (after midnight UTC).",
   "common.jobError.PLATFORM_LIMIT": "The app's AI translation limit for today is reached. Resume the job tomorrow (after midnight UTC).",
   "common.jobError.CONSENT_REQUIRED": "AI translation isn't allowed. Allow it under Settings → AI permission, then resume.",
-  "common.jobError.ENGINE_CONSENT": "Only a translation service your store hasn't allowed yet translates this language. Allow it under Settings, then resume.",
+  "common.jobError.ENGINE_CONSENT": "Only a translation service your store hasn't allowed yet translates this language. Allow it under Settings → AI permission, then resume.",
   "common.jobError.AI_NOT_CONFIGURED": "AI translation isn't configured for this app.",
   "common.jobError.PROVIDER_QUOTA": "The translation service quota is exhausted.",
   "common.jobError.PROVIDER_AUTH": "The translation service rejected our credentials.",
@@ -217,7 +217,7 @@ export const en = {
   "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL refused your key. Translation stopped; Linguva didn't switch to its own services. Check in your DeepL account under API Keys that the key is still valid, then click Check again in Settings or replace it; then resume.",
   "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure refused your key. Translation stopped; Linguva didn't switch to its own services. In the Azure portal under Keys and Endpoint, check Key 1 and the resource's region, then click Check again in Settings or replace the key; then resume.",
   "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud refused your key. Translation stopped; Linguva didn't switch to its own services. In the Google Cloud console, check that the Cloud Translation API is enabled and billing is on, then click Check again in Settings or replace the key; then resume.",
-  "common.jobError.OWN_KEY_MISSING": "No working translation key. Add one in Settings, then resume.",
+  "common.jobError.OWN_KEY_MISSING": "No working translation key. Add one under Settings → Your keys, then resume.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -277,7 +277,7 @@ export const de: Translation<typeof en> = {
   "common.jobError.DAILY_LIMIT": "Das KI-Kontingent für heute ist aufgebraucht. Setze den Auftrag morgen fort (nach Mitternacht UTC).",
   "common.jobError.PLATFORM_LIMIT": "Das Tageslimit der App für KI-Übersetzungen ist erreicht. Setze den Auftrag morgen fort (nach Mitternacht UTC).",
   "common.jobError.CONSENT_REQUIRED": "Die KI-Übersetzung ist nicht erlaubt. Erlaube sie unter „Einstellungen“ → „KI-Erlaubnis“ und setze den Auftrag dann fort.",
-  "common.jobError.ENGINE_CONSENT": "Diese Sprache übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat. Erlaube ihn unter „Einstellungen“ und setze den Auftrag dann fort.",
+  "common.jobError.ENGINE_CONSENT": "Diese Sprache übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat. Erlaube ihn unter „Einstellungen“ → „KI-Erlaubnis“ und setze den Auftrag dann fort.",
   "common.jobError.AI_NOT_CONFIGURED": "KI-Übersetzung ist für diese App nicht eingerichtet.",
   "common.jobError.PROVIDER_QUOTA": "Das Kontingent des Übersetzungsdienstes ist erschöpft.",
   "common.jobError.PROVIDER_AUTH": "Der Übersetzungsdienst hat unsere Zugangsdaten abgelehnt.",
@@ -434,7 +434,7 @@ export const de: Translation<typeof en> = {
   "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL hat deinen Schlüssel abgelehnt. Die Übersetzung wurde angehalten; Linguva ist nicht zu eigenen Diensten gewechselt. Prüfe in deinem DeepL-Konto unter „API-Schlüssel“, ob der Schlüssel noch gilt, klicke dann in den Einstellungen auf „Erneut prüfen“ oder ersetze ihn; setze danach fort.",
   "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure hat deinen Schlüssel abgelehnt. Die Übersetzung wurde angehalten; Linguva ist nicht zu eigenen Diensten gewechselt. Prüfe im Azure-Portal unter „Schlüssel und Endpunkt“ Schlüssel 1 und die Region der Ressource, klicke dann in den Einstellungen auf „Erneut prüfen“ oder ersetze den Schlüssel; setze danach fort.",
   "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud hat deinen Schlüssel abgelehnt. Die Übersetzung wurde angehalten; Linguva ist nicht zu eigenen Diensten gewechselt. Prüfe in der Google Cloud Console, ob die Cloud Translation API aktiviert und die Abrechnung an ist, klicke dann in den Einstellungen auf „Erneut prüfen“ oder ersetze den Schlüssel; setze danach fort.",
-  "common.jobError.OWN_KEY_MISSING": "Kein funktionierender Übersetzungsschlüssel. Füge in den Einstellungen einen hinzu und setze dann fort.",
+  "common.jobError.OWN_KEY_MISSING": "Kein funktionierender Übersetzungsschlüssel. Füge unter „Einstellungen“ → „Deine Schlüssel“ einen hinzu und setze dann fort.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -494,7 +494,7 @@ export const fr: Translation<typeof en> = {
   "common.jobError.DAILY_LIMIT": "Le quota d'IA d'aujourd'hui est épuisé. Reprenez la tâche demain (après minuit UTC).",
   "common.jobError.PLATFORM_LIMIT": "La limite quotidienne de traduction IA de l'application est atteinte. Reprenez la tâche demain (après minuit UTC).",
   "common.jobError.CONSENT_REQUIRED": "La traduction par IA n'est pas autorisée. Autorisez-la dans « Paramètres » → « Autorisation de l'IA », puis reprenez la tâche.",
-  "common.jobError.ENGINE_CONSENT": "Seul un service de traduction que votre boutique n'a pas encore autorisé traduit cette langue. Autorisez-le dans « Paramètres », puis reprenez la tâche.",
+  "common.jobError.ENGINE_CONSENT": "Seul un service de traduction que votre boutique n'a pas encore autorisé traduit cette langue. Autorisez-le dans « Paramètres » → « Autorisation de l'IA », puis reprenez la tâche.",
   "common.jobError.AI_NOT_CONFIGURED": "La traduction IA n'est pas configurée pour cette application.",
   "common.jobError.PROVIDER_QUOTA": "Le quota du service de traduction est épuisé.",
   "common.jobError.PROVIDER_AUTH": "Le service de traduction a refusé nos identifiants.",
@@ -651,7 +651,7 @@ export const fr: Translation<typeof en> = {
   "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL a refusé votre clé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Vérifiez dans votre compte DeepL, sous « Clés API », que la clé est toujours valide, puis cliquez sur « Vérifier à nouveau » dans les paramètres ou remplacez-la ; reprenez ensuite.",
   "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure a refusé votre clé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Dans le portail Azure, sous « Clés et point de terminaison », vérifiez la Clé 1 et la région de la ressource, puis cliquez sur « Vérifier à nouveau » dans les paramètres ou remplacez la clé ; reprenez ensuite.",
   "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud a refusé votre clé. La traduction s'est arrêtée ; Linguva n'est pas passé à ses propres services. Dans la console Google Cloud, vérifiez que l'API Cloud Translation est activée et la facturation active, puis cliquez sur « Vérifier à nouveau » dans les paramètres ou remplacez la clé ; reprenez ensuite.",
-  "common.jobError.OWN_KEY_MISSING": "Aucune clé de traduction valide. Ajoutez-en une dans les paramètres, puis reprenez.",
+  "common.jobError.OWN_KEY_MISSING": "Aucune clé de traduction valide. Ajoutez-en une dans « Paramètres » → « Vos clés », puis reprenez.",
 };
 
 export const es: Translation<typeof en> = {
@@ -711,7 +711,7 @@ export const es: Translation<typeof en> = {
   "common.jobError.DAILY_LIMIT": "La cuota de IA de hoy está agotada. Reanuda la tarea mañana (después de la medianoche UTC).",
   "common.jobError.PLATFORM_LIMIT": "Se alcanzó el límite diario de traducción con IA de la aplicación. Reanuda la tarea mañana (después de la medianoche UTC).",
   "common.jobError.CONSENT_REQUIRED": "La traducción con IA no está permitida. Permítela en «Configuración» → «Permiso de IA» y luego reanuda la tarea.",
-  "common.jobError.ENGINE_CONSENT": "Solo un servicio de traducción que tu tienda aún no ha permitido traduce este idioma. Permítelo en «Configuración» y luego reanuda la tarea.",
+  "common.jobError.ENGINE_CONSENT": "Solo un servicio de traducción que tu tienda aún no ha permitido traduce este idioma. Permítelo en «Configuración» → «Permiso de IA» y luego reanuda la tarea.",
   "common.jobError.AI_NOT_CONFIGURED": "La traducción con IA no está configurada para esta aplicación.",
   "common.jobError.PROVIDER_QUOTA": "La cuota del servicio de traducción está agotada.",
   "common.jobError.PROVIDER_AUTH": "El servicio de traducción rechazó nuestras credenciales.",
@@ -868,5 +868,5 @@ export const es: Translation<typeof en> = {
   "common.jobError.OWN_KEY_AUTH_DEEPL": "DeepL rechazó tu clave. La traducción se detuvo; Linguva no cambió a sus propios servicios. Comprueba en tu cuenta de DeepL, en «Claves de API», que la clave sigue siendo válida; luego haz clic en «Comprobar de nuevo» en la configuración o sustitúyela, y reanuda.",
   "common.jobError.OWN_KEY_AUTH_AZURE": "Microsoft Azure rechazó tu clave. La traducción se detuvo; Linguva no cambió a sus propios servicios. En el portal de Azure, en «Claves y punto de conexión», comprueba la Clave 1 y la región del recurso; luego haz clic en «Comprobar de nuevo» en la configuración o sustituye la clave, y reanuda.",
   "common.jobError.OWN_KEY_AUTH_GOOGLE": "Google Cloud rechazó tu clave. La traducción se detuvo; Linguva no cambió a sus propios servicios. En la consola de Google Cloud, comprueba que la API Cloud Translation esté activada y la facturación activa; luego haz clic en «Comprobar de nuevo» en la configuración o sustituye la clave, y reanuda.",
-  "common.jobError.OWN_KEY_MISSING": "No hay ninguna clave de traducción válida. Añade una en Configuración y luego reanuda.",
+  "common.jobError.OWN_KEY_MISSING": "No hay ninguna clave de traducción válida. Añade una en «Configuración» → «Tus claves» y luego reanuda.",
 };

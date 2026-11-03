@@ -3,19 +3,22 @@
  * blogs, and the content types under /app/content). The route supplies the loader and action
  * (.server/translation/resource-editor). From the top:
  *
- * - the way back to the area list the item is opened from ("‹ Produkte"), the item's picture (or
- *   its area's icon), its name and how much is open in the language;
+ * - the way back to the area list the item is opened from ("‹ Produkte"), keeping where that list was
+ *   opened from (Content), the item's picture (or its area's icon), its name and how much is open in
+ *   the language;
  * - the page's banners (leave without publishing, the AI permission, results and errors);
  * - one square tile per text with its state, each moving to its text;
  * - the toolbar: AI and the translation memory fill only the open texts (missing or outdated), the
- *   count in their buttons; "Translate everything again" asks first;
+ *   count in their buttons, and what they leave: texts only a person translates, image descriptions
+ *   past one AI request's; "Translate everything again" asks first;
  * - every text in Review's order (name, description, Google texts, other texts, web address last),
  *   its state beside its name, its HTML shown rendered with "Edit HTML";
  * - the image descriptions and extra details, and one "Publish translations" (also the admin's save
  *   bar) for all of it: their typed and AI texts count as unpublished too.
  */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Form, useBlocker, useFetcher, useLoaderData } from "react-router";
+import { Form, useBlocker, useFetcher, useLoaderData, useSearchParams } from "react-router";
+import type { MAX_ATTACHED_AI_RESOURCES } from "../.server/translation/attached-editor";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
 import { showToast, useResultToast, useSaveBar } from "./app-bridge";
@@ -36,8 +39,8 @@ import { ENGINE_NAMES, isEngineId } from "../lib/engines";
 import { parseOwnKeyCode } from "../lib/own-keys";
 import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
-import { editorArea, googlePreviewIndex, openForAi, orderTexts, pickDrafts, storefrontSegment, textCounts, textState } from "../lib/editor-view";
-import { CATEGORIES, categoryPath, categoryOf, EXTRAS, languagePath } from "../lib/language-categories";
+import { editorArea, googlePreviewIndex, openForAi, orderTexts, pickDrafts, storefrontSegment, textCounts, textState, type TextFacts } from "../lib/editor-view";
+import { CATEGORIES, categoryPath, categoryOf, EXTRAS, languagePath, originOf, withOrigin, type Origin } from "../lib/language-categories";
 import type { IconName } from "../lib/icons";
 import { upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
@@ -80,6 +83,19 @@ const EDITOR_SAVE_BAR = "linguva-editor-save-bar";
 const MAX_TILES = 12;
 /** The attached section's heading row (its tile jumps there). */
 const ATTACHED_ID = "editor-attached";
+/** Items whose image descriptions and extra details one AI request drafts: the server's limit, typed as its value so the two can't differ. */
+const ATTACHED_AI_ITEMS: typeof MAX_ATTACHED_AI_RESOURCES = 25;
+
+/**
+ * The open image descriptions and extra details one AI request drafts (`now`: those of the first
+ * ATTACHED_AI_ITEMS items with any, as the server picks them) and those it leaves (`later`): Shopify
+ * lists the same items as open until their drafts are published, so the next request picks them again.
+ */
+export function attachedForAi(items: readonly { fields: readonly TextFacts[] }[]): { now: number; later: number } {
+  const open = items.map((item) => openForAi(item.fields).length).filter((count) => count > 0);
+  const now = open.slice(0, ATTACHED_AI_ITEMS).reduce((sum, count) => sum + count, 0);
+  return { now, later: open.reduce((sum, count) => sum + count, 0) - now };
+}
 
 /** A text's heading row: its tile moves focus to `<id>-heading`. */
 const textId = (key: string) => `editor-text-${key}`;
@@ -101,19 +117,21 @@ function areaIcon(kind: string): IconName {
 /**
  * Where "back" leads: the area list the item is opened from (Produkte auf Deutsch), else (the theme's
  * texts, notifications) its list under Content. `label`: the admin's breadcrumb, the parent page's title.
+ * A list opened from Content (`origin`) is led back to as it was, so its trail starts at Content again.
  */
-function backTarget(data: EditorData, i18n: I18n, language: string) {
+function backTarget(data: EditorData, i18n: I18n, language: string, origin: Origin) {
   const { t } = i18n;
   const locale = data.target.locale;
   const area = editorArea(data.kind.type);
   if (area) {
     const name = categoryName(i18n, area);
+    const list = withOrigin(categoryPath(locale, area), origin);
     return {
-      href: categoryPath(locale, area),
+      href: list,
       label: t("language.list.heading", { category: name, language }),
       trail: [
-        { href: languagePath(locale), label: upperFirst(language) },
-        { href: categoryPath(locale, area), label: name },
+        { href: withOrigin(languagePath(locale), origin), label: upperFirst(language) },
+        { href: list, label: name },
       ],
     };
   }
@@ -177,6 +195,9 @@ export const hasConfirmation = (form: Pick<FormData, "entries">) => [...form.ent
 
 export function ResourceTranslationEditor() {
   const data = useLoaderData<EditorLoader>();
+  // Opened from an area list that came from Content (?from=content): the way back and the pages keep it.
+  const [searchParams] = useSearchParams();
+  const origin = originOf(searchParams.get("from"));
   const i18n = useI18n();
   const sourceName = i18n.language(data.sourceLocale, data.sourceName);
   const targetName = i18n.language(data.target.locale, data.target.name);
@@ -370,6 +391,7 @@ export function ResourceTranslationEditor() {
   const pageHref = (page: number) => {
     const params = new URLSearchParams({ lang: data.target.locale, page: String(page) });
     if (data.paging?.query) params.set("q", data.paging.query);
+    if (origin) params.set("from", origin);
     return `?${params.toString()}`;
   };
   // Own key plan: no Linguva allowance (limit null), so no "left" figure.
@@ -384,7 +406,8 @@ export function ResourceTranslationEditor() {
   // What AI and the memory work on: the open texts (missing or outdated); translations stay.
   const openKeys = openForAi(data.fields).map((f) => f.key);
   const openGoogle = openKeys.filter(isSeoKey);
-  const openAttached = openForAi(attachedTexts).length;
+  // The image descriptions and extra details this request drafts; the rest wait for one after publishing.
+  const { now: openAttached, later: attachedLater } = attachedForAi(data.attached.items);
   const aiCount = openKeys.length + openAttached;
   const machineKeys = data.fields.filter((f) => f.machine).map((f) => f.key);
   const translate = (run: AiRun, keys: readonly string[], attachedToo: boolean) => {
@@ -425,7 +448,7 @@ export function ResourceTranslationEditor() {
   }, [translating]);
 
   const language = targetName;
-  const back = backTarget(data, i18n, language);
+  const back = backTarget(data, i18n, language, origin);
   const counts = textCounts([...data.fields, ...attachedTexts]);
   const lead = data.paging
     ? t("editor.header.paged", { language, count: data.paging.total })
@@ -434,6 +457,13 @@ export function ResourceTranslationEditor() {
       : counts.open
         ? t("editor.header.open", { language, open: counts.open, count: counts.total })
         : t("editor.header.done", { language, count: counts.total });
+  // Under the buttons: the texts open for AI (a later request's too); else the open texts only a person
+  // translates (a web link, a file: "Manual only"), which the header counts too; else that none is open.
+  const openLine = aiCount
+    ? t("editor.toolbar.open", { count: aiCount + attachedLater })
+    : counts.open
+      ? t("editor.toolbar.manualOpen", { count: counts.open })
+      : t("editor.toolbar.allDone");
   // As its area list shows it, whatever its image descriptions say (the loader reads it).
   const picture = data.picture;
   const stateOf = (field: (typeof data.fields)[number]) => {
@@ -708,7 +738,10 @@ export function ResourceTranslationEditor() {
                 ) : null}
               </Actions>
             ) : null}
-            <s-text color="subdued">{aiCount ? t("editor.toolbar.open", { count: aiCount }) : t("editor.toolbar.allDone")}</s-text>
+            <s-text color="subdued">
+              {openLine}
+              {attachedLater ? ` ${t("editor.toolbar.attachedLater", { count: attachedLater, max: ATTACHED_AI_ITEMS })}` : null}
+            </s-text>
             {aiCount === 0 && machineKeys.length && !askAgain ? (
               <s-stack direction="inline">
                 <Button
@@ -782,6 +815,7 @@ export function ResourceTranslationEditor() {
             <s-stack direction="block" gap="small">
               <Form method="get">
                 <input type="hidden" name="lang" value={data.target.locale} />
+                {origin ? <input type="hidden" name="from" value={origin} /> : null}
                 <s-stack direction="inline" gap="small" alignItems="end">
                   <s-search-field name="q" label={t("editor.paging.findLabel")} placeholder={t("editor.paging.findPlaceholder")} value={data.paging.query} />
                   <Button type="submit">{t("common.action.search")}</Button>

@@ -181,6 +181,8 @@ export async function loadCoverageDashboard(request: Request) {
     idempotencyKey: randomUUID(),
     jobsAvailable: getQueues() !== null,
     canTranslate: facts.available && hasCurrentAiConsent(settings, facts.configured, facts.payer),
+    /** Own key plan without a usable key (none saved, or every one refused): its fix is a key, not the AI permission. */
+    ownKeyMissing: facts.payer === "merchant" && !facts.available,
     coverageTypes: COVERAGE_TYPES,
     /** The newest completed measurement (a failed or stuck newer one has no full scan to show). */
     lastFullScan: summary.lastCompleted?.finishedAt ?? null,
@@ -318,6 +320,7 @@ export async function loadCoverageItemsPage(request: Request) {
     idempotencyKey: randomUUID(),
     jobsAvailable: getQueues() !== null,
     canTranslate: false,
+    ownKeyMissing: false,
     bulk: target !== null,
     /** The job the bulk button starts (its owner type, with image descriptions and extra details or without). */
     target,
@@ -364,6 +367,8 @@ export async function loadCoverageItemsPage(request: Request) {
   return {
     ...base,
     canTranslate: facts.available && hasCurrentAiConsent(settings, facts.configured, facts.payer),
+    /** Own key plan without a usable key (none saved, or every one refused): its fix is a key, not the AI permission. */
+    ownKeyMissing: facts.payer === "merchant" && !facts.available,
     searchUnavailable,
     nextCursor: page.nextCursor,
     items: page.items.map((i) => {

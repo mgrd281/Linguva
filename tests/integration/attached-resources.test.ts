@@ -17,6 +17,7 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { attachedFieldName, attachedRef } from "../../app/.server/translation/attached-editor";
 import { loadEditorData, runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
+import { attachedForAi } from "../../app/components/ResourceTranslationEditor";
 import type { ResourceKind } from "../../app/lib/resource-kinds";
 import { PLANS } from "../../app/lib/plans";
 import { ownerDb, resetDatabase } from "../support/db";
@@ -180,6 +181,17 @@ describe("image alt text and metafields in the editor", () => {
     // Already translated alt text is not sent again; nothing is published.
     expect(store.calls).not.toContain("LinguvaTranslationsRegister");
     expect(store.translationOf(img, "de", "alt")).toBeUndefined();
+  });
+
+  it("drafts the image descriptions of 25 items per AI request, as the editor counts them", async () => {
+    const { shop, store } = await setup();
+    const images = Array.from({ length: 27 }, (_, i) => store.addImage(P1, `Red wool jacket, view ${i + 1}`));
+    // The editor's count: 25 now, 2 for a request after these drafts are published.
+    expect(attachedForAi((await loadEditorData(ctx(store, shop.id))).attached.items)).toEqual({ now: 25, later: 2 });
+    const result = await runEditorAction(ctx(store, shop.id), form([["intent", "ai-translate-attached"]]));
+    if (!("kind" in result) || result.kind !== "attached-ai") throw new Error("unexpected result");
+    expect(Object.keys(result.drafts)).toEqual(images.slice(0, 25).map((id) => attachedRef(id, "alt")));
+    expect(result.stopped).toBeUndefined();
   });
 
   it("publishes reviewed alt text and metafields with revisions, and refuses stale digests", async () => {

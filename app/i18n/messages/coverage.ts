@@ -134,9 +134,12 @@ export const en = {
   "coverage.duration.overDay": "more than a day",
   "coverage.seo.heading": "Texts for Google",
   "coverage.seo.items": "items",
-  "coverage.seo.noSourceTitle": "{language}: {count} {kind} have no Google title in the original, so Google shows the regular title.",
+  "coverage.seo.noSourceTitle": "{language}: {kind} without a Google title in the original: {count}. Google shows the regular title there.",
   "coverage.seo.duplicates": "{language}: {count} items share a Google title with another item. Different titles help Google tell pages apart.",
-  "coverage.seo.toCheck": "{language}: {count} translated texts for Google to check (length or wording).",
+  "coverage.seo.toCheck": {
+    one: "{language}: {count} translated text for Google to check (length or wording).",
+    other: "{language}: {count} translated texts for Google to check (length or wording).",
+  },
   "coverage.seo.none": "No findings for the shown languages.",
   "coverage.rules.heading": "How coverage is counted",
   "coverage.rules.fields": "Every text of an item counts on its own (title, description, Google title…). Only texts whose original isn't empty count.",
@@ -172,6 +175,7 @@ export const en = {
   "coverage.items.reviewDrafts": "Review drafts",
   "coverage.items.openOutdated": "Show outdated",
   "coverage.items.cantTranslate": "AI translation isn't available: allow it under Settings → AI permission.",
+  "coverage.items.noKey": "AI translation isn't available: the Own key plan needs a working translation key. Add one under Settings → Your keys.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -309,7 +313,10 @@ export const de: Translation<typeof en> = {
   "coverage.seo.items": "Einträge",
   "coverage.seo.noSourceTitle": "{language}: {kind} ohne Google-Titel im Original: {count}. Google zeigt dort den normalen Titel.",
   "coverage.seo.duplicates": "{language}: {count} Einträge haben denselben Google-Titel wie ein anderer Eintrag. Verschiedene Titel helfen Google, Seiten zu unterscheiden.",
-  "coverage.seo.toCheck": "{language}: {count} übersetzte Texte für Google zum Prüfen (Länge oder Wortlaut).",
+  "coverage.seo.toCheck": {
+    one: "{language}: {count} übersetzter Text für Google zum Prüfen (Länge oder Wortlaut).",
+    other: "{language}: {count} übersetzte Texte für Google zum Prüfen (Länge oder Wortlaut).",
+  },
   "coverage.seo.none": "Keine Hinweise für die angezeigten Sprachen.",
   "coverage.rules.heading": "So wird die Abdeckung gezählt",
   "coverage.rules.fields": "Jeder Text eines Eintrags zählt für sich (Titel, Beschreibung, Google-Titel …). Es zählen nur Texte, deren Original nicht leer ist.",
@@ -345,6 +352,7 @@ export const de: Translation<typeof en> = {
   "coverage.items.reviewDrafts": "Entwürfe prüfen",
   "coverage.items.openOutdated": "Veraltete anzeigen",
   "coverage.items.cantTranslate": "KI-Übersetzung ist nicht verfügbar: Erlaube sie unter „Einstellungen“ → „KI-Erlaubnis“.",
+  "coverage.items.noKey": "KI-Übersetzung ist nicht verfügbar: Der Tarif Own key braucht einen funktionierenden Übersetzungsschlüssel. Füge einen unter „Einstellungen“ → „Deine Schlüssel“ hinzu.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -480,9 +488,12 @@ export const fr: Translation<typeof en> = {
   "coverage.duration.overDay": "plus d'un jour",
   "coverage.seo.heading": "Textes pour Google",
   "coverage.seo.items": "éléments",
-  "coverage.seo.noSourceTitle": "{language} : {count} {kind} n'ont pas de titre Google dans l'original, Google affiche donc le titre normal.",
+  "coverage.seo.noSourceTitle": "{language} : {kind} sans titre Google dans l'original : {count}. Google y affiche le titre normal.",
   "coverage.seo.duplicates": "{language} : {count} éléments ont le même titre Google qu'un autre élément. Des titres différents aident Google à distinguer les pages.",
-  "coverage.seo.toCheck": "{language} : {count} textes traduits pour Google à vérifier (longueur ou formulation).",
+  "coverage.seo.toCheck": {
+    one: "{language} : {count} texte traduit pour Google à vérifier (longueur ou formulation).",
+    other: "{language} : {count} textes traduits pour Google à vérifier (longueur ou formulation).",
+  },
   "coverage.seo.none": "Aucune remarque pour les langues affichées.",
   "coverage.rules.heading": "Comment la couverture est calculée",
   "coverage.rules.fields": "Chaque texte d'un élément compte à part (titre, description, titre Google…). Seuls les textes dont l'original n'est pas vide comptent.",
@@ -518,6 +529,7 @@ export const fr: Translation<typeof en> = {
   "coverage.items.reviewDrafts": "Vérifier les brouillons",
   "coverage.items.openOutdated": "Voir les obsolètes",
   "coverage.items.cantTranslate": "La traduction par IA n'est pas disponible : autorisez-la dans « Paramètres » → « Autorisation de l'IA ».",
+  "coverage.items.noKey": "La traduction par IA n'est pas disponible : le forfait Own key nécessite une clé de traduction valide. Ajoutez-en une dans « Paramètres » → « Vos clés ».",
 };
 
 export const es: Translation<typeof en> = {
@@ -653,9 +665,12 @@ export const es: Translation<typeof en> = {
   "coverage.duration.overDay": "más de un día",
   "coverage.seo.heading": "Textos para Google",
   "coverage.seo.items": "elementos",
-  "coverage.seo.noSourceTitle": "{language}: {count} {kind} no tienen título de Google en el original, así que Google muestra el título normal.",
+  "coverage.seo.noSourceTitle": "{language}: {kind} sin título de Google en el original: {count}. Google muestra ahí el título normal.",
   "coverage.seo.duplicates": "{language}: {count} elementos comparten el título de Google con otro elemento. Los títulos distintos ayudan a Google a distinguir las páginas.",
-  "coverage.seo.toCheck": "{language}: {count} textos traducidos para Google por revisar (longitud o redacción).",
+  "coverage.seo.toCheck": {
+    one: "{language}: {count} texto traducido para Google por revisar (longitud o redacción).",
+    other: "{language}: {count} textos traducidos para Google por revisar (longitud o redacción).",
+  },
   "coverage.seo.none": "Sin avisos para los idiomas mostrados.",
   "coverage.rules.heading": "Cómo se calcula la cobertura",
   "coverage.rules.fields": "Cada texto de un elemento cuenta por separado (título, descripción, título de Google…). Solo cuentan los textos cuyo original no está vacío.",
@@ -691,4 +706,5 @@ export const es: Translation<typeof en> = {
   "coverage.items.reviewDrafts": "Revisar borradores",
   "coverage.items.openOutdated": "Ver desactualizados",
   "coverage.items.cantTranslate": "La traducción con IA no está disponible: permítela en «Configuración» → «Permiso de IA».",
+  "coverage.items.noKey": "La traducción con IA no está disponible: el plan Own key necesita una clave de traducción válida. Agrega una en «Configuración» → «Tus claves».",
 };

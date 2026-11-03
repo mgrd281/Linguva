@@ -13,7 +13,7 @@ import type { CategoryItems, CategoryRow, ListState } from "../.server/languages
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { itemErrorMessage, itemKindLabel, jobErrorMessage } from "../i18n/labels";
 import { isMetafieldCoverageType, type FieldGroup } from "../lib/coverage-rules";
-import { CATEGORIES, categoryPath, ITEM_STATES, type CategoryId, type ItemState, type Origin } from "../lib/language-categories";
+import { CATEGORIES, categoryPath, ITEM_STATES, withOrigin, type CategoryId, type ItemState, type Origin } from "../lib/language-categories";
 import { TRACK_COLOUR } from "./Coverage";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { StateIcon } from "./ItemStates";
@@ -193,8 +193,9 @@ function RowNotes({ row, i18n, smart }: { row: CategoryRow; i18n: I18n; smart: C
  * One item. With an editor, the whole row opens it: its name is the link
  * (read "Open: <name>"), stretched over the row (ui.css, .lv-row), with a
  * chevron at the end; the rest of the row stays text, read in its order.
+ * The editor gets where the list was opened from, so its way back keeps it.
  */
-function ItemRow({ row, data, i18n, names }: { row: CategoryRow; data: CategoryItems; i18n: I18n; names: ListNames }) {
+function ItemRow({ row, data, i18n, names, origin }: { row: CategoryRow; data: CategoryItems; i18n: I18n; names: ListNames; origin: Origin }) {
   const { t } = i18n;
   const name = rowName(i18n, row);
   // Areas with things of several kinds say which kind each one is.
@@ -207,7 +208,7 @@ function ItemRow({ row, data, i18n, names }: { row: CategoryRow; data: CategoryI
           <s-stack direction="block" gap="small-500">
             {kind ? <s-text color="subdued">{kind}</s-text> : null}
             {row.href ? (
-              <Link to={row.href} className="lv-row__link">
+              <Link to={withOrigin(row.href, origin)} className="lv-row__link">
                 <span className="lv-sr">{t("language.list.row.open")}: </span>
                 {name}
               </Link>
@@ -359,7 +360,7 @@ export function CategoryList({ data, i18n, names, origin = null }: { data: Categ
             {group.rows.map((row, i) => (
               <li key={row.id}>
                 {i > 0 ? <s-divider /> : null}
-                <ItemRow row={row} data={data} i18n={i18n} names={names} />
+                <ItemRow row={row} data={data} i18n={i18n} names={names} origin={from} />
               </li>
             ))}
           </ul>

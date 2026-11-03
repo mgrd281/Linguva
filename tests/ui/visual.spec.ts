@@ -18,6 +18,8 @@ const PAGES: Array<[string, string, UiShopKey?]> = [
   ["review-empty", "/app/review"],
   ["glossary", "/app/glossary"],
   ["settings", "/app/settings"],
+  // The form of address, language by language (the segmented choices).
+  ["settings-style", "/app/settings?section=style"],
   ["plan", "/app/plan"],
   // No plan chosen: the trial offer on the paid cards (the empty store's data is fixed too).
   ["plan-none", "/app/plan", "empty"],

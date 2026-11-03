@@ -1,0 +1,84 @@
+name: Visual baselines
+
+# The screenshot references (tests/ui/visual.spec.ts-snapshots/*-ci.png) come from GitHub's runner, the
+# reference machine (docs/UI_TESTING.md, "Visual comparisons"). This takes them there and commits the
+# images that changed to the same branch, on a push whose commit message contains "[visual-baselines]".
+# A changed image is still a review item: look at each one in the bot's commit.
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  baselines:
+    if: contains(github.event.head_commit.message, '[visual-baselines]')
+    name: Take and commit the visual baselines
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create database roles
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f scripts/db/init-roles.sql
+
+      - name: Generate the Prisma client
+        run: pnpm exec prisma generate
+        env:
+          DATABASE_URL: postgresql://linguva_owner:linguva_owner_dev@localhost:5432/linguva_test
+
+      - name: Build (web app and the UI tests' preload)
+        run: |
+          pnpm build
+          pnpm build:ui-preload
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Take the screenshots (only the ones that differ are written)
+        run: pnpm exec playwright test tests/ui/visual.spec.ts --update-snapshots=changed
+
+      - name: Commit the changed images
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/ui/visual.spec.ts-snapshots/
+          if git diff --cached --quiet; then
+            echo "No image changed."
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m "Visual baselines from CI for ${GITHUB_SHA::7}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

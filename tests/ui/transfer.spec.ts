@@ -90,9 +90,9 @@ test("the next part is offered only for the language, content and choice of the 
 
   // German chosen, whichever language the list starts with.
   await language.selectOption({ label: "German" });
-  const first = page.waitForResponse(/\/app\/translations\/export\?/);
+  const answered = page.waitForResponse(/\/app\/translations\/export\?/);
   await page.getByRole("button", { name: "Download CSV" }).click();
-  expect(new URL((await first).url()).searchParams.get("lang")).toBe("de");
+  expect(new URL((await answered).url()).searchParams.get("lang")).toBe("de");
   await expect(page.getByText("Downloaded 3 texts to translate into German.")).toBeVisible();
   await expect(next).toBeVisible();
   // German's cursor would start French after German's first part: French starts with its own first part.

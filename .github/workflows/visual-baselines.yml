@@ -9,6 +9,9 @@ on:
 
 permissions:
   contents: write
+  # To start CI on the commit with the images: a push with GitHub's token starts no workflow, so the
+  # commit would have no checks, and Railway deploys only a commit whose checks passed.
+  actions: write
 
 jobs:
   baselines:
@@ -82,3 +85,6 @@ jobs:
           git diff --cached --stat
           git commit -m "Visual baselines from CI for ${GITHUB_SHA::7}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
+          gh workflow run ci.yml --ref "${GITHUB_REF_NAME}"
+        env:
+          GH_TOKEN: ${{ github.token }}

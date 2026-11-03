@@ -80,7 +80,7 @@ Redesign 3 (2026-11-03) added `jobs-completed` and `job`; their `*-ci.png` image
 
 When a page changes on purpose, or when Shopify updates Polaris (it loads from Shopify's CDN, so its look can change without a change here):
 
-1. Push a commit whose message contains `[visual-baselines]`. The workflow `.github/workflows/visual-baselines.yml` takes the screenshots on GitHub's runner and commits the ones that changed to the same branch ("Visual baselines from CI for …").
+1. Push a commit whose message contains `[visual-baselines]`. The workflow `.github/workflows/visual-baselines.yml` takes the screenshots on GitHub's runner and commits the ones that changed to the same branch ("Visual baselines from CI for …"), then starts CI on that commit (a push with GitHub's own token starts no workflow, and Railway deploys only a commit whose checks passed).
 2. Look at every changed image in that commit; revert what is wrong and fix the page.
 3. Without the workflow: the visual test fails in CI, the Playwright report artifact holds `<page>-actual.png` for each changed page, and the correct ones are committed as `<page>-<desktop|mobile>-ci.png`.
 

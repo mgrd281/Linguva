@@ -28,11 +28,16 @@ const PAGES: Array<[string, string, UiShopKey?]> = [
   ["content", "/app/content"],
   // The Jobs list's Completed tab (its jobs started on fixed hours of earlier store days).
   ["jobs-completed", "/app/jobs?status=completed", "jobs"],
+  // The smart schedule on Business: how often as square tiles, its past checks (the store is read only).
+  ["smart", "/app/settings/automatic", "business"],
+  // Its schedule card, opened at its address (the page scrolls there): the mode tiles and the next checks.
+  ["smart-schedule", "/app/settings/automatic#smart-schedule", "business"],
 ];
 
 // With the time where a page shows it, in the store's zone or with "UTC" ("Oct 30, 2026,
 // 9:15 AM"), a weekday with its day ("Monday, November 2": a day's heading), a day of this
-// year without the year (the Plan page: "on November 1") and a time alone ("2:02 PM").
+// year without the year (the Plan page: "on November 1"), a time alone ("2:02 PM") and the
+// day words that depend on the hour the test runs ("today, 11:00 PM", "Yesterday").
 const MONTH = "(January|February|March|April|May|June|July|August|September|October|November|December)";
 const DATE = new RegExp(
   [
@@ -40,6 +45,7 @@ const DATE = new RegExp(
     `\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(, ${MONTH} \\d{1,2})?\\b`,
     `\\b${MONTH} \\d{1,2}\\b`,
     `\\b\\d{1,2}:\\d{2}\\s?[AP]M\\b`,
+    `\\b(Today|Tomorrow|Yesterday|today|tomorrow|yesterday)\\b`,
   ].join("|"),
 );
 

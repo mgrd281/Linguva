@@ -137,7 +137,8 @@ test.describe("the Jobs list", () => {
   test("on a phone the filters fold behind one button that counts them @responsive", async ({ page }, info) => {
     await openApp(page, "jobs", "/app/jobs?lang=fr");
     const toggle = page.locator("[data-button]", { hasText: "Filters (1)" });
-    const language = page.locator('s-select[name="lang"]');
+    // The select inside Polaris' host (the host itself draws no box).
+    const language = page.getByRole("combobox", { name: "Language" });
     if (info.project.name !== "mobile") {
       // A wide card shows the four filters and no button.
       await expect(language).toBeVisible();
@@ -147,8 +148,8 @@ test.describe("the Jobs list", () => {
     await expect(language).toBeHidden();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(toggle).toHaveAttribute("aria-controls", "jobs-filters");
-    // The first job is in the first screen.
-    await expect(rows(page).first()).toBeInViewport();
+    // The first job is in the first screen (its group's section: a row's Polaris host draws no box of its own).
+    await expect(page.locator('section[aria-labelledby="jobs-live"], section[aria-labelledby^="day-"]').first()).toBeInViewport();
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(language).toBeVisible();
@@ -210,7 +211,8 @@ test.describe("a job's page", () => {
     const problems = page.getByRole("list", { name: "3 products need your attention" }).locator("li");
     await expect(problems).toHaveCount(3);
     await expect(problems.first().locator("s-clickable")).toHaveAttribute("href", /^\/app\/products\/\d+\?lang=fr$/);
-    expect((await heading.boundingBox())!.y).toBeLessThan((await page.getByText("AI characters", { exact: true }).boundingBox())!.y);
+    // Measured on the stats' own box (a Polaris s-text host draws no box of its own).
+    expect((await heading.boundingBox())!.y).toBeLessThan((await page.locator(".lv-jobstats").boundingBox())!.y);
 
     await page.screenshot({ path: test.info().outputPath("job-running.png"), fullPage: true });
     await expectAccessible(page);

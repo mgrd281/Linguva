@@ -158,7 +158,7 @@ test("a count that never started can be started again, in German, without pollin
   const next = region(page, "Als Nächstes");
   await expect(next.getByText(/^Das Zählen kommt seit .+ nicht voran$/)).toBeVisible();
   // No worker runs in these tests (no heartbeat): the card says so instead of "start it again".
-  await expect(next.getByText(/^Hintergrundaufgaben laufen gerade nicht/)).toBeVisible();
+  await expect(next.getByText(/^Linguvas Hintergrunddienst läuft gerade nicht/)).toBeVisible();
   await expect(next.locator('[data-button][data-variant="primary"]', { hasText: "Neu zählen" })).toHaveCount(1);
   await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   // No bar stuck at 0 anywhere.

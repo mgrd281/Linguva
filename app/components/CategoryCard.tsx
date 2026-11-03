@@ -317,9 +317,12 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
       <s-stack direction="block" gap="base">
         <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="start">
           <AreaIcon id={category.id} />
-          {/* The name as the card's heading; "View all" below is its one link. */}
+          {/* The name, drawn as the card's heading: the section's label is its heading for assistive
+              technology (Polaris adds it), so the visible name isn't a second one. "View all" below is its one link. */}
           <s-stack direction="block" gap="small-500">
-            <s-heading>{name}</s-heading>
+            <span className="lv-h3" aria-hidden="true">
+              {name}
+            </span>
             {detail ? <s-text color="subdued">{detail}</s-text> : null}
           </s-stack>
           <s-stack direction="block" alignItems="end">

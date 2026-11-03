@@ -76,8 +76,9 @@ test("how far a language is, one next step, and each area with pictures @respons
   // The areas in the order customers meet them.
   expect(await areaOrder(page)).toEqual(["Products", "Collections", "Extra details", "Image descriptions"]);
   const products = page.locator(labelled("Products"));
-  // The name is the card's heading; its one link is "View all".
-  await expect(products.getByRole("heading", { name: "Products", exact: true })).toBeVisible();
+  // One heading per card (the section's label); the visible name is drawn as one, and its one link is "View all".
+  await expect(products.getByRole("heading", { name: "Products", exact: true })).toHaveCount(1);
+  await expect(products.locator(".lv-h3")).toHaveText("Products");
   await expect(products.getByRole("link", { name: "Products", exact: true })).toHaveCount(0);
   await expect(products.locator('.lv-icon-square[data-tint="blue"] s-icon[type="product"]')).toHaveCount(1);
   await expect(products.getByText(/^\d+% ?$|^<1%$/).first()).toBeVisible();

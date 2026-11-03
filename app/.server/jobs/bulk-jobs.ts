@@ -465,6 +465,19 @@ export async function jobCounts(shopId: string, filter: JobListFilter = {}, now:
   return { ...counts, history: counts.all - counts.active };
 }
 
+/**
+ * The languages the shop's jobs translated into, sorted: the list's language filter offers each of them,
+ * also one no longer in the store, and needs no Shopify call for it.
+ */
+export async function jobLanguages(shopId: string, client: PrismaClient = defaultClient): Promise<string[]> {
+  const rows = await withTenant(
+    shopId,
+    (tx) => tx.$queryRaw<Array<{ locale: string }>>`SELECT DISTINCT j."targetLocale" AS "locale" FROM "TranslationJob" j WHERE j."shopId" = ${shopId}::uuid`,
+    client,
+  );
+  return rows.map((r) => r.locale).sort();
+}
+
 /** The live group: active jobs with the list's filters, running first, then finding, then queued; newest first within each. */
 export async function listActiveJobs(shopId: string, filter: JobListFilter = {}, take = 21, client: PrismaClient = defaultClient): Promise<TranslationJob[]> {
   const limit = clampTake(take, 21);

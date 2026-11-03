@@ -639,7 +639,8 @@ test.describe("Review", () => {
     await expect(modal.getByRole("button", { name: "Approve all 2", exact: true })).toBeVisible();
     await modal.getByRole("button", { name: "Approve only the one without a note", exact: true }).click();
     await expectToast(page, "1 translation approved");
-    await expect(card(page, "Product 3 jacket, French").getByText("Approved – customers see it now.")).toBeVisible();
+    // Its only text decided, the clean card folds to one line.
+    await expect(card(page, "Product 3 jacket, French").getByText("1 approved", { exact: true })).toBeVisible();
     // The noted one still waits, and the strip counts what is left.
     await expect(button(page, "Approve: Name – Product 4 jacket")).toBeVisible();
     await expect(summary(page)).toHaveText("1 of 2 still open");

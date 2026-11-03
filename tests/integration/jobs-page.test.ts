@@ -15,6 +15,7 @@ import { findEngineKey, markEngineKey } from "../../app/.server/credentials/stor
 import {
   AUTO_REQUESTED_BY,
   jobCounts,
+  jobLanguages,
   jobPendingDrafts,
   jobsAttention,
   latestJobTitles,
@@ -181,6 +182,9 @@ describe("jobCounts and the problem rule", () => {
     expect(await jobCounts(s.id, { types: ["MENU", "LINK", "FILTER"] }, NOW, app)).toEqual({ all: 5, active: 1, queued: 1, history: 4, completed: 0, cancelled: 1, problems: 3, problemsNeedYou: 2 });
     // Only stops that wait for a reset: problems, none of them the merchant's.
     expect(await jobCounts(s.id, { types: ["MENU", "SHOP"] }, NOW, app)).toMatchObject({ problems: 2, problemsNeedYou: 0 });
+    // The language filter's choices: every language a job translated into, once each, sorted; another shop's none.
+    expect(await jobLanguages(s.id, app)).toEqual(["de", "fr", "it"]);
+    expect(await jobLanguages((await newShop("no-jobs")).id, app)).toEqual([]);
   });
 });
 

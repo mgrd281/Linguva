@@ -14,7 +14,7 @@ import { Form, Link, useFetcher, useLoaderData, useNavigate, useRevalidator } fr
 import type { TranslationJob } from "@prisma/client";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { shopBilling } from "../.server/billing/billing";
-import { getJobForShop, jobCounts, jobsAttention, listActiveJobs, listJobsPage, rowOutcomesByJob } from "../.server/jobs/bulk-jobs";
+import { getJobForShop, jobCounts, jobLanguages, jobsAttention, listActiveJobs, listJobsPage, rowOutcomesByJob } from "../.server/jobs/bulk-jobs";
 import { searchJobIds } from "../.server/jobs/job-search";
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
 import { stopFix, stopFixContext, stopResumesAt } from "../.server/jobs/stop-fix";
@@ -118,13 +118,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const withLive = query.status === "all" && firstPage;
   // The attention card is about the whole store: not on a filtered or searched view.
   const withAttention = withLive && filterCount(query) === 0 && !query.q;
-  const [counts, live, page, attention, drafts, workerRunning] = await Promise.all([
+  const [counts, live, page, attention, drafts, workerRunning, languages] = await Promise.all([
     jobCounts(shop.id, filter, now),
     withLive ? listActiveJobs(shop.id, filter, LIVE_SHOWN + 1) : Promise.resolve([]),
     listJobsPage(shop.id, { ...filter, status: query.status === "all" ? "history" : query.status, cursor: query.after, before: query.before, take: PAGE_SIZE }),
     withAttention ? jobsAttention(shop.id, now) : Promise.resolve(null),
     withAttention ? countPendingDrafts(shop.id) : Promise.resolve(0),
     backgroundJobsRunning(),
+    // The language filter: every language a job translated into, beside the store's own.
+    jobLanguages(shop.id),
   ]);
   const shown = [...live.slice(0, LIVE_SHOWN), ...page.jobs];
   const stops = attention?.stops.jobs ?? [];
@@ -156,6 +158,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     query,
     names: locales.names,
     targets: locales.targets ?? [],
+    jobLanguages: languages,
     marketCountries: peekMarketCountries(shop.id),
     counts,
     workerDown: !workerRunning,
@@ -563,7 +566,7 @@ function Filters({ data, words }: { data: Data; words: JobWords }) {
     chosen.current = href;
     void navigate(href, { replace: true, preventScrollReset: true });
   };
-  const languages = [...new Set([...data.targets, ...(q.lang ? [q.lang] : [])])]
+  const languages = [...new Set([...data.targets, ...data.jobLanguages, ...(q.lang ? [q.lang] : [])])]
     .map((code) => ({ code, name: words.i18n.language(code, data.names[code]) }))
     .sort((a, b) => a.name.localeCompare(b.name, words.i18n.locale));
   return (

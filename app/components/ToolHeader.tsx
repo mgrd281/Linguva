@@ -1,6 +1,6 @@
 /**
- * The header of a page in Settings › Tools (glossary, translation memory,
- * coverage, Countries & markets, import & export): the trail back to
+ * The header of a page in Settings › Tools (glossary, languages, translation
+ * memory, coverage, Countries & markets, import & export): the trail back to
  * Settings › Tools (a 44 px back row "‹ Tools" on a phone), the tool's icon
  * in the tinted square of its tile in Settings, the page's heading (h1, the
  * type scale's .lv-h1) and one line that says what the page is for. What
@@ -21,6 +21,7 @@ export const TOOLS_HREF = "/app/settings?section=tools";
 /** Each tool's sign: the icon and tint of its tile in Settings › Tools (app.settings.tsx, TOOLS). */
 export const TOOL_LOOK = {
   glossary: { href: "/app/glossary", icon: "book-open", tint: "violet" },
+  languages: { href: "/app/languages", icon: "language", tint: "blue" },
   markets: { href: "/app/markets", icon: "globe", tint: "teal" },
   memory: { href: "/app/memory", icon: "database", tint: "amber" },
   coverage: { href: "/app/coverage", icon: "chart-donut", tint: "green" },

@@ -440,295 +440,335 @@ export function ResourceTranslationEditor() {
         {back.label}
       </s-link>
 
-      <s-query-container>
-        <s-stack direction="block" gap="small-200">
-          <Breadcrumbs i18n={i18n} trail={back.trail} current={data.title} touch />
-          <div className="lv-ed-header">
-            {picture ? (
-              <span className="lv-ed-picture">
-                {/* The name is written beside it. */}
-                <img src={`${picture}${picture.includes("?") ? "&" : "?"}width=96`} alt="" />
-              </span>
-            ) : (
-              <IconSquare icon={areaIcon(kind)} size={48} />
-            )}
-            <div className="lv-ed-header__text">
-              <h1 className="lv-h1 lv-ed-header__name">{data.title}</h1>
-              <s-text color="subdued">{lead}</s-text>
+      {/* One stack for the page, as on every page: s-page spaces only its own sections, so the header, the tiles and the form's texts would touch them. */}
+      <s-stack direction="block" gap="base">
+        <s-query-container>
+          <s-stack direction="block" gap="small-200">
+            <Breadcrumbs i18n={i18n} trail={back.trail} current={data.title} touch />
+            <div className="lv-ed-header">
+              {picture ? (
+                <span className="lv-ed-picture">
+                  {/* The name is written beside it. */}
+                  <img src={`${picture}${picture.includes("?") ? "&" : "?"}width=96`} alt="" />
+                </span>
+              ) : (
+                <IconSquare icon={areaIcon(kind)} size={48} />
+              )}
+              <div className="lv-ed-header__text">
+                <h1 className="lv-h1 lv-ed-header__name">{data.title}</h1>
+                <s-text color="subdued">{lead}</s-text>
+              </div>
             </div>
-          </div>
-        </s-stack>
-      </s-query-container>
-
-      {blocker.state === "blocked" ? (
-        <s-banner tone="warning" heading={t("editor.leave.heading")}>
-          <s-paragraph>{t("editor.leave.body")}</s-paragraph>
-          <s-stack direction="inline" gap="base">
-            <Button id="editor-stay" variant="primary" onClick={() => blocker.reset()}>
-              {t("editor.leave.stay")}
-            </Button>
-            <Button tone="critical" onClick={() => blocker.proceed()}>
-              {t("editor.leave.leave")}
-            </Button>
           </s-stack>
-        </s-banner>
-      ) : null}
+        </s-query-container>
 
-      {data.ai.available && !data.ai.consent ? (
-        <s-banner tone="info" heading={t("editor.consent.heading")}>
-          <s-paragraph>
-            {/* Own key plan: the merchant's own keys, under its own contract with the services. */}
-            {data.ai.ownKey
-              ? t("editor.consent.body.ownKey", { singular, processors: processorsText(i18n, data.ai.consentTokens) })
-              : isDeepLOnly(data.ai.consentTokens)
-                ? t("editor.consent.body", { singular })
-                : t("editor.consent.body.multi", { singular, processors: processorsText(i18n, data.ai.consentTokens) })}
-            {/* Several services: their order and the failover, as in Settings (the same consent version). */}
-            {data.ai.consentTokens.length > 1 ? ` ${t("editor.consent.order", engineOrderTexts(i18n, data.ai.consentTokens))}` : null}
-          </s-paragraph>
-          {/* The page showed an older list of services: nothing was stored, the list above is the current one. */}
-          {consentFetcher.data?.kind === "error" && consentFetcher.data.code === "CONSENT_CHANGED" ? (
-            <s-paragraph>{t("editor.aiError.CONSENT_CHANGED")}</s-paragraph>
-          ) : null}
-          <consentFetcher.Form method="post">
-            <input type="hidden" name="intent" value="grant-consent" />
-            <input type="hidden" name="consentTokens" value={data.ai.consentTokens.join(",")} />
-            <Button type="submit" icon="shield-check-mark" {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
-              {t("editor.consent.allow")}
-            </Button>
-          </consentFetcher.Form>
-        </s-banner>
-      ) : null}
+        {blocker.state === "blocked" ? (
+          <s-banner tone="warning" heading={t("editor.leave.heading")}>
+            <s-paragraph>{t("editor.leave.body")}</s-paragraph>
+            <s-stack direction="inline" gap="base">
+              <Button id="editor-stay" variant="primary" onClick={() => blocker.reset()}>
+                {t("editor.leave.stay")}
+              </Button>
+              <Button tone="critical" onClick={() => blocker.proceed()}>
+                {t("editor.leave.leave")}
+              </Button>
+            </s-stack>
+          </s-banner>
+        ) : null}
 
-      {removed ? (
-        <s-banner
-          tone={removed.status === "removed" ? "success" : "warning"}
-          heading={removed.status === "removed" ? t("editor.removed.heading") : t("editor.removed.failedHeading")}
-        >
-          <s-paragraph>
-            {removed.status === "removed" ? t("editor.removed.body") : t("editor.reloadAndRetry")}
-          </s-paragraph>
-        </s-banner>
-      ) : null}
-
-      {restored ? (
-        <s-banner
-          tone={restored === "restored" ? "success" : "warning"}
-          heading={restored === "restored" ? t("editor.restored.heading") : t("editor.restored.failedHeading")}
-        >
-          <s-paragraph>
-            {restored === "restored"
-              ? t("editor.restored.body")
-              : restored === "source_changed"
-                ? t("editor.restored.sourceChanged")
-                : t("editor.reloadAndRetry")}
-          </s-paragraph>
-        </s-banner>
-      ) : null}
-
-      {actionError ? (
-        <s-banner
-          tone={actionError.code.startsWith("RATE_LIMITED") ? "warning" : "critical"}
-          heading={filledFrom === "memory" ? t("editor.aiError.memoryHeading") : t("editor.aiError.heading")}
-        >
-          <s-paragraph>
-            {consentEngine
-              ? t("editor.aiError.ENGINE_CONSENT.named", { engine: ENGINE_NAMES[consentEngine] })
-              : aiErrorMessage(i18n, actionError.code, "engine" in actionError && typeof actionError.engine === "string" ? actionError.engine : null)}
-            {"retryAfterSeconds" in actionError && actionError.retryAfterSeconds
-              ? ` ${t("editor.aiError.retryAfter", { seconds: Number(actionError.retryAfterSeconds) })}`
-              : ""}
-            {actionError.code === "ENGINE_CONSENT" ? (
-              <>
-                {" "}
-                <s-link href="/app/settings?section=ai">{t("common.nav.settings")}</s-link>
-              </>
-            ) : isOwnKeyError(actionError.code) ? (
-              <>
-                {" "}
-                <s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>
-              </>
-            ) : isPlanError(actionError.code) ? (
-              <>
-                {" "}
-                <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
-              </>
+        {data.ai.available && !data.ai.consent ? (
+          <s-banner tone="info" heading={t("editor.consent.heading")}>
+            <s-paragraph>
+              {/* Own key plan: the merchant's own keys, under its own contract with the services. */}
+              {data.ai.ownKey
+                ? t("editor.consent.body.ownKey", { singular, processors: processorsText(i18n, data.ai.consentTokens) })
+                : isDeepLOnly(data.ai.consentTokens)
+                  ? t("editor.consent.body", { singular })
+                  : t("editor.consent.body.multi", { singular, processors: processorsText(i18n, data.ai.consentTokens) })}
+              {/* Several services: their order and the failover, as in Settings (the same consent version). */}
+              {data.ai.consentTokens.length > 1 ? ` ${t("editor.consent.order", engineOrderTexts(i18n, data.ai.consentTokens))}` : null}
+            </s-paragraph>
+            {/* The page showed an older list of services: nothing was stored, the list above is the current one. */}
+            {consentFetcher.data?.kind === "error" && consentFetcher.data.code === "CONSENT_CHANGED" ? (
+              <s-paragraph>{t("editor.aiError.CONSENT_CHANGED")}</s-paragraph>
             ) : null}
-          </s-paragraph>
-        </s-banner>
-      ) : null}
-
-      {saved && !saved.every((o) => o.status === "saved") ? (
-        <s-banner tone="warning" heading={t("editor.saved.partialHeading")}>
-          <s-paragraph>{t("editor.saved.partialBody")}</s-paragraph>
-        </s-banner>
-      ) : null}
-
-      {data.caution === "legal" ? (
-        <s-banner tone="warning" heading={t("editor.caution.legalHeading")}>
-          <s-paragraph>{t("editor.caution.legalBody")}</s-paragraph>
-        </s-banner>
-      ) : null}
-      {data.caution === "liquid" ? (
-        <s-banner tone="warning" heading={t("editor.caution.liquidHeading")}>
-          <s-paragraph>{t("editor.caution.liquidBody")}</s-paragraph>
-        </s-banner>
-      ) : null}
-
-      {data.target.rtl ? (
-        <s-banner tone="info" heading={t("editor.rtl.heading")}>
-          <s-paragraph>{t("editor.rtl.body")}</s-paragraph>
-        </s-banner>
-      ) : null}
-
-      {tiles.length > 1 ? <TextTiles label={t("editor.tiles.label")} tiles={tiles} /> : null}
-
-      <s-section heading={`${sourceName} → ${targetName}`}>
-        <s-stack direction="block" gap="base">
-          {aiCount > 0 ? (
-            <Actions wide={780}>
-              <Button
-                variant="primary"
-                icon="wand"
-                inlineSize="fill"
-                accessibilityLabel={t("editor.toolbar.countLabel", { action: t("editor.toolbar.translateAi"), count: aiCount })}
-                disabled={!canAi || (translating && aiRun !== "open")}
-                {...(translating && aiRun === "open" ? { loading: true } : {})}
-                onClick={() => translate("open", openKeys, openAttached > 0)}
-              >
-                {t("editor.toolbar.translateAi")}
-                <CountChip count={aiCount} />
+            <consentFetcher.Form method="post">
+              <input type="hidden" name="intent" value="grant-consent" />
+              <input type="hidden" name="consentTokens" value={data.ai.consentTokens.join(",")} />
+              <Button type="submit" icon="shield-check-mark" {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
+                {t("editor.consent.allow")}
               </Button>
-              {openGoogle.length && openGoogle.length < aiCount ? (
-                <Button
-                  icon="search"
-                  inlineSize="fill"
-                  accessibilityLabel={t("editor.toolbar.countLabel", { action: t("editor.toolbar.translateSeo"), count: openGoogle.length })}
-                  disabled={!canAi || (translating && aiRun !== "google")}
-                  {...(translating && aiRun === "google" ? { loading: true } : {})}
-                  onClick={() => translate("google", openGoogle, false)}
-                >
-                  {t("editor.toolbar.translateSeo")}
-                  <CountChip count={openGoogle.length} />
-                </Button>
-              ) : null}
-              {openKeys.length ? (
-                <Button
-                  icon="database"
-                  inlineSize="fill"
-                  accessibilityLabel={t("editor.toolbar.countLabel", { action: t("editor.toolbar.fillMemory"), count: openKeys.length })}
-                  {...(memoryFetcher.state !== "idle" ? { loading: true } : {})}
-                  onClick={fillFromMemory}
-                >
-                  {t("editor.toolbar.fillMemory")}
-                  <CountChip count={openKeys.length} />
-                </Button>
-              ) : null}
-            </Actions>
-          ) : null}
-          <s-text color="subdued">{aiCount ? t("editor.toolbar.open", { count: aiCount }) : t("editor.toolbar.allDone")}</s-text>
-          {aiCount === 0 && machineKeys.length && !askAgain ? (
-            <s-stack direction="inline">
-              <Button
-                id="editor-again"
-                variant="tertiary"
-                icon="wand"
-                disabled={!canAi}
-                {...(translating && aiRun === "again" ? { loading: true } : {})}
-                onClick={() => setAskAgain(true)}
-              >
-                {t("editor.toolbar.again")}
-              </Button>
-            </s-stack>
-          ) : null}
-          {askAgain ? (
-            <InlineNotice
-              icon="wand"
-              heading={t("editor.again.heading")}
-              actions={
+            </consentFetcher.Form>
+          </s-banner>
+        ) : null}
+
+        {removed ? (
+          <s-banner
+            tone={removed.status === "removed" ? "success" : "warning"}
+            heading={removed.status === "removed" ? t("editor.removed.heading") : t("editor.removed.failedHeading")}
+          >
+            <s-paragraph>
+              {removed.status === "removed" ? t("editor.removed.body") : t("editor.reloadAndRetry")}
+            </s-paragraph>
+          </s-banner>
+        ) : null}
+
+        {restored ? (
+          <s-banner
+            tone={restored === "restored" ? "success" : "warning"}
+            heading={restored === "restored" ? t("editor.restored.heading") : t("editor.restored.failedHeading")}
+          >
+            <s-paragraph>
+              {restored === "restored"
+                ? t("editor.restored.body")
+                : restored === "source_changed"
+                  ? t("editor.restored.sourceChanged")
+                  : t("editor.reloadAndRetry")}
+            </s-paragraph>
+          </s-banner>
+        ) : null}
+
+        {actionError ? (
+          <s-banner
+            tone={actionError.code.startsWith("RATE_LIMITED") ? "warning" : "critical"}
+            heading={filledFrom === "memory" ? t("editor.aiError.memoryHeading") : t("editor.aiError.heading")}
+          >
+            <s-paragraph>
+              {consentEngine
+                ? t("editor.aiError.ENGINE_CONSENT.named", { engine: ENGINE_NAMES[consentEngine] })
+                : aiErrorMessage(i18n, actionError.code, "engine" in actionError && typeof actionError.engine === "string" ? actionError.engine : null)}
+              {"retryAfterSeconds" in actionError && actionError.retryAfterSeconds
+                ? ` ${t("editor.aiError.retryAfter", { seconds: Number(actionError.retryAfterSeconds) })}`
+                : ""}
+              {actionError.code === "ENGINE_CONSENT" ? (
                 <>
-                  <Button
-                    id="editor-again-confirm"
-                    variant="primary"
-                    onClick={() => {
-                      setAskAgain(false);
-                      translate("again", machineKeys, false);
-                    }}
-                  >
-                    {t("editor.again.confirm")}
-                  </Button>
-                  <Button onClick={closeAgain}>{t("common.action.cancel")}</Button>
+                  {" "}
+                  <s-link href="/app/settings?section=ai">{t("common.nav.settings")}</s-link>
                 </>
-              }
-            >
-              {t("editor.again.body", { count: machineKeys.length })}
-            </InlineNotice>
-          ) : null}
-          {data.ai.ownKey && !data.ai.available ? (
-            // Own key plan without a usable key: what is missing, and where to add it.
-            <StateLine icon="key">
-              {ownKeyHint(i18n, data.ai.ownKey.unavailable)} <s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>
-            </StateLine>
-          ) : charsLine ? (
-            <StateLine icon="gauge">{charsLine}</StateLine>
-          ) : null}
-          {data.smart ? (
-            <s-checkbox
-              label={t("editor.smart.exclude")}
-              details={t("editor.smart.excludeDetails")}
-              {...(smartExcluded ? { checked: true } : {})}
-              {...(smartFetcher.state !== "idle" ? { disabled: true } : {})}
-              // React 18 sends no onChange for a web component; its input event comes through.
-              onInput={(e) => smartFetcher.submit({ intent: e.currentTarget.checked ? "smart-exclude" : "smart-include" }, { method: "post" })}
-            />
-          ) : null}
-          {smartError ? (
-            <s-banner tone="critical">
-              <s-paragraph>{jobErrorMessage(i18n, smartError.code) ?? t("editor.aiError.generic")}</s-paragraph>
-            </s-banner>
-          ) : null}
-          {ai?.provider === "memory" ? (
-            <s-paragraph>{Object.keys(ai.drafts).length ? t("editor.fill.memory") : t("editor.fill.memoryNone")}</s-paragraph>
-          ) : aiFilled || attachedFilled ? (
-            <s-paragraph>{aiFilled?.memoryHits ? t("editor.fill.aiWithMemory", { count: aiFilled.memoryHits }) : t("editor.fill.ai")}</s-paragraph>
-          ) : null}
-        </s-stack>
-      </s-section>
+              ) : isOwnKeyError(actionError.code) ? (
+                <>
+                  {" "}
+                  <s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>
+                </>
+              ) : isPlanError(actionError.code) ? (
+                <>
+                  {" "}
+                  <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
+                </>
+              ) : null}
+            </s-paragraph>
+          </s-banner>
+        ) : null}
 
-      {data.paging ? (
-        <s-section heading={t("editor.paging.texts", { count: data.paging.total })}>
-          <s-stack direction="block" gap="small">
-            <Form method="get">
-              <input type="hidden" name="lang" value={data.target.locale} />
-              <s-stack direction="inline" gap="small" alignItems="end">
-                <s-search-field name="q" label={t("editor.paging.findLabel")} placeholder={t("editor.paging.findPlaceholder")} value={data.paging.query} />
-                <Button type="submit">{t("common.action.search")}</Button>
+        {saved && !saved.every((o) => o.status === "saved") ? (
+          <s-banner tone="warning" heading={t("editor.saved.partialHeading")}>
+            <s-paragraph>{t("editor.saved.partialBody")}</s-paragraph>
+          </s-banner>
+        ) : null}
+
+        {data.caution === "legal" ? (
+          <s-banner tone="warning" heading={t("editor.caution.legalHeading")}>
+            <s-paragraph>{t("editor.caution.legalBody")}</s-paragraph>
+          </s-banner>
+        ) : null}
+        {data.caution === "liquid" ? (
+          <s-banner tone="warning" heading={t("editor.caution.liquidHeading")}>
+            <s-paragraph>{t("editor.caution.liquidBody")}</s-paragraph>
+          </s-banner>
+        ) : null}
+
+        {data.target.rtl ? (
+          <s-banner tone="info" heading={t("editor.rtl.heading")}>
+            <s-paragraph>{t("editor.rtl.body")}</s-paragraph>
+          </s-banner>
+        ) : null}
+
+        {tiles.length > 1 ? <TextTiles label={t("editor.tiles.label")} tiles={tiles} /> : null}
+
+        <s-section heading={`${sourceName} → ${targetName}`}>
+          <s-stack direction="block" gap="base">
+            {aiCount > 0 ? (
+              <Actions wide={780}>
+                <Button
+                  variant="primary"
+                  icon="wand"
+                  inlineSize="fill"
+                  accessibilityLabel={t("editor.toolbar.countLabel", { action: t("editor.toolbar.translateAi"), count: aiCount })}
+                  disabled={!canAi || (translating && aiRun !== "open")}
+                  {...(translating && aiRun === "open" ? { loading: true } : {})}
+                  onClick={() => translate("open", openKeys, openAttached > 0)}
+                >
+                  {t("editor.toolbar.translateAi")}
+                  <CountChip count={aiCount} />
+                </Button>
+                {openGoogle.length && openGoogle.length < aiCount ? (
+                  <Button
+                    icon="search"
+                    inlineSize="fill"
+                    accessibilityLabel={t("editor.toolbar.countLabel", { action: t("editor.toolbar.translateSeo"), count: openGoogle.length })}
+                    disabled={!canAi || (translating && aiRun !== "google")}
+                    {...(translating && aiRun === "google" ? { loading: true } : {})}
+                    onClick={() => translate("google", openGoogle, false)}
+                  >
+                    {t("editor.toolbar.translateSeo")}
+                    <CountChip count={openGoogle.length} />
+                  </Button>
+                ) : null}
+                {openKeys.length ? (
+                  <Button
+                    icon="database"
+                    inlineSize="fill"
+                    accessibilityLabel={t("editor.toolbar.countLabel", { action: t("editor.toolbar.fillMemory"), count: openKeys.length })}
+                    {...(memoryFetcher.state !== "idle" ? { loading: true } : {})}
+                    onClick={fillFromMemory}
+                  >
+                    {t("editor.toolbar.fillMemory")}
+                    <CountChip count={openKeys.length} />
+                  </Button>
+                ) : null}
+              </Actions>
+            ) : null}
+            <s-text color="subdued">{aiCount ? t("editor.toolbar.open", { count: aiCount }) : t("editor.toolbar.allDone")}</s-text>
+            {aiCount === 0 && machineKeys.length && !askAgain ? (
+              <s-stack direction="inline">
+                <Button
+                  id="editor-again"
+                  variant="tertiary"
+                  icon="wand"
+                  disabled={!canAi}
+                  {...(translating && aiRun === "again" ? { loading: true } : {})}
+                  onClick={() => setAskAgain(true)}
+                >
+                  {t("editor.toolbar.again")}
+                </Button>
               </s-stack>
-            </Form>
-            <s-text color="subdued">
-              {data.paging.matching === 0
-                ? t("editor.paging.noMatch")
-                : t(data.paging.query ? "editor.paging.showingMatching" : "editor.paging.showing", {
-                    from: (data.paging.page - 1) * data.paging.pageSize + 1,
-                    to: Math.min(data.paging.page * data.paging.pageSize, data.paging.matching),
-                    total: data.paging.matching,
-                  })}
-            </s-text>
-            <s-stack direction="inline" gap="small">
-              {data.paging.page > 1 ? (
-                <Button icon="chevron-left" href={pageHref(data.paging.page - 1)}>
-                  {t("common.action.previous")}
-                </Button>
-              ) : null}
-              {data.paging.page < data.paging.pages ? (
-                <Button icon="chevron-right" href={pageHref(data.paging.page + 1)}>
-                  {t("common.action.next")}
-                </Button>
-              ) : null}
-            </s-stack>
+            ) : null}
+            {askAgain ? (
+              <InlineNotice
+                icon="wand"
+                heading={t("editor.again.heading")}
+                actions={
+                  <>
+                    <Button
+                      id="editor-again-confirm"
+                      variant="primary"
+                      onClick={() => {
+                        setAskAgain(false);
+                        translate("again", machineKeys, false);
+                      }}
+                    >
+                      {t("editor.again.confirm")}
+                    </Button>
+                    <Button onClick={closeAgain}>{t("common.action.cancel")}</Button>
+                  </>
+                }
+              >
+                {t("editor.again.body", { count: machineKeys.length })}
+              </InlineNotice>
+            ) : null}
+            {data.ai.ownKey && !data.ai.available ? (
+              // Own key plan without a usable key: what is missing, and where to add it.
+              <StateLine icon="key">
+                {ownKeyHint(i18n, data.ai.ownKey.unavailable)} <s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>
+              </StateLine>
+            ) : charsLine ? (
+              <StateLine icon="gauge">{charsLine}</StateLine>
+            ) : null}
+            {data.smart ? (
+              <s-checkbox
+                label={t("editor.smart.exclude")}
+                details={t("editor.smart.excludeDetails")}
+                {...(smartExcluded ? { checked: true } : {})}
+                {...(smartFetcher.state !== "idle" ? { disabled: true } : {})}
+                // React 18 sends no onChange for a web component; its input event comes through.
+                onInput={(e) => smartFetcher.submit({ intent: e.currentTarget.checked ? "smart-exclude" : "smart-include" }, { method: "post" })}
+              />
+            ) : null}
+            {smartError ? (
+              <s-banner tone="critical">
+                <s-paragraph>{jobErrorMessage(i18n, smartError.code) ?? t("editor.aiError.generic")}</s-paragraph>
+              </s-banner>
+            ) : null}
+            {ai?.provider === "memory" ? (
+              <s-paragraph>{Object.keys(ai.drafts).length ? t("editor.fill.memory") : t("editor.fill.memoryNone")}</s-paragraph>
+            ) : aiFilled || attachedFilled ? (
+              <s-paragraph>{aiFilled?.memoryHits ? t("editor.fill.aiWithMemory", { count: aiFilled.memoryHits }) : t("editor.fill.ai")}</s-paragraph>
+            ) : null}
           </s-stack>
         </s-section>
-      ) : null}
+
+        {data.paging ? (
+          <s-section heading={t("editor.paging.texts", { count: data.paging.total })}>
+            <s-stack direction="block" gap="small">
+              <Form method="get">
+                <input type="hidden" name="lang" value={data.target.locale} />
+                <s-stack direction="inline" gap="small" alignItems="end">
+                  <s-search-field name="q" label={t("editor.paging.findLabel")} placeholder={t("editor.paging.findPlaceholder")} value={data.paging.query} />
+                  <Button type="submit">{t("common.action.search")}</Button>
+                </s-stack>
+              </Form>
+              <s-text color="subdued">
+                {data.paging.matching === 0
+                  ? t("editor.paging.noMatch")
+                  : t(data.paging.query ? "editor.paging.showingMatching" : "editor.paging.showing", {
+                      from: (data.paging.page - 1) * data.paging.pageSize + 1,
+                      to: Math.min(data.paging.page * data.paging.pageSize, data.paging.matching),
+                      total: data.paging.matching,
+                    })}
+              </s-text>
+              <s-stack direction="inline" gap="small">
+                {data.paging.page > 1 ? (
+                  <Button icon="chevron-left" href={pageHref(data.paging.page - 1)}>
+                    {t("common.action.previous")}
+                  </Button>
+                ) : null}
+                {data.paging.page < data.paging.pages ? (
+                  <Button icon="chevron-right" href={pageHref(data.paging.page + 1)}>
+                    {t("common.action.next")}
+                  </Button>
+                ) : null}
+              </s-stack>
+            </s-stack>
+          </s-section>
+        ) : null}
+
+        <saveFetcher.Form ref={saveFormRef} method="post" onInput={onFormInput} onChange={onFormInput}>
+          <input type="hidden" name="intent" value="save" />
+          {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
+          {/* Each draft's own engine (the server reads it before the form-wide one). */}
+          {ai ? Object.keys(ai.drafts).map((key) => <input key={key} type="hidden" name={`provider:${key}`} value={ai.provider} />) : null}
+          <s-stack direction="block" gap="base">
+            {ordered.map((field, index) => (
+              <Fragment key={field.key}>
+                {index === previewAt ? googleSection : null}
+                {renderField(field)}
+              </Fragment>
+            ))}
+            {previewAt === ordered.length ? googleSection : null}
+          </s-stack>
+        </saveFetcher.Form>
+
+        <AttachedResourcesPanel
+          id={ATTACHED_ID}
+          data={data}
+          errorMessage={(code, engine) => aiErrorMessage(i18n, code, engine)}
+          ai={attachedAi}
+          // The same stop for both requests (the plan, a rate limit) is said once, at the top.
+          aiError={attachedAiError && !(actionError && actionError.code === attachedAiError.code) ? attachedAiError : null}
+          saved={attachedSaved}
+          save={attachedSaveFetcher}
+          formRef={attachedFormRef}
+          resetCount={resetCount}
+          value={attachedValue}
+          onValue={setAttachedValue}
+        />
+
+        <s-stack direction="inline" gap="base">
+          <Button variant="primary" onClick={publish} {...(saving ? { loading: true } : {})}>
+            {t("editor.publish")}
+          </Button>
+        </s-stack>
+      </s-stack>
 
       <ui-save-bar id={EDITOR_SAVE_BAR}>
         <button variant="primary" onClick={publish} {...(saving ? { loading: "" } : {})}>
@@ -736,41 +776,6 @@ export function ResourceTranslationEditor() {
         </button>
         <button onClick={discard}>{t("editor.discard")}</button>
       </ui-save-bar>
-
-      <saveFetcher.Form ref={saveFormRef} method="post" onInput={onFormInput} onChange={onFormInput}>
-        <input type="hidden" name="intent" value="save" />
-        {ai ? <input type="hidden" name="provider" value={ai.provider} /> : null}
-        {/* Each draft's own engine (the server reads it before the form-wide one). */}
-        {ai ? Object.keys(ai.drafts).map((key) => <input key={key} type="hidden" name={`provider:${key}`} value={ai.provider} />) : null}
-        {ordered.map((field, index) => (
-          <Fragment key={field.key}>
-            {index === previewAt ? googleSection : null}
-            {renderField(field)}
-          </Fragment>
-        ))}
-        {previewAt === ordered.length ? googleSection : null}
-      </saveFetcher.Form>
-
-      <AttachedResourcesPanel
-        id={ATTACHED_ID}
-        data={data}
-        errorMessage={(code, engine) => aiErrorMessage(i18n, code, engine)}
-        ai={attachedAi}
-        // The same stop for both requests (the plan, a rate limit) is said once, at the top.
-        aiError={attachedAiError && !(actionError && actionError.code === attachedAiError.code) ? attachedAiError : null}
-        saved={attachedSaved}
-        save={attachedSaveFetcher}
-        formRef={attachedFormRef}
-        resetCount={resetCount}
-        value={attachedValue}
-        onValue={setAttachedValue}
-      />
-
-      <s-stack direction="inline" gap="base">
-        <Button variant="primary" onClick={publish} {...(saving ? { loading: true } : {})}>
-          {t("editor.publish")}
-        </Button>
-      </s-stack>
     </s-page>
   );
 

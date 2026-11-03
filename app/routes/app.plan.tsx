@@ -17,6 +17,7 @@ import { requireShop } from "../.server/shopify/require-shop";
 import { useResultToast } from "../components/app-bridge";
 import { BackToJob } from "../components/jobs/BackToJob";
 import { Breadcrumbs } from "../components/LanguageLayout";
+import { PageHeader } from "../components/PageHeader";
 import { PlanCards } from "../components/plan/PlanCards";
 import { PlanFaq } from "../components/plan/PlanFaq";
 import { PlanFeatureTable } from "../components/plan/PlanFeatureTable";
@@ -155,10 +156,7 @@ export default function Plan() {
         <s-query-container>
           <s-stack direction="block" gap="base">
             <Breadcrumbs i18n={i18n} trail={[{ href: "/app/settings?section=plan", label: t("common.nav.settings") }]} current={t("common.nav.plan")} touch />
-            <s-stack direction="block" gap="small-300">
-              <h1 className="lv-h1">{t("common.nav.plan")}</h1>
-              <s-text color="subdued">{t("plan.page.subtitle")}</s-text>
-            </s-stack>
+            <PageHeader page="plan" title={t("common.nav.plan")} lead={t("plan.page.subtitle")} />
           </s-stack>
         </s-query-container>
         {data.welcome && data.state === "ACTIVE" ? (

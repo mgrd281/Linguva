@@ -29,7 +29,8 @@ import { languageList } from "../lib/name-lists";
 import { percentLabel } from "../components/Coverage";
 import { Flag } from "../components/Flag";
 import { TextStateBar } from "../components/ItemStates";
-import { Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
+import { PLAIN_LIST } from "../components/LanguageLayout";
+import { ToolHeader, TOOLS_HREF } from "../components/ToolHeader";
 import { Strong } from "../components/Type";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
@@ -160,26 +161,19 @@ export default function Languages() {
   const additional = chipOrder(i18n, data.locales.filter((l) => !l.primary));
   // Languages only a translation service the shop hasn't allowed translates: the way to allow it, once.
   const waiting = additional.filter((l) => data.ai[l.locale] === "needsConsent" && data.aiEngine[l.locale]);
-  const settings = { href: "/app/settings", label: t("common.nav.settings") };
-  const tools = { href: "/app/settings?section=tools", label: t("settings.tools.heading") };
 
   return (
     <s-page heading={t("common.languages")}>
-      <s-link slot="breadcrumb-actions" href={tools.href}>
-        {tools.label}
+      <s-link slot="breadcrumb-actions" href={TOOLS_HREF}>
+        {t("settings.tools.heading")}
       </s-link>
       <s-button slot="primary-action" href="shopify://admin/settings/languages" target="_top">
         {t("languages.manage")}
       </s-button>
 
       <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-200">
-          <Breadcrumbs i18n={i18n} trail={[settings, tools]} current={t("common.languages")} />
-          <s-stack direction="block" gap="small-500">
-            <h1 className="lv-h1">{t("common.languages")}</h1>
-            <s-text color="subdued">{t("languages.subtitle")}</s-text>
-          </s-stack>
-        </s-stack>
+        {/* A tools page: the trail back to Settings › Tools (a 44 px back row on a phone), its tile's sign. */}
+        <ToolHeader tool="languages" title={t("common.languages")} lead={t("languages.subtitle")} i18n={i18n} />
 
         {data.remainingEnabled === 0 ? (
           <s-banner tone="warning" heading={t("languages.limit.heading")}>

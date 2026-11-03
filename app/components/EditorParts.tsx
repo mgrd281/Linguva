@@ -16,10 +16,13 @@ import { focusSection } from "./SettingsParts";
 /** Pages, blog posts and blogs have a title, everything else a name (as the area lists and Review say). */
 const TITLED: ReadonlySet<string> = new Set(["PAGE", "ARTICLE", "BLOG"]);
 
+/** Whether the kind's first text is a title: every text that mentions it says "title" too, not "name". */
+export const isTitled = (kind: string) => TITLED.has(kind);
+
 /** A text's name: Review's words where it has them, Shopify's field names otherwise ("Summary", "Product type"). */
 export function textName(i18n: I18n, key: string, kind: string): string {
   const { t } = i18n;
-  if (key === "title" || key === "name" || key === "label") return TITLED.has(kind) ? t("language.list.text.heading") : t("language.list.text.title");
+  if (key === "title" || key === "name" || key === "label") return isTitled(kind) ? t("language.list.text.heading") : t("language.list.text.title");
   if (key === "body_html" || key === "body" || key === "description") return t("language.list.text.description");
   if (key === "meta_title") return t("language.list.text.seo_title");
   if (key === "meta_description") return t("language.list.text.seo_description");

@@ -205,6 +205,9 @@ test("every feature has its icon, on the cards and in the full comparison (close
   // 18 features and the price row, each with its icon; the same on the cards.
   const rows = details.locator('tbody th[scope="row"]');
   await expect(rows).toHaveCount(19);
+  // Alt text by the app's one word for it, as in the editor and the smart schedule (never "Bildtexte").
+  await expect(rows.filter({ hasText: "Bildbeschreibungen und Zusatzinfos" })).toHaveCount(1);
+  await expect(page.locator("s-page")).not.toContainText("Bildtext");
   for (const type of await rows.evaluateAll((ths) => ths.map((th) => th.querySelector("s-icon")?.getAttribute("type") ?? ""))) expect(FEATURE_ICONS.has(type), type).toBe(true);
   const features = page.locator('[role="group"] li');
   await expect(features).toHaveCount(20);

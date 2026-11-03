@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { normaliseSmartSettings, type SmartSettingsContext, type SmartSettingsInput } from "../../app/.server/smart/validate";
 import { BudgetMeter, budgetMeter, ChoiceTiles, DayToggles, failedAction, shortWeekday, SmartPreview, SmartStateBanner, whenIn } from "../../app/components/SmartAutoCard";
-import { translator, type AppLocale } from "../../app/i18n/i18n";
+import { APP_LOCALES, translator, type AppLocale } from "../../app/i18n/i18n";
 import { I18nProvider } from "../../app/i18n/react";
 import { PLANS } from "../../app/lib/plans";
 import { attachedOwner, budgetWindows, checkSpec, pauseLiftsAt, smartCoverageTypes, smartStatus } from "../../app/lib/smart-auto";
@@ -323,6 +323,17 @@ describe("the smart page's choices", () => {
     for (const box of boxes) expect(box).toContain('name="weekday"');
     expect(markup).toContain('<span class="lv-smart-day__face">Mo</span>');
     expect(markup).toContain('<legend class="lv-smart-days__legend">Tage</legend>');
+  });
+});
+
+describe("the smart page's words for alt text and custom fields", () => {
+  it("are its own field groups' names, also in the option that includes them (never “benutzerdefinierte Felder”)", () => {
+    for (const locale of APP_LOCALES) {
+      const i18n = translator(locale);
+      const label = i18n.t("automatic.attached.label").toLocaleLowerCase();
+      for (const group of ["alt", "value"] as const) expect(label, `${locale} ${group}`).toContain(i18n.t(`coverage.group.${group}`).toLocaleLowerCase());
+    }
+    expect(translator("de").t("automatic.attached.label")).toBe("Auch Bildbeschreibungen und Zusatzinfos");
   });
 });
 

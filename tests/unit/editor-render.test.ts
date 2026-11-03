@@ -10,6 +10,7 @@ import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createStaticHandler, createStaticRouter, StaticRouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
+import { AttachedResourcesPanel, type AttachedDrafts } from "../../app/components/AttachedResourcesPanel";
 import { ResourceTranslationEditor } from "../../app/components/ResourceTranslationEditor";
 import type { AppLocale } from "../../app/i18n/i18n";
 import { I18nProvider } from "../../app/i18n/react";
@@ -51,6 +52,8 @@ function product(overrides: Record<string, unknown> = {}) {
         },
       ],
     },
+    // Its featured media's picture, as the area list reads it.
+    picture: "https://cdn.example.com/jacket.png",
     kind: { type: "PRODUCT", label: "Products", singular: "product", path: "/app/products", plural: "products" },
     shopDomain: "ui-full.myshopify.com",
     title: "Product 2 jacket",
@@ -101,10 +104,50 @@ describe("the editor's page", () => {
     expect(html).toContain('<img src="https://cdn.example.com/jacket.png?width=96" alt=""');
   });
 
+  it("shows the item's picture as its area list does, also when no image has a description; else the area's icon", async () => {
+    // The only image has no description: nothing to translate in its section, the picture beside the name all the same.
+    const noAlt = product({ attached: { available: true, imagesWithoutAlt: 1, unsupported: 0, items: [] } });
+    expect(await render(noAlt)).toContain('<div class="lv-ed-header"><span class="lv-ed-picture"><img src="https://cdn.example.com/jacket.png?width=96" alt=""');
+    // A collection's image (its image description has no picture of its own); the size joins its query.
+    const collection = product({ kind: { type: "COLLECTION", label: "Collections", singular: "collection", path: "/app/collections", plural: "collections" }, picture: "https://cdn.example.com/winter.png?v=2" });
+    expect(await render(collection)).toContain('<img src="https://cdn.example.com/winter.png?v=2&amp;width=96" alt=""');
+    const none = await render(product({ picture: null }));
+    expect(none).not.toContain("<img");
+    expect(none).toContain('<div class="lv-ed-header"><span class="lv-icon-square" data-tint="grey" aria-hidden="true" style="width:48px;height:48px;border-radius:14px"><s-icon type="product"');
+  });
+
   it("says it in German for a German admin user", async () => {
     const html = await render(product(), "de");
     expect(html).toContain('href="/app/languages/de/products">Produkte auf Deutsch</s-link>');
     expect(html).toContain("Auf Deutsch · 3 von 5 Texten offen");
+  });
+
+  it("calls a page's first text its title wherever a text mentions it, a product's its name", async () => {
+    const page = product({
+      kind: { type: "PAGE", label: "Pages", singular: "page", path: "/app/pages", plural: "pages" },
+      title: "About us",
+      picture: null,
+      attached: { available: true, imagesWithoutAlt: 0, unsupported: 0, items: [] },
+      fields: [field("title", "SINGLE_LINE_TEXT_FIELD", "About us", "Über uns"), field("body_html", "HTML", "<p>We make warm clothes.</p>"), field("handle", "URI", "about-us", "ueber-uns")],
+    });
+    const html = await render(page);
+    expect(sections(html)).toEqual(["English → German", "Title", "Description", "On Google", "Web address"]);
+    // No Google title of its own: the preview and the web address's suggestion name the same text.
+    expect(html).toContain("No Google title: Shopify uses the translated title.");
+    expect(html).toMatch(/<span class="lv-btn__label">Suggest from the translated title<\/span>/);
+    const german = await render(page, "de");
+    expect(german).toContain("Kein Google-Titel: Shopify verwendet den übersetzten Titel.");
+    expect(german).toContain("Aus dem übersetzten Titel vorschlagen");
+
+    const named = await render(product({ fields: [field("title", "SINGLE_LINE_TEXT_FIELD", "Product 2 jacket", "Produkt 2 Jacke"), field("handle", "URI", "product-2", "produkt-2")] }));
+    expect(named).toContain("No Google title: Shopify uses the translated name.");
+    expect(named).toMatch(/<span class="lv-btn__label">Suggest from the translated name<\/span>/);
+  });
+
+  it("keeps a region for the AI's and the memory's result, there before the result comes (so it is announced)", async () => {
+    const html = await render(product());
+    // Out of the way while empty: the toolbar's spacing stays as it is.
+    expect(html).toContain('<div role="status" class="lv-sr"></div></s-stack></s-section>');
   });
 
   it("shows the texts in Review's order, the Google preview before the Google texts, the web address last", async () => {
@@ -201,5 +244,41 @@ describe("the editor's page", () => {
     expect(html).toContain("In German · 120 texts");
     expect(html).not.toContain("lv-ed-tiles");
     expect(sections(html)).toContain("120 texts");
+  });
+});
+
+describe("the image descriptions' section", () => {
+  const IMAGE = "gid://shopify/MediaImage/1:alt";
+  const panel = (ai: AttachedDrafts | null, aiError: { code: string } | null = null) =>
+    renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        { locale: "en", timeZone: "UTC" } as ComponentProps<typeof I18nProvider>,
+        createElement(AttachedResourcesPanel, {
+          id: "editor-attached",
+          data: product() as never,
+          errorMessage: (code: string) => `Error ${code}.`,
+          ai,
+          aiError,
+          saved: null,
+          // A plain form: the editor's fetcher posts it.
+          save: { Form: "form" } as never,
+          formRef: { current: null },
+          resetCount: 0,
+          value: (ref: string) => ai?.drafts[ref] ?? "",
+          onValue: () => {},
+        }),
+      ),
+    );
+  const stopped: AttachedDrafts = { drafts: {}, rejected: {}, warnings: {}, provider: "mock", stopped: "QUOTA_EXCEEDED" };
+
+  it("says a stop beside the drafts it left; one before any draft is said at the top, by the button that started it", () => {
+    expect(panel(stopped)).not.toContain("<s-banner");
+    const partial = panel({ ...stopped, drafts: { [IMAGE]: "[de] Rote Wolljacke" } });
+    expect(partial).toContain('<s-banner tone="critical" heading="AI translation failed"><s-paragraph>Error QUOTA_EXCEEDED. The drafts created before the problem are filled in below.</s-paragraph></s-banner>');
+  });
+
+  it("says the request's own error the top doesn't say", () => {
+    expect(panel(null, { code: "PROVIDER_RETRYABLE" })).toContain('<s-paragraph>Error PROVIDER_RETRYABLE.</s-paragraph>');
   });
 });

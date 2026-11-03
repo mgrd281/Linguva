@@ -21,7 +21,7 @@ import type { loadEditorData, runEditorAction } from "../.server/translation/res
 import { showToast, useResultToast, useSaveBar } from "./app-bridge";
 import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
 import { categoryName } from "./CategoryCard";
-import { CountChip, HeadingRow, NoteBadges, StateBadge, TextTiles, textName, textStateLabel, type TextTile } from "./EditorParts";
+import { CountChip, HeadingRow, isTitled, NoteBadges, StateBadge, TextTiles, textName, textStateLabel, type TextTile } from "./EditorParts";
 import { HtmlPreview, previewHeight } from "./HtmlPreview";
 import { IconSquare } from "./IconSquare";
 import { Breadcrumbs } from "./LanguageLayout";
@@ -142,6 +142,39 @@ interface PublishRound {
   attachedBefore: unknown;
 }
 
+/** What the merchant typed (by key, or by ref for the image descriptions), and the drafts it was typed over. */
+export interface TypedTexts {
+  base: { drafts: Record<string, string> } | null;
+  values: Record<string, string>;
+}
+
+/**
+ * What is still typed once a new AI or memory result (or none) fills the form. A field starts again
+ * only where its draft changed (its key names the draft); every other one keeps the typed text on
+ * screen, so it stays counted too: its state, the save bar, the question on leaving, the publish.
+ */
+export function carryTyped(state: TypedTexts, next: { drafts: Record<string, string> } | null): Record<string, string> {
+  if (state.base === next) return state.values;
+  const before = state.base?.drafts ?? {};
+  const after = next?.drafts ?? {};
+  return Object.fromEntries(Object.entries(state.values).filter(([key]) => before[key] === after[key]));
+}
+
+/**
+ * The error the banner at the top says, with its links: the memory's, else the last AI run's, of the
+ * requests it sent (the item's texts first, then the image descriptions' stop before any draft).
+ */
+export function topError<E extends { code: string }>(
+  run: { from: "ai" | "memory"; main: boolean; attached: boolean },
+  errors: { memory: E | null; main: E | null; attached: E | null },
+): E | null {
+  if (run.from === "memory") return errors.memory;
+  return (run.main ? errors.main : null) ?? (run.attached ? errors.attached : null);
+}
+
+/** A ticked "still correct" box (confirm:<key>, confirm:<id>:<key>), as the server reads it: the form has something to publish. */
+export const hasConfirmation = (form: Pick<FormData, "entries">) => [...form.entries()].some(([name, value]) => name.startsWith("confirm:") && value === "on");
+
 export function ResourceTranslationEditor() {
   const data = useLoaderData<EditorLoader>();
   const i18n = useI18n();
@@ -196,13 +229,6 @@ export function ResourceTranslationEditor() {
   const filled = filledFrom === "memory" ? memoryResult : aiResult;
   const ai = filled && filled !== discarded ? filled : null;
   const restored = restoreFetcher.data?.kind === "restored" ? restoreFetcher.data.status : null;
-  // Errors of the action that ran last (AI translation or memory suggestions).
-  const lastData = filledFrom === "memory" ? memoryFetcher.data : aiFetcher.data;
-  const actionError = lastData?.kind === "error" ? lastData : null;
-  // A language only an engine the shop hasn't allowed serves: that engine, by name (only for that
-  // code: an own key's quota or refusal names its engine too).
-  const consentEngine =
-    actionError && actionError.code === "ENGINE_CONSENT" && "engine" in actionError && typeof actionError.engine === "string" && isEngineId(actionError.engine) ? actionError.engine : null;
   const saved = saveFetcher.data?.kind === "saved" ? saveFetcher.data.outcomes : null;
   const saveStatus = new Map(saved?.map((o) => [o.key, o]) ?? []);
   const translating = aiFetcher.state !== "idle" || attachedAiFetcher.state !== "idle";
@@ -212,9 +238,12 @@ export function ResourceTranslationEditor() {
   const canAi = data.ai.available && data.ai.consent;
 
   // What the merchant has typed, for live SEO checks and the preview. It
-  // belongs to the drafts it was typed over, so new drafts start fresh.
-  const [typedState, setTyped] = useState<{ base: unknown; values: Record<string, string> }>({ base: null, values: {} });
-  const typed = typedState.base === ai ? typedState.values : {};
+  // belongs to the drafts it was typed over: a text that gets a new draft starts fresh.
+  const [typedState, setTyped] = useState<TypedTexts>({ base: null, values: {} });
+  // Re-based on each result as it shows (in render, before it is drawn): a text whose field started again
+  // with a draft stays dropped when a later result has none for it (its field then starts once more).
+  if (typedState.base !== ai) setTyped({ base: ai, values: carryTyped(typedState, ai) });
+  const typed = carryTyped(typedState, ai);
   const fieldByKey = new Map(data.fields.map((f) => [f.key, f]));
   const currentValue = (key: string) => typed[key] ?? ai?.drafts[key] ?? fieldByKey.get(key)?.translation ?? "";
   // Right-to-left languages are typed right to left. URL handles stay left to
@@ -226,7 +255,7 @@ export function ResourceTranslationEditor() {
     const name = el?.getAttribute?.("name");
     if (name?.startsWith("value:") && typeof el?.value === "string") {
       const key = name.slice("value:".length);
-      setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), [key]: el.value! } }));
+      setTyped((s) => ({ base: ai, values: { ...carryTyped(s, ai), [key]: el.value! } }));
     }
   };
 
@@ -236,13 +265,36 @@ export function ResourceTranslationEditor() {
   const [attachedDiscarded, setAttachedDiscarded] = useState<unknown>(null);
   const attachedAi = attachedAiData && attachedAiData !== attachedDiscarded ? attachedAiData : null;
   const attachedSaved = attachedSaveFetcher.data?.kind === "attached-saved" ? attachedSaveFetcher.data.outcomes : null;
-  const [attachedTypedState, setAttachedTyped] = useState<{ base: unknown; values: Record<string, string> }>({ base: null, values: {} });
-  const attachedTyped = attachedTypedState.base === attachedAi ? attachedTypedState.values : {};
+  const [attachedTypedState, setAttachedTyped] = useState<TypedTexts>({ base: null, values: {} });
+  if (attachedTypedState.base !== attachedAi) setAttachedTyped({ base: attachedAi, values: carryTyped(attachedTypedState, attachedAi) });
+  const attachedTyped = carryTyped(attachedTypedState, attachedAi);
   const attachedTexts = data.attached.items.flatMap((item) => item.fields.map((field) => ({ ...field, ref: `${item.id}:${field.key}` })));
   const attachedByRef = new Map(attachedTexts.map((f) => [f.ref, f]));
   const attachedValue = (ref: string) => attachedTyped[ref] ?? attachedAi?.drafts[ref] ?? attachedByRef.get(ref)?.translation ?? "";
-  const setAttachedValue = (ref: string, value: string) =>
-    setAttachedTyped((s) => ({ base: attachedAi, values: { ...(s.base === attachedAi ? s.values : {}), [ref]: value } }));
+  const setAttachedValue = (ref: string, value: string) => setAttachedTyped((s) => ({ base: attachedAi, values: { ...carryTyped(s, attachedAi), [ref]: value } }));
+
+  // Which requests the last AI run sent (the item's texts, its image descriptions): the banner at the top speaks for those only.
+  const [sent, setSent] = useState({ main: false, attached: false });
+  // The image descriptions' stop before any draft is said at the top, by the button that started it, with
+  // the plans or Settings one link away; a stop after some drafts is said beside them, in their section.
+  const attachedStop =
+    attachedAiError ??
+    (attachedAiData?.stopped && !Object.keys(attachedAiData.drafts).length
+      ? { kind: "error" as const, code: attachedAiData.stopped, ...(attachedAiData.engine ? { engine: attachedAiData.engine } : {}) }
+      : null);
+  // Errors of the action that ran last (AI translation or memory suggestions).
+  const actionError = topError(
+    { from: filledFrom, ...sent },
+    {
+      memory: memoryFetcher.data?.kind === "error" ? memoryFetcher.data : null,
+      main: aiFetcher.data?.kind === "error" ? aiFetcher.data : null,
+      attached: attachedStop,
+    },
+  );
+  // A language only an engine the shop hasn't allowed serves: that engine, by name (only for that
+  // code: an own key's quota or refusal names its engine too).
+  const consentEngine =
+    actionError && actionError.code === "ENGINE_CONSENT" && "engine" in actionError && typeof actionError.engine === "string" && isEngineId(actionError.engine) ? actionError.engine : null;
 
   // Typed text or drafts that differ from what is published would be lost
   // by leaving the page: ask first (in-app navigation and reloads).
@@ -284,11 +336,13 @@ export function ResourceTranslationEditor() {
   };
 
   // One "Publish translations" for the page: the item's texts and, when changed, its image
-  // descriptions and extra details (two requests); one toast once both are in.
+  // descriptions and extra details (two requests); one toast once both are in. A ticked "still
+  // correct" box is a change of its form too: the server re-saves that text only with it.
   const [round, setRound] = useState<PublishRound | null>(null);
+  const confirmed = (form: HTMLFormElement | null) => (form ? hasConfirmation(new FormData(form)) : false);
   const publish = () => {
-    const attached = attachedChanged;
-    const main = mainChanged || !attached;
+    const attached = attachedChanged || confirmed(attachedFormRef.current);
+    const main = mainChanged || confirmed(saveFormRef.current) || !attached;
     setRound((r) => ({ id: (r?.id ?? 0) + 1, main, attached, mainBefore: saveFetcher.data, attachedBefore: attachedSaveFetcher.data }));
     if (main) saveFormRef.current?.requestSubmit();
     if (attached) attachedFormRef.current?.requestSubmit();
@@ -336,6 +390,7 @@ export function ResourceTranslationEditor() {
   const translate = (run: AiRun, keys: readonly string[], attachedToo: boolean) => {
     setFilledFrom("ai");
     setAiRun(run);
+    setSent({ main: keys.length > 0, attached: attachedToo });
     if (keys.length) {
       const form = new FormData();
       form.set("intent", "ai-translate");
@@ -357,6 +412,17 @@ export function ResourceTranslationEditor() {
     setAskAgain(false);
     requestAnimationFrame(() => document.getElementById("editor-again")?.focus());
   };
+  // Confirming closes the question with its focused button, and the again button waits disabled while
+  // AI works: focus goes back to it once the drafts are in, unless the merchant has moved on since.
+  const refocusAgain = useRef(false);
+  useEffect(() => {
+    if (translating || !refocusAgain.current) return;
+    refocusAgain.current = false;
+    requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      document.getElementById("editor-again")?.focus();
+    });
+  }, [translating]);
 
   const language = targetName;
   const back = backTarget(data, i18n, language);
@@ -368,7 +434,8 @@ export function ResourceTranslationEditor() {
       : counts.open
         ? t("editor.header.open", { language, open: counts.open, count: counts.total })
         : t("editor.header.done", { language, count: counts.total });
-  const picture = data.attached.items.find((item) => item.kind === "IMAGE" && item.previewUrl)?.previewUrl ?? null;
+  // As its area list shows it, whatever its image descriptions say (the loader reads it).
+  const picture = data.picture;
   const stateOf = (field: (typeof data.fields)[number]) => {
     const draft = ai?.drafts[field.key];
     return textState({
@@ -404,6 +471,17 @@ export function ResourceTranslationEditor() {
   const previewAt = data.seoPreview ? googlePreviewIndex(ordered) : -1;
   const aiFilled = ai && ai.provider !== "memory" ? ai : null;
   const attachedFilled = attachedAi && Object.keys(attachedAi.drafts).length ? attachedAi : null;
+  // What the last AI or memory result filled in, in words (under the buttons, and announced).
+  const resultLine =
+    ai?.provider === "memory"
+      ? Object.keys(ai.drafts).length
+        ? t("editor.fill.memory")
+        : t("editor.fill.memoryNone")
+      : aiFilled || attachedFilled
+        ? aiFilled?.memoryHits
+          ? t("editor.fill.aiWithMemory", { count: aiFilled.memoryHits })
+          : t("editor.fill.ai")
+        : null;
 
   const charsLine =
     data.ai.ownKey && !data.ai.available ? null : data.ai.ownKey
@@ -429,6 +507,7 @@ export function ResourceTranslationEditor() {
           shopDomain={data.shopDomain}
           locale={data.target.locale}
           pathSegment={storefrontSegment(kind, data.kind.plural)}
+          titled={isTitled(kind)}
         />
         {seoFields.length === 0 ? <s-paragraph>{t("editor.seo.noFields", { singular })}</s-paragraph> : null}
       </s-stack>
@@ -655,6 +734,7 @@ export function ResourceTranslationEditor() {
                       variant="primary"
                       onClick={() => {
                         setAskAgain(false);
+                        refocusAgain.current = true;
                         translate("again", machineKeys, false);
                       }}
                     >
@@ -690,11 +770,10 @@ export function ResourceTranslationEditor() {
                 <s-paragraph>{jobErrorMessage(i18n, smartError.code) ?? t("editor.aiError.generic")}</s-paragraph>
               </s-banner>
             ) : null}
-            {ai?.provider === "memory" ? (
-              <s-paragraph>{Object.keys(ai.drafts).length ? t("editor.fill.memory") : t("editor.fill.memoryNone")}</s-paragraph>
-            ) : aiFilled || attachedFilled ? (
-              <s-paragraph>{aiFilled?.memoryHits ? t("editor.fill.aiWithMemory", { count: aiFilled.memoryHits }) : t("editor.fill.ai")}</s-paragraph>
-            ) : null}
+            {/* The result in words, announced when it comes: the region is always there, out of the way while empty. */}
+            <div role="status" className={resultLine ? undefined : "lv-sr"}>
+              {resultLine ? <s-paragraph>{resultLine}</s-paragraph> : null}
+            </div>
           </s-stack>
         </s-section>
 
@@ -754,8 +833,8 @@ export function ResourceTranslationEditor() {
           data={data}
           errorMessage={(code, engine) => aiErrorMessage(i18n, code, engine)}
           ai={attachedAi}
-          // The same stop for both requests (the plan, a rate limit) is said once, at the top.
-          aiError={attachedAiError && !(actionError && actionError.code === attachedAiError.code) ? attachedAiError : null}
+          // Only what the top banner doesn't say: the same stop for both requests (the plan, a rate limit) is said once.
+          aiError={attachedAiError && attachedAiError.code !== actionError?.code ? attachedAiError : null}
           saved={attachedSaved}
           save={attachedSaveFetcher}
           formRef={attachedFormRef}
@@ -877,7 +956,7 @@ export function ResourceTranslationEditor() {
                     locale={data.target.locale}
                     rtl={data.target.rtl}
                     {...(error ? { error } : {})}
-                    onValue={(next) => setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), [field.key]: next } }))}
+                    onValue={(next) => setTyped((s) => ({ base: ai, values: { ...carryTyped(s, ai), [field.key]: next } }))}
                   />
                 ) : html && !editingHtml ? (
                   <>
@@ -931,10 +1010,10 @@ export function ResourceTranslationEditor() {
                         onClick={() => {
                           const title = currentValue("title") || fieldByKey.get("title")?.source || "";
                           const suggestion = suggestHandle(title, data.target.locale);
-                          if (suggestion) setTyped((t) => ({ base: ai, values: { ...(t.base === ai ? t.values : {}), handle: suggestion } }));
+                          if (suggestion) setTyped((s) => ({ base: ai, values: { ...carryTyped(s, ai), handle: suggestion } }));
                         }}
                       >
-                        {t("editor.handle.suggest")}
+                        {t(isTitled(kind) ? "editor.handle.suggest.titled" : "editor.handle.suggest")}
                       </Button>
                     </s-stack>
                     {currentValue("handle") && validateHandle(currentValue("handle")) ? (

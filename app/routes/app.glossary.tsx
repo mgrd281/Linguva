@@ -261,6 +261,11 @@ export default function GlossaryPage() {
   // A store whose plan lost the glossary: the lock says so, not a banner after the fact.
   const rest = (placed?.rest ?? []).filter((ref) => !(locked && ref.key === "glossary.error.notOnPlan"));
 
+  // The search filters only while its field is shown. Below SEARCH_FROM (after a delete or "Replace all")
+  // it is forgotten, so the list isn't filtered by words nobody can see, and a field that comes back starts
+  // empty. Reset while rendering, not in an effect: React renders again before any filtered list is shown.
+  const searchable = terms.length >= SEARCH_FROM;
+  if (!searchable && query) setQuery("");
   const matching = useMemo(() => terms.filter((term) => matchesQuery(term, query)), [terms, query]);
   const shown = matching.slice(0, MAX_SHOWN_TERMS);
   const activeMarkets = data.markets.filter((m) => m.active);
@@ -337,7 +342,7 @@ export default function GlossaryPage() {
             </s-box>
           ) : (
             <s-stack direction="block">
-              {terms.length >= SEARCH_FROM ? (
+              {searchable ? (
                 <s-box padding="base base none base">
                   <s-search-field label={t("glossary.search.label")} placeholder={t("glossary.search.placeholder")} onInput={(e) => setQuery(e.currentTarget.value)} />
                 </s-box>

@@ -34,6 +34,26 @@ test("unpublished changes are kept unless the merchant chooses to leave @respons
   await expect(page).toHaveURL(/\/app\/languages\/fr\/products(\?|$)/);
 });
 
+test("a change to a translated text stays counted when the memory fills the open ones", async ({ page }) => {
+  const BAR = "linguva-editor-save-bar";
+  // Product 6's German name is translated; its description is open, the memory's to fill.
+  await openApp(page, "full", "/app/products/6?lang=de");
+  const name = page.locator('s-section[data-text="Name"]');
+  const title = page.locator('s-text-field[name="value:title"] input');
+  await title.fill("Warme Jacke Nummer 6");
+  await expect(name.locator("s-badge").first()).toHaveText("Changed, not published");
+  await expect.poll(() => saveBarShown(page, BAR)).toBe(true);
+
+  await page.getByRole("button", { name: "Fill from memory: 1 open text" }).click();
+  // Whatever the memory finds for the description, the typed name stays on screen, and so it stays counted.
+  await expect(page.getByText(/^(Similar translations from your memory are filled in below|No similar translations found in your memory)/)).toBeVisible();
+  await expect(title).toHaveValue("Warme Jacke Nummer 6");
+  await expect(name.locator("s-badge").first()).toHaveText("Changed, not published");
+  expect(await saveBarShown(page, BAR)).toBe(true);
+  await goBack(page);
+  await expect(page.locator('s-banner[heading="Leave without publishing?"]')).toBeVisible();
+});
+
 test("after publishing, leaving doesn't ask", async ({ page }) => {
   await openApp(page, "full", "/app/products/4?lang=fr");
   await page.locator('s-text-field[name="value:title"] input').fill("Veste numéro 4");

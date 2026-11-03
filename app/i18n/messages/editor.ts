@@ -107,6 +107,7 @@ export const en = {
   "editor.seo.intro": "How “{title}” may look in Google's results in {language}.",
   "editor.seo.noFields": "This {singular} has no Google title or description of its own. Add them in Shopify to choose what Google shows in each language.",
   "editor.seo.noTitle": "No Google title: Shopify uses the translated name.",
+  "editor.seo.noTitle.titled": "No Google title: Shopify uses the translated title.",
   "editor.seo.noDescription": "No Google description in this language: Google may show the description instead.",
   "editor.seo.exampleAddress": "Example address; the real one depends on your domains and markets.",
   "editor.publish": "Publish translations",
@@ -129,6 +130,7 @@ export const en = {
   "editor.rejection.MISSING_CODE": "The AI result lost part of the formatting, so it was discarded.",
 
   "editor.handle.suggest": "Suggest from the translated name",
+  "editor.handle.suggest.titled": "Suggest from the translated title",
   "editor.handle.confirm": "Change the published address. Links to …/{handle} in {language} will stop working.",
   "editor.handle.problem.EMPTY": "Enter a web address.",
   "editor.handle.problem.TOO_LONG": "Use at most {max} characters.",
@@ -302,6 +304,7 @@ export const de: Translation<typeof en> = {
   "editor.seo.intro": "So könnte „{title}“ bei Google auf {language} aussehen.",
   "editor.seo.noFields": "Dieser Eintrag ({singular}) hat keinen eigenen Google-Titel und keine eigene Google-Beschreibung. Füge sie in Shopify hinzu, um festzulegen, was Google in jeder Sprache zeigt.",
   "editor.seo.noTitle": "Kein Google-Titel: Shopify verwendet den übersetzten Namen.",
+  "editor.seo.noTitle.titled": "Kein Google-Titel: Shopify verwendet den übersetzten Titel.",
   "editor.seo.noDescription": "Keine Google-Beschreibung in dieser Sprache: Google zeigt eventuell stattdessen die Beschreibung.",
   "editor.seo.exampleAddress": "Beispieladresse; die tatsächliche hängt von deinen Domains und Märkten ab.",
   "editor.publish": "Übersetzungen veröffentlichen",
@@ -325,6 +328,7 @@ export const de: Translation<typeof en> = {
   "editor.rejection.MISSING_CODE": "Im KI\u2011Ergebnis fehlte ein Teil der Formatierung, daher wurde es verworfen.",
 
   "editor.handle.suggest": "Aus dem übersetzten Namen vorschlagen",
+  "editor.handle.suggest.titled": "Aus dem übersetzten Titel vorschlagen",
   "editor.handle.confirm": "Veröffentlichte Adresse ändern. Links auf …/{handle} in {language} funktionieren dann nicht mehr.",
   "editor.handle.problem.EMPTY": "Gib eine Webadresse ein.",
   "editor.handle.problem.TOO_LONG": "Verwende höchstens {max} Zeichen.",
@@ -500,6 +504,7 @@ export const fr: Translation<typeof en> = {
   "editor.seo.intro": "Voici comment « {title} » pourrait apparaître sur Google en {language}.",
   "editor.seo.noFields": "Cet élément ({singular}) n'a pas de titre ni de description Google propres. Ajoutez-les dans Shopify pour choisir ce que Google affiche dans chaque langue.",
   "editor.seo.noTitle": "Aucun titre Google : Shopify utilise le nom traduit.",
+  "editor.seo.noTitle.titled": "Aucun titre Google : Shopify utilise le titre traduit.",
   "editor.seo.noDescription": "Aucune description Google dans cette langue : Google peut afficher la description à la place.",
   "editor.seo.exampleAddress": "Adresse d'exemple ; l'adresse réelle dépend de vos domaines et de vos marchés.",
   "editor.publish": "Publier les traductions",
@@ -523,6 +528,7 @@ export const fr: Translation<typeof en> = {
   "editor.rejection.MISSING_CODE": "Le résultat de l'IA avait perdu une partie de la mise en forme ; il a donc été rejeté.",
 
   "editor.handle.suggest": "Proposer à partir du nom traduit",
+  "editor.handle.suggest.titled": "Proposer à partir du titre traduit",
   "editor.handle.confirm": "Modifier l'adresse publiée. Les liens vers …/{handle} ({language}) ne fonctionneront plus.",
   "editor.handle.problem.EMPTY": "Saisissez une adresse web.",
   "editor.handle.problem.TOO_LONG": "Utilisez {max} caractères au maximum.",
@@ -698,6 +704,7 @@ export const es: Translation<typeof en> = {
   "editor.seo.intro": "Así podría verse «{title}» en los resultados de Google en {language}.",
   "editor.seo.noFields": "Este elemento ({singular}) no tiene título ni descripción de Google propios. Agrégalos en Shopify para elegir lo que Google muestra en cada idioma.",
   "editor.seo.noTitle": "Sin título de Google: Shopify usa el nombre traducido.",
+  "editor.seo.noTitle.titled": "Sin título de Google: Shopify usa el título traducido.",
   "editor.seo.noDescription": "Sin descripción de Google en este idioma: Google puede mostrar la descripción en su lugar.",
   "editor.seo.exampleAddress": "Dirección de ejemplo; la real depende de tus dominios y mercados.",
   "editor.publish": "Publicar traducciones",
@@ -720,6 +727,7 @@ export const es: Translation<typeof en> = {
   "editor.rejection.MISSING_CODE": "El resultado de la IA perdió parte del formato, así que se descartó.",
 
   "editor.handle.suggest": "Sugerir a partir del nombre traducido",
+  "editor.handle.suggest.titled": "Sugerir a partir del título traducido",
   "editor.handle.confirm": "Cambiar la dirección publicada. Los enlaces a …/{handle} ({language}) dejarán de funcionar.",
   "editor.handle.problem.EMPTY": "Ingresa una dirección web.",
   "editor.handle.problem.TOO_LONG": "Usa como máximo {max} caracteres.",

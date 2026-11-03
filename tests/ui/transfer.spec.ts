@@ -1,8 +1,8 @@
 /**
  * Translation import and export in three steps: the CSV comes from the real
- * export route (session token via fetch) in the language chosen, a filled
- * row comes back as a draft on Review, rows that can't be trusted are listed
- * with their line.
+ * export route (session token via fetch) in the language chosen, its next
+ * part only for the choice it continues, a filled row comes back as a draft
+ * on Review, rows that can't be trusted are listed with their line.
  */
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
@@ -66,6 +66,56 @@ test("the export is in the language chosen, not the list's first one, and says s
   // The language column (the fourth: id, type and field have no commas).
   expect(new Set(rows.map((r) => r.split(",")[3]))).toEqual(new Set(["fr"]));
   await expect(page.getByText(/^Downloaded \d+ texts? to translate into French\.$/)).toBeVisible();
+});
+
+test("the next part is offered only for the language, content and choice of the part downloaded", async ({ page }) => {
+  // As in a catalog of more than 2,000 items: each part names the cursor where the next one starts.
+  const asked: Array<Record<string, string>> = [];
+  await page.route(/\/app\/translations\/export\?/, async (route) => {
+    const params = Object.fromEntries(new URL(route.request().url()).searchParams);
+    asked.push(params);
+    await route.fulfill({
+      status: 200,
+      contentType: "text/csv; charset=utf-8",
+      headers: { "X-Linguva-Rows": "3", "X-Linguva-Next": `after-${params.lang}-${asked.length}` },
+      body: "resource_id,content_type,field,language,source_digest,original,translation,status\r\n",
+    });
+  });
+  await openApp(page, "full", "/app/translations");
+  const language = page.getByRole("combobox", { name: "Language" });
+  const content = page.getByRole("combobox", { name: "Content" });
+  const gaps = page.getByRole("checkbox", { name: "Only missing and outdated texts" });
+  const next = page.getByRole("button", { name: "Download the next part" });
+
+  await page.getByRole("button", { name: "Download CSV" }).click();
+  await expect(page.getByText("Downloaded 3 texts to translate into German.")).toBeVisible();
+  await expect(next).toBeVisible();
+  // German's cursor would start French after German's first part: French starts with its own first part.
+  await language.selectOption({ label: "French" });
+  await expect(next).toHaveCount(0);
+  await language.selectOption({ label: "German" });
+  await expect(next).toBeVisible();
+  // The same for another content type, and for translated texts too.
+  await content.selectOption("COLLECTION");
+  await expect(next).toHaveCount(0);
+  await content.selectOption("PRODUCT");
+  await gaps.uncheck();
+  await expect(next).toHaveCount(0);
+  await gaps.check();
+
+  // Back on the part's own choice, the next part continues it.
+  const part = page.waitForEvent("download");
+  await next.click();
+  expect((await part).suggestedFilename()).toBe("linguva-product-de.csv");
+  expect(asked[1]).toEqual({ lang: "de", type: "PRODUCT", gaps: "1", after: "after-de-1" });
+  // Another language starts at its first part, with a next part of its own.
+  await language.selectOption({ label: "French" });
+  const first = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download CSV" }).click();
+  expect((await first).suggestedFilename()).toBe("linguva-product-fr.csv");
+  expect(asked[2]).toEqual({ lang: "fr", type: "PRODUCT", gaps: "1" });
+  await expect(page.getByText("Downloaded 3 texts to translate into French.")).toBeVisible();
+  await expect(next).toBeVisible();
 });
 
 test("the import and export page is German for a German admin user", async ({ page }) => {

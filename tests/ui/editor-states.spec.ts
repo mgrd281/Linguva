@@ -49,6 +49,17 @@ test("each text starts with its state, in Review's order, and its tile leads to 
   await expectAccessible(page);
 });
 
+test("the item's picture is beside its name, as its area list shows it: a collection's too", async ({ page }) => {
+  // Demo catalog: the Hiking collection's image (its description is an image description of its own, without a picture).
+  await openApp(page, "demo", "/app/collections/1?lang=de");
+  await expect(page.getByRole("heading", { level: 1, name: "Hiking" })).toBeVisible();
+  const picture = page.locator(".lv-ed-header .lv-ed-picture img");
+  await expect(picture).toHaveAttribute("src", /\/mountains\.svg\?width=96$/);
+  // Decorative: the name is written beside it.
+  await expect(picture).toHaveAttribute("alt", "");
+  await expect.poll(() => picture.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+});
+
 test("the way back leads to the area list the item is opened from", async ({ page }) => {
   await openApp(page, "demo", "/app/products/2?lang=de");
   await expect(page.locator('s-link[slot="breadcrumb-actions"]')).toHaveAttribute("href", "/app/languages/de/products");

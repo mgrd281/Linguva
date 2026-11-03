@@ -67,6 +67,16 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     },
   },
   {
+    name: "Editor of a page",
+    path: "/app/pages/1?lang=de",
+    check: async (page) => {
+      // A page's first text is its title, and every text that mentions it says so.
+      await expect(page.getByRole("heading", { level: 2, name: "Title", exact: true })).toBeVisible();
+      await expect(page.getByText("No Google title: Shopify uses the translated title.")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Suggest from the translated title" })).toBeVisible();
+    },
+  },
+  {
     name: "Review",
     path: "/app/review",
     check: async (page) => {

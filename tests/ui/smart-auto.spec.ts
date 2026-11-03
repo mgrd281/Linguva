@@ -409,6 +409,8 @@ test("the smart page is German for a German admin user, with one word for each t
   for (const name of ["Titel und Namen", "Beschreibungen", "Google-Titel", "Google-Beschreibungen", "Bildbeschreibungen", "Zusatzinfos", "Weitere Texte"]) {
     await expect(groups.getByRole("checkbox", { name, exact: true })).toBeVisible();
   }
+  // The option that includes them, in the same card, in the same words (never "benutzerdefinierte Felder").
+  await expect(groups.getByRole("checkbox", { name: "Auch Bildbeschreibungen und Zusatzinfos", exact: true })).toBeVisible();
   expect(await groups.innerText()).not.toMatch(/\b(seo_title|seo_description|title|description|alt|value|other)\b/);
   await expectAccessible(page);
 });

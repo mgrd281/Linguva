@@ -4,9 +4,10 @@
  * resource; field names here only label the values.
  *
  * The editor owns the state (ResourceTranslationEditor): one "Translate with AI" fills these open
- * texts with the item's own, one "Publish translations" (and the admin's save bar) publishes them,
- * and what is typed or drafted here counts as unpublished, so leaving asks first and Discard clears
- * it. Each text's state comes first, as for the item's own texts.
+ * texts with the item's own (a stop before any draft is said at the top, by that button), one
+ * "Publish translations" (and the admin's save bar) publishes them with a ticked "still correct"
+ * box, and what is typed or drafted here counts as unpublished, so leaving asks first and Discard
+ * clears it. Each text's state comes first, as for the item's own texts.
  */
 import type { RefObject } from "react";
 import type { useFetcher } from "react-router";
@@ -57,6 +58,7 @@ export function AttachedResourcesPanel({
   /** Text for an AI error code, in the interface language (an own key's stop names its engine). */
   errorMessage: (code: string, engine?: string | null) => string;
   ai: AttachedDrafts | null;
+  /** The request's own error, when the editor's banner at the top doesn't say it already. */
   aiError: { code: string; engine?: string } | null;
   saved: Array<{ ref: string; status: string; message?: string; code?: string }> | null;
   save: ReturnType<typeof useFetcher<EditorAction>>;
@@ -106,7 +108,8 @@ export function AttachedResourcesPanel({
           </s-banner>
         ) : null}
         {attached.unsupported ? <s-paragraph>{t("editor.attached.unsupported", { count: attached.unsupported })}</s-paragraph> : null}
-        {aiError || ai?.stopped ? (
+        {/* A stop that left drafts is said here, beside them; one before any draft at the top, by the button (the editor). */}
+        {aiError || (ai?.stopped && Object.keys(ai.drafts).length) ? (
           <s-banner tone="critical" heading={t("editor.aiError.heading")}>
             <s-paragraph>
               {errorMessage(aiError?.code ?? ai?.stopped ?? "", (aiError && typeof aiError.engine === "string" ? aiError.engine : null) ?? ai?.engine ?? null)}

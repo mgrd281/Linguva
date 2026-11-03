@@ -67,7 +67,7 @@ import { consentLead, enginesText, isDeepLOnly } from "../lib/engine-texts";
 import type { ConsentToken } from "../lib/engines";
 import type { IconName } from "../lib/icons";
 import { CATEGORIES, categoryOf, isCategoryId, TIERS, type CategoryId } from "../lib/language-categories";
-import { jobName } from "../lib/job-view";
+import { jobKindLabel, jobName } from "../lib/job-view";
 import { languageList } from "../lib/name-lists";
 import { entitlementsFor } from "../lib/plans";
 import { CONTENT_TYPES, isContentType, stillWithoutAccess } from "../lib/resource-kinds";
@@ -738,9 +738,10 @@ export default function SmartAutomatic() {
                 ) : null}
                 {/* The rest is fixed in the editor: its job lists them. */}
                 {failed.job ? <s-link href={`/app/jobs/${failed.job}`}>{t("automatic.activity.seeJob")}</s-link> : null}
+                {/* A run's image and custom-field jobs by the Jobs page's words ("Extra details (products)"), which the link opens. */}
                 {run.jobs.slice(0, 3).map((job) => (
                   <s-link key={job.id} href={`/app/jobs/${job.id}`}>
-                    {`${kindLabel(i18n, job.resourceType)} · ${languageNames.get(job.locale) ?? job.locale}`}
+                    {`${jobKindLabel(i18n, job.resourceType)} · ${languageNames.get(job.locale) ?? job.locale}`}
                   </s-link>
                 ))}
               </s-stack>
@@ -843,7 +844,7 @@ export default function SmartAutomatic() {
                   {!readOnly && panel.status.state === "off" && !data.consent ? consentNote : null}
                   {panel.noAccess.length ? (
                     <InlineNotice icon="lock" heading={t("automatic.noAccess.heading")} actions={accessHref ? <Button href={accessHref}>{t("coverage.types.allowAccess")}</Button> : undefined}>
-                      {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => kindLabel(i18n, type)), 4) })}
+                      {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => jobKindLabel(i18n, type)), 4) })}
                     </InlineNotice>
                   ) : null}
                   {actionError ? (

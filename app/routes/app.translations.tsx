@@ -86,15 +86,19 @@ export default function Translations() {
   const [type, setType] = useState("PRODUCT");
   const [gaps, setGaps] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [exported, setExported] = useState<{ rows: number; next: string | null; locale: string } | "failed" | null>(null);
+  // A part keeps the choice it was downloaded for (also when that changed while it loaded).
+  const [exported, setExported] = useState<{ rows: number; next: string | null; locale: string; type: string; gaps: boolean } | "failed" | null>(null);
 
   async function exportPart(after: string | null) {
     setExporting(true);
     const params = new URLSearchParams({ lang, type, ...(gaps ? { gaps: "1" } : {}), ...(after ? { after } : {}) });
     const result = await download(params);
-    setExported(result ? { ...result, locale: lang } : "failed");
+    setExported(result ? { ...result, locale: lang, type, gaps } : "failed");
     setExporting(false);
   }
+  // The next part only for that same choice: the cursor names no language, so after a change it would
+  // quietly start the new choice after the first part's last item.
+  const next = exported && exported !== "failed" && exported.locale === lang && exported.type === type && exported.gaps === gaps ? exported.next : null;
 
   const imported = importer.data?.kind === "imported" ? importer.data.result : null;
   const importError = importer.data?.kind === "error" ? importer.data.code : null;
@@ -167,8 +171,8 @@ export default function Translations() {
               <Button variant="primary" icon="export" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>
                 {t("transfer.export.download")}
               </Button>
-              {exported && exported !== "failed" && exported.next ? (
-                <Button icon="export" onClick={() => exportPart(exported.next)} {...(exporting ? { loading: true } : {})}>
+              {next ? (
+                <Button icon="export" onClick={() => exportPart(next)} {...(exporting ? { loading: true } : {})}>
                   {t("transfer.export.next")}
                 </Button>
               ) : null}

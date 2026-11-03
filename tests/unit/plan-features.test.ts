@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { featureTableCounts } from "../../app/components/plan/PlanFeatureTable";
+import { APP_LOCALES, translate } from "../../app/i18n/i18n";
 import { everyPlanRows, FEATURE_ICON, FEATURE_TINT, OWN_KEY_ICON, PLAN_CARD_FEATURES, PLAN_FEATURE_ROWS, PLAN_ICON, PLAN_TINT, PRICE_ROW, STATE_ICON, type FeatureKey } from "../../app/lib/plan-features";
 import { PLAN_PRICES, PLANS, type PlanHandle } from "../../app/lib/plans";
 
@@ -52,6 +53,14 @@ describe("plan comparison", () => {
     expect(strip.map((r) => r.key)).toEqual(["manual", "aiOne", "seo", "images", "hints", "approve", "restore", "memory", "csv", "coverage", "markets"]);
     // Every other row differs between plans.
     for (const r of ROWS.filter((x) => !strip.includes(x))) expect(new Set(HANDLES.map((h) => r.value(PLANS[h]))).size, r.key).toBeGreaterThan(1);
+  });
+
+  it("names alt text and custom fields by the app's words for them, the field groups' names (never “Bildtexte”)", () => {
+    for (const locale of APP_LOCALES) {
+      const label = translate(locale, row("images").label).toLocaleLowerCase();
+      for (const key of ["coverage.group.alt", "coverage.group.value"] as const) expect(label, `${locale} ${key}`).toContain(translate(locale, key).toLocaleLowerCase());
+    }
+    expect(translate("de", row("images").label)).toBe("Bildbeschreibungen und Zusatzinfos");
   });
 
   it("has a price for exactly the plans compared", () => {

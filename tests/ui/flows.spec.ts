@@ -55,6 +55,23 @@ test("image descriptions are translated with the product's texts and published w
   await expect(page.locator('s-text-field[name$=":alt"] input')).toHaveValue("[de] Red wool jacket, front view");
 });
 
+test("a ticked “still correct” box is published with a typed image description", async ({ page }) => {
+  // The jobs store's catalog is the demo's: the jacket's German description is outdated, its picture's
+  // description isn't translated, and no other test reads the store's German texts.
+  await openApp(page, "jobs", "/app/products/2?lang=de");
+  const description = page.locator('s-section[data-text="Description"]');
+  await expect(description.locator("s-badge").first()).toHaveText("Outdated");
+  await description.getByRole("checkbox", { name: "The source changed, but this translation is still correct" }).check();
+  await page.locator('s-text-field[name$=":alt"] input').fill("Rote Wanderjacke mit Kapuze");
+  await page.getByRole("button", { name: "Publish translations" }).click();
+  // Both: the confirmed description goes with the image's description, not only the typed text.
+  await expectToast(page, "2 translations published");
+
+  await openApp(page, "jobs", "/app/products/2?lang=de");
+  await expect(description.locator("s-badge").first()).toHaveText("Translated");
+  await expect(page.locator('s-text-field[name$=":alt"] input')).toHaveValue("Rote Wanderjacke mit Kapuze");
+});
+
 test.describe("plan page", () => {
   test("a subscribed store sees its plan and can change it on Shopify's page", async ({ page }) => {
     await openApp(page, "full", "/app/plan");

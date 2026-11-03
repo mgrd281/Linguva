@@ -3,10 +3,10 @@
  * Countries & markets. Each starts with its heading and the way back to
  * Settings › Tools. Content, accessibility, phone layout, the glossary's
  * rules as tiles, its plan gate before the form, a problem shown on its
- * field, replacing every term only after a question, and languages chosen
- * by name.
+ * field, replacing every term only after a question, a search that ends
+ * with its field, and languages chosen by name.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
 
 /** The page's heading, and the way back to Settings › Tools: the trail's link on a wide page, the 44 px back row on a phone. */
@@ -86,6 +86,50 @@ test("glossary: replacing every term asks first and names how many go", async ({
   await page.locator("s-modal#glossary-replace").getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Replace all 5 terms?" })).toBeHidden();
   await expect(page.locator("s-table-row")).toHaveCount(5);
+});
+
+test("glossary: a search ends with its field, so a shorter list shows every term again", async ({ page }) => {
+  await openApp(page, "full", "/app/glossary");
+  const names = ["A", "B", "C", "D", "E", "F", "G", "H"].map((letter) => `Lv-Suche-${letter}`);
+  const remove = async (row: Locator) => {
+    await row.getByRole("button", { name: "Delete" }).click();
+    await page.locator("s-modal#glossary-delete").getByRole("button", { name: "Delete", exact: true }).click();
+  };
+  // Eight terms: the list gets its search.
+  await page.locator('s-drop-zone[name="file"] input[type="file"]').setInputFiles({
+    name: "terms.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(["rule,term,translation,target_locale,market,case_sensitive,notes", ...names.map((name) => `DO_NOT_TRANSLATE,${name},,,,,`)].join("\n")),
+  });
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expectToast(page, "8 terms imported.");
+  await expect(page.locator('s-section[heading="Terms (8)"]')).toHaveCount(1);
+  const search = page.getByRole("searchbox", { name: "Search terms" });
+  const rows = page.locator("s-table-row");
+  await search.fill("Suche-C");
+  await expect(rows).toHaveCount(1);
+
+  // Deleting the one found leaves seven: no search, and every term listed, not "No term matches your search".
+  await remove(rows);
+  await expect(page.locator('s-section[heading="Terms (7)"]')).toHaveCount(1);
+  await expect(search).toHaveCount(0);
+  await expect(rows).toHaveCount(7);
+  await expect(page.getByText("No term matches your search.")).toHaveCount(0);
+
+  // Eight again: the search comes back empty, over the whole list.
+  const form = page.locator('s-section[heading="Add a term"]');
+  await form.getByRole("textbox", { name: "Term" }).fill("Lv-Suche-C");
+  await form.getByRole("button", { name: "Add term" }).click();
+  await expectToast(page, "Term added");
+  await expect(search).toHaveValue("");
+  await expect(rows).toHaveCount(8);
+
+  // Clean up for other tests.
+  for (const name of names) {
+    const row = page.locator("s-table-row", { hasText: name });
+    await remove(row);
+    await expect(row).toHaveCount(0);
+  }
 });
 
 test("translation memory: search with a language chosen by name @responsive", async ({ page }) => {

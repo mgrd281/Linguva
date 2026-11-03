@@ -77,6 +77,28 @@ test("translate, edit and publish a product with the keyboard only", async ({ pa
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Jacke Nummer 12");
 });
 
+test("translate everything again by keyboard: focus comes back to the button once the drafts are in, and the result is said", async ({ page }) => {
+  // Product 17 has no German texts yet: translated and published first, so nothing is open.
+  await openApp(page, "full", "/app/products/17?lang=de");
+  await page.getByRole("button", { name: "Translate with AI" }).click();
+  await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[de] Product 17 jacket");
+  await page.getByRole("button", { name: "Publish translations" }).click();
+  await expectToast(page, /translations? published$/);
+  await openApp(page, "full", "/app/products/17?lang=de");
+  await expect(page.getByText("Nothing is missing or outdated: every text is translated.")).toBeVisible();
+  await page.locator("body").focus();
+
+  await tabTo(page, (f) => f.button && f.text === "Translate everything again");
+  await page.keyboard.press("Enter");
+  // The question takes focus; confirming closes it with its button.
+  await expect.poll(async () => (await focused(page)).text).toBe("Translate again");
+  await page.keyboard.press("Enter");
+  // The result is said in a status region, and focus is back where it was, not on the page's start.
+  await expect(page.getByRole("status").filter({ hasText: "AI drafts are filled in below" })).toHaveCount(1);
+  await expect.poll(async () => (await focused(page)).text).toBe("Translate everything again");
+  expect((await focused(page)).visible).toBe(true);
+});
+
 test("leaving with unpublished changes: focus is on Stay, Enter stays", async ({ page }) => {
   await openApp(page, "full", "/app/products/7?lang=fr");
   // A slow machine (CI runners are): the notice's button may not take focus in its first frame.

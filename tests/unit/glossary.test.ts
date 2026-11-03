@@ -53,7 +53,7 @@ describe("parseGlossaryCsv", () => {
     const result = parseGlossaryCsv(csv);
     expect(result.terms).toHaveLength(2);
     expect(result.errors.map((e) => e.line)).toEqual([4, 5, 6]);
-    expect(text(result.errors[0])).toBe("translation: is required for preferred terms");
+    expect(text(result.errors[0])).toBe("translation: needed for the rule PREFERRED (“Always translate as”)");
     expect(text(result.errors[1])).toBe('rule: Invalid option: expected one of "DO_NOT_TRANSLATE"|"PREFERRED"|"FORBIDDEN"');
     expect(text(result.errors[2])).toBe("targetLocale: must be a locale code such as de or pt-BR, or empty");
     expect(text(result.errors[2], "de")).toBe("targetLocale: muss ein Sprachcode wie de oder pt-BR sein oder leer bleiben");
@@ -153,7 +153,7 @@ describe("segments made only of glossary terms", () => {
 });
 
 describe("market input", () => {
-  it("accepts the market number from the Markets page or the full id, and nothing else", async () => {
+  it("accepts a market number or the full id, and nothing else", async () => {
     const { termInputSchema } = await import("../../app/.server/glossary/glossary");
     const parse = (market: string) => termInputSchema.safeParse({ rule: "DO_NOT_TRANSLATE", term: "Brand", market });
     expect(parse("42").data?.market).toBe("gid://shopify/Market/42");

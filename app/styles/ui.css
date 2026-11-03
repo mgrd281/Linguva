@@ -1793,6 +1793,90 @@ a.lv-filter:focus-visible {
   }
 }
 
+/* Tools pages (glossary, translation memory, coverage, Countries & markets, import & export): .lv-tools-*. */
+
+/*
+ * The glossary's rules as equal tiles (Settings' option tiles, .lv-option): the rule's icon in its square,
+ * a native radio at the top (the arrow keys move between the rules), the name and what it means; the chosen
+ * rule in the app's chosen look. The whole tile is the radio's label.
+ */
+.lv-tools-rules {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.lv-tools-rules__legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+.lv-tools-rule {
+  gap: 4px;
+  padding: 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lv-tools-rule:not(.lv-option--current):hover {
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
+}
+.lv-tools-rule:has(input:focus-visible) {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-tools-rule__radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  accent-color: var(--lv-selected-ring);
+  cursor: pointer;
+}
+.lv-tools-rules:disabled .lv-tools-rule {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.lv-tools-rules:disabled .lv-tools-rule:hover {
+  border-color: var(--lv-border);
+  box-shadow: none;
+}
+
+/* A tools page's figures under its heading (the memory's entries and reuses): each figure with its caption. */
+.lv-tools-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-tools-figures__item {
+  display: grid;
+  gap: 2px;
+}
+
+/* A sentence with a language's flag before its name, or a pair of them ("🇬🇧 English → 🇩🇪 German"). */
+.lv-tools-language {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+}
+
+/* The import and export page's steps: the number in its circle beside the step's heading. */
+.lv-tools-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-tools-rule {
+    transition: none;
+  }
+}
+
 /* ── Smart schedule (app.settings_.automatic.tsx, SmartAutoCard): its own rules here, media queries included. ── */
 
 /* The summary card decides by its own width where its actions go: beside the summary, or under it on a phone. */

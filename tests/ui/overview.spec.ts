@@ -232,9 +232,10 @@ test("the Coverage page lets a stuck measurement be started again, without follo
     if (request.url().includes(".data")) requests.push(request.url());
   });
   await openApp(page, "stalled", "/app/coverage", { locale: "de" });
-  await expect(page.getByText(/^Die Prüfung kommt seit .+ nicht voran$/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Shop (erneut )?prüfen$/ })).toBeEnabled();
-  await expect(page.getByRole("progressbar", { name: /Prüfung|Messung|Scan/ })).toHaveCount(0);
+  // Counting is "zählen" there too ("prüfen" means approving).
+  await expect(page.getByText(/^Das Zählen kommt seit .+ nicht voran$/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Shop (neu )?zählen$/ })).toBeEnabled();
+  await expect(page.getByRole("progressbar", { name: /Zählen|Prüfung|Messung|Scan/ })).toHaveCount(0);
   await page.waitForTimeout(4_000);
   expect(requests).toEqual([]);
   await expectAccessible(page);

@@ -1,31 +1,50 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Form, useFetcher, useLoaderData, useRevalidator } from "react-router";
+import { Link, useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { bulkTargetOf, coverageAction, loadCoverageDashboard } from "../.server/coverage/dashboard";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
-import { hasMessage, kindLabel, kindPlural } from "../i18n/labels";
-import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar, StateLegend, StateSummary } from "../components/Coverage";
+import { hasMessage, kindPlural } from "../i18n/labels";
+import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar } from "../components/Coverage";
+import { CoverageConfirm, type CoverageConfirmTarget } from "../components/CoverageConfirm";
+import { FieldStateLinks, FieldStateList } from "../components/CoverageStates";
+import { Disclosure } from "../components/Disclosure";
+import { Flag } from "../components/Flag";
 import { ProgressBar } from "../components/ProgressBar";
 import { SmartStateBadge, SmartStateBanner } from "../components/SmartAutoCard";
+import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
+import { Strong } from "../components/Type";
+import { bulkTypes, openTexts, type BulkTarget } from "../lib/coverage-bulk";
 import { byFieldGroup, byType, coverageNextStep, headlineByLocale, storeWide, unreadableTypes, type CoverageNextStep, type Tally } from "../lib/coverage-view";
+import { contentTypeName } from "../lib/content-type-names";
+import { chipName, chipOrder, switcherKind } from "../lib/content-language";
 import { inParentheses, languageList, upperFirst } from "../lib/name-lists";
 import { languagePath } from "../lib/language-categories";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES } from "../lib/coverage-rules";
-import { localeFlag } from "../lib/flags";
+import { localeCountry } from "../lib/flags";
 import { CONTENT_TYPES, isContentType, RESOURCE_KINDS, type ResourceKind } from "../lib/resource-kinds";
+import { ALL } from "../lib/select-all";
 import { Button } from "../components/Button";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const data = await loadCoverageDashboard(request);
-  return { ...data, bulkTypes: data.coverageTypes.filter((t) => bulkTargetOf(t) !== null) };
+  // The job each row's "Translate" starts (none: the type is translated item by item).
+  const bulkTargets: Record<string, BulkTarget> = {};
+  for (const type of data.coverageTypes) {
+    const target = bulkTargetOf(type);
+    if (target) bulkTargets[type] = target;
+  }
+  return { ...data, bulkTargets };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => coverageAction(request);
 
 const isResourceKind = (type: string): type is ResourceKind => Object.hasOwn(RESOURCE_KINDS, type);
 const EMPTY: Tally = { counts: emptyCounts(), total: 0, complete: 0, percent: null };
+/** Plan gates of the actions: their message has the way to the plans beside it. */
+const PLAN_ERRORS = new Set(["PLAN_BULK", "PLAN_LANGUAGE"]);
+const CONFIRM_ID = "coverage-translate";
 
 function errorMessage(i18n: I18n, code: string | null | undefined): string | null {
   if (code === "SHOP_AUTH") return i18n.t("common.jobError.SHOP_AUTH");
@@ -42,7 +61,7 @@ function accessHref(types: readonly string[]): string | null {
   return type ? `/app/content/${CONTENT_TYPES[type].slug}` : null;
 }
 
-/** The next step in words, and its action (none: scanning again is the page's own button, or there's nothing to do). */
+/** The next step in words, and its action (none: counting again is the page's own button, or there's nothing to do). */
 function stepView(step: Step, data: Data, i18n: I18n): { text: string; action: { href: string; label: string } | null } {
   const { t } = i18n;
   const name = (locale: string) => i18n.language(locale, data.names[locale]);
@@ -54,23 +73,93 @@ function stepView(step: Step, data: Data, i18n: I18n): { text: string; action: {
       };
     case "failed":
     case "missing": {
-      const vars = { count: step.count, type: kindLabel(i18n, step.type), language: inParentheses(name(step.locale)) };
+      const vars = { count: step.count, type: contentTypeName(i18n, step.type), language: inParentheses(name(step.locale)) };
       return step.kind === "failed"
         ? { text: t("coverage.next.failed", vars), action: { href: itemsHref({ lang: step.locale, type: step.type, state: "failed" }), label: t("coverage.next.action.failed") } }
         : { text: t("coverage.next.missing", vars), action: { href: itemsHref({ lang: step.locale, type: step.type }), label: t("coverage.next.action.missing") } };
     }
     case "unread":
-      return { text: t(step.message, { type: kindLabel(i18n, step.segment.resourceType), language: inParentheses(name(step.segment.locale)) }), action: null };
+      return { text: t(step.message, { type: contentTypeName(i18n, step.segment.resourceType), language: inParentheses(name(step.segment.locale)) }), action: null };
     case "unmeasured":
       return { text: t(step.message, { language: name(step.locale) }), action: null };
     case "denied": {
       const href = accessHref(step.types);
-      const types = inParentheses(languageList(i18n, step.types.map((type) => kindLabel(i18n, type))));
+      const types = inParentheses(languageList(i18n, step.types.map((type) => contentTypeName(i18n, type))));
       return { text: t("coverage.next.denied", { count: step.types.length, types }), action: href ? { href, label: t("coverage.next.action.denied") } : null };
     }
     case "scanning":
       return { text: t("coverage.next.scanning"), action: null };
   }
+}
+
+/**
+ * The languages as the Content page's chips: flag, name and figure, visible languages first, the shown
+ * one in the chosen look; more than six: one select that opens the chosen language at once.
+ */
+function LanguageChips({ data, i18n, measured, headline, hrefFor }: { data: Data; i18n: I18n; measured: ReadonlySet<string>; headline: Map<string, Tally>; hrefFor: (locale: string) => string }) {
+  const { t } = i18n;
+  const navigate = useNavigate();
+  const ordered = chipOrder(i18n, data.targets);
+  const figure = (locale: string) => {
+    const tally = headline.get(locale) ?? EMPTY;
+    return measured.has(locale) ? percentLabel(i18n, tally.complete, tally.total) : "—";
+  };
+  const label = (l: Data["targets"][number]) => {
+    const name = chipName(i18n, l);
+    const shown = l.published ? name : t("resources.hiddenLanguage", { language: name });
+    const tally = headline.get(l.locale) ?? EMPTY;
+    return measured.has(l.locale) ? t("content.language.chip", { language: shown, percent: percentLabel(i18n, tally.complete, tally.total) }) : t("content.language.chipNotCounted", { language: shown });
+  };
+  if (switcherKind(ordered.length) === "select") {
+    return (
+      <s-select label={t("content.language.label")} value={data.selected ?? ""} onInput={(e) => void navigate(hrefFor(e.currentTarget.value))}>
+        {ordered.map((l) => (
+          <s-option key={l.locale} value={l.locale}>
+            {label(l)}
+          </s-option>
+        ))}
+      </s-select>
+    );
+  }
+  return (
+    <nav aria-label={t("content.language.label")}>
+      <ul className="lv-langs">
+        {ordered.map((l) => {
+          const current = l.locale === data.selected;
+          const body = (
+            <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
+              <Flag country={localeCountry(l.locale, data.marketCountries)} fallback={l.locale} size={20} />
+              <s-stack direction="block">
+                <span>{current ? <Strong>{chipName(i18n, l)}</Strong> : <s-text>{chipName(i18n, l)}</s-text>}</span>
+                {l.published ? null : (
+                  <s-stack direction="inline" gap="small-400" alignItems="center">
+                    <s-icon type="hide" size="small" color="subdued" />
+                    <s-text color="subdued">{t("content.language.hidden")}</s-text>
+                  </s-stack>
+                )}
+              </s-stack>
+              <span className={current ? "lv-figure-row" : undefined}>{current ? figure(l.locale) : <s-text color="subdued">{figure(l.locale)}</s-text>}</span>
+            </s-grid>
+          );
+          return (
+            <li key={l.locale} className="lv-langs__item">
+              {current ? (
+                <span className="lv-lang" aria-current="page">
+                  {body}
+                </span>
+              ) : (
+                // The link's own text is its name for screen readers; the words inside are hidden from them (nothing read twice).
+                <Link className="lv-lang" to={hrefFor(l.locale)}>
+                  <span className="lv-sr">{label(l)}</span>
+                  <span aria-hidden="true">{body}</span>
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
 }
 
 export default function Coverage() {
@@ -80,6 +169,8 @@ export default function Coverage() {
   const runner = useFetcher<typeof action>();
   const fixer = useFetcher<typeof action>();
   const revalidator = useRevalidator();
+  const navigate = useNavigate();
+  const [pending, setPending] = useState<{ type: string; index: number; view: CoverageConfirmTarget } | null>(null);
   // A measurement that stopped moving can be started again; nothing to follow then.
   const scanning = (data.report?.status === "QUEUED" || data.report?.status === "RUNNING") && !data.report.stalled;
   const live = scanning || data.jobs.length > 0;
@@ -100,6 +191,7 @@ export default function Coverage() {
   const store = storeWide(data.counts, counted);
   const scanned = data.segments.length > 0;
   const selected = data.selected;
+  const selectedTarget = data.targets.find((l) => l.locale === selected) ?? null;
   const selectedName = selected ? i18n.language(selected, data.names[selected]) : "";
   const types = useMemo(() => (selected ? byType(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
   const groups = useMemo(() => (selected ? byFieldGroup(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
@@ -118,412 +210,455 @@ export default function Coverage() {
       })
     : null;
   const step = next ? stepView(next, data, i18n) : null;
-  const actionError = [runner.data, fixer.data].find((d) => d && "error" in d) as { error: string } | undefined;
+  const actionError = ([runner.data, fixer.data].find((d) => d && "error" in d) as { error: string } | undefined)?.error ?? null;
   const languageOf = (locale: string) => i18n.language(locale, data.names[locale]);
   const marketQuery = data.markets.selected ? `&market=${encodeURIComponent(data.markets.selected)}` : "";
+  const languageHref = (locale: string) => `/app/coverage?lang=${encodeURIComponent(locale)}${marketQuery}`;
+  const title = t("settings.tools.coverage.label");
 
-  // Types with nothing to translate (scanned, no counted field) are folded away.
+  // Types with nothing to translate (counted, no text) are folded away.
   const visibleTypes = data.coverageTypes.filter((type) => {
     const seg = segmentOf(type);
     return (types.get(type)?.total ?? 0) > 0 || (seg && seg.status !== "SCANNED") || (!seg && scanned);
   });
   const hiddenTypes = data.coverageTypes.length - visibleTypes.length;
+  const selectedTally = selected ? (headline.get(selected) ?? EMPTY) : EMPTY;
+
+  /** What a row's "Translate" asks before its job starts. */
+  const confirmFor = (type: string): CoverageConfirmTarget | null => {
+    const target = data.bulkTargets[type];
+    if (!target || !selected) return null;
+    return { resourceType: target.resourceType, name: contentTypeName(i18n, target.resourceType), includeAttached: target.includeAttached, open: openTexts(data.counts, selected, bulkTypes(target)) };
+  };
 
   return (
-    <s-page heading={t("coverage.page.heading")}>
-      <s-section>
-        <s-stack direction="block" gap="base">
-          {actionError ? (
-            <s-banner tone="critical" heading={t("coverage.startFailed.heading")}>
-              <s-paragraph>{errorMessage(i18n, actionError.error) ?? t("coverage.startFailed.fallback")}</s-paragraph>
-            </s-banner>
-          ) : null}
-          {data.report?.status === "FAILED" ? (
-            <s-banner tone="warning" heading={t("coverage.lastFailed.heading")}>
-              <s-paragraph>{errorMessage(i18n, data.report.errorCode) ?? t("coverage.lastFailed.fallback")}</s-paragraph>
-            </s-banner>
-          ) : null}
-          <runner.Form method="post">
-            <input type="hidden" name="intent" value="run" />
-            <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-            <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
-              <s-stack direction="block" gap="small-300">
-                <s-text>{t("coverage.intro")}</s-text>
-                {!scanning && data.lastFullScan ? <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.lastFullScan) })}</s-text> : null}
-                {data.report?.stalled ? <s-text color="subdued">{t("coverage.scan.stalled", { date: i18n.dateTime(data.report.updatedAt) })}</s-text> : null}
-              </s-stack>
-              <Button
-                type="submit"
-                variant={scanned ? "secondary" : "primary"}
-                disabled={!data.jobsAvailable || scanning || data.targets.length === 0}
-                {...(runner.state !== "idle" ? { loading: true } : {})}
-              >
-                {scanned ? t("coverage.scan.again") : t("coverage.scan.first")}
-              </Button>
-            </s-stack>
-          </runner.Form>
-          {scanning && data.report ? (
-            <s-stack direction="block" gap="small-200">
-              <ProgressBar value={(data.report.progress.done / Math.max(1, data.report.progress.total)) * 100} label={t("coverage.scan.progressLabel")} />
-              <s-text color="subdued">
-                {t("coverage.scan.running", {
-                  scanning: data.report.scanning ? `${kindLabel(i18n, data.report.scanning.type)} · ${data.report.scanning.language}` : "",
-                  done: data.report.progress.done,
-                  total: data.report.progress.total,
-                  items: data.report.resourcesScanned,
-                })}
-              </s-text>
-            </s-stack>
-          ) : null}
-          {!scanned && !scanning ? <s-paragraph>{t("coverage.scan.never")}</s-paragraph> : null}
-        </s-stack>
-      </s-section>
+    <s-page heading={title}>
+      <ToolsBreadcrumbSlot i18n={i18n} />
+      <s-stack direction="block" gap="base">
+        <ToolHeader tool="coverage" title={title} lead={t("coverage.intro")} i18n={i18n} />
 
-      {data.markets.available && data.markets.list.length > 1 ? (
-        <s-section heading={t("coverage.filter.heading")}>
-          <Form method="get">
-            <s-stack direction="inline" gap="base" alignItems="end">
-              <s-select name="market" label={t("coverage.filter.market")} value={data.markets.selected ?? "all"}>
-                <s-option value="all">{t("coverage.filter.allMarkets")}</s-option>
-                {data.markets.list.map((m) => (
-                  <s-option key={m.id} value={m.id}>
-                    {m.name}
-                  </s-option>
-                ))}
-              </s-select>
-              <Button type="submit">{t("coverage.filter.apply")}</Button>
-            </s-stack>
-          </Form>
-          {data.markets.selected ? (
-            <s-text color="subdued">{t("coverage.filter.marketNote", { market: data.markets.list.find((m) => m.id === data.markets.selected)?.name ?? "" })}</s-text>
-          ) : null}
-        </s-section>
-      ) : null}
-
-      {data.jobs.length ? (
-        <s-section heading={t("coverage.jobs.heading")}>
+        {/* Counting: when it was last done, and the way to count again. */}
+        <s-section>
           <s-stack direction="block" gap="base">
-            {data.jobs.map((job) => {
-              const vars = { type: kindLabel(i18n, job.resourceType), language: languageOf(job.locale), done: i18n.number(job.done), total: i18n.number(job.total) };
-              return (
-                <s-stack key={job.id} direction="block" gap="small-200">
-                  <s-stack direction="inline" gap="base" alignItems="center">
-                    <s-text>{job.discoveryDone ? t("coverage.jobs.progress", vars) : t("coverage.jobs.finding", vars)}</s-text>
-                    <s-link href={`/app/jobs/${job.id}`}>{t("coverage.jobs.open")}</s-link>
-                  </s-stack>
-                  {job.discoveryDone && job.total > 0 ? (
+            {actionError ? (
+              <s-banner tone="critical" heading={t("coverage.startFailed.heading")}>
+                <s-paragraph>
+                  {errorMessage(i18n, actionError) ?? t("coverage.startFailed.fallback")}
+                  {PLAN_ERRORS.has(actionError) ? (
                     <>
-                      <ProgressBar value={job.percent} label={t("coverage.jobs.progressLabel", vars)} tone="success" />
-                      <s-text color="subdued">
-                        {job.remainingMs !== null ? t("coverage.jobs.eta", { duration: durationText(i18n, job.remainingMs) }) : t("coverage.jobs.noEta")}
-                      </s-text>
+                      {" "}
+                      <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
                     </>
                   ) : null}
-                </s-stack>
-              );
-            })}
-          </s-stack>
-        </s-section>
-      ) : null}
-
-      {data.smart ? (
-        <s-section heading={t("automatic.name")}>
-          <s-stack direction="block" gap="small">
-            <s-stack direction="inline" gap="small" alignItems="center">
-              <SmartStateBadge status={data.smart.status} />
-              <s-text>
-                {[
-                  !data.smart.inSchedule
-                    ? t("coverage.smart.notThisLanguage")
-                    : data.smart.status.state !== "on"
-                      ? null
-                      : data.smart.nextCheck
-                        ? t("coverage.smart.next", { time: t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.smart.nextCheck, data.smart.zone), zone: data.smart.zone }) })
-                        : data.smart.mode === "manual"
-                          ? t("coverage.smart.manual")
-                          : null,
-                  data.smart.inSchedule && data.smart.mode === "realtime" && data.smart.status.state === "on" ? t("coverage.smart.realtime") : null,
-                  data.smart.translating ? t("coverage.smart.translating", { count: data.smart.translating }) : null,
-                  data.smart.excluded ? t("coverage.smart.excluded", { count: data.smart.excluded }) : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </s-text>
-              <s-link href="/app/settings/automatic">{t("automatic.action.options")}</s-link>
-            </s-stack>
-            <SmartStateBanner status={data.smart.status} zone={data.smart.zone} />
-          </s-stack>
-        </s-section>
-      ) : null}
-
-      {scanned ? (
-        <s-query-container>
-          <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
-            <s-section heading={t("coverage.store.heading")}>
-              <s-stack direction="block" gap="small">
-                <span style={{ fontSize: 32, lineHeight: "40px", fontWeight: 650, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>
-                  {percentLabel(i18n, store.complete, store.total)}
-                </span>
-                {/* No bar before a language is read in full: an empty one would read "nothing to translate". */}
-                {published.length > 0 && counted.length === 0 ? null : (
-                  <StateBar counts={store.counts} label={t("coverage.store.percentLabel")} i18n={i18n} height={10} />
-                )}
-                <s-text color="subdued">
-                  {published.length > 0 && counted.length === 0
-                    ? t("coverage.store.notMeasured")
-                    : !store.total
-                      ? t("coverage.store.nothing")
-                      : counted.length < published.length
-                        ? t("coverage.store.fieldsSome", { complete: i18n.number(store.complete), total: i18n.number(store.total), count: counted.length, published: published.length })
-                        : t("coverage.store.fields", { complete: i18n.number(store.complete), total: i18n.number(store.total) })}
-                </s-text>
-                <StateSummary counts={store.counts} i18n={i18n} />
-                {unreadable.length ? (
-                  <s-stack direction="inline" gap="small" alignItems="center">
-                    <s-text color="subdued">{t("coverage.store.denied", { count: unreadable.length })}</s-text>
-                    {accessHref(unreadable) ? <s-link href={accessHref(unreadable)!}>{t("coverage.types.allowAccess")}</s-link> : null}
+                </s-paragraph>
+              </s-banner>
+            ) : null}
+            {data.report?.status === "FAILED" ? (
+              <s-banner tone="warning" heading={t("coverage.lastFailed.heading")}>
+                <s-paragraph>{errorMessage(i18n, data.report.errorCode) ?? t("coverage.lastFailed.fallback")}</s-paragraph>
+              </s-banner>
+            ) : null}
+            <runner.Form method="post">
+              <input type="hidden" name="intent" value="run" />
+              <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
+              <s-query-container>
+                <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="base" alignItems="center">
+                  <s-stack direction="block" gap="small-500">
+                    <Strong>{scanning ? t("coverage.scan.counting") : data.lastFullScan ? t("coverage.scan.last", { date: i18n.dateTime(data.lastFullScan) }) : t("coverage.scan.notYet")}</Strong>
+                    {data.report?.stalled ? <s-text color="subdued">{t("coverage.scan.stalled", { date: i18n.dateTime(data.report.updatedAt) })}</s-text> : null}
+                    {!scanned && !scanning ? <s-text color="subdued">{t("coverage.scan.never")}</s-text> : null}
                   </s-stack>
-                ) : null}
-                {published.length === 0 && data.targets.length > 0 ? (
-                  <s-banner tone="info">
-                    <s-paragraph>{t("coverage.store.noPublished")}</s-paragraph>
-                  </s-banner>
-                ) : null}
+                  <s-stack direction="inline">
+                    <Button
+                      type="submit"
+                      variant={scanned ? "secondary" : "primary"}
+                      icon="chart-donut"
+                      disabled={!data.jobsAvailable || scanning || data.targets.length === 0}
+                      {...(runner.state !== "idle" ? { loading: true } : {})}
+                    >
+                      {scanned ? t("coverage.scan.again") : t("coverage.scan.first")}
+                    </Button>
+                  </s-stack>
+                </s-grid>
+              </s-query-container>
+            </runner.Form>
+            {scanning && data.report ? (
+              <s-stack direction="block" gap="small-200">
+                <ProgressBar value={(data.report.progress.done / Math.max(1, data.report.progress.total)) * 100} label={t("coverage.scan.progressLabel")} />
+                <s-text color="subdued">
+                  {t("coverage.scan.running", {
+                    scanning: data.report.scanning ? `${contentTypeName(i18n, data.report.scanning.type)} · ${data.report.scanning.language}` : "",
+                    done: data.report.progress.done,
+                    total: data.report.progress.total,
+                    items: data.report.resourcesScanned,
+                  })}
+                </s-text>
               </s-stack>
-            </s-section>
-            <s-section heading={t("coverage.next.heading")}>
-              <s-stack direction="block" gap="small">
-                {step ? (
-                  <>
-                    <s-paragraph>{step.text}</s-paragraph>
-                    {/* Scanning again is the page's own button. */}
-                    {step.action ? (
-                      <s-stack direction="inline">
-                        <Button href={step.action.href} variant="primary">
-                          {step.action.label}
-                        </Button>
-                      </s-stack>
-                    ) : null}
-                  </>
-                ) : (
-                  <s-paragraph>{t("coverage.next.done")}</s-paragraph>
-                )}
-              </s-stack>
-            </s-section>
-          </s-grid>
-        </s-query-container>
-      ) : null}
+            ) : null}
+          </s-stack>
+        </s-section>
 
-      {scanned && data.targets.length ? (
-        <s-section heading={t("coverage.languages.heading")}>
-          <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, (inline-size > 900px) 1fr 1fr 1fr, 1fr" gap="base">
-              {data.targets.map((l) => {
-                const tally = headline.get(l.locale) ?? EMPTY;
-                const name = upperFirst(i18n.language(l.locale, l.name));
-                const flag = localeFlag(l.locale);
+        {data.markets.available && data.markets.list.length > 1 ? (
+          <s-section>
+            <s-stack direction="block" gap="small-200">
+              {/* Opens the market's languages at once: no extra button. */}
+              <s-query-container>
+                <s-grid gridTemplateColumns="@container (inline-size > 560px) 320px 1fr, 1fr" gap="base">
+                  <s-select
+                    label={t("coverage.filter.market")}
+                    value={data.markets.selected ?? ALL}
+                    onInput={(e) => {
+                      const market = e.currentTarget.value;
+                      void navigate(market && market !== ALL ? `/app/coverage?market=${encodeURIComponent(market)}` : "/app/coverage");
+                    }}
+                  >
+                    <s-option value={ALL}>{t("coverage.filter.allMarkets")}</s-option>
+                    {data.markets.list.map((m) => (
+                      <s-option key={m.id} value={m.id}>
+                        {m.name}
+                      </s-option>
+                    ))}
+                  </s-select>
+                </s-grid>
+              </s-query-container>
+              {data.markets.selected ? (
+                <s-text color="subdued">{t("coverage.filter.marketNote", { market: data.markets.list.find((m) => m.id === data.markets.selected)?.name ?? "" })}</s-text>
+              ) : null}
+            </s-stack>
+          </s-section>
+        ) : null}
+
+        {data.jobs.length ? (
+          <s-section heading={t("coverage.jobs.heading")}>
+            <s-stack direction="block" gap="base">
+              {data.jobs.map((job) => {
+                const vars = { type: contentTypeName(i18n, job.resourceType), language: languageOf(job.locale), done: i18n.number(job.done), total: i18n.number(job.total) };
                 return (
-                  <s-box key={l.locale} padding="base" border="base" borderRadius="base" background={l.locale === selected ? "subdued" : "base"}>
-                    <s-stack direction="block" gap="small">
-                      <s-stack direction="inline" gap="small" alignItems="center">
-                        {flag ? <span aria-hidden="true">{flag}</span> : null}
-                        <s-heading>
-                          <s-link href={languagePath(l.locale)}>{name}</s-link>
-                        </s-heading>
-                        {l.published ? <s-badge tone="success">{t("coverage.languages.published")}</s-badge> : <s-badge tone="warning">{t("coverage.languages.unpublished")}</s-badge>}
-                      </s-stack>
-                      {measured.has(l.locale) ? (
-                        <>
-                          <span style={{ fontSize: 24, lineHeight: "32px", fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>{percentLabel(i18n, tally.complete, tally.total)}</span>
-                          <StateBar counts={tally.counts} label={t("coverage.languages.progressLabel", { language: name })} i18n={i18n} />
-                          <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) })}</s-text>
-                        </>
-                      ) : (
-                        // A share of what was read so far could read as 100 %: no figure until every type is read.
-                        <s-text color="subdued">{t("coverage.languages.notMeasured")}</s-text>
-                      )}
-                      {!l.published ? <s-text color="subdued">{t("coverage.languages.unpublishedHelp")}</s-text> : null}
-                      <StateLegend counts={tally.counts} i18n={i18n} states={["review", "draft", "failed", "outdated", "missing"]} hrefFor={(state) => itemsHref({ lang: l.locale, state })} />
-                      {l.locale === selected ? (
-                        <s-text color="subdued">{t("coverage.languages.selected")}</s-text>
-                      ) : (
-                        <s-link href={`/app/coverage?lang=${encodeURIComponent(l.locale)}${marketQuery}`} accessibilityLabel={`${t("coverage.languages.details")}: ${name}`}>
-                          {t("coverage.languages.details")}
-                        </s-link>
-                      )}
+                  <s-stack key={job.id} direction="block" gap="small-200">
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <s-icon type="in-progress" color="subdued" size="small" />
+                      <s-text>{job.discoveryDone ? t("coverage.jobs.progress", vars) : t("coverage.jobs.finding", vars)}</s-text>
+                      <s-link href={`/app/jobs/${job.id}`}>{t("coverage.jobs.open")}</s-link>
                     </s-stack>
-                  </s-box>
+                    {job.discoveryDone && job.total > 0 ? (
+                      <>
+                        <ProgressBar value={job.percent} label={t("coverage.jobs.progressLabel", vars)} tone="success" />
+                        <s-text color="subdued">
+                          {job.remainingMs !== null ? t("coverage.jobs.eta", { duration: durationText(i18n, job.remainingMs) }) : t("coverage.jobs.noEta")}
+                        </s-text>
+                      </>
+                    ) : null}
+                  </s-stack>
                 );
               })}
+            </s-stack>
+          </s-section>
+        ) : null}
+
+        {data.smart ? (
+          <s-section heading={t("automatic.name")}>
+            <s-stack direction="block" gap="small">
+              <s-stack direction="inline" gap="small" alignItems="center">
+                <SmartStateBadge status={data.smart.status} />
+                <s-text>
+                  {[
+                    !data.smart.inSchedule
+                      ? t("coverage.smart.notThisLanguage")
+                      : data.smart.status.state !== "on"
+                        ? null
+                        : data.smart.nextCheck
+                          ? t("coverage.smart.next", { time: t("automatic.schedule.zone", { time: i18n.dateTimeIn(data.smart.nextCheck, data.smart.zone), zone: data.smart.zone }) })
+                          : data.smart.mode === "manual"
+                            ? t("coverage.smart.manual")
+                            : null,
+                    data.smart.inSchedule && data.smart.mode === "realtime" && data.smart.status.state === "on" ? t("coverage.smart.realtime") : null,
+                    data.smart.translating ? t("coverage.smart.translating", { count: data.smart.translating }) : null,
+                    data.smart.excluded ? t("coverage.smart.excluded", { count: data.smart.excluded }) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </s-text>
+                <s-link href="/app/settings/automatic">{t("automatic.action.options")}</s-link>
+              </s-stack>
+              <SmartStateBanner status={data.smart.status} zone={data.smart.zone} />
+            </s-stack>
+          </s-section>
+        ) : null}
+
+        {scanned ? (
+          <s-query-container>
+            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
+              <s-section heading={t("coverage.store.heading")}>
+                <s-stack direction="block" gap="small">
+                  <span className="lv-figure">{percentLabel(i18n, store.complete, store.total)}</span>
+                  {/* No bar before a language is read in full: an empty one would read "nothing to translate". */}
+                  {published.length > 0 && counted.length === 0 ? null : (
+                    <StateBar counts={store.counts} label={t("coverage.store.percentLabel")} i18n={i18n} height={10} />
+                  )}
+                  <s-text color="subdued">
+                    {published.length > 0 && counted.length === 0
+                      ? t("coverage.store.notMeasured")
+                      : !store.total
+                        ? t("coverage.store.nothing")
+                        : counted.length < published.length
+                          ? t("coverage.store.fieldsSome", { complete: i18n.number(store.complete), total: i18n.number(store.total), count: counted.length, published: published.length })
+                          : t("coverage.store.fields", { complete: i18n.number(store.complete), total: i18n.number(store.total) })}
+                  </s-text>
+                  <FieldStateList counts={store.counts} i18n={i18n} />
+                  {unreadable.length ? (
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <s-icon type="lock" color="subdued" size="small" />
+                      <s-text color="subdued">{t("coverage.store.denied", { count: unreadable.length })}</s-text>
+                      {accessHref(unreadable) ? <s-link href={accessHref(unreadable)!}>{t("coverage.types.allowAccess")}</s-link> : null}
+                    </s-stack>
+                  ) : null}
+                  {published.length === 0 && data.targets.length > 0 ? (
+                    <s-banner tone="info">
+                      <s-paragraph>{t("coverage.store.noPublished")}</s-paragraph>
+                    </s-banner>
+                  ) : null}
+                </s-stack>
+              </s-section>
+              <s-section heading={t("coverage.next.heading")}>
+                <s-stack direction="block" gap="small">
+                  {step ? (
+                    <>
+                      <s-paragraph>{step.text}</s-paragraph>
+                      {/* Counting again is the page's own button. */}
+                      {step.action ? (
+                        <s-stack direction="inline">
+                          <Button href={step.action.href} variant="primary">
+                            {step.action.label}
+                          </Button>
+                        </s-stack>
+                      ) : null}
+                    </>
+                  ) : (
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <s-icon type="check-circle-filled" tone="success" size="small" />
+                      <s-text>{t("coverage.next.done")}</s-text>
+                    </s-stack>
+                  )}
+                </s-stack>
+              </s-section>
             </s-grid>
           </s-query-container>
-        </s-section>
-      ) : null}
-      {data.markets.selected && data.targets.length === 0 ? (
-        <s-section>
-          <s-paragraph>{t("coverage.filter.noLanguages")}</s-paragraph>
-        </s-section>
-      ) : null}
+        ) : null}
 
-      {scanned && selected ? (
-        <s-section heading={t("coverage.types.heading", { language: selectedName })} padding="none">
-          <s-table>
-            <s-table-header-row>
-              <s-table-header listSlot="primary">{t("coverage.types.type")}</s-table-header>
-              <s-table-header>{t("coverage.types.coverage")}</s-table-header>
-              <s-table-header format="numeric">{t("coverage.items.fields")}</s-table-header>
-              <s-table-header>{t("coverage.types.actions")}</s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {visibleTypes.map((type, i) => {
-                const tally = types.get(type) ?? EMPTY;
-                const seg = segmentOf(type);
-                const excluded = HEADLINE_EXCLUDED_TYPES[type];
-                const gaps = tally.counts.missing + tally.counts.outdated + tally.counts.failed;
-                const status = !seg
-                  ? t("coverage.types.notScanned")
-                  : seg.status === "DENIED"
-                    ? t("coverage.types.denied")
-                    : seg.status === "FAILED" || (seg.status === "SCANNING" && !scanning)
-                      ? t("coverage.types.failed")
-                      : seg.status === "SCANNING"
-                        ? t("coverage.types.scanning")
-                        : null;
-                return (
-                  <s-table-row key={type}>
-                    <s-table-cell>
-                      <s-stack direction="block" gap="small-300">
-                        <s-text>{kindLabel(i18n, type)}</s-text>
-                        {excluded ? <s-text color="subdued">{t("coverage.types.excluded")}</s-text> : null}
-                        {status ? <s-text color="subdued">{status}</s-text> : null}
-                        {seg?.status === "DENIED" && isContentType(type) ? <s-link href={`/app/content/${CONTENT_TYPES[type].slug}`}>{t("coverage.types.allowAccess")}</s-link> : null}
-                      </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      {tally.total ? (
-                        <CoverageMeter counts={tally.counts} complete={tally.complete} total={tally.total} label={kindLabel(i18n, type)} i18n={i18n} />
-                      ) : (
-                        <s-text color="subdued">{seg?.status === "SCANNED" ? t("coverage.types.empty") : "—"}</s-text>
-                      )}
-                    </s-table-cell>
-                    <s-table-cell>{tally.total ? t("coverage.types.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) }) : "—"}</s-table-cell>
-                    <s-table-cell>
-                      <s-stack direction="inline" gap="small" alignItems="center">
-                        {tally.total > tally.complete ? <s-link href={itemsHref({ lang: selected, type })}>{t("coverage.types.showItems")}</s-link> : null}
-                        {gaps > 0 && data.bulkTypes.includes(type) ? (
-                          <fixer.Form method="post">
-                            <input type="hidden" name="intent" value="translate" />
-                            <input type="hidden" name="idempotencyKey" value={`${data.idempotencyKey}-${i}`} />
-                            <input type="hidden" name="locale" value={selected} />
-                            <input type="hidden" name="resourceType" value={type} />
+        {/* One language at a time, as on the Content page: its chip, then its figure and states (each opening its texts). */}
+        {scanned && data.targets.length && selectedTarget ? (
+          <s-section heading={t("coverage.languages.heading")}>
+            <s-stack direction="block" gap="base">
+              <LanguageChips data={data} i18n={i18n} measured={measured} headline={headline} hrefFor={languageHref} />
+              <s-box padding="base" border="base" borderRadius="large-100">
+                <s-stack direction="block" gap="small">
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <Flag country={localeCountry(selectedTarget.locale, data.marketCountries)} fallback={selectedTarget.locale} size={20} />
+                    <h3 className="lv-h3">{upperFirst(selectedName)}</h3>
+                    {selectedTarget.published ? (
+                      <s-badge tone="success">{t("coverage.languages.published")}</s-badge>
+                    ) : (
+                      <s-badge tone="warning" icon="hide">
+                        {t("coverage.languages.unpublished")}
+                      </s-badge>
+                    )}
+                  </s-stack>
+                  {measured.has(selectedTarget.locale) ? (
+                    <>
+                      <span className="lv-figure">{percentLabel(i18n, selectedTally.complete, selectedTally.total)}</span>
+                      <StateBar counts={selectedTally.counts} label={t("coverage.languages.progressLabel", { language: selectedName })} i18n={i18n} />
+                      <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(selectedTally.complete), total: i18n.number(selectedTally.total) })}</s-text>
+                    </>
+                  ) : (
+                    // A share of what was read so far could read as 100 %: no figure until every type is read.
+                    <s-text color="subdued">{t("coverage.languages.notMeasured")}</s-text>
+                  )}
+                  {!selectedTarget.published ? <s-text color="subdued">{t("coverage.languages.unpublishedHelp")}</s-text> : null}
+                  <FieldStateLinks counts={selectedTally.counts} i18n={i18n} states={["review", "draft", "failed", "outdated", "missing"]} hrefFor={(state) => itemsHref({ lang: selectedTarget.locale, state })} />
+                  <span>
+                    <s-link href={languagePath(selectedTarget.locale)}>{t("content.language.next", { language: selectedName })}</s-link>
+                  </span>
+                </s-stack>
+              </s-box>
+            </s-stack>
+          </s-section>
+        ) : null}
+        {data.markets.selected && data.targets.length === 0 ? (
+          <s-section>
+            <s-paragraph>{t("coverage.filter.noLanguages")}</s-paragraph>
+          </s-section>
+        ) : null}
+
+        {scanned && selected ? (
+          <s-section heading={t("coverage.types.heading", { language: selectedName })} padding="none">
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">{t("coverage.types.type")}</s-table-header>
+                <s-table-header>{t("coverage.types.coverage")}</s-table-header>
+                <s-table-header format="numeric">{t("coverage.items.fields")}</s-table-header>
+                <s-table-header>{t("coverage.types.actions")}</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {visibleTypes.map((type) => {
+                  const tally = types.get(type) ?? EMPTY;
+                  const seg = segmentOf(type);
+                  const excluded = HEADLINE_EXCLUDED_TYPES[type];
+                  const gaps = tally.counts.missing + tally.counts.outdated + tally.counts.failed;
+                  const name = contentTypeName(i18n, type);
+                  const status = !seg
+                    ? t("coverage.types.notScanned")
+                    : seg.status === "DENIED"
+                      ? t("coverage.types.denied")
+                      : seg.status === "FAILED" || (seg.status === "SCANNING" && !scanning)
+                        ? t("coverage.types.failed")
+                        : seg.status === "SCANNING"
+                          ? t("coverage.types.scanning")
+                          : null;
+                  const confirm = gaps > 0 ? confirmFor(type) : null;
+                  return (
+                    <s-table-row key={type}>
+                      <s-table-cell>
+                        <s-stack direction="block" gap="small-300">
+                          <s-text>{name}</s-text>
+                          {excluded ? <s-text color="subdued">{t("coverage.types.excluded")}</s-text> : null}
+                          {status ? <s-text color="subdued">{status}</s-text> : null}
+                          {seg?.status === "DENIED" && isContentType(type) ? <s-link href={`/app/content/${CONTENT_TYPES[type].slug}`}>{t("coverage.types.allowAccess")}</s-link> : null}
+                        </s-stack>
+                      </s-table-cell>
+                      <s-table-cell>
+                        {tally.total ? (
+                          <CoverageMeter counts={tally.counts} complete={tally.complete} total={tally.total} label={name} i18n={i18n} />
+                        ) : (
+                          <s-text color="subdued">{seg?.status === "SCANNED" ? t("coverage.types.empty") : "—"}</s-text>
+                        )}
+                      </s-table-cell>
+                      <s-table-cell>{tally.total ? t("coverage.types.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) }) : "—"}</s-table-cell>
+                      <s-table-cell>
+                        <s-stack direction="inline" gap="small" alignItems="center">
+                          {tally.total > tally.complete ? <s-link href={itemsHref({ lang: selected, type })}>{t("coverage.types.showItems")}</s-link> : null}
+                          {confirm ? (
+                            // Asks first, as everywhere bulk translation starts (what, approval or live, AI characters).
                             <Button
-                              type="submit"
-                              variant="secondary"
+                              variant="tertiary"
+                              icon="wand"
                               disabled={!data.canTranslate || !data.jobsAvailable}
-                              accessibilityLabel={`${t("coverage.types.translate")}: ${kindLabel(i18n, type)}, ${selectedName}`}
+                              commandFor={CONFIRM_ID}
+                              command="--show"
+                              accessibilityLabel={`${t("coverage.types.translate")}: ${name}, ${selectedName}`}
+                              onClick={() => setPending({ type, index: data.coverageTypes.indexOf(type), view: confirm })}
                             >
                               {t("coverage.types.translate")}
                             </Button>
-                          </fixer.Form>
-                        ) : null}
-                        {tally.counts.review + tally.counts.draft > 0 ? (
-                          <s-link href={`/app/review?lang=${encodeURIComponent(selected)}${isResourceKind(type) ? `&type=${type}` : ""}`}>{t("coverage.types.reviewDrafts")}</s-link>
-                        ) : null}
-                      </s-stack>
-                    </s-table-cell>
-                  </s-table-row>
-                );
-              })}
-            </s-table-body>
-          </s-table>
-          <s-box padding="base">
-            <s-stack direction="block" gap="small-200">
-              {hiddenTypes > 0 ? <s-text color="subdued">{t("coverage.types.hideEmpty", { count: hiddenTypes })}</s-text> : null}
-              {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "theme") ? <s-text color="subdued">{t("coverage.types.excludedHelp.theme")}</s-text> : null}
-              {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "notifications") ? (
-                <s-text color="subdued">{t("coverage.types.excludedHelp.notifications")}</s-text>
-              ) : null}
-            </s-stack>
-          </s-box>
-        </s-section>
-      ) : null}
-
-      {/* Field groups add up every type: only for a language read in full. */}
-      {scanned && selected && measured.has(selected) && groups.size ? (
-        <s-section heading={t("coverage.groups.heading", { language: selectedName })} padding="none">
-          <s-table>
-            <s-table-header-row>
-              <s-table-header listSlot="primary">{t("coverage.groups.field")}</s-table-header>
-              <s-table-header>{t("coverage.types.coverage")}</s-table-header>
-              <s-table-header format="numeric">{t("coverage.items.fields")}</s-table-header>
-              <s-table-header>{t("coverage.types.actions")}</s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {FIELD_GROUPS.filter((g) => (groups.get(g)?.total ?? 0) > 0).map((g) => {
-                const tally = groups.get(g)!;
-                return (
-                  <s-table-row key={g}>
-                    <s-table-cell>
-                      <s-stack direction="block" gap="small-300">
-                        <s-text>{t(`coverage.group.${g}`)}</s-text>
-                        {g === "url" ? <s-text color="subdued">{t("coverage.types.excluded")}</s-text> : null}
-                      </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <CoverageMeter counts={tally.counts} complete={tally.complete} total={tally.total} label={t(`coverage.group.${g}`)} i18n={i18n} />
-                    </s-table-cell>
-                    <s-table-cell>{t("coverage.types.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) })}</s-table-cell>
-                    <s-table-cell>
-                      {tally.total > tally.complete ? <s-link href={itemsHref({ lang: selected, group: g })}>{t("coverage.types.showItems")}</s-link> : null}
-                    </s-table-cell>
-                  </s-table-row>
-                );
-              })}
-            </s-table-body>
-          </s-table>
-          {groups.has("url") ? (
+                          ) : null}
+                          {tally.counts.review + tally.counts.draft > 0 ? (
+                            <s-link href={`/app/review?lang=${encodeURIComponent(selected)}${isResourceKind(type) ? `&type=${type}` : ""}`}>{t("coverage.types.reviewDrafts")}</s-link>
+                          ) : null}
+                        </s-stack>
+                      </s-table-cell>
+                    </s-table-row>
+                  );
+                })}
+              </s-table-body>
+            </s-table>
             <s-box padding="base">
-              <s-text color="subdued">{t("coverage.groups.urlNote")}</s-text>
+              <s-stack direction="block" gap="small-200">
+                {!data.canTranslate ? <s-text color="subdued">{t("coverage.items.cantTranslate")}</s-text> : null}
+                {hiddenTypes > 0 ? <s-text color="subdued">{t("coverage.types.hideEmpty", { count: hiddenTypes })}</s-text> : null}
+                {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "theme") ? <s-text color="subdued">{t("coverage.types.excludedHelp.theme")}</s-text> : null}
+                {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "notifications") ? (
+                  <s-text color="subdued">{t("coverage.types.excludedHelp.notifications")}</s-text>
+                ) : null}
+              </s-stack>
             </s-box>
-          ) : null}
-        </s-section>
-      ) : null}
+          </s-section>
+        ) : null}
 
-      {scanned ? (
-        <s-section heading={t("coverage.seo.heading")}>
-          <s-stack direction="block" gap="small">
-            {(() => {
-              const shown = new Set(data.targets.map((l) => l.locale));
-              const lines = [
-                ...data.seo.missingSourceTitle
-                  .filter((m) => shown.has(m.locale) && m.locale === selected)
-                  .map((m) =>
-                    t("coverage.seo.noSourceTitle", {
-                      language: languageOf(m.locale),
-                      count: m.count,
-                      kind: isResourceKind(m.resourceType) ? kindPlural(i18n, m.resourceType) : t("coverage.seo.items"),
+        {/* Field groups add up every type: only for a language read in full. */}
+        {scanned && selected && measured.has(selected) && groups.size ? (
+          <s-section heading={t("coverage.groups.heading", { language: selectedName })} padding="none">
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">{t("coverage.groups.field")}</s-table-header>
+                <s-table-header>{t("coverage.types.coverage")}</s-table-header>
+                <s-table-header format="numeric">{t("coverage.items.fields")}</s-table-header>
+                <s-table-header>{t("coverage.types.actions")}</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {FIELD_GROUPS.filter((g) => (groups.get(g)?.total ?? 0) > 0).map((g) => {
+                  const tally = groups.get(g)!;
+                  return (
+                    <s-table-row key={g}>
+                      <s-table-cell>
+                        <s-stack direction="block" gap="small-300">
+                          <s-text>{t(`coverage.group.${g}`)}</s-text>
+                          {g === "url" ? <s-text color="subdued">{t("coverage.types.excluded")}</s-text> : null}
+                        </s-stack>
+                      </s-table-cell>
+                      <s-table-cell>
+                        <CoverageMeter counts={tally.counts} complete={tally.complete} total={tally.total} label={t(`coverage.group.${g}`)} i18n={i18n} />
+                      </s-table-cell>
+                      <s-table-cell>{t("coverage.types.fields", { complete: i18n.number(tally.complete), total: i18n.number(tally.total) })}</s-table-cell>
+                      <s-table-cell>
+                        {tally.total > tally.complete ? <s-link href={itemsHref({ lang: selected, group: g })}>{t("coverage.types.showItems")}</s-link> : null}
+                      </s-table-cell>
+                    </s-table-row>
+                  );
+                })}
+              </s-table-body>
+            </s-table>
+            {groups.has("url") ? (
+              <s-box padding="base">
+                <s-text color="subdued">{t("coverage.groups.urlNote")}</s-text>
+              </s-box>
+            ) : null}
+          </s-section>
+        ) : null}
+
+        {scanned ? (
+          <s-section heading={t("coverage.seo.heading")}>
+            <s-stack direction="block" gap="small">
+              {(() => {
+                const shown = new Set(data.targets.map((l) => l.locale));
+                const lines = [
+                  ...data.seo.missingSourceTitle
+                    .filter((m) => shown.has(m.locale) && m.locale === selected)
+                    .map((m) =>
+                      t("coverage.seo.noSourceTitle", {
+                        language: languageOf(m.locale),
+                        count: m.count,
+                        kind: isResourceKind(m.resourceType) ? kindPlural(i18n, m.resourceType) : t("coverage.seo.items"),
+                      }),
+                    ),
+                  ...Object.entries(data.seo.duplicateTitles)
+                    .filter(([locale, count]) => shown.has(locale) && count > 0)
+                    .map(([locale, count]) => t("coverage.seo.duplicates", { language: languageOf(locale), count })),
+                  ...[...new Set(data.seo.issues.filter((s) => shown.has(s.locale)).map((s) => s.locale))].map((locale) =>
+                    t("coverage.seo.toCheck", {
+                      language: languageOf(locale),
+                      count: data.seo.issues.filter((s) => s.locale === locale).reduce((n, s) => n + s.count, 0),
                     }),
                   ),
-                ...Object.entries(data.seo.duplicateTitles)
-                  .filter(([locale, count]) => shown.has(locale) && count > 0)
-                  .map(([locale, count]) => t("coverage.seo.duplicates", { language: languageOf(locale), count })),
-                ...[...new Set(data.seo.issues.filter((s) => shown.has(s.locale)).map((s) => s.locale))].map((locale) =>
-                  t("coverage.seo.toCheck", {
-                    language: languageOf(locale),
-                    count: data.seo.issues.filter((s) => s.locale === locale).reduce((n, s) => n + s.count, 0),
-                  }),
-                ),
-              ];
-              return lines.length ? lines.map((line) => <s-paragraph key={line}>{line}</s-paragraph>) : <s-paragraph>{t("coverage.seo.none")}</s-paragraph>;
-            })()}
-          </s-stack>
-        </s-section>
-      ) : null}
+                ];
+                return lines.length ? (
+                  lines.map((line) => (
+                    <s-grid key={line} gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
+                      <s-icon type="alert-triangle" tone="caution" size="small" />
+                      <s-text>{line}</s-text>
+                    </s-grid>
+                  ))
+                ) : (
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <s-icon type="check-circle-filled" tone="success" size="small" />
+                    <s-text>{t("coverage.seo.none")}</s-text>
+                  </s-stack>
+                );
+              })()}
+            </s-stack>
+          </s-section>
+        ) : null}
 
-      <s-section>
-        <details>
-          <summary style={{ cursor: "pointer", fontWeight: 600, minHeight: 24 }}>{t("coverage.rules.heading")}</summary>
-          <s-box paddingBlockStart="small">
+        <s-section>
+          <Disclosure summary={t("coverage.rules.heading")}>
             <s-unordered-list>
               <s-list-item>{t("coverage.scan.live")}</s-list-item>
               <s-list-item>{t("coverage.rules.fields")}</s-list-item>
@@ -532,9 +667,25 @@ export default function Coverage() {
               <s-list-item>{t("coverage.rules.excluded")}</s-list-item>
               <s-list-item>{t("coverage.rules.store")}</s-list-item>
             </s-unordered-list>
-          </s-box>
-        </details>
-      </s-section>
+          </Disclosure>
+        </s-section>
+      </s-stack>
+      <CoverageConfirm
+        id={CONFIRM_ID}
+        target={pending?.view ?? null}
+        languageName={selectedName}
+        publishMode={data.bulk.publishMode}
+        aiRemaining={data.bulk.aiRemaining}
+        i18n={i18n}
+        onConfirm={() =>
+          pending &&
+          selected &&
+          fixer.submit(
+            { intent: "translate", idempotencyKey: `${data.idempotencyKey}-${pending.index}`, locale: selected, resourceType: pending.type },
+            { method: "post" },
+          )
+        }
+      />
     </s-page>
   );
 }

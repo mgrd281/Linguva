@@ -7,7 +7,9 @@ import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
 test("the operator's store sees each DeepL key's quota as a ring @responsive", async ({ page }) => {
   await openApp(page, "owner", "/app");
-  const card = page.locator("s-section").filter({ has: page.getByRole("heading", { name: "DeepL quota" }) });
+  // A card named by its heading, like the Overview's others.
+  const card = page.getByRole("region", { name: "DeepL quota", exact: true });
+  await expect(card.getByRole("heading", { level: 2, name: "DeepL quota" })).toBeVisible();
   await expect(card.getByText("Only you see this")).toBeVisible();
   await expect(card.getByText("Together: 800,000 of 2,000,000 characters left")).toBeVisible();
 

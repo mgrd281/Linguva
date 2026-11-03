@@ -8,7 +8,10 @@
  * cards, so the grid keeps to what there is to translate.
  *
  * On a phone each card is one compact row with the percentage beside the
- * name, so a store selling to many countries stays short.
+ * name, so a store selling to many countries stays short. Every card keeps
+ * its edge there too (CARD), names are semibold (Strong), and a language's
+ * state is one badge with its icon wherever it shows: Original, Hidden, Not
+ * offered, Not set up.
  */
 import type { ReactNode } from "react";
 import type { I18n } from "../i18n/i18n";
@@ -18,10 +21,12 @@ import { localeCountry } from "../lib/flags";
 import { languagePath } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
 import { percentLabel } from "./Coverage";
+import { CARD } from "./ContentTiles";
 import { Flag } from "./Flag";
 import { StateIcon, TextStateBar, textCounts } from "./ItemStates";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { Button } from "./Button";
+import { Strong } from "./Type";
 
 /** A language of the store as the Overview loads it (one per additional language). */
 export interface PlaceLanguage {
@@ -51,14 +56,13 @@ interface PlaceContext {
   anyCounted: boolean;
 }
 
+/** Shopify's language settings: the Overview's one label and icon for them (app._index.tsx, languageSettings). */
 const LANGUAGE_SETTINGS = "shopify://admin/settings/languages";
 
 /** Narrow (a phone): one compact row per card; wide: figure and bar below the name. */
 const COMPACT = "@container (inline-size > 640px) none, auto";
 const WIDE = "@container (inline-size > 640px) auto, none";
 const CARD_GRID = "@container (inline-size > 560px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr";
-const BIG_FIGURE = { fontSize: 24, lineHeight: "28px", fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" } as const;
-const ROW_FIGURE = { fontWeight: 650, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" } as const;
 
 const counted = (language: PlaceLanguage | undefined): language is PlaceLanguage & { counts: StateCounts } =>
   Boolean(language && language.measured && language.total > 0 && language.counts);
@@ -73,12 +77,21 @@ function percentOf(i18n: I18n, language: PlaceLanguage | undefined) {
   return counted(language) ? percentLabel(i18n, language.complete, language.total) : "—";
 }
 
+/** Why customers can't choose a language there: it is hidden in the store, or that market doesn't offer it. */
+function UnavailableBadge({ reason, i18n }: { reason: CountryLanguage["reason"]; i18n: I18n }) {
+  return reason === "unpublished" ? (
+    <s-badge icon="hide">{i18n.t("language.hidden")}</s-badge>
+  ) : (
+    <s-badge icon="disabled">{i18n.t("overview.unavailable.notInMarketBadge")}</s-badge>
+  );
+}
+
 /** The big figure and what it means: "29 % translated into Danish", or why there is none. */
 function Figure({ language, caption, i18n }: { language: PlaceLanguage | undefined; caption: string; i18n: I18n }) {
   const { t } = i18n;
   return (
     <s-stack direction="inline" gap="small-200" alignItems="baseline">
-      <span style={BIG_FIGURE}>{percentOf(i18n, language)}</span>
+      <span className="lv-figure">{percentOf(i18n, language)}</span>
       <s-text color="subdued">{counted(language) ? caption : language?.measured ? t("language.hero.nothing") : t("language.hero.notCounted")}</s-text>
     </s-stack>
   );
@@ -131,40 +144,36 @@ function PlaceCard(props: { href: string; flag: ReactNode; title: string; subtit
   const { i18n } = props.ctx;
   const language = props.language;
   return (
-    <s-section padding="none">
-      <s-clickable href={props.href} padding="base" borderRadius="large-100">
-        <s-stack direction="block" gap="small-200">
-          <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto auto" gap="small-200" alignItems="center">
-            {props.flag}
-            <s-stack direction="block" gap="small-500">
-              <s-stack direction="inline" gap="small-200" alignItems="center">
-                <s-text type="strong">{props.title}</s-text>
-                {props.badge}
-              </s-stack>
-              {props.subtitle ? <s-text color="subdued">{props.subtitle}</s-text> : null}
+    <s-clickable href={props.href} {...CARD} padding="base">
+      <s-stack direction="block" gap="small-200">
+        <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto auto" gap="small-200" alignItems="center">
+          {props.flag}
+          <s-stack direction="block" gap="small-500">
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <Strong>{props.title}</Strong>
+              {props.badge}
             </s-stack>
-            <s-box display={COMPACT}>
-              {props.ctx.anyCounted ? <span style={{ ...ROW_FIGURE, fontSize: 17 }}>{percentOf(i18n, language)}</span> : null}
-            </s-box>
-            <s-icon type="chevron-right" color="subdued" />
-          </s-grid>
-          {props.ctx.anyCounted ? (
-            <s-box display={WIDE}>
-              <s-stack direction="block" gap="small-200">
-                <Figure language={language} caption={props.caption} i18n={i18n} />
-                {counted(language) ? (
-                  // The figure and the status line say it in words.
-                  <div aria-hidden="true">
-                    <TextStateBar counts={language.counts} label={props.title} i18n={i18n} />
-                  </div>
-                ) : null}
-              </s-stack>
-            </s-box>
-          ) : null}
-          <StatusLine language={language} ctx={props.ctx} />
-        </s-stack>
-      </s-clickable>
-    </s-section>
+            {props.subtitle ? <s-text color="subdued">{props.subtitle}</s-text> : null}
+          </s-stack>
+          <s-box display={COMPACT}>{props.ctx.anyCounted ? <span className="lv-figure-row lv-ov-compact-figure">{percentOf(i18n, language)}</span> : null}</s-box>
+          <s-icon type="chevron-right" color="subdued" />
+        </s-grid>
+        {props.ctx.anyCounted ? (
+          <s-box display={WIDE}>
+            <s-stack direction="block" gap="small-200">
+              <Figure language={language} caption={props.caption} i18n={i18n} />
+              {counted(language) ? (
+                // The figure and the status line say it in words.
+                <div aria-hidden="true">
+                  <TextStateBar counts={language.counts} label={props.title} i18n={i18n} />
+                </div>
+              ) : null}
+            </s-stack>
+          </s-box>
+        ) : null}
+        <StatusLine language={language} ctx={props.ctx} />
+      </s-stack>
+    </s-clickable>
   );
 }
 
@@ -178,27 +187,27 @@ function LanguageRow({ entry, ctx }: { entry: CountryLanguage; ctx: PlaceContext
     return (
       <s-box padding="small-200 base" minBlockSize="44px">
         <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="center" minBlockSize="28px">
-          <s-text type="strong">{name}</s-text>
+          <Strong>{name}</Strong>
           {entry.primary ? (
             <s-badge tone="success" icon="check-circle">
               {t("overview.card.original")}
             </s-badge>
           ) : (
-            <s-text color="subdued">{t("overview.card.notAdded")}</s-text>
+            <s-badge icon="minus-circle">{t("overview.card.notAdded")}</s-badge>
           )}
         </s-grid>
       </s-box>
     );
   }
-  const state = entry.available ? null : entry.reason === "unpublished" ? t("language.hidden") : t("overview.card.notInMarket");
+  const unavailable = !entry.available;
   return (
     <s-clickable href={languagePath(entry.locale)} padding="small-200 base" minBlockSize="44px">
       <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 64px auto auto, 1fr auto auto" gap="small-200" alignItems="center" minBlockSize="28px">
-        <s-text type="strong">{name}</s-text>
+        <Strong>{name}</Strong>
         <s-box display={WIDE}>
-          <div aria-hidden="true">{counted(language) && !state ? <TextStateBar counts={language.counts} label={name} i18n={i18n} height={6} /> : null}</div>
+          <div aria-hidden="true">{counted(language) && !unavailable ? <TextStateBar counts={language.counts} label={name} i18n={i18n} height={6} /> : null}</div>
         </s-box>
-        {state ? <s-text color="subdued">{state}</s-text> : ctx.anyCounted ? <span style={ROW_FIGURE}>{percentOf(i18n, language)}</span> : <span />}
+        {unavailable ? <UnavailableBadge reason={entry.reason} i18n={i18n} /> : ctx.anyCounted ? <span className="lv-figure-row">{percentOf(i18n, language)}</span> : <span />}
         <s-icon type="chevron-right" color="subdued" />
       </s-grid>
     </s-clickable>
@@ -210,25 +219,27 @@ function SeveralLanguagesCard({ country, ctx }: { country: CountryCoverage; ctx:
   const { i18n } = ctx;
   const name = i18n.country(country.code, country.name);
   return (
-    <s-section padding="none" accessibilityLabel={name}>
-      <s-box padding="base base small-200">
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
-          <Flag country={country.code} size={28} />
-          <s-stack direction="block" gap="small-500">
-            <s-text type="strong">{name}</s-text>
-            <s-text color="subdued">{i18n.t("overview.card.choose", { count: country.languages.length })}</s-text>
-          </s-stack>
-        </s-grid>
+    <section aria-label={name}>
+      <s-box {...CARD} overflow="hidden">
+        <s-box padding="base base small-200">
+          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
+            <Flag country={country.code} size={28} />
+            <s-stack direction="block" gap="small-500">
+              <Strong>{name}</Strong>
+              <s-text color="subdued">{i18n.t("overview.card.several", { count: country.languages.length })}</s-text>
+            </s-stack>
+          </s-grid>
+        </s-box>
+        <ul style={PLAIN_LIST}>
+          {country.languages.map((entry) => (
+            <li key={entry.locale}>
+              <s-divider />
+              <LanguageRow entry={entry} ctx={ctx} />
+            </li>
+          ))}
+        </ul>
       </s-box>
-      <ul style={PLAIN_LIST}>
-        {country.languages.map((entry) => (
-          <li key={entry.locale}>
-            <s-divider />
-            <LanguageRow entry={entry} ctx={ctx} />
-          </li>
-        ))}
-      </ul>
-    </s-section>
+    </section>
   );
 }
 
@@ -243,8 +254,12 @@ function Flags({ codes }: { codes: readonly string[] }) {
   );
 }
 
-/** Countries without any language of their own in the store: what customers see there, and where to add it. */
-function MissingCard({ countries, ctx, free, max }: { countries: CountryCoverage[]; ctx: PlaceContext; free: number; max: number }) {
+/**
+ * Countries without any language of their own in the store: what customers
+ * see there, and where to add it, unless the next step above already offers
+ * that (`offered`): then the card only names them.
+ */
+function MissingCard({ countries, ctx, free, max, offered }: { countries: CountryCoverage[]; ctx: PlaceContext; free: number; max: number; offered: boolean }) {
   const { i18n } = ctx;
   const { t } = i18n;
   const wanted = new Set(countries.flatMap((c) => c.languages.map((l) => l.locale)));
@@ -253,39 +268,41 @@ function MissingCard({ countries, ctx, free, max }: { countries: CountryCoverage
       ? t("overview.missing.one", { primary: ctx.primary, language: languageList(i18n, countries[0]!.languages.map((l) => i18n.language(l.locale))) })
       : t("overview.missing.many", { primary: ctx.primary });
   return (
-    <s-section accessibilityLabel={t("overview.missing.badge")}>
-      <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-200">
-          <s-stack direction="inline">
-            <s-badge tone="warning" icon="alert-triangle">
-              {t("overview.missing.badge")}
-            </s-badge>
+    <section aria-label={t("overview.missing.badge")}>
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-stack direction="block" gap="small-200">
+            <s-stack direction="inline">
+              <s-badge tone="warning" icon="alert-triangle">
+                {t("overview.missing.badge")}
+              </s-badge>
+            </s-stack>
+            <s-text color="subdued">{detail}</s-text>
           </s-stack>
-          <s-text color="subdued">{detail}</s-text>
+          <s-grid gridTemplateColumns="@container (inline-size > 300px) 1fr 1fr, (inline-size > 560px) 1fr 1fr 1fr, 1fr" gap="base">
+            {countries.map((country) => (
+              <s-grid key={country.code} gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
+                <Flag country={country.code} size={28} />
+                <s-stack direction="block" gap="small-500">
+                  <Strong>{i18n.country(country.code, country.name)}</Strong>
+                  <s-text color="subdued">{languageList(i18n, country.languages.map((l) => upperFirst(i18n.language(l.locale))))}</s-text>
+                </s-stack>
+              </s-grid>
+            ))}
+          </s-grid>
+          {offered ? null : free > 0 ? (
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <Button href={LANGUAGE_SETTINGS} target="_top" icon="language">
+                {t("overview.checklist.languageSettings")}
+              </Button>
+              {free < wanted.size ? <s-text color="subdued">{t("overview.countries.capacity", { max, count: free })}</s-text> : null}
+            </s-stack>
+          ) : (
+            <s-text color="subdued">{t("languages.limit.body", { max })}</s-text>
+          )}
         </s-stack>
-        <s-grid gridTemplateColumns="@container (inline-size > 300px) 1fr 1fr, (inline-size > 560px) 1fr 1fr 1fr, 1fr" gap="base">
-          {countries.map((country) => (
-            <s-grid key={country.code} gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
-              <Flag country={country.code} size={28} />
-              <s-stack direction="block" gap="small-500">
-                <s-text type="strong">{i18n.country(country.code, country.name)}</s-text>
-                <s-text color="subdued">{languageList(i18n, country.languages.map((l) => upperFirst(i18n.language(l.locale))))}</s-text>
-              </s-stack>
-            </s-grid>
-          ))}
-        </s-grid>
-        {free > 0 ? (
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <Button href={LANGUAGE_SETTINGS} target="_top" icon="plus">
-              {t("overview.missing.action")}
-            </Button>
-            {free < wanted.size ? <s-text color="subdued">{t("overview.countries.capacity", { max, count: free })}</s-text> : null}
-          </s-stack>
-        ) : (
-          <s-text color="subdued">{t("languages.limit.body", { max })}</s-text>
-        )}
-      </s-stack>
-    </s-section>
+      </s-box>
+    </section>
   );
 }
 
@@ -298,23 +315,21 @@ function UnavailableRow({ countries, entry, ctx }: { countries: CountryCoverage[
   const hidden = entry.reason === "unpublished";
   const figure = counted(language) ? t("overview.unavailable.figure", { percent: percentOf(i18n, language) }) : ctx.anyCounted ? t("language.hero.notCounted") : "";
   return (
-    <s-section padding="none">
-      <s-clickable href={languagePath(entry.locale)} padding="base" borderRadius="large-100">
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="center">
-          <Flags codes={countries.map((c) => c.code)} />
-          <s-stack direction="block" gap="small-500">
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <s-text type="strong">{languageList(i18n, countries.map((c) => i18n.country(c.code, c.name)))}</s-text>
-              {hidden ? <s-badge icon="hide">{t("language.hidden")}</s-badge> : <s-badge>{t("overview.unavailable.notInMarketBadge")}</s-badge>}
-            </s-stack>
-            <s-text color="subdued">
-              {hidden ? t("overview.unavailable.hidden", { language: inSentence }) : t("overview.unavailable.notInMarket", { language: inSentence })} {figure}
-            </s-text>
+    <s-clickable href={languagePath(entry.locale)} {...CARD} padding="base">
+      <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="center">
+        <Flags codes={countries.map((c) => c.code)} />
+        <s-stack direction="block" gap="small-500">
+          <s-stack direction="inline" gap="small-200" alignItems="center">
+            <Strong>{languageList(i18n, countries.map((c) => i18n.country(c.code, c.name)))}</Strong>
+            <UnavailableBadge reason={entry.reason} i18n={i18n} />
           </s-stack>
-          <s-icon type="chevron-right" color="subdued" />
-        </s-grid>
-      </s-clickable>
-    </s-section>
+          <s-text color="subdued">
+            {hidden ? t("overview.unavailable.hidden", { language: inSentence }) : t("overview.unavailable.notInMarket", { language: inSentence })} {figure}
+          </s-text>
+        </s-stack>
+        <s-icon type="chevron-right" color="subdued" />
+      </s-grid>
+    </s-clickable>
   );
 }
 
@@ -323,18 +338,18 @@ function OriginalCard({ countries, ctx }: { countries: CountryCoverage[]; ctx: P
   const { i18n } = ctx;
   const { t } = i18n;
   return (
-    <s-section>
+    <s-box {...CARD} padding="base">
       <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="center">
         <Flags codes={countries.map((c) => c.code)} />
         <s-stack direction="block" gap="small-500">
-          <s-text type="strong">{languageList(i18n, countries.map((c) => i18n.country(c.code, c.name)))}</s-text>
+          <Strong>{languageList(i18n, countries.map((c) => i18n.country(c.code, c.name)))}</Strong>
           <s-text color="subdued">{t("overview.original.detail", { primary: ctx.primary })}</s-text>
         </s-stack>
         <s-badge tone="success" icon="check-circle">
           {t("overview.card.original")}
         </s-badge>
       </s-grid>
-    </s-section>
+    </s-box>
   );
 }
 
@@ -370,8 +385,13 @@ function context(props: PlacesProps): PlaceContext {
   };
 }
 
-/** Every country the store sells to, the least translated first. */
-export function CountryCards(props: PlacesProps & { countries: readonly CountryCoverage[]; freeLanguages: number; maxLanguages: number }) {
+/**
+ * Every country the store sells to, the least translated first.
+ * `languageFixOffered`: the next step above already opens Shopify's language
+ * settings to add the missing languages, so the countries without one don't
+ * repeat that button.
+ */
+export function CountryCards(props: PlacesProps & { countries: readonly CountryCoverage[]; freeLanguages: number; maxLanguages: number; languageFixOffered?: boolean }) {
   const ctx = context(props);
   const { i18n } = ctx;
   const groups = props.countries.map(group);
@@ -393,7 +413,7 @@ export function CountryCards(props: PlacesProps & { countries: readonly CountryC
   const original = of("original").map((g) => g.country);
   return (
     <s-stack direction="block" gap="base">
-      {missing.length ? <MissingCard countries={missing} ctx={ctx} free={props.freeLanguages} max={props.maxLanguages} /> : null}
+      {missing.length ? <MissingCard countries={missing} ctx={ctx} free={props.freeLanguages} max={props.maxLanguages} offered={props.languageFixOffered ?? false} /> : null}
       {cards.length ? (
         <s-grid gridTemplateColumns={CARD_GRID} gap="@container (inline-size > 640px) base, small-200" alignItems="start">
           {cards.map((card) => {

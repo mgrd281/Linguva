@@ -9,7 +9,7 @@ test.describe("empty states", () => {
   test("a store with only its primary language is guided to add one", async ({ page }) => {
     await openApp(page, "empty", "/app");
     // The next step is adding a language, as the primary action.
-    await expect(page.locator('s-section[heading="Next"]').getByText("Add a language")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Next", exact: true }).getByText("Add a language")).toBeVisible();
     await expect(page.locator('[data-button][data-variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
     await expect(page.getByText("Your store only has its original language (English).")).toBeVisible();
     await openApp(page, "empty", "/app/products");

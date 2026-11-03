@@ -9,7 +9,9 @@ import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from
 
 test("the operator's store sees the translation services: order, DeepL keys, an Azure and a Google tile", async ({ page }) => {
   await openApp(page, "owner", "/app");
-  const card = page.locator("s-section").filter({ has: page.getByRole("heading", { name: "Translation services" }) });
+  // A card named by its heading, like the Overview's others; translating is its icon (globe stands for countries).
+  const card = page.getByRole("region", { name: "Translation services", exact: true });
+  await expect(card.locator('.lv-icon-square s-icon[type="language-translate"]')).toHaveCount(1);
   await expect(card.getByText("Only you see this")).toBeVisible();
   await expect(card.getByText("Order: DeepL → Microsoft Azure → Google Cloud")).toBeVisible();
   await expect(card.getByRole("heading", { name: "DeepL keys" })).toBeVisible();

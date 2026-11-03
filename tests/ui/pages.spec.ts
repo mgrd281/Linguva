@@ -11,7 +11,7 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     path: "/app",
     check: async (page) => {
       // One next step, the only primary button: drafts wait in this store.
-      await expect(page.locator('s-section[heading="Next"]').getByText(/^Approve \d+ translations?$/)).toBeVisible();
+      await expect(page.getByRole("region", { name: "Next", exact: true }).getByText(/^Approve \d+ translations?$/)).toBeVisible();
       await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
       // Languages with their storefront state, each opening its page.
       await expect(page.getByRole("link", { name: /^Arabic Hidden/ })).toHaveAttribute("href", "/app/languages/ar");

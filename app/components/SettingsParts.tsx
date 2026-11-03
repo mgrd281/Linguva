@@ -230,8 +230,7 @@ export function OptionCard({
   return (
     <div role="group" aria-labelledby={id} style={{ position: "relative", isolation: "isolate", minWidth: 0 }}>
       <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: -1 }}>
-        <s-box background="base" border={current ? "none" : "base"} borderRadius="large-100" blockSize="100%" />
-        {current ? <div style={{ position: "absolute", inset: 0, borderRadius: 12, boxShadow: "inset 0 0 0 2px currentColor" }} /> : null}
+        {current ? <div className="lv-selected-frame" /> : <s-box background="base" border="base" borderRadius="large-100" blockSize="100%" />}
       </div>
       {choosable ? (
         <s-clickable

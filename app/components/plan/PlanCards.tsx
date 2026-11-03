@@ -205,10 +205,9 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
       style={{ position: "relative", isolation: "isolate", display: "grid", gridTemplateRows: "subgrid", gridRow: `span ${rows}`, rowGap: 16, padding: 16, minWidth: 0 }}
     >
       {/* The card's frame, behind its rows. The current plan's ring lies inside the frame, so its edges line up with
-          the other cards', and is drawn in the text's own colour (Polaris' dark ink, no colour of its own). */}
+          the other cards' (app/styles/ui.css .lv-selected-frame: blue, the colour of its "Your plan" badge). */}
       <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: -1 }}>
-        <s-box background="base" border={current ? "none" : "base"} borderRadius="large-100" blockSize="100%" />
-        {current ? <div style={{ position: "absolute", inset: 0, borderRadius: 12, boxShadow: "inset 0 0 0 2px currentColor" }} /> : null}
+        {current ? <div className="lv-selected-frame" /> : <s-box background="base" border="base" borderRadius="large-100" blockSize="100%" />}
       </div>
       {/* The sign, then each badge on its own: beside the sign at the right while it fits, else on the next line at
           the left. So a state badge ("Your plan", "Applies now", "from …") keeps its place and only a badge too wide

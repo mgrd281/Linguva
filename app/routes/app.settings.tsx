@@ -66,6 +66,7 @@ import {
   Actions,
   FactList,
   focusById,
+  focusSection,
   InlineNotice,
   LinkTiles,
   LockLine,
@@ -451,7 +452,7 @@ export default function Settings() {
   useEffect(() => {
     if (shown.current === current) return;
     shown.current = current;
-    showSection(sectionId(current));
+    focusSection(sectionId(current));
   }, [current]);
   // The cards' old addresses (/app/settings#settings-keys) open their section.
   const hasKeys = Boolean(data.ownKeys);
@@ -477,8 +478,8 @@ export default function Settings() {
   // way back to it now shows). More services allowed, or permission withdrawn: the permission's heading.
   useFreshResult(consentFetcher, (result) => {
     if (!(result && "granted" in result)) return;
-    if (!result.granted || result.extended) return showSection(sectionId("ai"));
-    if (jobParam || current === "changes") return showSection(sectionId(current));
+    if (!result.granted || result.extended) return focusSection(sectionId("ai"));
+    if (jobParam || current === "changes") return focusSection(sectionId(current));
     navigate(sectionHref("changes"));
   });
 
@@ -562,19 +563,6 @@ export default function Settings() {
       </s-query-container>
     </s-page>
   );
-}
-
-/**
- * Moves to a section that is now shown: focuses its heading, and scrolls only when the heading
- * isn't in view (a new address already starts at the top of the page).
- */
-function showSection(id: string) {
-  if (typeof document === "undefined") return;
-  const heading = document.getElementById(`${id}-heading`);
-  if (!heading) return;
-  heading.focus({ preventScroll: true });
-  const top = heading.getBoundingClientRect().top;
-  if (top < 0 || top > window.innerHeight - 48) document.getElementById(id)?.scrollIntoView({ block: "start" });
 }
 
 // ─── Translation services ─────────────────────────────────────────────────────

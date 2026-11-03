@@ -42,15 +42,17 @@ const SECTION_HEADING = { margin: 0, fontSize: 17, lineHeight: "24px", fontWeigh
 const FOCUS_TARGET = { outline: "none" } as const;
 
 /**
- * Moves to a card or a section: scrolls it into view and focuses its
- * heading, so the keyboard and screen readers continue there. No
- * navigation, so the page's data isn't loaded again.
+ * Moves to a section that is shown now: focuses its heading, so the keyboard
+ * and screen readers continue there, and scrolls only when the heading isn't
+ * in view (a new address already starts at the top of the page).
  */
-export function focusCard(id: string) {
+export function focusSection(id: string) {
   if (typeof document === "undefined") return;
-  const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  document.getElementById(`${id}-heading`)?.focus({ preventScroll: true });
+  const heading = document.getElementById(`${id}-heading`);
+  if (!heading) return;
+  heading.focus({ preventScroll: true });
+  const top = heading.getBoundingClientRect().top;
+  if (top < 0 || top > window.innerHeight - 48) document.getElementById(id)?.scrollIntoView({ block: "start" });
 }
 
 /** Focuses an element by id once it is on the page (after a switch, the newly current option). */

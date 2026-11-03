@@ -52,6 +52,7 @@ import { entitlementsFor } from "../lib/plans";
 import { CONTENT_TYPES, isContentType, stillWithoutAccess } from "../lib/resource-kinds";
 import { formatTime, MAX_TIMES_PER_DAY, nextOccurrence, normaliseSchedule, parseTime, WEEKDAYS } from "../lib/schedule";
 import { checkSpec, REALTIME_CHECK_MINUTE, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_PERSONAL_DATA_TYPES, SMART_TYPES, type SmartType } from "../lib/smart-auto";
+import { Button } from "../components/Button";
 
 const SAVE_BAR = "smart-auto-save-bar";
 const MODES = ["realtime", "daily", "weekly", "custom", "manual"] as const;
@@ -429,9 +430,9 @@ export default function SmartAutomatic() {
     <consentFetcher.Form method="post" action="/app/settings">
       <input type="hidden" name="intent" value="grant-consent" />
       <input type="hidden" name="consentTokens" value={data.engines.configured.join(",")} />
-      <s-button type="submit" variant={variant} {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
+      <Button type="submit" variant={variant} {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
         {t("settings.ai.allow")}
-      </s-button>
+      </Button>
     </consentFetcher.Form>
   );
 
@@ -449,53 +450,53 @@ export default function SmartAutomatic() {
           : { label: t("automatic.state.off"), icon: "minus-circle", tone: "neutral" };
   const heroActions = readOnly ? (
     <>
-      <s-button href="/app/plan">{t("automatic.upsell.cta")}</s-button>
+      <Button href="/app/plan">{t("automatic.upsell.cta")}</Button>
       {panel.status.state !== "off" ? (
-        <s-button onClick={() => act("turn-off")} {...loading("turn-off")}>
+        <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
           {t("automatic.action.turnOff")}
-        </s-button>
+        </Button>
       ) : null}
     </>
   ) : panel.status.state === "off" ? (
     canTurnOn ? (
       notConfigured ? (
-        <s-button variant={heroVariant} onClick={turnOnSubmit} {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
+        <Button variant={heroVariant} onClick={turnOnSubmit} {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
           {t("automatic.action.turnOnWithThese")}
-        </s-button>
+        </Button>
       ) : (
-        <s-button variant={heroVariant} onClick={() => act("turn-on", data.basicOn ? { replaceBasic: "true" } : {})} {...loading("turn-on")}>
+        <Button variant={heroVariant} onClick={() => act("turn-on", data.basicOn ? { replaceBasic: "true" } : {})} {...loading("turn-on")}>
           {t("automatic.action.turnOn")}
-        </s-button>
+        </Button>
       )
     ) : !data.consent ? (
       grantButton(heroVariant)
     ) : null
   ) : panel.status.state === "paused" ? (
     <>
-      <s-button variant={heroVariant} onClick={() => act("resume")} {...loading("resume")}>
+      <Button variant={heroVariant} onClick={() => act("resume")} {...loading("resume")}>
         {t("automatic.action.resume")}
-      </s-button>
-      <s-button onClick={() => act("turn-off")} {...loading("turn-off")}>
+      </Button>
+      <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
         {t("automatic.action.turnOff")}
-      </s-button>
+      </Button>
     </>
   ) : panel.status.state === "on" ? (
     <>
-      <s-button variant={heroVariant} onClick={() => act("check-now", { key: data.checkKey })} {...loading("check-now")}>
+      <Button variant={heroVariant} onClick={() => act("check-now", { key: data.checkKey })} {...loading("check-now")}>
         {t("automatic.action.checkNow")}
-      </s-button>
-      <s-button onClick={() => act("pause")} {...loading("pause")}>
+      </Button>
+      <Button onClick={() => act("pause")} {...loading("pause")}>
         {t("automatic.action.pause")}
-      </s-button>
-      <s-button onClick={() => act("turn-off")} {...loading("turn-off")}>
+      </Button>
+      <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
         {t("automatic.action.turnOff")}
-      </s-button>
+      </Button>
     </>
   ) : (
     // Waiting: the reason says what to do; turning off stays possible.
-    <s-button onClick={() => act("turn-off")} {...loading("turn-off")}>
+    <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
       {t("automatic.action.turnOff")}
-    </s-button>
+    </Button>
   );
 
   if (!data.entitled && !config) {
@@ -519,7 +520,7 @@ export default function SmartAutomatic() {
               ]}
             />
             <s-stack direction="inline">
-              <s-button href="/app/plan">{t("automatic.upsell.cta")}</s-button>
+              <Button href="/app/plan">{t("automatic.upsell.cta")}</Button>
             </s-stack>
           </SettingCard>
         </s-stack>
@@ -620,7 +621,7 @@ export default function SmartAutomatic() {
               {/* Next to the summary's grant button: what it agrees to. */}
               {!readOnly && panel.status.state === "off" && !data.consent ? consentNote : null}
               {panel.noAccess.length ? (
-                <InlineNotice icon="lock" heading={t("automatic.noAccess.heading")} actions={accessHref ? <s-button href={accessHref}>{t("coverage.types.allowAccess")}</s-button> : undefined}>
+                <InlineNotice icon="lock" heading={t("automatic.noAccess.heading")} actions={accessHref ? <Button href={accessHref}>{t("coverage.types.allowAccess")}</Button> : undefined}>
                   {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => kindLabel(i18n, type)), 4) })}
                 </InlineNotice>
               ) : null}
@@ -701,14 +702,14 @@ export default function SmartAutomatic() {
                             ) : null}
                             {/* Only while it runs: retried items would be cancelled again while paused or off. */}
                             {run.failed && panel.status.state === "on" && !readOnly ? (
-                              <s-button
+                              <Button
                                 variant="tertiary"
                                 accessibilityLabel={`${t("automatic.action.retryFailed")}: ${when}`}
                                 onClick={() => act("retry", { runId: run.id })}
                                 {...loading("retry", ["runId", run.id])}
                               >
                                 {t("automatic.action.retryFailed")}
-                              </s-button>
+                              </Button>
                             ) : null}
                             {run.jobs.slice(0, 3).map((job) => (
                               <s-link key={job.id} href={`/app/jobs/${job.id}`}>
@@ -741,14 +742,14 @@ export default function SmartAutomatic() {
                       <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
                         <s-icon type="hide" color="subdued" />
                         {e.href ? <s-link href={e.href}>{name}</s-link> : <s-text>{e.resourceGid}</s-text>}
-                        <s-button
+                        <Button
                           variant="tertiary"
                           accessibilityLabel={`${t("automatic.action.remove")}: ${name}`}
                           onClick={() => act("remove-exclusion", { resourceGid: e.resourceGid })}
                           {...loading("remove-exclusion", ["resourceGid", e.resourceGid])}
                         >
                           {t("automatic.action.remove")}
-                        </s-button>
+                        </Button>
                       </s-grid>
                     </s-box>
                   </li>
@@ -1043,9 +1044,9 @@ export default function SmartAutomatic() {
             {readOnly ? null : (
               // The save bar is the main way to save; this one stays for pages opened without it, and is secondary.
               <s-stack direction="inline" gap="small-200 base" alignItems="center">
-                <s-button type="submit" {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
+                <Button type="submit" {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
                   {saveTurnsOn ? t("automatic.action.saveAndTurnOn") : t("automatic.action.save")}
-                </s-button>
+                </Button>
                 <s-text color="subdued">{t("automatic.save.note")}</s-text>
               </s-stack>
             )}

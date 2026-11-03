@@ -32,6 +32,7 @@ import { emptyCounts } from "../lib/coverage-rules";
 import { localeCountry } from "../lib/flags";
 import { EXTRAS, TIERS, type CategoryId, type ExtraId, type LanguageStep } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
+import { Button } from "../components/Button";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, shop, scopes, redirect } = await requireShop(request);
@@ -213,9 +214,9 @@ function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<St
     <counter.Form method="post">
       <input type="hidden" name="intent" value="run" />
       <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-      <s-button type="submit" variant={variant} {...(counter.state !== "idle" ? { loading: true } : {})}>
+      <Button type="submit" variant={variant} {...(counter.state !== "idle" ? { loading: true } : {})}>
         {label}
-      </s-button>
+      </Button>
     </counter.Form>
   );
   switch (step.kind) {
@@ -226,26 +227,26 @@ function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<St
         title: t("language.next.review.title", { count: step.count }),
         detail: step.payoff !== null ? t("language.next.review.detail", { percent: i18n.percent(step.payoff) }) : t("language.next.review.detailNoGain"),
         action: (
-          <s-button variant={variant} href={step.href}>
+          <Button variant={variant} href={step.href}>
             {t("language.next.review.action")}
-          </s-button>
+          </Button>
         ),
       };
     case "category": {
       const category = data.categories.find((c) => c.id === step.category);
       const name = categoryName(i18n, step.category);
       const action = category?.job ? (
-        <s-button variant={variant} href={category.job.href}>
+        <Button variant={variant} href={category.job.href}>
           {t("language.card.jobOpen")}
-        </s-button>
+        </Button>
       ) : step.action === "translate" ? (
-        <s-button variant={variant} icon="wand" commandFor={CONFIRM} command="--show" onClick={() => ctx.confirm(step.category)} accessibilityLabel={`${t("language.action.translate")}: ${name}`}>
+        <Button variant={variant} icon="wand" commandFor={CONFIRM} command="--show" onClick={() => ctx.confirm(step.category)} accessibilityLabel={`${t("language.action.translate")}: ${name}`}>
           {t("language.action.translate")}
-        </s-button>
+        </Button>
       ) : (
-        <s-button variant={variant} href={step.href} accessibilityLabel={`${t("language.action.view")}: ${name}`}>
+        <Button variant={variant} href={step.href} accessibilityLabel={`${t("language.action.view")}: ${name}`}>
           {t("language.action.view")}
-        </s-button>
+        </Button>
       );
       return { title: t("language.next.category.title", { category: name }), detail: categoryDetail(i18n, step), action };
     }
@@ -260,9 +261,9 @@ function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<St
         title: t("language.next.access.title", { categories: list(i18n, step.categories) }),
         detail: t("language.next.access.detail"),
         action: step.href ? (
-          <s-button variant={variant} href={step.href}>
+          <Button variant={variant} href={step.href}>
             {t("coverage.types.allowAccess")}
-          </s-button>
+          </Button>
         ) : undefined,
       };
     case "done":

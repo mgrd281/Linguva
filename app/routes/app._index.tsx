@@ -43,6 +43,7 @@ import { ENGINE_IDS, ENGINE_NAMES } from "../lib/engines";
 import { usableOwnKey } from "../lib/own-keys";
 import { languageList, upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
+import { Button } from "../components/Button";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -259,9 +260,9 @@ function CountForm({ fetcher, data, label, primary }: { fetcher: Counter; data: 
     <fetcher.Form method="post" action="/app/coverage">
       <input type="hidden" name="intent" value="run" />
       <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-      <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(primary ? {} : { icon: "refresh" })} {...(fetcher.state !== "idle" ? { loading: true } : {})}>
+      <Button type="submit" variant={primary ? "primary" : "secondary"} {...(primary ? {} : { icon: "refresh" })} {...(fetcher.state !== "idle" ? { loading: true } : {})}>
         {label}
-      </s-button>
+      </Button>
     </fetcher.Form>
   );
 }
@@ -272,14 +273,14 @@ function StepAction({ view, primary, data, counter }: { view: StepView; primary:
   if (!action) return null;
   if ("measure" in action) return <CountForm fetcher={counter} data={data} label={action.measure} primary={primary} />;
   return (
-    <s-button
+    <Button
       variant={primary ? "primary" : "secondary"}
       href={action.href}
       {...(action.external ? { target: "_top" } : {})}
       {...(action.accessibilityLabel ? { accessibilityLabel: action.accessibilityLabel } : {})}
     >
       {action.label}
-    </s-button>
+    </Button>
   );
 }
 
@@ -649,9 +650,9 @@ function Places({ data, i18n, marketCountries }: { data: Data; i18n: I18n; marke
             <s-icon type="globe" color="subdued" size="small" />
             <s-text color="subdued">{t("overview.places.access")}</s-text>
             <access.Form method="post" action="/app/markets">
-              <s-button type="submit" {...(access.state !== "idle" ? { loading: true } : {})}>
+              <Button type="submit" {...(access.state !== "idle" ? { loading: true } : {})}>
                 {t("overview.places.access.allow")}
-              </s-button>
+              </Button>
             </access.Form>
           </s-stack>
         ) : countries && "error" in countries ? (

@@ -34,7 +34,7 @@ const numberIn = async (locator: Locator) => Number(((await locator.textContent(
 const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Languages" }).locator("s-clickable", { hasText: name });
 /** A chip as shown (a wide card wraps its chips; a phone swipes through one row: the other copy is hidden). */
 const chip = (page: Page, name: string) => page.locator("s-clickable-chip", { hasText: name }).filter({ visible: true });
-const primaryHost = (page: Page) => page.locator('s-button[commandfor="review-approve"][command="--show"]');
+const primaryHost = (page: Page) => page.locator('[data-button][data-command-for="review-approve"]');
 const languages = (page: Page) => page.getByRole("navigation", { name: "Languages" });
 const areas = (page: Page) => page.getByRole("navigation", { name: "Areas" });
 const primary = (page: Page) => page.getByRole("button", { name: /^Approve all \d+( on this page)?$/ });
@@ -105,7 +105,7 @@ test.describe("Review", () => {
     // The next page doesn't confirm this page's approval a second time.
     const toasts = () => page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts.length);
     const shown = await toasts();
-    await page.locator("s-button[href]", { hasText: "Continue" }).click();
+    await page.locator("[data-button][href]", { hasText: "Continue" }).click();
     await expect(page).not.toHaveURL(/area=/);
     await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
     // (A result shown again would come back within the first frames of the new page.)
@@ -292,7 +292,7 @@ test.describe("Review", () => {
     await open(page, "/app/jobs");
     const job = await page.locator('section[aria-labelledby^="day-"] s-clickable[href^="/app/jobs/"]').first().getAttribute("href");
     await open(page, job!);
-    const review = await page.locator('s-button[href^="/app/review?job="]').getAttribute("href");
+    const review = await page.locator('[data-button][href^="/app/review?job="]').getAttribute("href");
     await open(page, review!);
     await expect(page.getByText(/^Only from the job of /)).toBeVisible();
     const scoped = await numberIn(summary(page));
@@ -335,7 +335,7 @@ test.describe("Review", () => {
     });
     expect(tally).toBeGreaterThan(picture.x + picture.width);
     expect((await page.getByRole("link", { name: "Continue" }).boundingBox())!.x).toBeGreaterThan((await heading.boundingBox())!.x);
-    await page.locator("s-button[href]", { hasText: "Continue" }).click();
+    await page.locator("[data-button][href]", { hasText: "Continue" }).click();
     await expect(page).not.toHaveURL(/area=/);
     await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
   });
@@ -477,7 +477,7 @@ test.describe("Review", () => {
     // Texts of other jobs and imports still wait: the job's page says nothing about them.
     await expect(page.getByRole("heading", { name: "All reviewed" })).toHaveCount(0);
     await expect(page.getByText(/Nothing else is waiting|No translation is waiting/)).toHaveCount(0);
-    await page.locator("s-button[href]", { hasText: "Show all" }).click();
+    await page.locator("[data-button][href]", { hasText: "Show all" }).click();
     await expect(page).not.toHaveURL(/job=/);
     await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
 
@@ -485,7 +485,7 @@ test.describe("Review", () => {
     await open(page, `/app/review?job=${job.id}`);
     await expect(page.getByText("No translations for this selection.")).toBeVisible();
     await expect(page.getByRole("heading", { name: "All reviewed" })).toHaveCount(0);
-    await page.locator('s-button[href="/app/review"]', { hasText: "Show all" }).click();
+    await page.locator('[data-button][href="/app/review"]', { hasText: "Show all" }).click();
     await expect(page).not.toHaveURL(/job=/);
     await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
   });
@@ -555,7 +555,7 @@ test.describe("Review", () => {
       await new Promise((resolve) => setTimeout(resolve, 2_000));
       await route.fulfill({ response });
     });
-    await page.locator("s-button", { hasText: "Reject all" }).click();
+    await page.locator("[data-button]", { hasText: "Reject all" }).click();
     await page.locator("s-modal#review-reject").getByRole("button", { name: "Reject 1", exact: true }).click();
     await expect(page.getByRole("button", { name: "Reject all", exact: true })).toBeDisabled();
     await expect(page.getByText("Approving – this can take a moment.")).toHaveCount(0);

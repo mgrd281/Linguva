@@ -18,6 +18,7 @@ import { markupToPlainText } from "../.server/translation/segment-markup";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
 import { ALL, chosen } from "../lib/select-all";
+import { Button } from "../components/Button";
 
 function plain(markup: string): string {
   try {
@@ -97,7 +98,7 @@ export default function Memory() {
                   </s-option>
                 ))}
               </s-select>
-              <s-button type="submit">{t("common.action.search")}</s-button>
+              <Button type="submit">{t("common.action.search")}</Button>
             </s-grid>
           </s-query-container>
         </Form>
@@ -135,14 +136,14 @@ export default function Memory() {
                   <s-table-cell>
                     <s-stack direction="inline" gap="small">
                       {e.status !== "APPROVED" ? (
-                        <s-button
+                        <Button
                           variant="tertiary"
                           onClick={() => fetcher.submit({ intent: "approve", entryId: e.id }, { method: "post" })}
                         >
                           {t("memory.action.approve")}
-                        </s-button>
+                        </Button>
                       ) : null}
-                      <s-button
+                      <Button
                         variant="tertiary"
                         tone="critical"
                         commandFor="memory-delete"
@@ -150,7 +151,7 @@ export default function Memory() {
                         onClick={() => setPendingDelete(e.id)}
                       >
                         {t("common.action.delete")}
-                      </s-button>
+                      </Button>
                     </s-stack>
                   </s-table-cell>
                 </s-table-row>

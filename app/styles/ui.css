@@ -1,0 +1,351 @@
+/*
+ * Linguva's own controls (app/components/Button.tsx, Segmented.tsx): flat,
+ * light edges, a soft shadow, 10 px corners and a clear focus ring, in the
+ * admin's type (Inter, 13 px) and on its surfaces. The owner asked for
+ * buttons without Polaris' dark bevelled edge (2026-11-03). Buttons in
+ * Shopify's own dialogs, banners and the save bar stay the admin's.
+ *
+ * Sizes: 32 px high with a fine pointer, 44 px on touch screens (WCAG 2.5.8
+ * needs 24 px; 44 px is the platforms' own size). Every state has more than
+ * colour: the focus ring, the disabled opacity with its cursor, the spinner.
+ */
+
+.lv-btn {
+  --lv-btn-height: 32px;
+  --lv-btn-radius: 10px;
+  --lv-btn-pad: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: var(--lv-btn-height);
+  max-width: 100%;
+  padding: 0 var(--lv-btn-pad);
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: var(--lv-btn-radius);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.003em;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  /* Its own width in a stack of blocks; `fill` stretches it. */
+  align-self: flex-start;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.lv-btn:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}
+
+.lv-btn__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lv-btn__icon {
+  display: inline-flex;
+  flex: none;
+  margin-inline-start: -2px;
+}
+
+/* Primary: the page's one main action. */
+.lv-btn--primary {
+  background: #1f1f1f;
+  color: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #383838;
+}
+.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):active {
+  background: #000000;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+/* Icons are Polaris' (drawn in the text colour of their tone): white on the dark fill. */
+.lv-btn--primary .lv-btn__icon {
+  filter: brightness(0) invert(1);
+}
+
+/* Secondary: white with a light edge, no dark bottom line. */
+.lv-btn--secondary {
+  background: #ffffff;
+  color: #1f1f1f;
+  border-color: #dedede;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+.lv-btn--secondary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #f7f7f7;
+  border-color: #cfcfcf;
+}
+.lv-btn--secondary:not(:disabled):not([aria-disabled="true"]):active {
+  background: #f0f0f0;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.06);
+}
+
+/* Tertiary: words only, a soft background under the pointer. */
+.lv-btn--tertiary {
+  --lv-btn-pad: 10px;
+  background: transparent;
+  color: #1f1f1f;
+}
+.lv-btn--tertiary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.lv-btn--tertiary:not(:disabled):not([aria-disabled="true"]):active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Critical: what can't be undone. */
+.lv-btn--critical.lv-btn--primary {
+  background: #c70a24;
+}
+.lv-btn--critical.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #a30a1e;
+}
+.lv-btn--critical.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):active {
+  background: #8a0818;
+}
+.lv-btn--critical.lv-btn--secondary,
+.lv-btn--critical.lv-btn--tertiary {
+  color: #b5141f;
+}
+.lv-btn--critical.lv-btn--secondary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #fff6f6;
+  border-color: #f2c4c8;
+}
+.lv-btn--critical.lv-btn--tertiary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #fff1f1;
+}
+
+/* An icon alone: a square, its name for assistive technology in aria-label. */
+.lv-btn--icon {
+  width: var(--lv-btn-height);
+  padding: 0;
+}
+.lv-btn--icon .lv-btn__icon {
+  margin: 0;
+}
+
+.lv-btn--fill {
+  width: 100%;
+  align-self: stretch;
+}
+
+.lv-btn:disabled,
+.lv-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Loading: the words keep their room, a spinner in their place. */
+.lv-btn[aria-busy="true"] {
+  cursor: progress;
+  pointer-events: none;
+}
+.lv-btn[aria-busy="true"] > :not(.lv-btn__spinner) {
+  visibility: hidden;
+}
+.lv-btn__spinner {
+  --lv-spin-track: rgba(0, 0, 0, 0.18);
+  --lv-spin-head: #1f1f1f;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--lv-spin-track);
+  border-top-color: var(--lv-spin-head);
+  animation: lv-spin 0.7s linear infinite;
+}
+.lv-btn--primary .lv-btn__spinner {
+  --lv-spin-track: rgba(255, 255, 255, 0.35);
+  --lv-spin-head: #ffffff;
+}
+@keyframes lv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A choice of a few options in one row (the form of address): a soft track, the chosen option raised. */
+.lv-seg {
+  display: inline-flex;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 3px;
+  gap: 2px;
+  margin: 0;
+  border: 1px solid #ebebeb;
+  border-radius: 10px;
+  background: #f3f3f3;
+}
+.lv-seg--fill {
+  display: flex;
+  width: 100%;
+}
+/* One width for every row of a list, so the choices line up (full width on a narrow list); the first option (the default) gets the most room. */
+.lv-seg--even {
+  display: flex;
+  width: 100%;
+}
+.lv-seg__option {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lv-seg--even .lv-seg__option,
+.lv-seg--fill .lv-seg__option {
+  flex: 1 1 0;
+}
+.lv-seg--even .lv-seg__option:first-of-type,
+.lv-seg--fill .lv-seg__option:first-of-type {
+  flex-grow: 1.8;
+}
+.lv-seg__option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.lv-seg__text {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 26px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 20px;
+  color: #4a4a4a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-seg__option:hover input:not(:checked):not(:disabled) + .lv-seg__text {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1f1f1f;
+}
+.lv-seg__option input:checked + .lv-seg__text {
+  background: #ffffff;
+  color: #1f1f1f;
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+.lv-seg__option input:focus-visible + .lv-seg__text {
+  outline: 2px solid #005bd3;
+  outline-offset: 1px;
+}
+.lv-seg__option input:disabled {
+  cursor: not-allowed;
+}
+.lv-seg__option input:disabled + .lv-seg__text {
+  opacity: 0.45;
+}
+
+/* A list of choices, one row each: the name, then its choice beside it once the list is wide enough. */
+.lv-choices {
+  container-type: inline-size;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lv-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid #ebebeb;
+}
+.lv-choice:first-child {
+  border-top: 0;
+}
+.lv-choice__name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+@container (min-width: 520px) {
+  .lv-choice {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .lv-choice .lv-seg--even {
+    width: 320px;
+  }
+}
+
+/* A sentence that names languages with their flags. */
+.lv-language-line {
+  margin: 0;
+  color: #616161;
+  line-height: 24px;
+}
+.lv-language-line__item {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  margin-inline-start: 2px;
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  .lv-btn {
+    --lv-btn-height: 44px;
+    --lv-btn-radius: 12px;
+    --lv-btn-pad: 18px;
+    font-size: 14px;
+  }
+  .lv-btn--tertiary {
+    --lv-btn-pad: 12px;
+  }
+  .lv-seg__text {
+    min-height: 38px;
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-btn,
+  .lv-seg__text {
+    transition: none;
+  }
+  .lv-btn__spinner {
+    animation-duration: 1.6s;
+  }
+}

@@ -38,7 +38,7 @@ for (const { path, heading, merchantText } of GERMAN_PAGES as Array<{ path: stri
     await expect(page.locator("html")).toHaveAttribute("lang", "de");
     if (heading) await expect(page.locator("s-page")).toHaveAttribute("heading", heading);
     const text = merchantText
-      ? await page.locator("s-page s-button, s-page s-badge, s-page s-section").evaluateAll((els) =>
+      ? await page.locator("s-page s-button, s-page [data-button], s-page s-badge, s-page s-section").evaluateAll((els) =>
           els.map((el) => (el.tagName === "S-SECTION" ? (el.getAttribute("heading") ?? "") : (el as HTMLElement).innerText)).join("\n"),
         )
       : await interfaceText(page);
@@ -60,7 +60,7 @@ for (const { locale, nav } of [
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
       await expect(page.locator("s-app-nav s-link", { hasText: nav })).toHaveCount(1);
       const text = merchantText
-        ? await page.locator("s-page s-button, s-page s-badge, s-page s-section").evaluateAll((els) =>
+        ? await page.locator("s-page s-button, s-page [data-button], s-page s-badge, s-page s-section").evaluateAll((els) =>
             els.map((el) => (el.tagName === "S-SECTION" ? (el.getAttribute("heading") ?? "") : (el as HTMLElement).innerText)).join("\n"),
           )
         : await interfaceText(page);
@@ -77,7 +77,7 @@ test("navigation, product list and editor are German; merchant content stays as 
   await expect(page.getByText("Product 1 jacket").first()).toBeVisible();
   // Language names in German, not Shopify's English names.
   await expect(page.locator("s-badge", { hasText: "Französisch" })).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Alle in Französisch übersetzen" })).toBeVisible();
+  await expect(page.locator("[data-button]", { hasText: "Alle in Französisch übersetzen" })).toBeVisible();
   await page.getByText("Product 1 jacket").first().click();
   await expect(page).toHaveURL(/\/app\/products\/1\?lang=fr/);
   // The interface stays German after moving inside the app (no `locale` on in-app links).
@@ -95,7 +95,7 @@ test("the app's target language never changes the interface language", async ({ 
 test("an error page is German for a German admin user", async ({ page }) => {
   await openApp(page, "full", "/app/products/999999?lang=de", { locale: "de" });
   await expect(page.locator('s-banner[heading="Diese Seite wurde nicht gefunden"]')).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Zur Übersicht" })).toBeVisible();
+  await expect(page.locator("[data-button]", { hasText: "Zur Übersicht" })).toBeVisible();
 });
 
 test.describe("without Shopify's locale parameter", () => {

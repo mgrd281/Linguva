@@ -18,6 +18,7 @@ import { CATEGORIES, type CategoryId } from "../lib/language-categories";
 import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
 import { ProgressBar } from "./ProgressBar";
+import { Button } from "./Button";
 
 export type LanguageCategory = LanguagePage["categories"][number];
 
@@ -337,7 +338,7 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
             {category.job ? <s-link href={category.job.href}>{t("language.card.jobOpen")}</s-link> : null}
           </s-stack>
           {translate && !category.job ? (
-            <s-button
+            <Button
               icon="wand"
               commandFor={translate.modalId}
               command="--show"
@@ -346,7 +347,7 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
               {...(translate.loading ? { loading: true } : {})}
             >
               {t("language.action.translate")}
-            </s-button>
+            </Button>
           ) : null}
         </s-grid>
       </s-stack>

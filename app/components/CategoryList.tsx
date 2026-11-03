@@ -16,6 +16,7 @@ import { CATEGORIES, categoryPath, ITEM_STATES, type CategoryId, type ItemState 
 import { TRACK_COLOUR } from "./Coverage";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { StateIcon } from "./ItemStates";
+import { Button } from "./Button";
 
 /** A list's address with its filter, search and position. */
 export function listHref(locale: string, category: CategoryId, query: { state?: ListState; q?: string; after?: string | null }): string {
@@ -295,7 +296,7 @@ function Search({ data, i18n }: { data: CategoryItems; i18n: I18n }) {
       {data.filter.state !== "all" ? <input type="hidden" name="state" value={data.filter.state} /> : null}
       <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="end">
         <s-search-field name="q" label={label} labelAccessibilityVisibility="exclusive" placeholder={label} value={data.filter.q} />
-        <s-button type="submit">{t("language.list.search.submit")}</s-button>
+        <Button type="submit">{t("language.list.search.submit")}</Button>
       </s-grid>
     </Form>
   );
@@ -366,9 +367,9 @@ export function CategoryList({ data, i18n, names }: { data: CategoryItems; i18n:
             <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
               <s-text color="subdued">{t("language.list.page.position", { page: page.number, from: page.from, to: page.to, total: page.total })}</s-text>
               <s-stack direction="inline" gap="small-200">
-                {page.number > 1 ? <s-button href={listHref(locale, id, { state: data.filter.state, q: query })}>{t("language.list.page.first")}</s-button> : null}
+                {page.number > 1 ? <Button href={listHref(locale, id, { state: data.filter.state, q: query })}>{t("language.list.page.first")}</Button> : null}
                 {page.nextCursor ? (
-                  <s-button href={listHref(locale, id, { state: data.filter.state, q: query, after: page.nextCursor })}>{t("language.list.page.next")}</s-button>
+                  <Button href={listHref(locale, id, { state: data.filter.state, q: query, after: page.nextCursor })}>{t("language.list.page.next")}</Button>
                 ) : null}
               </s-stack>
             </s-grid>

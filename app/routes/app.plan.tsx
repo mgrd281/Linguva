@@ -26,6 +26,7 @@ import type { I18n } from "../i18n/i18n";
 import { jobName } from "../lib/job-view";
 import { showTrial } from "../lib/plan-prices";
 import { planName, planView, recommendPlan, usableEngines, type HeroView } from "../lib/plan-view";
+import { Button } from "../components/Button";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
@@ -67,23 +68,23 @@ function HeroActions({ i18n, hero, choosePlanUrl, refresh, lead = "primary" }: {
   const busy = refresh.state !== "idle";
   // Own key plan without a usable key: the key comes first (Settings › Your translation keys).
   const addKey = (
-    <s-button variant={lead} href="/app/settings?section=keys">
+    <Button variant={lead} href="/app/settings?section=keys">
       {t("plan.hero.addKey")}
-    </s-button>
+    </Button>
   );
   const link = (kind: "change" | "choose", variant: "primary" | "secondary") =>
     choosePlanUrl ? (
-      <s-button variant={variant} href={choosePlanUrl} target="_top">
+      <Button variant={variant} href={choosePlanUrl} target="_top">
         {kind === "change" ? t("common.action.changePlan") : t("plan.action.choose")}
-      </s-button>
+      </Button>
     ) : null;
   const main =
     hero.primary === "retry" ? (
       <s-stack direction="inline" gap="small-200">
         <refresh.Form method="post">
-          <s-button type="submit" variant={lead} icon="refresh" {...(busy ? { loading: true } : {})}>
+          <Button type="submit" variant={lead} icon="refresh" {...(busy ? { loading: true } : {})}>
             {t("plan.action.retry")}
-          </s-button>
+          </Button>
         </refresh.Form>
         {hero.secondary ? link(hero.secondary, "secondary") : null}
       </s-stack>
@@ -100,9 +101,9 @@ function HeroActions({ i18n, hero, choosePlanUrl, refresh, lead = "primary" }: {
       <s-stack direction="inline" gap="small-300" alignItems="center">
         <s-text color="subdued">{t("plan.checkedAt", { date: i18n.dateTime(hero.checkedAt) })}</s-text>
         <refresh.Form method="post">
-          <s-button type="submit" variant="tertiary" icon="refresh" {...(busy ? { loading: true } : {})}>
+          <Button type="submit" variant="tertiary" icon="refresh" {...(busy ? { loading: true } : {})}>
             {t("plan.action.refresh")}
-          </s-button>
+          </Button>
         </refresh.Form>
       </s-stack>
     ) : null;

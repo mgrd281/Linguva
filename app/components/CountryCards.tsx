@@ -21,6 +21,7 @@ import { percentLabel } from "./Coverage";
 import { Flag } from "./Flag";
 import { StateIcon, TextStateBar, textCounts } from "./ItemStates";
 import { PLAIN_LIST } from "./LanguageLayout";
+import { Button } from "./Button";
 
 /** A language of the store as the Overview loads it (one per additional language). */
 export interface PlaceLanguage {
@@ -275,9 +276,9 @@ function MissingCard({ countries, ctx, free, max }: { countries: CountryCoverage
         </s-grid>
         {free > 0 ? (
           <s-stack direction="inline" gap="base" alignItems="center">
-            <s-button href={LANGUAGE_SETTINGS} target="_top" icon="plus">
+            <Button href={LANGUAGE_SETTINGS} target="_top" icon="plus">
               {t("overview.missing.action")}
-            </s-button>
+            </Button>
             {free < wanted.size ? <s-text color="subdued">{t("overview.countries.capacity", { max, count: free })}</s-text> : null}
           </s-stack>
         ) : (

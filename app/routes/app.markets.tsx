@@ -15,6 +15,7 @@ import { countryFlag } from "../lib/flags";
 import type { I18n } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
+import { Button } from "../components/Button";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -107,9 +108,9 @@ export default function Markets() {
           <s-stack direction="block" gap="base">
             <s-paragraph>{t("markets.access.body")}</s-paragraph>
             <fetcher.Form method="post">
-              <s-button type="submit" variant="primary" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
+              <Button type="submit" variant="primary" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
                 {t("markets.access.allow")}
-              </s-button>
+              </Button>
             </fetcher.Form>
           </s-stack>
         </s-section>

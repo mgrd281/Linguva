@@ -21,6 +21,7 @@ import { IconTile } from "../CategoryCard";
 import { PLAIN_LIST } from "../LanguageLayout";
 import { OwnKeyPlanCard } from "./OwnKeyPlanCard";
 import { CARD_NAME, EMPHASIS, PRICE, SECTION_HEADING, STAT, SUB_HEADING } from "./styles";
+import { Button } from "../Button";
 
 const AUDIENCE: Record<PlanHandle, MessageKey> = {
   free: "plan.audience.free",
@@ -283,9 +284,9 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
                 </s-grid>
               ) : null}
               {button ? (
-                <s-button href={button} target="_top">
+                <Button href={button} target="_top">
                   {t("plan.compare.choose", { plan: planName(handle) })}
-                </s-button>
+                </Button>
               ) : null}
             </s-stack>
           ) : null}

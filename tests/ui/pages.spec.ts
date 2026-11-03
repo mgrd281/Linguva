@@ -12,7 +12,7 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     check: async (page) => {
       // One next step, the only primary button: drafts wait in this store.
       await expect(page.locator('s-section[heading="Next"]').getByText(/^Approve \d+ translations?$/)).toBeVisible();
-      await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+      await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
       // Languages with their storefront state, each opening its page.
       await expect(page.getByRole("link", { name: /^Arabic Hidden/ })).toHaveAttribute("href", "/app/languages/ar");
       // AI usage this month, in characters.
@@ -38,8 +38,8 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     check: async (page) => {
       // Area by area, each a link with its figure; one primary button, for the missing permission.
       await expect(page.getByRole("link", { name: /^Products: \d+% translated\. / })).toBeVisible();
-      await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
-      await expect(page.locator('s-button[variant="primary"]')).toHaveText("Allow access");
+      await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
+      await expect(page.locator('[data-button][data-variant="primary"]')).toHaveText("Allow access");
     },
   },
   {
@@ -89,7 +89,7 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
       await expect(page.getByRole("heading", { name: "Your plan: Pro" })).toBeVisible();
       await expect(page.getByText("AI characters this month", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("of 1,200,000", { exact: true })).toBeVisible();
-      await expect(page.locator("s-button", { hasText: "Change plan" })).toBeVisible();
+      await expect(page.locator("[data-button]", { hasText: "Change plan" })).toBeVisible();
     },
   },
 ];

@@ -25,6 +25,7 @@ import { useResultToast } from "../components/app-bridge";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useI18n } from "../i18n/react";
 import { ALL, chosen } from "../lib/select-all";
+import { Button } from "../components/Button";
 
 const MAX_IMPORT_BYTES = 1024 * 1024;
 
@@ -182,9 +183,9 @@ export default function GlossaryPage() {
                 <s-checkbox name="caseSensitive" label={t("glossary.field.caseSensitive")} />
               </s-grid>
             </s-query-container>
-            <s-button type="submit" variant="primary" {...(addFetcher.state !== "idle" ? { loading: true } : {})}>
+            <Button type="submit" variant="primary" {...(addFetcher.state !== "idle" ? { loading: true } : {})}>
               {t("glossary.add.submit")}
-            </s-button>
+            </Button>
           </s-stack>
         </addFetcher.Form>
         {addResult?.kind === "error" ? (
@@ -223,7 +224,7 @@ export default function GlossaryPage() {
                   </s-table-cell>
                   <s-table-cell>{term.market ? term.market.replace("gid://shopify/Market/", "#") : t("common.state.all")}</s-table-cell>
                   <s-table-cell>
-                    <s-button
+                    <Button
                       variant="tertiary"
                       tone="critical"
                       commandFor="glossary-delete"
@@ -231,7 +232,7 @@ export default function GlossaryPage() {
                       onClick={() => setPendingDelete(term.id)}
                     >
                       {t("common.action.delete")}
-                    </s-button>
+                    </Button>
                   </s-table-cell>
                 </s-table-row>
               ))}
@@ -248,9 +249,9 @@ export default function GlossaryPage() {
             <s-drop-zone name="file" accept=".csv,text/csv" label={t("glossary.import.file")} />
             <s-text-area name="csv" label={t("glossary.import.paste")} rows={4} />
             <s-checkbox name="replaceAll" label={t("glossary.import.replaceAll")} />
-            <s-button type="submit" {...(importFetcher.state !== "idle" ? { loading: true } : {})}>
+            <Button type="submit" {...(importFetcher.state !== "idle" ? { loading: true } : {})}>
               {t("glossary.import.submit")}
-            </s-button>
+            </Button>
           </s-stack>
         </importFetcher.Form>
         {importResult?.kind === "imported" && importResult.errors.length ? (

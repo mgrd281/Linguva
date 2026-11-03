@@ -1,6 +1,10 @@
-import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+import type { LinksFunction, LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from "react-router";
 import { resolveLocale } from "./i18n/i18n";
+import uiStyles from "./styles/ui.css?url";
+
+// The app's own controls (buttons, the segmented choice): app/styles/ui.css.
+export const links: LinksFunction = () => [{ rel: "stylesheet", href: uiStyles }];
 
 // Page title for assistive technology and browser tabs (the admin shows each page's heading).
 export const meta: MetaFunction = () => [{ title: "Linguva" }];

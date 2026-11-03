@@ -16,6 +16,7 @@ import { reviewHref, type Facets, type ReviewQuery } from "../lib/review-view";
 import { areaIcon, areaName, focusSoon, languageLabel, NARROW, WIDE } from "./ReviewCard";
 import { Flag } from "./Flag";
 import { PLAIN_LIST } from "./LanguageLayout";
+import { Button } from "./Button";
 
 /** Typing pauses this long before the search runs. */
 const SEARCH_DELAY_MS = 350;
@@ -328,11 +329,11 @@ export function ReviewControls({
                   {!actions.busy && actions.blocked ? (
                     <s-text color="subdued">{t(actions.blocked === "empty" ? "review.page.blocked.empty" : "review.page.blocked.question")}</s-text>
                   ) : null}
-                  <s-button variant="tertiary" tone="critical" commandFor="review-reject" command="--show" {...(rejectDisabled ? { disabled: true } : {})}>
+                  <Button variant="tertiary" tone="critical" commandFor="review-reject" command="--show" {...(rejectDisabled ? { disabled: true } : {})}>
                     {t("review.page.rejectAll")}
-                  </s-button>
+                  </Button>
                   {actions.approvable > 0 ? (
-                    <s-button
+                    <Button
                       variant="primary"
                       icon="check"
                       commandFor="review-approve"
@@ -341,7 +342,7 @@ export function ReviewControls({
                       {...(actions.approving ? { loading: true } : {})}
                     >
                       {t(actions.allOnPage ? "review.page.approveAll" : "review.page.approveAllOnPage", { count: actions.approvable })}
-                    </s-button>
+                    </Button>
                   ) : null}
                 </s-stack>
               ) : null}

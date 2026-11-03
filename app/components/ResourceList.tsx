@@ -7,6 +7,7 @@ import type { loadResourceList, runResourceListAction } from "../.server/transla
 import { useI18n } from "../i18n/react";
 import { kindLabel, kindPlural, kindSingular } from "../i18n/labels";
 import { Breadcrumbs } from "./LanguageLayout";
+import { Button } from "./Button";
 
 type ListLoader = () => ReturnType<typeof loadResourceList>;
 type ListAction = () => ReturnType<typeof runResourceListAction>;
@@ -37,9 +38,9 @@ export function ResourceList() {
               <permission.Form method="post" action="/app/content">
                 <input type="hidden" name="intent" value="request-scope" />
                 <input type="hidden" name="scope" value={data.denied.scope} />
-                <s-button type="submit" variant="primary" {...(permission.state !== "idle" ? { loading: true } : {})}>
+                <Button type="submit" variant="primary" {...(permission.state !== "idle" ? { loading: true } : {})}>
                   {t("resources.denied.allow")}
-                </s-button>
+                </Button>
               </permission.Form>
             ) : null}
             <s-link href={contentHref(data.target?.locale ?? null)}>{t("resources.denied.back")}</s-link>
@@ -54,9 +55,9 @@ export function ResourceList() {
       <s-page heading={label}>
         <s-section heading={t("resources.noLanguages.heading")}>
           <s-paragraph>{t("resources.noLanguages.body", { plural })}</s-paragraph>
-          <s-button href="shopify://admin/settings/languages" target="_top">
+          <Button href="shopify://admin/settings/languages" target="_top">
             {t("resources.noLanguages.open")}
-          </s-button>
+          </Button>
         </s-section>
       </s-page>
     );
@@ -163,14 +164,14 @@ export function ResourceList() {
                     ) : null}
                   </s-grid>
                 </s-query-container>
-                <s-button
+                <Button
                   type="submit"
                   variant="primary"
                   disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
                   {...(bulk.state !== "idle" ? { loading: true } : {})}
                 >
                   {t("resources.bulk.submit", { language: i18n.language(data.target.locale, data.target.name) })}
-                </s-button>
+                </Button>
               </s-stack>
             </bulk.Form>
           </s-stack>
@@ -227,14 +228,14 @@ export function ResourceList() {
 
       <s-stack direction="inline" gap="base">
         {!data.isFirstPage ? (
-          <s-button href={`${data.kind.path}?lang=${encodeURIComponent(locale)}`}>{t("resources.paging.first")}</s-button>
+          <Button href={`${data.kind.path}?lang=${encodeURIComponent(locale)}`}>{t("resources.paging.first")}</Button>
         ) : null}
         {data.nextCursor ? (
-          <s-button
+          <Button
             href={`${data.kind.path}?lang=${encodeURIComponent(locale)}&after=${encodeURIComponent(data.nextCursor)}`}
           >
             {t("resources.paging.next")}
-          </s-button>
+          </Button>
         ) : null}
       </s-stack>
     </s-page>

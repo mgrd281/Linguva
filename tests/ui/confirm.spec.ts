@@ -19,7 +19,7 @@ test("rejecting asks first: Cancel keeps every text, one text is rejected after 
   const allTab = page.getByRole("navigation", { name: "Languages" }).locator('[aria-current="true"]');
   await expect(allTab).toContainText(String(before));
 
-  await page.locator("s-button", { hasText: "Reject all" }).click();
+  await page.locator("[data-button]", { hasText: "Reject all" }).click();
   const dialog = page.getByRole("dialog", { name: /^Reject \d+ translations\?$/ });
   await expect(dialog).toBeVisible();
   await expectAccessible(page);
@@ -42,7 +42,7 @@ test("confirming Reject all rejects the page's texts and a toast says so", async
   // One product's French texts (a search narrows the page), so the shared store keeps the rest.
   await openApp(page, "full", "/app/review?lang=fr&q=Product%208%20jacket");
   await expect(page.getByText(/^2 translations on this page/)).toBeVisible();
-  await page.locator("s-button", { hasText: "Reject all" }).click();
+  await page.locator("[data-button]", { hasText: "Reject all" }).click();
   await expect(page.getByRole("dialog", { name: "Reject 2 translations?" })).toBeVisible();
   await modalButton(page, "review-reject", "Reject 2").click();
   await expectToast(page, /^\d+ translations rejected\. They won't be published\.$/);
@@ -57,14 +57,14 @@ test("deleting a glossary term asks first", async ({ page }) => {
   const row = page.locator("s-table-row", { hasText: "Linguva-Testbegriff" });
   await expect(row).toBeVisible();
 
-  await row.locator("s-button", { hasText: "Delete" }).click();
+  await row.locator("[data-button]", { hasText: "Delete" }).click();
   const dialog = dialogOpen(page, "Delete this term?");
   await expect(dialog).toBeVisible();
   await modalButton(page, "glossary-delete", "Cancel").click();
   await expect(dialog).toBeHidden();
   await expect(row).toBeVisible();
 
-  await row.locator("s-button", { hasText: "Delete" }).click();
+  await row.locator("[data-button]", { hasText: "Delete" }).click();
   await modalButton(page, "glossary-delete", "Delete").click();
   await expect(row).toHaveCount(0);
 });
@@ -97,7 +97,7 @@ test("a glossary CSV is imported from the drop zone and confirmed with a toast",
   await expectToast(page, "1 term imported.");
   await expect(page.locator("s-table-row", { hasText: "Linguva-CSV" })).toHaveCount(1);
   // Clean up for other tests.
-  await page.locator("s-table-row", { hasText: "Linguva-CSV" }).locator("s-button", { hasText: "Delete" }).click();
+  await page.locator("s-table-row", { hasText: "Linguva-CSV" }).locator("[data-button]", { hasText: "Delete" }).click();
   await modalButton(page, "glossary-delete", "Delete").click();
   await expect(page.locator("s-table-row", { hasText: "Linguva-CSV" })).toHaveCount(0);
 });

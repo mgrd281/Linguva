@@ -16,6 +16,7 @@ import { isOwnKeyHandle, OWN_KEY_PLAN } from "../../lib/plans";
 import { IconTile } from "../CategoryCard";
 import { PLAIN_LIST } from "../LanguageLayout";
 import { CARD_NAME, PRICE, STAT } from "./styles";
+import { Button } from "../Button";
 
 /** What the plan includes and what it doesn't, in this order (the cost sentence right after the engines). */
 const POINTS: ReadonlyArray<{ key: MessageKey; icon: IconType; included: boolean }> = [
@@ -88,9 +89,9 @@ export function OwnKeyPlanCard({ i18n, plan, hero, now }: OwnKeyPlanCardProps) {
               </s-stack>
               {button ? (
                 <s-stack direction="inline">
-                  <s-button href={button} target="_top">
+                  <Button href={button} target="_top">
                     {t("plan.compare.choose", { plan: OWN_KEY_NAME })}
-                  </s-button>
+                  </Button>
                 </s-stack>
               ) : null}
             </s-stack>

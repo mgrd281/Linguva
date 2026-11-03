@@ -12,6 +12,7 @@
  */
 import { useI18n } from "../../i18n/react";
 import { CARD } from "../ContentTiles";
+import { Button } from "../Button";
 
 const NAME = { fontWeight: 600 } as const;
 
@@ -28,9 +29,9 @@ export function BackToJob({ jobId, name }: { jobId: string; name: string }) {
               <strong style={NAME}>{t("jobs.attention.resumable", { name })}</strong>
               <s-text color="subdued">{t("jobs.back.text")}</s-text>
             </s-stack>
-            <s-button variant="primary" href={`/app/jobs/${encodeURIComponent(jobId)}`} accessibilityLabel={t("jobs.back.label", { name })}>
+            <Button variant="primary" href={`/app/jobs/${encodeURIComponent(jobId)}`} accessibilityLabel={t("jobs.back.label", { name })}>
               {t("jobs.back.action")}
-            </s-button>
+            </Button>
           </s-grid>
         </s-grid>
       </s-query-container>

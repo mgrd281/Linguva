@@ -33,6 +33,7 @@ import { HtmlPreview } from "./HtmlPreview";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { SeoCounter } from "./SeoPanel";
 import { StructuredView } from "./StructuredValue";
+import { Button } from "./Button";
 
 /** Wide card: texts side by side, actions in the label row. */
 export const WIDE = "@container (inline-size > 640px) auto, none";
@@ -366,10 +367,9 @@ function TextActions({ draft, title, ctx, cardBusy, approve, copy }: RowProps & 
   const disabled = ctx.pageBusy || cardBusy || ctx.busy.has(draft.id);
   const editable = draft.kind === "plain" || draft.kind === "html" || draft.kind === "handle";
   const html = draft.kind === "html";
-  const tip = `review-tip-${draft.id}-${copy}`;
   const editButton = editable ? (
     editing ? (
-      <s-button
+      <Button
         variant="tertiary"
         data-review-edit={draft.id}
         accessibilityLabel={t("review.field.cancelLabel", { field: label, title })}
@@ -377,9 +377,9 @@ function TextActions({ draft, title, ctx, cardBusy, approve, copy }: RowProps & 
         {...(disabled ? { disabled: true } : {})}
       >
         {t("common.action.cancel")}
-      </s-button>
+      </Button>
     ) : (
-      <s-button
+      <Button
         variant="tertiary"
         icon={html ? "code" : "edit"}
         data-review-edit={draft.id}
@@ -388,26 +388,25 @@ function TextActions({ draft, title, ctx, cardBusy, approve, copy }: RowProps & 
         {...(disabled ? { disabled: true } : {})}
       >
         {t(html ? "review.field.editHtml" : "review.field.edit")}
-      </s-button>
+      </Button>
     )
   ) : null;
   const rejectButton = (
     <>
-      <s-button
+      <Button
         variant="tertiary"
         icon="x"
-        interestFor={tip}
+        tooltip={t("review.field.reject")}
         data-review-reject={draft.id}
         accessibilityLabel={t("review.field.rejectLabel", { field: label, title })}
         onClick={() => ctx.ask(draft.id, "reject")}
         {...(disabled ? { disabled: true } : {})}
       />
-      <s-tooltip id={tip}>{t("review.field.reject")}</s-tooltip>
     </>
   );
   const problem = ctx.problemOf(draft);
   const approveButton = (
-    <s-button
+    <Button
       icon="check"
       data-review-approve={draft.id}
       accessibilityLabel={t("review.field.approveLabel", { field: label, title })}
@@ -417,7 +416,7 @@ function TextActions({ draft, title, ctx, cardBusy, approve, copy }: RowProps & 
       {...(ctx.busy.has(draft.id) && !ctx.pageBusy ? { loading: true } : {})}
     >
       {t("review.field.approve")}
-    </s-button>
+    </Button>
   );
   return copy === "wide" ? (
     <s-stack direction="inline" gap="small-200" alignItems="center" justifyContent="end">
@@ -650,9 +649,9 @@ function ResultLine({ card, draft, title, ctx, outcome, label }: RowProps & { ou
             </s-link>
           ) : null}
           {outcome.status === "changed" ? (
-            <s-button variant="tertiary" onClick={ctx.reload}>
+            <Button variant="tertiary" onClick={ctx.reload}>
               {t("review.result.reload")}
-            </s-button>
+            </Button>
           ) : null}
         </s-stack>
       </s-grid>
@@ -849,7 +848,7 @@ export function ReviewCardView({ card, ctx }: { card: ReviewCard; ctx: CardConte
             <s-divider />
             <s-box padding="base">
               <s-stack direction="inline" justifyContent="end">
-                <s-button
+                <Button
                   icon="check"
                   accessibilityLabel={t("review.card.approveAllLabel", { count: approvable.length, title, language })}
                   onClick={() => approve(approvable)}
@@ -857,7 +856,7 @@ export function ReviewCardView({ card, ctx }: { card: ReviewCard; ctx: CardConte
                   {...(cardBusy ? { loading: true } : {})}
                 >
                   {t("review.card.approveAll", { count: approvable.length })}
-                </s-button>
+                </Button>
               </s-stack>
             </s-box>
           </>

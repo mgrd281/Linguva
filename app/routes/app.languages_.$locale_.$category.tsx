@@ -32,6 +32,7 @@ import { emptyCounts, type StateCounts } from "../lib/coverage-rules";
 import { localeCountry } from "../lib/flags";
 import { CATEGORIES, categoryPath, languagePath, type CategoryId } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
+import { Button } from "../components/Button";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, shop, scopes, redirect } = await requireShop(request);
@@ -217,9 +218,9 @@ function areaSteps({ data, i18n, names, counter, translating }: StepContext): St
     <counter.Form method="post">
       <input type="hidden" name="intent" value="run" />
       <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-      <s-button type="submit" variant={variant()} {...(counter.state !== "idle" ? { loading: true } : {})}>
+      <Button type="submit" variant={variant()} {...(counter.state !== "idle" ? { loading: true } : {})}>
         {label}
-      </s-button>
+      </Button>
     </counter.Form>
   );
 
@@ -234,9 +235,9 @@ function areaSteps({ data, i18n, names, counter, translating }: StepContext): St
       title: t("language.next.review.title", { count: category.review.count }),
       detail: category.payoff !== null ? t("language.next.review.detail", { percent: i18n.percent(category.payoff) }) : t("language.next.review.detailNoGain"),
       action: (
-        <s-button variant={variant()} href={category.review.href}>
+        <Button variant={variant()} href={category.review.href}>
           {t("language.next.review.action")}
-        </s-button>
+        </Button>
       ),
     });
   }
@@ -252,9 +253,9 @@ function areaSteps({ data, i18n, names, counter, translating }: StepContext): St
         <s-stack direction="block" gap="small-200">
           {counted ? <ProgressBar value={(job.done / job.total) * 100} label={t("language.card.jobLabel", { category: names.category })} /> : null}
           <s-stack direction="inline">
-            <s-button variant={variant()} href={job.href}>
+            <Button variant={variant()} href={job.href}>
               {t("language.card.jobOpen")}
-            </s-button>
+            </Button>
           </s-stack>
         </s-stack>
       ),
@@ -266,9 +267,9 @@ function areaSteps({ data, i18n, names, counter, translating }: StepContext): St
       detail: `${openTexts(i18n, estimate.texts)}. ${t("language.list.next.keep")}`,
       action:
         data.bulk.gate === null ? (
-          <s-button variant={variant()} icon="wand" commandFor={CONFIRM} command="--show" {...(translating ? { loading: true } : {})}>
+          <Button variant={variant()} icon="wand" commandFor={CONFIRM} command="--show" {...(translating ? { loading: true } : {})}>
             {t("language.action.translate")}
-          </s-button>
+          </Button>
         ) : undefined,
     });
   } else if (open > 0) {
@@ -279,9 +280,9 @@ function areaSteps({ data, i18n, names, counter, translating }: StepContext): St
       title: t("language.next.category.title", { category: names.category }),
       detail: withOwners ? t("language.card.withOwners") : `${openTexts(i18n, figure.counts)}. ${t("language.list.next.oneByOne")}`,
       action: withOwners ? (
-        <s-button variant={variant()} href={categoryPath(data.language.locale, "products")}>
+        <Button variant={variant()} href={categoryPath(data.language.locale, "products")}>
           {t("language.list.next.toProducts")}
-        </s-button>
+        </Button>
       ) : undefined,
     });
   }
@@ -295,9 +296,9 @@ function areaSteps({ data, i18n, names, counter, translating }: StepContext): St
       title: t("language.next.access.title", { categories: names.category }),
       detail: t("language.next.access.detail"),
       action: href ? (
-        <s-button variant={variant()} href={href}>
+        <Button variant={variant()} href={href}>
           {t("coverage.types.allowAccess")}
-        </s-button>
+        </Button>
       ) : undefined,
     });
   }

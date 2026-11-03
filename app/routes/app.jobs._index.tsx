@@ -61,6 +61,7 @@ import {
 } from "../lib/job-view";
 import { CATEGORIES, CATEGORY_IDS } from "../lib/language-categories";
 import { ALL } from "../lib/select-all";
+import { Button } from "../components/Button";
 
 /** Jobs per page of the history; the live group shows up to 20 (one more says there are others). */
 const PAGE_SIZE = 25;
@@ -400,9 +401,9 @@ function Attention({ model, data, words, resumer }: { model: AttentionModel; dat
                 {model.text.length ? <s-text color="subdued">{model.text.map(words.say).join(" ")}</s-text> : null}
               </s-stack>
               {model.headAction ? (
-                <s-button variant="primary" href={model.headAction.href}>
+                <Button variant="primary" href={model.headAction.href}>
                   {words.say(model.headAction.label)}
-                </s-button>
+                </Button>
               ) : null}
             </s-grid>
           </s-grid>
@@ -423,25 +424,25 @@ function Attention({ model, data, words, resumer }: { model: AttentionModel; dat
               </s-grid>
               <s-stack direction="inline" gap="small-200" alignItems="center">
                 {primary?.kind === "link" ? (
-                  <s-button variant="primary" href={primary.href}>
+                  <Button variant="primary" href={primary.href}>
                     {words.say(primary.label)}
-                  </s-button>
+                  </Button>
                 ) : primary?.kind === "reload" ? (
-                  <s-button variant="primary" onClick={() => window.location.reload()}>
+                  <Button variant="primary" onClick={() => window.location.reload()}>
                     {words.say(primary.label)}
-                  </s-button>
+                  </Button>
                 ) : primary?.kind === "resume" ? (
                   <resumer.Form method="post">
                     <input type="hidden" name="intent" value="resume" />
                     <input type="hidden" name="job" value={primary.jobId} />
-                    <s-button type="submit" variant="primary" {...(resumer.state !== "idle" ? { loading: true } : {})}>
+                    <Button type="submit" variant="primary" {...(resumer.state !== "idle" ? { loading: true } : {})}>
                       {words.say(primary.label)}
-                    </s-button>
+                    </Button>
                   </resumer.Form>
                 ) : null}
-                <s-button variant={featured.view.variant} href={featured.view.href}>
+                <Button variant={featured.view.variant} href={featured.view.href}>
                   {words.say(featured.view.label)}
-                </s-button>
+                </Button>
               </s-stack>
             </s-stack>
           </s-box>
@@ -569,7 +570,7 @@ function Filters({ data, words }: { data: Data; words: JobWords }) {
       <s-stack direction="block" gap="small-200">
         <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="center">
           <s-search-field name="q" label={t("jobs.search.label")} labelAccessibilityVisibility="exclusive" placeholder={t("jobs.search.placeholder")} value={q.q ?? ""} />
-          <s-button type="submit">{t("common.action.search")}</s-button>
+          <Button type="submit">{t("common.action.search")}</Button>
         </s-grid>
         {fields}
         {set || q.q ? (
@@ -592,13 +593,13 @@ function Pager({ data, words }: { data: Data; words: JobWords }) {
         <s-stack direction="inline" gap="base" alignItems="center">
           {data.prevCursor ? (
             q.page > 2 ? (
-              <s-button href={jobsHref(q, { before: data.prevCursor, page: q.page - 1 })}>{t("jobs.pagination.previous")}</s-button>
+              <Button href={jobsHref(q, { before: data.prevCursor, page: q.page - 1 })}>{t("jobs.pagination.previous")}</Button>
             ) : (
-              <s-button href={jobsHref(q, { after: null, before: null, page: 1 })}>{t("jobs.pagination.first")}</s-button>
+              <Button href={jobsHref(q, { after: null, before: null, page: 1 })}>{t("jobs.pagination.first")}</Button>
             )
           ) : null}
           <s-text color="subdued">{t("jobs.pagination.page", { page: q.page })}</s-text>
-          {data.nextCursor ? <s-button href={jobsHref(q, { after: data.nextCursor, page: q.page + 1 })}>{t("jobs.pagination.next")}</s-button> : null}
+          {data.nextCursor ? <Button href={jobsHref(q, { after: data.nextCursor, page: q.page + 1 })}>{t("jobs.pagination.next")}</Button> : null}
         </s-stack>
       </s-box>
     </nav>
@@ -618,7 +619,7 @@ function Empty({ data, words }: { data: Data; words: JobWords }) {
         {nothingYet ? (
           <s-stack direction="block" gap="small-200" alignItems="center">
             <s-text color="subdued">{t("jobs.list.emptyStart")}</s-text>
-            <s-button href="/app">{t("jobs.list.emptyAction")}</s-button>
+            <Button href="/app">{t("jobs.list.emptyAction")}</Button>
           </s-stack>
         ) : (
           <s-text color="subdued">{text}</s-text>
@@ -676,7 +677,7 @@ export default function Jobs() {
             <s-paragraph>{t("jobs.detail.unavailable")}</s-paragraph>
           </s-banner>
         ) : resumed?.busy ? (
-          <InlineNotice icon="info" tone="info" heading={t("jobs.detail.retryBusy")} actions={<s-button href={jobHref(resumed.busy)}>{t("jobs.action.viewJob")}</s-button>} />
+          <InlineNotice icon="info" tone="info" heading={t("jobs.detail.retryBusy")} actions={<Button href={jobHref(resumed.busy)}>{t("jobs.action.viewJob")}</Button>} />
         ) : null}
 
         {attention ? <Attention model={attention} data={data} words={words} resumer={resumer} /> : null}

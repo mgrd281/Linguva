@@ -22,13 +22,13 @@ test("the store's figure, one next step, and a card per country that opens its l
 
   const next = page.locator('s-section[heading="Next"]');
   await expect(next.getByText(/^Approve \d+ translations?$/)).toBeVisible();
-  await expect(next.locator('s-button[variant="primary"]')).toHaveAttribute("href", "/app/review");
-  await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+  await expect(next.locator('[data-button][data-variant="primary"]')).toHaveAttribute("href", "/app/review");
+  await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   // Beneath it, quieter: the outdated text and the country whose language is hidden (Spain).
   await expect(next.getByText("1 text is outdated")).toBeVisible();
   await expect(next.getByRole("link", { name: "German: View" })).toHaveAttribute("href", "/app/languages/de");
   await expect(next.getByText("A language is missing in 1 country")).toBeVisible();
-  await expect(next.locator('s-button[href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
+  await expect(next.locator('[data-button][href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
 
   // Countries first (the markets are known), each card opening the language its customers read.
   await expect(page.getByRole("heading", { name: "Your customers by country" })).toBeVisible();
@@ -47,7 +47,7 @@ test("the store's figure, one next step, and a card per country that opens its l
   // Countries without a language of their own, together, with the way to add one.
   const missing = page.locator(labelled("No language of their own"));
   await expect(missing.getByText("Czechia")).toBeVisible();
-  await expect(missing.locator('s-button[href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
+  await expect(missing.locator('[data-button][href="shopify://admin/settings/languages"][target="_top"]')).toHaveCount(1);
   // Spain's language is hidden; the United States read the original; the draft market (Japan) doesn't count.
   await expect(page.getByRole("link", { name: /^Spain Hidden Customers can't choose Spanish there yet\./ })).toHaveAttribute("href", "/app/languages/es");
   await expect(page.getByText("Customers here read your original in English. Nothing to do.")).toBeVisible();
@@ -134,8 +134,8 @@ test("a count that never started can be started again, in German, without pollin
   await expect(next.getByText(/^Das Zählen kommt seit .+ nicht voran$/)).toBeVisible();
   // No worker runs in these tests (no heartbeat): the card says so instead of "start it again".
   await expect(next.getByText(/^Hintergrundaufgaben laufen gerade nicht/)).toBeVisible();
-  await expect(next.locator('s-button[variant="primary"]', { hasText: "Neu zählen" })).toHaveCount(1);
-  await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+  await expect(next.locator('[data-button][data-variant="primary"]', { hasText: "Neu zählen" })).toHaveCount(1);
+  await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   // No bar stuck at 0 anywhere.
   await expect(page.getByRole("progressbar")).toHaveCount(0);
 
@@ -167,7 +167,7 @@ test("a stuck newer count keeps the figures and can be started again from the he
   // No worker runs in these tests: the note says so (with a worker: "A newer count didn't finish…").
   await expect(store.getByText(/^Background jobs aren't running right now/)).toBeVisible();
   // A secondary action: the next step keeps the page's only primary button.
-  await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+  await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   await page.getByRole("button", { name: "Count store again" }).click();
   const status = store.locator('div[role="status"]');
   await expect(status).toContainText("Starting…");

@@ -70,9 +70,9 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
   await expect(page.getByText(trialLine(de))).toHaveCount(0);
   // The current plan is marked, and it has no button of its own.
   await expect(card(page, "pro").locator("s-badge", { hasText: "Dein Tarif" })).toHaveCount(1);
-  await expect(card(page, "pro").locator("s-button")).toHaveCount(0);
+  await expect(card(page, "pro").locator("[data-button]")).toHaveCount(0);
   for (const handle of ["free", "starter", "business"] as const) {
-    const choose = card(page, handle).locator("s-button");
+    const choose = card(page, handle).locator("[data-button]");
     await expect(choose).toHaveText(de.t("plan.compare.choose", { plan: NAMES[handle] }));
     await expect(choose).toHaveAttribute("href", "https://admin.shopify.com/store/ui-full/charges/linguva-ui-test/pricing_plans");
     await expect(choose).toHaveAttribute("target", "_top");
@@ -90,7 +90,7 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
     };
     return cards.map((c) => ({
       price: top(Array.from(c.querySelectorAll("span")).find((s) => getComputedStyle(s).fontSize === "32px") ?? null),
-      button: top(c.querySelector("s-button")),
+      button: top(c.querySelector("[data-button]")),
       sign: top(c.querySelector('s-stack[background="subdued"]')),
       current: top(c.querySelector('s-badge[color="strong"]')),
     }));
@@ -122,7 +122,7 @@ test("a store without a plan: Free applies now, the trial on the three paid card
   await openApp(page, "empty", "/app/plan");
   await expect(page.getByRole("heading", { name: "Your plan: No plan chosen" })).toBeVisible();
   await expect(page.getByText(en.t("plan.hero.line.none"))).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Choose a plan" })).toHaveAttribute("href", /\/charges\/linguva-ui-test\/pricing_plans$/);
+  await expect(page.locator("[data-button]", { hasText: "Choose a plan" })).toHaveAttribute("href", /\/charges\/linguva-ui-test\/pricing_plans$/);
 
   await expect(card(page, "free").locator("s-badge", { hasText: en.t("plan.compare.appliesNow") })).toHaveCount(1);
   // The paid plans' trial, only while they have one (TRIAL_DAYS 0: no trial text anywhere).
@@ -135,7 +135,7 @@ test("a store without a plan: Free applies now, the trial on the three paid card
   await expect(page.getByText(en.t("plan.recommend.reasonFree"))).toBeVisible();
   await expect(card(page, "free").locator("s-badge", { hasText: en.t("plan.recommend.badge") })).toHaveCount(1);
   // Every plan can be chosen on Shopify's page.
-  for (const handle of HANDLES) await expect(card(page, handle).locator("s-button")).toHaveAttribute("target", "_top");
+  for (const handle of HANDLES) await expect(card(page, handle).locator("[data-button]")).toHaveAttribute("target", "_top");
 
   // On a phone the cards stand one below the other, in a desktop window side by side.
   const boxes = await Promise.all(HANDLES.map((h) => card(page, h).boundingBox()));
@@ -167,7 +167,7 @@ test("the owner's store: prices for reference, no plan buttons, no recommendatio
   await expect(page.getByText(en.t("plan.compare.introComplimentary"))).toBeVisible();
   for (const handle of HANDLES) await expect(card(page, handle)).toContainText(priceLabel(en, handle));
   await expect(page.getByText(en.t("plan.price.usd"), { exact: true })).toBeVisible();
-  await expect(page.locator("s-page s-button[href]")).toHaveCount(0);
+  await expect(page.locator("s-page [data-button][href]")).toHaveCount(0);
   await expect(page.getByText(/^Fits your store/)).toHaveCount(0);
   await expect(page.getByText(trialLine(en))).toHaveCount(0);
 });
@@ -244,13 +244,13 @@ test.describe("billing states in words", () => {
     await expect(page.getByRole("heading", { name: "Your plan: Plan unknown" })).toBeVisible();
     await expect(page.getByText(en.t("plan.hero.line.unknown"))).toBeVisible();
     await expect(page.getByText(trialLine(en))).toHaveCount(0);
-    await page.locator("s-button", { hasText: "Try again" }).click();
+    await page.locator("[data-button]", { hasText: "Try again" }).click();
     await expectToast(page, en.t("plan.toast.failed"));
   });
 
   test("Refresh asks Shopify and confirms the plan", async ({ page }) => {
     await openApp(page, "full", "/app/plan");
-    await page.locator("s-button", { hasText: "Refresh" }).click();
+    await page.locator("[data-button]", { hasText: "Refresh" }).click();
     await expectToast(page, "Confirmed with Shopify: Pro");
   });
 });

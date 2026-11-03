@@ -30,8 +30,8 @@ test("the content page shows the store area by area for one language @responsive
   // One card for what Linguva may not read, with one button that asks for all of it.
   await expect(page.getByRole("heading", { name: "Linguva can't read everything yet" })).toBeVisible();
   await expect(page.locator("s-chip", { hasText: "Legal texts" })).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Allow access" })).toHaveCount(1);
-  await expect(page.locator('s-button[variant="primary"]')).toHaveCount(1);
+  await expect(page.locator("[data-button]", { hasText: "Allow access" })).toHaveCount(1);
+  await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   expect(await page.locator('form input[name="scope"]').evaluateAll((inputs) => inputs.map((i) => (i as HTMLInputElement).value))).toEqual(["read_legal_policies"]);
 
   // Each area is one link to its list in this language, with its figure in the link's name.
@@ -105,7 +105,7 @@ test("a language not counted yet says so, offers counting and shows no figures @
   // The owner's store is never counted (the Overview's test starts a count in the "measure" store).
   await openApp(page, "owner", "/app/content");
   await expect(page.getByRole("heading", { name: "German isn't counted yet" })).toBeVisible();
-  await expect(page.locator('s-button[variant="primary"]', { hasText: "Count now" })).toHaveCount(1);
+  await expect(page.locator('[data-button][data-variant="primary"]', { hasText: "Count now" })).toHaveCount(1);
   await expect(page.getByText(/^Last counted/)).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Products. Not counted yet." })).toHaveAttribute("href", "/app/languages/de/products");
   await expectAccessible(page);
@@ -117,14 +117,14 @@ test("a store with many languages picks one in a select, shown on request", asyn
   const select = page.locator('s-select[name="lang"]');
   await expect(select).toHaveAttribute("label", "Language");
   await expect(page.getByRole("navigation", { name: "Choose a language" }).locator("li")).toHaveCount(0);
-  await expect(page.locator("s-button", { hasText: "Show" })).toBeVisible();
+  await expect(page.locator("[data-button]", { hasText: "Show" })).toBeVisible();
   await expectAccessible(page);
 });
 
 test("without an additional language the page says where to add one", async ({ page }) => {
   await openApp(page, "empty", "/app/content");
   await expect(page.getByRole("heading", { name: "No language to translate into yet" })).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
+  await expect(page.locator("[data-button]", { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
   await expect(page.getByText("Nothing to translate yet.", { exact: false })).toBeVisible();
   await expectAccessible(page);
 });
@@ -133,7 +133,7 @@ test("a store with nothing to translate says so and offers no count", async ({ p
   // Every type checked and empty: counting would find nothing.
   await openApp(page, "emptyCatalog", "/app/content");
   await expect(page.getByText("Nothing to translate yet.", { exact: false })).toBeVisible();
-  await expect(page.locator("s-button", { hasText: /Count/ })).toHaveCount(0);
+  await expect(page.locator("[data-button]", { hasText: /Count/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /isn't counted yet/ })).toHaveCount(0);
   await expectAccessible(page);
 });
@@ -159,7 +159,7 @@ test("theme content with many texts is searched and paged @responsive", async ({
   await openApp(page, "full", `/app/content/theme-templates/${contentRef(UI_THEME_GID)}?lang=de`);
   await expect(page.locator('s-section[heading="120 texts"]')).toHaveCount(1);
   await expect(page.getByText(/Showing 1–50 of 120/)).toBeVisible();
-  await page.locator("s-button", { hasText: "Next" }).click();
+  await page.locator("[data-button]", { hasText: "Next" }).click();
   await expect(page.getByText(/Showing 51–100 of 120/)).toBeVisible();
 
   await page.locator('s-search-field[name="q"] input').fill("free shipping");

@@ -10,11 +10,11 @@ test.describe("empty states", () => {
     await openApp(page, "empty", "/app");
     // The next step is adding a language, as the primary action.
     await expect(page.locator('s-section[heading="Next"]').getByText("Add a language")).toBeVisible();
-    await expect(page.locator('s-button[variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
+    await expect(page.locator('[data-button][data-variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
     await expect(page.getByText("Your store only has its original language (English).")).toBeVisible();
     await openApp(page, "empty", "/app/products");
     await expect(page.getByText("No languages to translate into")).toBeVisible();
-    await expect(page.locator("s-button", { hasText: "Open language settings" })).toBeVisible();
+    await expect(page.locator("[data-button]", { hasText: "Open language settings" })).toBeVisible();
     await expectAccessible(page);
   });
 
@@ -42,7 +42,7 @@ test.describe("error states", () => {
     await expect(banner).toBeVisible();
     await expect(page.getByText(/Nothing was changed/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
-    await expect(page.locator("s-button", { hasText: "Go to Overview" })).toHaveAttribute("href", "/app");
+    await expect(page.locator("[data-button]", { hasText: "Go to Overview" })).toHaveAttribute("href", "/app");
     const html = await page.content();
     // Neither Shopify's raw answer nor internals (error classes, paths, stack frames).
     expect(html).not.toMatch(/Service unavailable|HttpResponseError|GraphqlQueryError|node_modules|\.server\/|\n\s+at \S+ \(/);
@@ -78,9 +78,9 @@ test.describe("loading states", () => {
     });
     const button = page.getByRole("button", { name: "Translate with AI" });
     await button.click();
-    await expect(page.locator("s-button[loading]").filter({ hasText: "Translate with AI" })).toHaveCount(1);
+    await expect(page.locator('[data-button][aria-busy="true"]').filter({ hasText: "Translate with AI" })).toHaveCount(1);
     release();
-    await expect(page.locator("s-button[loading]").filter({ hasText: "Translate with AI" })).toHaveCount(0);
+    await expect(page.locator('[data-button][aria-busy="true"]').filter({ hasText: "Translate with AI" })).toHaveCount(0);
     await expect(page.getByText(/AI drafts are filled in below/)).toBeVisible();
     await expect(page.getByText("AI draft").first()).toBeVisible();
     // Nothing is published until the merchant clicks Publish: reload shows Shopify's value.

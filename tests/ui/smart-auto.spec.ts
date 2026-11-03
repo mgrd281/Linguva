@@ -189,7 +189,7 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await expect(status.getByText("The suggestions below suit most stores. Adjust them, or turn the schedule on right away.")).toBeVisible();
   // Nothing to show yet, so no empty cards before the form; and never a disabled primary button.
   await expect(page.locator("#smart-activity, #smart-exclusions")).toHaveCount(0);
-  await expect(page.locator('s-button[variant="primary"][disabled]')).toHaveCount(0);
+  await expect(page.locator('[data-button][data-variant="primary"]:disabled')).toHaveCount(0);
   // The plan's languages are chosen by default, the safe content types too, review first.
   for (const name of ["French", "German", "Spanish"]) await expect(page.getByRole("checkbox", { name, exact: true })).toBeChecked();
   await isCurrent(page, "#smart-publishing", "Review first");
@@ -368,18 +368,18 @@ test("a job the schedule stopped for its budget: its card leads back once the bu
   try {
     await openApp(page, "business", `/app/settings/automatic?job=${job.id}#smart-budgets`);
     const budgets = page.locator("#smart-budgets");
-    const back = budgets.locator(`s-button[href="/app/jobs/${job.id}"]`);
+    const back = budgets.locator(`[data-button][href="/app/jobs/${job.id}"]`);
     await expect(back).toBeVisible();
     await expect(back).toHaveText("Back to the job");
-    await expect(back).toHaveAttribute("variant", "primary");
+    await expect(back).toHaveAttribute("data-variant", "primary");
     await expect(budgets.getByText("German · Products can go on")).toBeVisible();
     // Only there, and the hero's own main button steps back.
-    await expect(page.locator("#smart-scope").locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
-    await expect(page.locator('#smart-status s-button[variant="primary"]')).toHaveCount(0);
+    await expect(page.locator("#smart-scope").locator('[data-button][href^="/app/jobs/"]')).toHaveCount(0);
+    await expect(page.locator('#smart-status [data-button][data-variant="primary"]')).toHaveCount(0);
     await expectAccessible(page);
     // Without the job in the address, nothing.
     await openApp(page, "business", "/app/settings/automatic");
-    await expect(page.locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
+    await expect(page.locator('[data-button][href^="/app/jobs/"]')).toHaveCount(0);
   } finally {
     await job.remove();
   }

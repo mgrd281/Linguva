@@ -22,6 +22,7 @@ import { engineList } from "../lib/name-lists";
 import { DEEPL_PLAN_NAMES, ownKeyToken, usableOwnKey, type OwnKeyStatus, type OwnKeySummary } from "../lib/own-keys";
 import { useResultToast } from "./app-bridge";
 import { Actions, FactList, focusById, InlineNotice, More, SETTING_NAME, SettingSection, StateLine, useFreshResult, type SettingState } from "./SettingsParts";
+import { Button } from "./Button";
 
 /** The Settings loader's `ownKeys` (OwnKeysView): summaries only, never a key. */
 export interface OwnKeysCardData {
@@ -309,14 +310,14 @@ function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyR
               <fetcher.Form method="post">
                 <input type="hidden" name="intent" value="check-key" />
                 <input type="hidden" name="engine" value={engine} />
-                <s-button type="submit" {...(busy && intent === "check-key" ? { loading: true } : {})}>
+                <Button type="submit" {...(busy && intent === "check-key" ? { loading: true } : {})}>
                   {t("settings.keys.checkAgain")}
-                </s-button>
+                </Button>
               </fetcher.Form>
             ) : null}
-            <s-button tone="critical" commandFor={modal} command="--show" {...(busy && intent === "remove-key" ? { loading: true } : {})}>
+            <Button tone="critical" commandFor={modal} command="--show" {...(busy && intent === "remove-key" ? { loading: true } : {})}>
               {t("settings.keys.remove")}
-            </s-button>
+            </Button>
           </Actions>
           {manage ? <More summary={t("settings.keys.replace")}>{form}</More> : null}
           {error}
@@ -381,9 +382,9 @@ function KeyForm({
         {engine === "google" ? <StateLine icon="globe">{t("settings.keys.google.global")}</StateLine> : null}
         {elsewhere ? <s-text color="subdued">{t(elsewhere)}</s-text> : null}
         <s-stack direction="inline">
-          <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(loading ? { loading: true } : {})}>
+          <Button type="submit" variant={primary ? "primary" : "secondary"} {...(loading ? { loading: true } : {})}>
             {t("settings.keys.save")}
-          </s-button>
+          </Button>
         </s-stack>
       </s-stack>
     </fetcher.Form>

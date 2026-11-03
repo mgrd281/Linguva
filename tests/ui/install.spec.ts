@@ -19,7 +19,7 @@ test("a new store installs through token exchange and lands on the Overview", as
   await openApp(page, "fresh", "/app");
   // A new merchant is guided: German exists and is published; the next step is measuring it.
   await expect(page.locator('s-section[heading="Next"]').getByText("See how much of your store is translated")).toBeVisible();
-  await expect(page.locator('s-button[variant="primary"]', { hasText: "Count now" })).toBeVisible();
+  await expect(page.locator('[data-button][data-variant="primary"]', { hasText: "Count now" })).toBeVisible();
 
   // afterAuth stored the tenant with the GID Shopify reported.
   const row = await owner.shop.findUniqueOrThrow({ where: { shopDomain: shop.domain } });

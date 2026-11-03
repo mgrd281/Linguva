@@ -183,7 +183,6 @@ export const en = {
   "settings.ai.extra.body": "Linguva is also set up to use {processors}. Until you allow it, Linguva uses only {consented}.",
   "settings.ai.extra.action": "Allow these too",
   "settings.ai.changed": "The list of translation services has changed. Check it and allow again.",
-  "settings.style.engineNoChoice": "Translated with {engine}: no choice",
   "settings.style.fallbackNote": "If DeepL can't translate, another service steps in. It can't keep the form of address, so those results wait in Review.",
   "settings.style.storeContext.detailsDeepL": "What you sell and how you speak. Helps DeepL choose its words; not translated. The other services don't use it.",
   "settings.style.storeContext.detailsUnused": "What you sell and how you speak. The translation services in use don't read it; it is kept for DeepL. Not translated.",
@@ -281,6 +280,9 @@ export const en = {
   "settings.tools.lead": "More pages around your translations.",
   "settings.tools.glossary.detail": "Terms AI always translates the same way",
   "settings.tools.memory.detail": "Translations Linguva reuses for the same text",
+  "settings.style.autoHint": "“DeepL decides” uses the usual form for each language.",
+  "settings.style.noChoiceFor": "No choice needed for {languages}.",
+  "settings.style.engineNoChoiceFor": "Translated with {engine}, without a choice: {languages}.",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -467,7 +469,6 @@ export const de: Translation<typeof en> = {
   "settings.ai.extra.body": "Linguva ist auch für {processors} eingerichtet. Bis du es erlaubst, nutzt Linguva nur {consented}.",
   "settings.ai.extra.action": "Auch diese erlauben",
   "settings.ai.changed": "Die Liste der Übersetzungsdienste hat sich geändert. Prüfe sie und erlaube erneut.",
-  "settings.style.engineNoChoice": "Übersetzt mit {engine}: keine Wahl",
   "settings.style.fallbackNote": "Kann DeepL nicht übersetzen, springt ein anderer Dienst ein. Er kann die Anrede nicht übernehmen, daher warten diese Ergebnisse unter „Prüfen“.",
   "settings.style.storeContext.detailsDeepL": "Was du verkaufst und wie du sprichst. Hilft DeepL bei der Wortwahl und wird nicht übersetzt. Die anderen Dienste nutzen es nicht.",
   "settings.style.storeContext.detailsUnused": "Was du verkaufst und wie du sprichst. Die genutzten Übersetzungsdienste lesen es nicht; es bleibt für DeepL gespeichert. Wird nicht übersetzt.",
@@ -564,6 +565,9 @@ export const de: Translation<typeof en> = {
   "settings.tools.lead": "Weitere Seiten rund um deine Übersetzungen.",
   "settings.tools.glossary.detail": "Begriffe, die die KI immer gleich übersetzt",
   "settings.tools.memory.detail": "Übersetzungen, die Linguva für gleichen Text wiederverwendet",
+  "settings.style.autoHint": "„DeepL entscheidet“ wählt für jede Sprache die übliche Form.",
+  "settings.style.noChoiceFor": "Keine Wahl nötig für {languages}.",
+  "settings.style.engineNoChoiceFor": "Mit {engine} übersetzt, ohne Wahl: {languages}.",
 };
 
 export const fr: Translation<typeof en> = {
@@ -756,7 +760,6 @@ export const fr: Translation<typeof en> = {
   "settings.ai.extra.body": "Linguva est aussi configuré pour utiliser {processors}. Tant que vous ne l'autorisez pas, Linguva n'utilise que {consented}.",
   "settings.ai.extra.action": "Les autoriser aussi",
   "settings.ai.changed": "La liste des services de traduction a changé. Vérifiez-la et autorisez à nouveau.",
-  "settings.style.engineNoChoice": "Traduit avec {engine} : pas de choix",
   "settings.style.fallbackNote": "Si DeepL ne peut pas traduire, un autre service prend le relais. Il ne peut pas respecter la forme de politesse : ces résultats attendent dans Révision.",
   "settings.style.storeContext.detailsDeepL": "Ce que vous vendez et votre façon de parler. Aide DeepL à choisir ses mots ; n'est pas traduit. Les autres services ne l'utilisent pas.",
   "settings.style.storeContext.detailsUnused": "Ce que vous vendez et votre façon de parler. Les services de traduction utilisés ne le lisent pas ; il est conservé pour DeepL. N'est pas traduit.",
@@ -853,6 +856,9 @@ export const fr: Translation<typeof en> = {
   "settings.tools.lead": "D'autres pages autour de vos traductions.",
   "settings.tools.glossary.detail": "Les termes que l'IA traduit toujours de la même façon",
   "settings.tools.memory.detail": "Les traductions que Linguva réutilise pour un même texte",
+  "settings.style.autoHint": "« DeepL décide » utilise la forme habituelle de chaque langue.",
+  "settings.style.noChoiceFor": "Aucun choix nécessaire pour {languages}.",
+  "settings.style.engineNoChoiceFor": "Traduit avec {engine}, sans choix : {languages}.",
 };
 
 export const es: Translation<typeof en> = {
@@ -1041,7 +1047,6 @@ export const es: Translation<typeof en> = {
   "settings.ai.extra.body": "Linguva también está configurado para usar {processors}. Hasta que lo permitas, Linguva solo usa {consented}.",
   "settings.ai.extra.action": "Permitirlos también",
   "settings.ai.changed": "La lista de servicios de traducción ha cambiado. Revísala y vuelve a permitirlo.",
-  "settings.style.engineNoChoice": "Se traduce con {engine}: sin elección",
   "settings.style.fallbackNote": "Si DeepL no puede traducir, otro servicio lo sustituye. No puede mantener el tratamiento, así que esos resultados esperan en Revisión.",
   "settings.style.storeContext.detailsDeepL": "Lo que vendes y cómo hablas. Ayuda a DeepL a elegir las palabras; no se traduce. Los otros servicios no lo usan.",
   "settings.style.storeContext.detailsUnused": "Lo que vendes y cómo hablas. Los servicios de traducción en uso no lo leen; se guarda para DeepL. No se traduce.",
@@ -1138,4 +1143,7 @@ export const es: Translation<typeof en> = {
   "settings.tools.lead": "Más páginas sobre tus traducciones.",
   "settings.tools.glossary.detail": "Términos que la IA traduce siempre igual",
   "settings.tools.memory.detail": "Traducciones que Linguva reutiliza para el mismo texto",
+  "settings.style.autoHint": "«DeepL decide» usa la forma habitual de cada idioma.",
+  "settings.style.noChoiceFor": "No hace falta elegir para {languages}.",
+  "settings.style.engineNoChoiceFor": "Se traduce con {engine}, sin elección: {languages}.",
 };

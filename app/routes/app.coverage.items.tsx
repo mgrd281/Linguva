@@ -8,6 +8,7 @@ import { hasMessage, kindLabel } from "../i18n/labels";
 import { StateDot } from "../components/Coverage";
 import { FIELD_GROUPS, FIELD_STATES, isFieldState, type FieldState } from "../lib/coverage-rules";
 import { RESOURCE_KINDS } from "../lib/resource-kinds";
+import { Button } from "../components/Button";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => loadCoverageItemsPage(request);
 export const action = async ({ request }: ActionFunctionArgs) => coverageAction(request);
@@ -102,10 +103,10 @@ export default function CoverageItems() {
             <s-search-field name="q" label={t("coverage.items.search")} placeholder={t("coverage.items.searchPlaceholder")} value={f.search} />
             {data.searchUnavailable || (f.search && !data.searchable) ? <s-text color="subdued">{t("coverage.items.searchUnsupported")}</s-text> : null}
             <s-stack direction="inline" gap="base" alignItems="center">
-              <s-button type="submit">{t("coverage.filter.apply")}</s-button>
-              <s-button variant="tertiary" href={f.locale ? `/app/coverage/items?lang=${encodeURIComponent(f.locale)}` : "/app/coverage/items"}>
+              <Button type="submit">{t("coverage.filter.apply")}</Button>
+              <Button variant="tertiary" href={f.locale ? `/app/coverage/items?lang=${encodeURIComponent(f.locale)}` : "/app/coverage/items"}>
                 {t("coverage.items.clear")}
-              </s-button>
+              </Button>
             </s-stack>
           </s-stack>
         </Form>
@@ -132,9 +133,9 @@ export default function CoverageItems() {
                     <input type="hidden" name="locale" value={f.locale} />
                     <input type="hidden" name="resourceType" value={f.type} />
                     {f.fieldGroup ? <input type="hidden" name="fieldGroup" value={f.fieldGroup} /> : null}
-                    <s-button type="submit" variant="primary" disabled={!data.canTranslate || !data.jobsAvailable} {...(fixer.state !== "idle" ? { loading: true } : {})}>
+                    <Button type="submit" variant="primary" disabled={!data.canTranslate || !data.jobsAvailable} {...(fixer.state !== "idle" ? { loading: true } : {})}>
                       {f.state === "failed" ? t("coverage.items.retryFailed") : t("coverage.items.translateMissing")}
-                    </s-button>
+                    </Button>
                   </fixer.Form>
                   <s-link href={`/app/review?lang=${encodeURIComponent(f.locale)}${f.type in RESOURCE_KINDS ? `&type=${f.type}` : ""}`}>{t("coverage.items.reviewDrafts")}</s-link>
                   {f.state !== "outdated" ? <s-link href={filterQuery({ state: "outdated", after: null })}>{t("coverage.items.openOutdated")}</s-link> : null}
@@ -206,8 +207,8 @@ export default function CoverageItems() {
         {data.nextCursor || !data.isFirstPage ? (
           <s-box padding="base">
             <s-stack direction="inline" gap="base">
-              {!data.isFirstPage ? <s-button href={filterQuery({ after: null })}>{t("coverage.items.first")}</s-button> : null}
-              {data.nextCursor ? <s-button href={filterQuery({ after: data.nextCursor })}>{t("coverage.items.next")}</s-button> : null}
+              {!data.isFirstPage ? <Button href={filterQuery({ after: null })}>{t("coverage.items.first")}</Button> : null}
+              {data.nextCursor ? <Button href={filterQuery({ after: data.nextCursor })}>{t("coverage.items.next")}</Button> : null}
             </s-stack>
           </s-box>
         ) : null}

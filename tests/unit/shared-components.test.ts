@@ -233,21 +233,24 @@ describe("BackToJob (Jobs SPEC §5.5, the way back)", () => {
   const back = (locale: AppLocale) => html(createElement(BackToJob, { jobId: ID, name: NAMES[locale] }), locale);
 
   it("starts the button's accessible name with its visible label (WCAG 2.5.3): 'Back to the job Italian · Collections'", () => {
-    const button = tags(back("en"), "s-button");
-    expect(button).toEqual([`<s-button variant="primary" href="/app/jobs/${ID}" accessibilityLabel="Back to the job Italian · Collections">`]);
-    expect(back("en")).toContain(">Back to the job</s-button>");
+    const button = tags(back("en"), "a");
+    expect(button).toHaveLength(1);
+    expect(attr(button[0]!, "href")).toBe(`/app/jobs/${ID}`);
+    expect(attr(button[0]!, "aria-label")).toBe("Back to the job Italian · Collections");
+    expect(back("en")).toContain('<span class="lv-btn__label">Back to the job</span></a>');
   });
 
   it("is a primary link to the job in every language, its name first in the button's accessible name", () => {
     for (const locale of APP_LOCALES) {
       const markup = back(locale);
-      const [button] = tags(markup, "s-button");
-      const visible = markup.match(/<s-button[^>]*>([^<]*)<\/s-button>/)![1]!;
-      expect(tags(markup, "s-button"), locale).toHaveLength(1);
-      expect(attr(button!, "variant"), locale).toBe("primary");
+      const [button] = tags(markup, "a");
+      const visible = markup.match(/<span class="lv-btn__label">([^<]*)<\/span>/)![1]!;
+      expect(tags(markup, "a"), locale).toHaveLength(1);
+      expect(attr(button!, "class"), locale).toBe("lv-btn lv-btn--primary");
+      expect(attr(button!, "data-variant"), locale).toBe("primary");
       expect(attr(button!, "href"), locale).toBe(`/app/jobs/${ID}`);
       expect(visible, locale).toBe(translator(locale).t("jobs.back.action"));
-      expect(attr(button!, "accessibilityLabel"), locale).toBe(`${visible} ${NAMES[locale]}`);
+      expect(attr(button!, "aria-label"), locale).toBe(`${visible} ${NAMES[locale]}`);
     }
   });
 
@@ -258,7 +261,7 @@ describe("BackToJob (Jobs SPEC §5.5, the way back)", () => {
     const de = back("de");
     expect(de).toContain(">Italienisch · Kollektionen kann weiterlaufen</strong>");
     expect(de).toContain(">Auf seiner Seite setzt du den Auftrag mit einem Klick fort.</s-text>");
-    expect(de).toContain(">Zurück zum Auftrag</s-button>");
+    expect(de).toContain(">Zurück zum Auftrag</span></a>");
   });
 
   it("is a framed card whose button sits beside the line when the card is wide enough and under it on a phone", () => {

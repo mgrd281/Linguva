@@ -25,6 +25,8 @@ async function focused(page: Page) {
         style!.boxShadow !== "none");
     return {
       tag: host?.tagName.toLowerCase() ?? "",
+      // The app's buttons (components/Button.tsx) and Polaris' own (a dialog's).
+      button: Boolean(host?.hasAttribute("data-button") || host?.tagName === "S-BUTTON"),
       name: host?.getAttribute("name") ?? "",
       text: (host?.textContent ?? "").trim().slice(0, 60),
       label: host?.getAttribute("label") ?? "",
@@ -47,7 +49,7 @@ test("translate, edit and publish a product with the keyboard only", async ({ pa
   await openApp(page, "full", "/app/products/6?lang=de");
   await page.locator("body").focus();
 
-  const ai = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Translate with AI");
+  const ai = await tabTo(page, (f) => f.button && f.text === "Translate with AI");
   expect(ai.visible).toBe(true);
   await page.keyboard.press("Enter");
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[de] Product 6 jacket");
@@ -59,10 +61,10 @@ test("translate, edit and publish a product with the keyboard only", async ({ pa
   await page.keyboard.type("Jacke Nummer 6");
 
   // Shift+Tab goes back the same way (no keyboard trap).
-  const back = await tabTo(page, (f) => f.tag === "s-button", 10, "Shift+Tab");
+  const back = await tabTo(page, (f) => f.button, 10, "Shift+Tab");
   expect(back.visible).toBe(true);
 
-  await tabTo(page, (f) => f.tag === "s-button" && f.text === "Publish translations", 80);
+  await tabTo(page, (f) => f.button && f.text === "Publish translations", 80);
   await page.keyboard.press("Enter");
   await expectToast(page, /translations? published$/);
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Jacke Nummer 6");
@@ -85,11 +87,11 @@ test("leaving with unpublished changes: focus is on Stay, Enter stays", async ({
 test("Review: reach a text's Approve and the page's primary by keyboard, approve with Enter", async ({ page }) => {
   await openApp(page, "full", "/app/review?lang=fr");
   await page.locator("body").focus();
-  const first = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Approve", 80);
+  const first = await tabTo(page, (f) => f.button && f.text === "Approve", 80);
   expect(first.visible).toBe(true);
-  const primary = await tabTo(page, (f) => f.tag === "s-button" && /^Approve all \d+/.test(f.text), 20, "Shift+Tab");
+  const primary = await tabTo(page, (f) => f.button && /^Approve all \d+/.test(f.text), 20, "Shift+Tab");
   expect(primary.visible).toBe(true);
-  await tabTo(page, (f) => f.tag === "s-button" && f.text === "Approve", 20);
+  await tabTo(page, (f) => f.button && f.text === "Approve", 20);
   await page.keyboard.press("Enter");
   await expect(page.getByText("Approved – customers see it now.").first()).toBeVisible();
   // Focus moves on to the next text's Approve.
@@ -100,9 +102,9 @@ test("Review: reach a text's Approve and the page's primary by keyboard, approve
 test("Plan: the plan links and both lists of details are reached by keyboard, Enter opens them", async ({ page }) => {
   await openApp(page, "full", "/app/plan");
   await page.locator("body").focus();
-  const change = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Change plan", 30);
+  const change = await tabTo(page, (f) => f.button && f.text === "Change plan", 30);
   expect(change.visible).toBe(true);
-  const choose = await tabTo(page, (f) => f.tag === "s-button" && f.text === "Choose Starter", 30);
+  const choose = await tabTo(page, (f) => f.button && f.text === "Choose Starter", 30);
   expect(choose.visible).toBe(true);
 
   const table = await tabTo(page, (f) => f.tag === "summary" && f.text.startsWith("Compare all features"), 40);

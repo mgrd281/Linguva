@@ -26,10 +26,12 @@ const navOrder = (page: Page) => nav(page).locator("li").evaluateAll((items) => 
 const status = (page: Page) => page.locator("#settings-status");
 /** Primary buttons the merchant sees: not in a closed dialog, not in a section that isn't shown. */
 const primaries = (page: Page) =>
-  page.locator('s-button[variant="primary"]').evaluateAll((buttons) =>
+  page.locator('[data-button][data-variant="primary"]').evaluateAll((buttons) =>
     buttons
       .filter((b) => {
         if (b.closest("s-modal")) return false;
+        // Inside a Polaris box hidden for this width (its display is decided in its shadow root): not drawn.
+        if (b.getClientRects().length === 0) return false;
         for (let el: Element | null = b; el; el = el.parentElement) if (getComputedStyle(el).display === "none") return false;
         return true;
       })
@@ -71,7 +73,7 @@ test.describe("subscribed, no key yet", () => {
     await expect(page.locator("s-banner s-link", { hasText: "Add your key" })).toHaveAttribute("href", "/app/settings?section=keys");
     await expect(page.getByRole("heading", { name: "Your plan: Own key" })).toBeVisible();
     await expect(page.getByText(en.t("plan.hero.line.ownKey.missing"))).toBeVisible();
-    const addKey = page.locator('s-button[variant="primary"][href="/app/settings?section=keys"]');
+    const addKey = page.locator('[data-button][data-variant="primary"][href="/app/settings?section=keys"]');
     await expect(addKey).toHaveText("Add your key");
     expect(await primaries(page)).toEqual(["Add your key"]);
     // Its card is shown although OWN_KEY_PLAN_VISIBLE is off: it is the store's plan.
@@ -85,7 +87,7 @@ test.describe("subscribed, no key yet", () => {
   test("the Overview's next step is the key, and its footer says a key is needed", async ({ page }) => {
     await openApp(page, "ownkey", "/app");
     await expect(page.getByText(en.t("overview.checklist.ownKey.label"), { exact: true })).toBeVisible();
-    await expect(page.locator('s-button[href="/app/settings?section=keys"]', { hasText: "Add key" })).toBeVisible();
+    await expect(page.locator('[data-button][href="/app/settings?section=keys"]', { hasText: "Add key" })).toBeVisible();
     await expect(page.getByText(en.t("overview.usage.ownKeyMissing"))).toBeVisible();
     await expect(page.getByText(en.t("overview.usage.notConfigured"))).toHaveCount(0);
     await expect(page.locator(`s-banner[heading="${en.t("overview.banner.exhausted.heading")}"]`)).toHaveCount(0);
@@ -102,7 +104,7 @@ test.describe("subscribed, no key yet", () => {
       // A phone: the status row leads to the keys, as the list's one primary button.
       await expect(navEntry(page, "Your keys")).toHaveText(/^Your keys\s*No key yet$/, { useInnerText: true });
       expect(await primaries(page)).toEqual(["Add key"]);
-      await status(page).locator('s-button[href="/app/settings?section=keys"]').click();
+      await status(page).locator('[data-button][href="/app/settings?section=keys"]').click();
       await expect(page.locator("#settings-keys-heading")).toBeFocused();
     }
     expect(await primaries(page)).toEqual(["Check and save"]);
@@ -163,7 +165,7 @@ test.describe("adding and managing keys", () => {
     await expect(page.locator("#settings-keys")).toBeVisible();
     await expect(status(page)).toHaveText(/^AI translation isn't allowed yet\s*Without permission, AI translates nothing/, { useInnerText: true });
     expect(await primaries(page)).toEqual(["Read and allow"]);
-    await status(page).locator('s-button[href="/app/settings?section=ai"]').click();
+    await status(page).locator('[data-button][href="/app/settings?section=ai"]').click();
     await expect(page.locator("#settings-ai-heading")).toBeFocused();
     // There, with the own-key notice, the permission is the page's one primary button.
     expect(await primaries(page)).toEqual(["Allow AI translation"]);

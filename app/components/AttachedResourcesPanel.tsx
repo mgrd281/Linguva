@@ -12,6 +12,7 @@ import type { I18n } from "../i18n/i18n";
 import { fieldName as fieldLabel, hasMessage, issueName } from "../i18n/labels";
 import { useResultToast } from "./app-bridge";
 import { StructuredEditor, StructuredView } from "./StructuredValue";
+import { Button } from "./Button";
 
 type EditorData = Awaited<ReturnType<typeof loadEditorData>>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
@@ -92,9 +93,9 @@ export function AttachedResourcesPanel({
         {hasMachine ? (
           <aiFetcher.Form method="post">
             <input type="hidden" name="intent" value="ai-translate-attached" />
-            <s-button type="submit" disabled={!canAi} {...(aiFetcher.state !== "idle" ? { loading: true } : {})}>
+            <Button type="submit" disabled={!canAi} {...(aiFetcher.state !== "idle" ? { loading: true } : {})}>
               {t("editor.attached.translateAi")}
-            </s-button>
+            </Button>
           </aiFetcher.Form>
         ) : null}
 
@@ -212,9 +213,9 @@ export function AttachedResourcesPanel({
               </s-box>
             ))}
             {attached.items.length ? (
-              <s-button type="submit" variant="primary" {...(saveFetcher.state !== "idle" ? { loading: true } : {})}>
+              <Button type="submit" variant="primary" {...(saveFetcher.state !== "idle" ? { loading: true } : {})}>
                 {t("editor.attached.publish")}
-              </s-button>
+              </Button>
             ) : null}
           </s-stack>
         </saveFetcher.Form>

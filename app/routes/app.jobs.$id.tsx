@@ -52,6 +52,7 @@ import {
 } from "../lib/job-view";
 import { usesOwnKeys } from "../lib/plans";
 import { editorPathFor, numericId } from "../lib/resource-kinds";
+import { Button } from "../components/Button";
 
 const ACTIVE = new Set(["PENDING", "DISCOVERING", "RUNNING"]);
 const CANCEL_MODAL = "job-cancel";
@@ -290,9 +291,9 @@ function RetryButton({ fetcher, label, accessibilityLabel, primary }: { fetcher:
   return (
     <fetcher.Form method="post">
       <input type="hidden" name="intent" value="retry" />
-      <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(accessibilityLabel ? { accessibilityLabel } : {})} {...(busy ? { loading: true } : {})}>
+      <Button type="submit" variant={primary ? "primary" : "secondary"} {...(accessibilityLabel ? { accessibilityLabel } : {})} {...(busy ? { loading: true } : {})}>
         {label}
-      </s-button>
+      </Button>
     </fetcher.Form>
   );
 }
@@ -304,9 +305,9 @@ function stepAction(step: Step, words: JobWords, fetcher: Fetcher): ReactNode {
   switch (action.kind) {
     case "link":
       return (
-        <s-button variant={variant} href={action.href}>
+        <Button variant={variant} href={action.href}>
           {words.say(action.label)}
-        </s-button>
+        </Button>
       );
     case "retry":
       return <RetryButton fetcher={fetcher} label={words.say(action.label)} accessibilityLabel={words.say(action.accessibilityLabel)} primary={step.primary} />;
@@ -314,9 +315,9 @@ function stepAction(step: Step, words: JobWords, fetcher: Fetcher): ReactNode {
       return <RetryButton fetcher={fetcher} label={words.say(action.label)} primary={step.primary} />;
     case "reload":
       return (
-        <s-button variant={variant} onClick={() => window.location.reload()}>
+        <Button variant={variant} onClick={() => window.location.reload()}>
           {words.say(action.label)}
-        </s-button>
+        </Button>
       );
   }
 }
@@ -325,15 +326,15 @@ function stepAction(step: Step, words: JobWords, fetcher: Fetcher): ReactNode {
 function FootAction({ action, words }: { action: PanelFoot["action"]; words: JobWords }) {
   if (action.kind === "cancel") {
     return (
-      <s-button variant="tertiary" tone="critical" commandFor={CANCEL_MODAL} command="--show">
+      <Button variant="tertiary" tone="critical" commandFor={CANCEL_MODAL} command="--show">
         {words.say(action.label)}
-      </s-button>
+      </Button>
     );
   }
   return (
-    <s-button variant="secondary" href={action.href}>
+    <Button variant="secondary" href={action.href}>
       {words.say(action.label)}
-    </s-button>
+    </Button>
   );
 }
 
@@ -487,7 +488,7 @@ function Details({ data, words }: { data: Data; words: JobWords }) {
           <s-text color="subdued">{t("jobs.detail.outcomes.empty")}</s-text>
         )}
         <s-stack direction="inline" gap="base" alignItems="center">
-          {data.outcomes.length ? <s-button onClick={() => void downloadReport(data.job.id, words.i18n.locale)}>{t("jobs.detail.outcomes.download")}</s-button> : null}
+          {data.outcomes.length ? <Button onClick={() => void downloadReport(data.job.id, words.i18n.locale)}>{t("jobs.detail.outcomes.download")}</Button> : null}
           <s-text color="subdued">{t("jobs.detail.reference", { id: data.job.id })}</s-text>
         </s-stack>
       </More>
@@ -517,9 +518,9 @@ function ActionNotice({ result, data, words }: { result: ActionData | undefined;
         heading={heading}
         actions={
           busy.id ? (
-            <s-button href={`/app/jobs/${encodeURIComponent(busy.id)}`} accessibilityLabel={t("jobs.detail.busy.label", { name })}>
+            <Button href={`/app/jobs/${encodeURIComponent(busy.id)}`} accessibilityLabel={t("jobs.detail.busy.label", { name })}>
               {t("jobs.action.viewJob")}
-            </s-button>
+            </Button>
           ) : null
         }
       >

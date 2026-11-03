@@ -28,7 +28,7 @@ test("a job page explains every result and offers a report @responsive", async (
   await expectNoHorizontalScroll(page);
 
   const download = page.waitForEvent("download");
-  await results.locator("s-button", { hasText: "Download report (CSV)" }).click();
+  await results.locator("[data-button]", { hasText: "Download report (CSV)" }).click();
   const file = await (await download).path();
   const csv = await readFile(file!, "utf8");
   const [header, ...rows] = csv.replace(/^\uFEFF/, "").trim().split("\r\n");
@@ -45,7 +45,7 @@ test("the job report is German for a German admin user", async ({ page }) => {
   await expect(results.getByText("Als Entwurf zur Prüfung gespeichert")).toBeVisible();
   await expect(page.locator("s-page")).toHaveAttribute("heading", "Französisch · Produkte");
   const download = page.waitForEvent("download");
-  await results.locator("s-button", { hasText: "Bericht herunterladen (CSV)" }).click();
+  await results.locator("[data-button]", { hasText: "Bericht herunterladen (CSV)" }).click();
   const csv = await readFile((await (await download).path())!, "utf8");
   expect(csv.replace(/^\uFEFF/, "").split("\r\n")[0]).toBe("Nr.,Shopify-ID,Status,Grund-Code,Grund,Übersetzte Felder,Zurückgehaltene Felder,Versuche,Beendet (UTC),Referenz");
 });

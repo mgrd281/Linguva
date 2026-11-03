@@ -40,8 +40,8 @@ test("an area's items: figure, filters that add up, groups by state, pictures an
   await expect(hero.getByText("Fully done: 7 of 55 products")).toBeVisible();
   // One next step with the page's only primary button: translate what is open (asks first).
   await expect(hero.getByText("48 products to translate")).toBeVisible();
-  const primary = page.locator('s-button[variant="primary"]').filter({ hasNot: page.locator("s-modal") });
-  await expect(page.locator('s-button[variant="primary"]:not(s-modal s-button)')).toHaveCount(1);
+  const primary = page.locator('[data-button][data-variant="primary"]').filter({ hasNot: page.locator("s-modal") });
+  await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   await expect(primary.first()).toHaveText("Translate");
 
   // Each product is in exactly one group: the filters add up to All.
@@ -148,7 +148,7 @@ test("an area Linguva can't read says so, with the way to allow it", async ({ pa
   await expect(page.getByRole("heading", { level: 1, name: "Store & checkout in German" })).toBeVisible();
   const hero = page.locator(labelled("Progress: Store & checkout"));
   await expect(hero.getByRole("img", { name: "No access" })).toBeVisible();
-  await expect(hero.locator('s-button[href="/app/content/policies"]')).toHaveText("Allow access");
+  await expect(hero.locator('[data-button][href="/app/content/policies"]')).toHaveText("Allow access");
   await expectAccessible(page);
 });
 
@@ -156,7 +156,7 @@ test("an area of a language not counted yet offers counting", async ({ page }) =
   await openApp(page, "owner", "/app/languages/de/products");
   const hero = page.locator(labelled("Progress: Products"));
   await expect(hero.getByRole("img", { name: "Not counted yet" })).toBeVisible();
-  await expect(hero.locator('s-button[variant="primary"]')).toHaveText("Count now");
+  await expect(hero.locator('[data-button][data-variant="primary"]')).toHaveText("Count now");
   await expect(page.getByRole("navigation", { name: "Show" })).toHaveCount(0);
 });
 

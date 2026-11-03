@@ -18,7 +18,7 @@
  * the page's data again. A job stopped for the permission or a key links
  * here with `?job=<id>`; once its cause is fixed, the section leads back.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData, useLocation, useNavigate, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -57,7 +57,8 @@ import { useResultToast, useSaveBar } from "../components/app-bridge";
 import { BackToJob } from "../components/jobs/BackToJob";
 import { KEYS_CARD, keysState, ownKeyCostNote, OwnKeysCard, type KeyFetcher } from "../components/OwnKeysCard";
 import { Flag } from "../components/Flag";
-import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
+import { Segmented } from "../components/Segmented";
+import { BIG_HEADING, Breadcrumbs } from "../components/LanguageLayout";
 import { STAT, SUB_HEADING } from "../components/plan/styles";
 import { ProgressBar } from "../components/ProgressBar";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
@@ -81,7 +82,7 @@ import {
   type SettingState,
 } from "../components/SettingsParts";
 import { scheduleSummary, smartErrorText, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
-import type { I18n } from "../i18n/i18n";
+import { INTL_LOCALE, type I18n } from "../i18n/i18n";
 import { jobErrorMessage } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { basicState, changesMode, effectivePublishMode, smartState, type BasicState, type SmartState } from "../lib/automation-state";
@@ -91,11 +92,12 @@ import { localeCountry } from "../lib/flags";
 import { formalityPronouns, supportsFormality } from "../lib/formality";
 import type { IconName } from "../lib/icons";
 import { jobName } from "../lib/job-view";
-import { languageList } from "../lib/name-lists";
+import { languageList, upperFirst } from "../lib/name-lists";
 import { isOwnKeyCode, usableOwnKey } from "../lib/own-keys";
 import { entitlementsFor, TRIAL_AI_CHARS } from "../lib/plans";
 import { planName, usagePercent } from "../lib/plan-view";
 import { usageLevel } from "../lib/usage";
+import { Button } from "../components/Button";
 
 /** The sections in the nav's order: how Linguva translates, then what it may use (keys right before the permission). */
 const SECTION_KEYS = ["changes", "publish", "style", "memory", "keys", "ai", "plan", "tools"] as const;
@@ -211,9 +213,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
  */
 export const shouldRevalidate = ({ currentUrl, nextUrl, formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) => {
   if (formMethod || currentUrl.pathname !== nextUrl.pathname || currentUrl.search === nextUrl.search) return defaultShouldRevalidate;
+  // The section, and what Shopify adds to the first address (the admin's launch: shop, host, token,
+  // interface language), change nothing the loader reads.
   const rest = (url: URL) => {
     const params = new URLSearchParams(url.search);
-    params.delete("section");
+    for (const name of ["section", "embedded", "shop", "host", "id_token", "hmac", "session", "timestamp", "locale"]) params.delete(name);
     params.sort();
     return params.toString();
   };
@@ -516,9 +520,9 @@ export default function Settings() {
   // shown beside it (a wide page), that section's own button is the way, so only the phone list has it.
   const fix = status.action;
   const fixButton = fix ? (
-    <s-button variant={back ? "secondary" : "primary"} href={fix.href} {...(fix.external ? { target: "_top" as const } : {})}>
+    <Button variant={back ? "secondary" : "primary"} href={fix.href} {...(fix.external ? { target: "_top" as const } : {})}>
       {fix.label}
-    </s-button>
+    </Button>
   ) : null;
   const statusAction = !fixButton ? null : status.section !== current ? fixButton : requested ? null : <s-box display={NARROW_ONLY}>{fixButton}</s-box>;
 
@@ -772,7 +776,7 @@ function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
         </s-stack>
       )}
       <s-stack direction="inline">
-        <s-button href="/app/plan">{t("common.action.seePlans")}</s-button>
+        <Button href="/app/plan">{t("common.action.seePlans")}</Button>
       </s-stack>
     </SettingSection>
   );
@@ -902,9 +906,9 @@ function ChangesCard({
     <consentFetcher.Form method="post">
       <input type="hidden" name="intent" value="grant-consent" />
       <ConsentTokensInput data={data} />
-      <s-button type="submit" variant={variant} {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
+      <Button type="submit" variant={variant} {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
         {t("settings.ai.allow")}
-      </s-button>
+      </Button>
     </consentFetcher.Form>
   );
   const needsConsent = (
@@ -936,13 +940,13 @@ function ChangesCard({
         ) : null}
         {mode === "smart" ? <StateLine icon="info">{t("settings.changes.replacesSmart")}</StateLine> : null}
         <Actions wide={280}>
-          <s-button type="submit" {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
+          <Button type="submit" {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
             {mode === "basic" ? t("settings.auto.saveLanguages") : t("settings.auto.turnOn")}
-          </s-button>
+          </Button>
           {mode === "basic" ? null : (
-            <s-button type="button" variant="tertiary" onClick={() => setChoosingBasic(false)}>
+            <Button type="button" variant="tertiary" onClick={() => setChoosingBasic(false)}>
               {t("common.action.cancel")}
-            </s-button>
+            </Button>
           )}
         </Actions>
       </s-stack>
@@ -960,12 +964,12 @@ function ChangesCard({
           actionsWide={300}
           actions={
             <>
-              <s-button href="/app/plan">
+              <Button href="/app/plan">
                 {t("common.action.seePlans")}
-              </s-button>
-              <s-button onClick={turnOffBasic} {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
+              </Button>
+              <Button onClick={turnOffBasic} {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
                 {t("settings.auto.turnOff")}
-              </s-button>
+              </Button>
             </>
           }
         >
@@ -1023,14 +1027,14 @@ function ChangesCard({
                   {languages.map((l) => (
                     <input key={l} type="hidden" name="locale" value={l} />
                   ))}
-                  <s-button type="submit" variant={data.consent ? "primary" : "secondary"} {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
+                  <Button type="submit" variant={data.consent ? "primary" : "secondary"} {...(autoFetcher.state !== "idle" ? { loading: true } : {})}>
                     {t("settings.changes.instead")}
-                  </s-button>
+                  </Button>
                 </autoFetcher.Form>
               ) : null}
-              <s-button href="/app/plan">
+              <Button href="/app/plan">
                 {t("common.action.seePlans")}
-              </s-button>
+              </Button>
               <s-link href="/app/settings/automatic">{t("settings.changes.viewSchedule")}</s-link>
             </>
           }
@@ -1133,13 +1137,13 @@ function ChangesCard({
               {smart === "plan" ? null : (
                 <Actions wide={300}>
                   {data.smart?.status.state === "on" ? (
-                    <s-button onClick={() => smartAct("check-now", { key: data.smartCheckKey })} {...(smartFetcher.state !== "idle" ? { loading: true } : {})}>
+                    <Button onClick={() => smartAct("check-now", { key: data.smartCheckKey })} {...(smartFetcher.state !== "idle" ? { loading: true } : {})}>
                       {t("automatic.action.checkNow")}
-                    </s-button>
+                    </Button>
                   ) : null}
-                  <s-button href="/app/settings/automatic">
+                  <Button href="/app/settings/automatic">
                     {t("automatic.action.options")}
-                  </s-button>
+                  </Button>
                 </Actions>
               )}
             </s-stack>
@@ -1279,11 +1283,6 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
   const withFallback = data.engines.text.includes("deepl") && !isDeepLOnly(data.engines.text);
   // No DeepL at all (Azure, Google or both): no service in use reads the store context.
   const contextUnused = !data.engines.text.includes("deepl");
-  const optionLabel = (locale: string, kind: "formal" | "informal") => {
-    const pronouns = formalityPronouns(locale);
-    if (!pronouns) return kind === "formal" ? t("settings.style.formal") : t("settings.style.informal");
-    return kind === "formal" ? t("settings.style.formalWith", { pronoun: pronouns.formal }) : t("settings.style.informalWith", { pronoun: pronouns.informal });
-  };
   return (
     <SettingSection id="settings-style" heading={t("settings.section.style")} lead={t("settings.style.lead")}>
       <ui-save-bar id={STYLE_SAVE_BAR}>
@@ -1297,46 +1296,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
         <s-stack direction="block" gap="base">
           <h3 style={SUB_HEADING}>{t("settings.style.heading")}</h3>
           {data.style.languages.length ? (
-            <ul aria-label={t("settings.style.address")} style={PLAIN_LIST}>
-              {data.style.languages.map((l, index) => {
-                const name = i18n.language(l.locale, l.name);
-                return (
-                  <li key={l.locale}>
-                    {index > 0 ? <s-divider /> : null}
-                    <s-box paddingBlock="small-300">
-                      {/* The name keeps the room it needs; the choice is narrower on a phone. */}
-                      <s-grid gridTemplateColumns="@container (inline-size > 520px) 1fr 220px, 1fr 170px" gap="base" alignItems="center">
-                        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
-                          <Flag country={localeCountry(l.locale)} fallback={l.locale} size={20} />
-                          <span aria-hidden="true" style={{ fontWeight: 600, overflowWrap: "anywhere" }}>
-                            {name}
-                          </span>
-                        </s-grid>
-                        {hasFormalityChoice(data, l.locale) ? (
-                          <s-select name={`formality:${l.locale}`} label={name} labelAccessibilityVisibility="exclusive" value={l.formality}>
-                            <s-option value="default">{t("settings.style.deeplDecides")}</s-option>
-                            <s-option value="more">{optionLabel(l.locale, "formal")}</s-option>
-                            <s-option value="less">{optionLabel(l.locale, "informal")}</s-option>
-                          </s-select>
-                        ) : (
-                          <>
-                            {/* No choice for this language (DeepL has none, or another service without one
-                                translates it): what is stored stays as it is. */}
-                            <input type="hidden" name={`formality:${l.locale}`} value={l.formality} />
-                            <s-text color="subdued">
-                              <s-text accessibilityVisibility="exclusive">{`${name}: `}</s-text>
-                              {supportsFormality(l.locale) && servingEngine(data, l.locale)
-                                ? t("settings.style.engineNoChoice", { engine: ENGINE_NAMES[servingEngine(data, l.locale)!] })
-                                : t("settings.style.noChoice")}
-                            </s-text>
-                          </>
-                        )}
-                      </s-grid>
-                    </s-box>
-                  </li>
-                );
-              })}
-            </ul>
+            <AddressChoices data={data} i18n={i18n} />
           ) : (
             <StateLine icon="language">{t("settings.style.noLanguages")}</StateLine>
           )}
@@ -1367,6 +1327,88 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
         </s-stack>
       </fetcher.Form>
     </SettingSection>
+  );
+}
+
+/**
+ * The form of address, language by language: a row with the segmented
+ * choice ("DeepL entscheidet" · "Sie" · "Du") for each language that has
+ * one, then one line naming the languages without a choice, with their
+ * flags. Their stored value goes along unchanged (hidden inputs).
+ */
+function AddressChoices({ data, i18n }: { data: Data; i18n: I18n }) {
+  const { t } = i18n;
+  const languages = data.style.languages.map((l) => ({ ...l, label: i18n.language(l.locale, l.name) }));
+  const choices = languages.filter((l) => hasFormalityChoice(data, l.locale));
+  const without = languages.filter((l) => !hasFormalityChoice(data, l.locale));
+  // Without a choice: the languages DeepL has none for, and per service those it translates without one.
+  const byEngine = new Map<EngineId, typeof without>();
+  const none: typeof without = [];
+  for (const l of without) {
+    const engine = supportsFormality(l.locale) ? servingEngine(data, l.locale) : null;
+    if (engine) byEngine.set(engine, [...(byEngine.get(engine) ?? []), l]);
+    else none.push(l);
+  }
+  const options = (locale: string) => {
+    const pronouns = formalityPronouns(locale);
+    return [
+      { value: "default", label: t("settings.style.deeplDecides") },
+      pronouns
+        ? { value: "more", label: upperFirst(pronouns.formal), accessibilityLabel: t("settings.style.formalWith", { pronoun: pronouns.formal }) }
+        : { value: "more", label: t("settings.style.formal") },
+      pronouns
+        ? { value: "less", label: upperFirst(pronouns.informal), accessibilityLabel: t("settings.style.informalWith", { pronoun: pronouns.informal }) }
+        : { value: "less", label: t("settings.style.informal") },
+    ];
+  };
+  return (
+    <s-stack direction="block" gap="small-200">
+      {choices.length ? <s-text color="subdued">{t("settings.style.autoHint")}</s-text> : null}
+      {choices.length ? (
+        <ul aria-label={t("settings.style.address")} className="lv-choices">
+          {choices.map((l) => (
+            <li key={l.locale} className="lv-choice">
+              <span className="lv-choice__name" aria-hidden="true">
+                <Flag country={localeCountry(l.locale)} fallback={l.locale} size={20} />
+                <span>{l.label}</span>
+              </span>
+              <Segmented name={`formality:${l.locale}`} legend={l.label} options={options(l.locale)} defaultValue={l.formality} even />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {without.map((l) => (
+        // No choice for this language: what is stored stays as it is.
+        <input key={l.locale} type="hidden" name={`formality:${l.locale}`} value={l.formality} />
+      ))}
+      {none.length ? <LanguageLine i18n={i18n} text={t("settings.style.noChoiceFor")} languages={none} /> : null}
+      {[...byEngine].map(([engine, list]) => (
+        <LanguageLine key={engine} i18n={i18n} text={t("settings.style.engineNoChoiceFor", { engine: ENGINE_NAMES[engine] })} languages={list} />
+      ))}
+    </s-stack>
+  );
+}
+
+/** A sentence with {languages}: each language with its flag, joined as the interface language joins a list. */
+function LanguageLine({ i18n, text, languages }: { i18n: I18n; text: string; languages: ReadonlyArray<{ locale: string; label: string }> }) {
+  const [before, after = ""] = text.split("{languages}");
+  const parts = new Intl.ListFormat(INTL_LOCALE[i18n.locale], { type: "conjunction" }).formatToParts(languages.map((l) => l.label));
+  let index = 0;
+  return (
+    <p className="lv-language-line">
+      {before}
+      {parts.map((part, i) => {
+        if (part.type !== "element") return <Fragment key={i}>{part.value}</Fragment>;
+        const language = languages[index++]!;
+        return (
+          <span key={i} className="lv-language-line__item">
+            <Flag country={localeCountry(language.locale)} fallback={language.locale} size={20} />
+            {part.value}
+          </span>
+        );
+      })}
+      {after}
+    </p>
   );
 }
 
@@ -1465,18 +1507,18 @@ function PermissionCard({
       </More>
       <s-stack direction="inline">
         {data.consent ? (
-          <s-button commandFor={REVOKE_MODAL} command="--show" {...(busy ? { loading: true } : {})}>
+          <Button commandFor={REVOKE_MODAL} command="--show" {...(busy ? { loading: true } : {})}>
             {t("settings.ai.withdraw")}
-          </s-button>
+          </Button>
         ) : noKey ? (
           <StateLine icon="connect">{t("settings.ai.noKey")}</StateLine>
         ) : (
           <fetcher.Form method="post">
             <input type="hidden" name="intent" value="grant-consent" />
             <ConsentTokensInput data={data} />
-            <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(busy ? { loading: true } : {})}>
+            <Button type="submit" variant={primary ? "primary" : "secondary"} {...(busy ? { loading: true } : {})}>
               {t("settings.ai.allow")}
-            </s-button>
+            </Button>
           </fetcher.Form>
         )}
       </s-stack>
@@ -1498,9 +1540,9 @@ function PermissionCard({
                 <input type="hidden" name="intent" value="grant-consent" />
                 <input type="hidden" name="extend" value="true" />
                 <ConsentTokensInput data={data} />
-                <s-button type="submit" {...(busy ? { loading: true } : {})}>
+                <Button type="submit" {...(busy ? { loading: true } : {})}>
                   {t("settings.ai.extra.action")}
-                </s-button>
+                </Button>
               </fetcher.Form>
             </s-stack>
           </s-stack>

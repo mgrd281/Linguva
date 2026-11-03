@@ -27,6 +27,7 @@ import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "./LanguageLayout";
 import { ReviewApproveConfirm, type ApproveSummary } from "./ReviewApproveConfirm";
 import { firstSight, focusSoon, languageLabel, outcomeText, ReviewCardView, textLabel, visible, type CardContext } from "./ReviewCard";
 import { ReviewControls, type PageActions } from "./ReviewControls";
+import { Button } from "./Button";
 
 const PANEL_HEADING = { margin: 0, fontSize: 15, lineHeight: "22px", fontWeight: 600 } as const;
 // A label that heads what follows (Polaris "strong" text keeps the body weight).
@@ -342,12 +343,12 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
         <s-banner tone="warning" heading={t("review.leave.heading")}>
           <s-paragraph>{t("review.leave.body", { count: unsaved })}</s-paragraph>
           <s-stack direction="inline" gap="base">
-            <s-button id="review-stay" onClick={() => blocker.reset()}>
+            <Button id="review-stay" onClick={() => blocker.reset()}>
               {t("editor.leave.stay")}
-            </s-button>
-            <s-button tone="critical" onClick={() => blocker.proceed()}>
+            </Button>
+            <Button tone="critical" onClick={() => blocker.proceed()}>
               {t("review.leave.leave")}
-            </s-button>
+            </Button>
           </s-stack>
         </s-banner>
       ) : null}
@@ -369,7 +370,7 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
             <s-text>
               {query.search && !scopeDone ? t("language.list.search.none", { query: t("language.preview.quoted", { text: query.search }) }) : t("review.filtered.none")}
             </s-text>
-            <s-button
+            <Button
               href={
                 scopeDone
                   ? everything
@@ -379,7 +380,7 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
               }
             >
               {query.search && !scopeDone ? t("language.list.search.clear") : t("review.filter.showAll")}
-            </s-button>
+            </Button>
           </s-stack>
         </s-section>
       ) : null}
@@ -400,8 +401,8 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
           <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
             {data.page.size ? <s-text color="subdued">{t("review.page.position", { from: data.page.from, to: data.page.to, total: data.page.matching })}</s-text> : <span />}
             <s-stack direction="inline" gap="small-200">
-              {!data.page.isFirstPage ? <s-button href={reviewHref(query)}>{t("language.list.page.first")}</s-button> : null}
-              {data.page.nextCursor ? <s-button href={reviewHref(query, { after: data.page.nextCursor })}>{t("language.list.page.next")}</s-button> : null}
+              {!data.page.isFirstPage ? <Button href={reviewHref(query)}>{t("language.list.page.first")}</Button> : null}
+              {data.page.nextCursor ? <Button href={reviewHref(query, { after: data.page.nextCursor })}>{t("language.list.page.next")}</Button> : null}
             </s-stack>
           </s-grid>
         </s-box>
@@ -507,9 +508,9 @@ function PageDone({
               </s-stack>
               {link ? (
                 <s-stack direction="inline" justifyContent="end">
-                  <s-button variant="primary" href={link.href}>
+                  <Button variant="primary" href={link.href}>
                     {link.label}
-                  </s-button>
+                  </Button>
                 </s-stack>
               ) : null}
             </s-grid>

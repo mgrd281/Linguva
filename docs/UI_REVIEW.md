@@ -243,6 +243,16 @@ Behaviour kept: every action, toast and focus move; giving the permission moves 
 
 Screenshots (German, 1,280 px at scale 1 and an iPhone 13): `UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign3 pnpm test:ui tests/ui/ui-review-screenshots.spec.ts -g "settings-sections"` writes `settings-desktop.png` and `settings-phone.png`. They couldn't be taken where this was built (Polaris' script from Shopify's CDN wasn't reachable there); the browser tests run in CI.
 
+## 3g. Buttons without the dark edge, the form of address as one row (owner request, 2026-11-03)
+
+The owner, looking at Settings in the admin: the English flag was missing, and the buttons and the dark edges of the controls didn't look modern; every button of the app should be 10/10. Polaris' buttons (`s-button`) can't be styled (only variant, tone, icon and width), so the app's buttons are its own now:
+
+- **`app/components/Button.tsx`** with **`app/styles/ui.css`**: a native `<button>`, or a link (React Router's Link inside the app, `window.open` for the admin's `shopify://` pages, a plain link otherwise), with s-button's props. Flat, a light 1 px edge instead of the dark bevel, a soft shadow, 10 px corners (12 px on touch screens), Inter 13 px semibold, 32 px high (44 px on touch screens), a 2 px blue focus ring, a spinner in the words' place while loading. Primary dark, secondary white, tertiary words only, critical red. 140 buttons on every page use it; the 19 that Polaris places itself (a dialog's actions, a banner's, the page's) stay the admin's.
+- **The form of address** ("So schreibt die KI"): instead of a select per language, one row per language that has a choice, with a segmented choice ("DeepL entscheidet · Sie · Du", `app/components/Segmented.tsx`, native radio buttons); the languages without a choice in one line with their flags. All rows line up.
+- **English's flag**: the United Kingdom's when the store's markets name no English-speaking country (`localeCountry`); Arabic and Chinese still show their code.
+
+Status: **Implemented; buttons and the segmented choice checked in a browser** (their CSS doesn't need Polaris). The pages around them are checked in CI (`visual.spec.ts`, new `settings-style`).
+
 ## 4. Tests for the changes
 
 | Change | Test |

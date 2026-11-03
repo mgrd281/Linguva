@@ -9,6 +9,7 @@ import { importTranslations, MAX_IMPORT_BYTES, type ImportResult } from "../.ser
 import { useI18n } from "../i18n/react";
 import { kindLabel } from "../i18n/labels";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, RESOURCE_KINDS } from "../lib/resource-kinds";
+import { Button } from "../components/Button";
 
 const EXPORT_TYPES = [...Object.keys(RESOURCE_KINDS), ...Object.keys(IMAGE_COVERAGE_TYPES), ...Object.keys(CONTENT_TYPES)];
 
@@ -125,13 +126,13 @@ export default function Translations() {
           />
           <s-text color="subdued">{t("transfer.export.columns")}</s-text>
           <s-stack direction="inline" gap="base" alignItems="center">
-            <s-button variant="primary" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>
+            <Button variant="primary" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>
               {t("transfer.export.download")}
-            </s-button>
+            </Button>
             {exported && exported !== "failed" && exported.next ? (
-              <s-button onClick={() => exportPart(exported.next)} {...(exporting ? { loading: true } : {})}>
+              <Button onClick={() => exportPart(exported.next)} {...(exporting ? { loading: true } : {})}>
                 {t("transfer.export.next")}
-              </s-button>
+              </Button>
             ) : null}
           </s-stack>
           {exported === "failed" ? <s-text tone="critical">{t("transfer.export.failed")}</s-text> : null}
@@ -145,9 +146,9 @@ export default function Translations() {
           <s-stack direction="block" gap="base">
             <s-paragraph>{t("transfer.import.safety")}</s-paragraph>
             <s-drop-zone name="file" accept=".csv,text/csv" label={t("transfer.import.file")} />
-            <s-button type="submit" {...(importer.state !== "idle" ? { loading: true } : {})}>
+            <Button type="submit" {...(importer.state !== "idle" ? { loading: true } : {})}>
               {t("transfer.import.submit")}
-            </s-button>
+            </Button>
             {importError ? (
               <s-banner tone="critical">
                 <s-paragraph>{t(`transfer.import.${importError}`)}</s-paragraph>

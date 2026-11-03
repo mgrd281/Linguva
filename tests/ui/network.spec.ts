@@ -43,12 +43,12 @@ test("on a slow connection, AI translation shows its progress and can't be sent 
     }
     await route.continue();
   });
-  const button = page.locator("s-button", { hasText: "Translate with AI" });
+  const button = page.locator("[data-button]", { hasText: "Translate with AI" });
   await button.click();
-  await expect(button).toHaveAttribute("loading", "");
+  await expect(button).toHaveAttribute("aria-busy", "true");
   // A second click while it runs doesn't send another request.
   await button.click({ force: true });
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[fr] Product 8 jacket", { timeout: 10_000 });
-  await expect(button).not.toHaveAttribute("loading", "");
+  await expect(button).not.toHaveAttribute("aria-busy");
   expect(posts).toBe(1);
 });

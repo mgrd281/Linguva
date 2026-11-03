@@ -13,7 +13,7 @@ const labelled = (label: string) => `s-section[accessibilitylabel="${label}"]`;
 
 /** Primary buttons outside dialogs (a dialog has its own primary action). */
 const primaryButtons = (page: Page) =>
-  page.locator('s-button[variant="primary"]').evaluateAll((buttons) => buttons.filter((b) => !b.closest("s-modal")).map((b) => (b as HTMLElement).innerText.trim()));
+  page.locator('[data-button][data-variant="primary"]').evaluateAll((buttons) => buttons.filter((b) => !b.closest("s-modal")).map((b) => (b as HTMLElement).innerText.trim()));
 
 /** The area cards' names, top to bottom. */
 const AREAS = ["Products", "Collections", "Menus & filters", "Sizes & colors", "Store & checkout", "Extra details", "Size charts & more", "Pages", "Blog", "Image descriptions"];
@@ -60,7 +60,7 @@ test("how far a language is, one next step, and each area with pictures @respons
   await expect(hero.locator("ol > li")).not.toHaveCount(0);
   expect((await hero.locator("ol > li").count()) <= 3).toBe(true);
   expect(await primaryButtons(page)).toHaveLength(1);
-  const primary = hero.locator("ol > li").first().locator('s-button[variant="primary"]');
+  const primary = hero.locator("ol > li").first().locator('[data-button][data-variant="primary"]');
   await expect(primary).toHaveCount(1);
   // Easy to hit with a thumb.
   if (info.project.name === "mobile") expect((await primary.getByRole("button").boundingBox())!.height).toBeGreaterThanOrEqual(44);

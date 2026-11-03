@@ -32,10 +32,12 @@ const choose = (page: Page, card: string, name: string) => option(page, card, na
 const isCurrent = (page: Page, card: string, name: string) => expect(option(page, card, name).getByText("Current setting")).toBeVisible();
 /** Primary buttons the merchant sees: not in a closed dialog, not in a section that isn't shown. */
 const primaries = (page: Page) =>
-  page.locator('s-button[variant="primary"]').evaluateAll((buttons) =>
+  page.locator('[data-button][data-variant="primary"]').evaluateAll((buttons) =>
     buttons
       .filter((b) => {
         if (b.closest("s-modal")) return false;
+        // Inside a Polaris box hidden for this width (its display is decided in its shadow root): not drawn.
+        if (b.getClientRects().length === 0) return false;
         for (let el: Element | null = b; el; el = el.parentElement) if (getComputedStyle(el).display === "none") return false;
         return true;
       })
@@ -164,7 +166,7 @@ test("without a section, the first that needs the merchant opens; the permission
   await expect(status(page)).toHaveText(/^AI translation isn't allowed yet\s*Without permission, AI translates nothing$/, { useInnerText: true });
   await expect(nav(page).locator('[aria-current="page"]')).toHaveText(/^AI permission\s*Not allowed$/);
   // The section beside the status row has the step itself; the status row needs no second button.
-  await expect(status(page).locator('s-button[href="/app/settings?section=ai"]')).toBeHidden();
+  await expect(status(page).locator('[data-button][href="/app/settings?section=ai"]')).toBeHidden();
   expect(await primaries(page)).toEqual(["Allow AI translation"]);
   // What is sent and when, behind its disclosure.
   const ai = section(page, "ai");
@@ -177,12 +179,12 @@ test("without a section, the first that needs the merchant opens; the permission
   await nav(page).getByRole("link", { name: /^Translating changes/ }).click();
   await expect(page.locator("#settings-changes-heading")).toBeFocused();
   expect(await primaries(page)).toEqual(["Read and allow"]);
-  await expect(status(page).locator('s-button[href="/app/settings?section=ai"]')).toHaveText("Read and allow");
+  await expect(status(page).locator('[data-button][href="/app/settings?section=ai"]')).toHaveText("Read and allow");
   // What needs the permission says so, with the way to give it where it is.
   const basic = option(page, "#settings-changes", "Shortly after saving");
   await expect(basic.getByText("Allow AI translation first.")).toBeVisible();
   await expect(basic.getByRole("button", { name: "Allow AI translation" })).toBeVisible();
-  await status(page).locator('s-button[href="/app/settings?section=ai"]').click();
+  await status(page).locator('[data-button][href="/app/settings?section=ai"]').click();
   await expect(section(page, "ai")).toBeVisible();
   await expect(page.locator("#settings-ai-heading")).toBeFocused();
 });
@@ -193,11 +195,16 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await expect(style.getByRole("heading", { level: 2 })).toHaveText("How AI writes");
   await expect(style.getByRole("heading", { level: 3 })).toHaveText("Form of address");
   await expect(style.getByText("How AI addresses your customers and what it knows about your store.")).toBeVisible();
-  // The pronouns of each language; no choice where DeepL has none (Arabic).
-  await expect(style.locator('s-select[name="formality:de"] s-option')).toHaveText(["DeepL decides", "Formal (Sie)", "Informal (du)"]);
-  await expect(style.locator('s-select[name="formality:fr"] s-option')).toHaveText(["DeepL decides", "Formal (vous)", "Informal (tu)"]);
-  await expect(style.getByRole("combobox", { name: "Arabic", exact: true })).toHaveCount(0);
-  await expect(style.getByText("No choice needed")).toBeVisible();
+  // One row per language with a choice: the pronouns as the options' words, read with what they mean;
+  // no choice where DeepL has none (Arabic): named in one line instead.
+  const address = (language: string) => style.getByRole("group", { name: language, exact: true });
+  await expect(address("German").locator(".lv-seg__text")).toHaveText(["DeepL decides", "Sie", "Du"]);
+  await expect(address("German").getByRole("radio")).toHaveCount(3);
+  await expect(address("German").getByRole("radio", { name: "Formal (Sie)" })).toBeAttached();
+  await expect(address("German").getByRole("radio", { name: "Informal (du)" })).toBeAttached();
+  await expect(address("French").locator(".lv-seg__text")).toHaveText(["DeepL decides", "Vous", "Tu"]);
+  await expect(address("Arabic")).toHaveCount(0);
+  await expect(style.getByText(/^No choice needed for\s+Arabic\.$/)).toBeVisible();
   const context = style.getByRole("textbox", { name: "About your store" });
   await expect(context).toHaveAttribute("placeholder", "Outdoor clothing for families, friendly and simple");
   await expect(style.getByText("What you sell and how you speak. Helps AI choose its words; not translated.")).toBeVisible();
@@ -208,7 +215,7 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await style.getByRole("combobox", { name: "German", exact: true }).selectOption("less");
+  await address("German").getByRole("radio", { name: "Informal (du)" }).check();
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(true);
   await context.fill("Outdoor clothing for families, friendly and simple.");
   if (info.project.name === "desktop") {
@@ -223,22 +230,22 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await expectToast(page, "Saved. New AI translations use this form of address.");
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(false);
   await page.reload();
-  await expect(style.getByRole("combobox", { name: "German", exact: true })).toHaveValue("less");
+  await expect(address("German").getByRole("radio", { name: "Informal (du)" })).toBeChecked();
   await expect(context).toHaveValue("Outdoor clothing for families, friendly and simple.");
   // German informal, French as DeepL decides: chosen per language.
   if (info.project.name === "desktop") await expect(navEntry(page, "How AI writes")).toHaveText(/^How AI writes\s*Per language$/, { useInnerText: true });
 
   // Discard: back to what is saved, nothing written.
-  await style.getByRole("combobox", { name: "French", exact: true }).selectOption("more");
+  await address("French").getByRole("radio", { name: "Formal (vous)" }).check();
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(true);
   await clickSaveBarButton(page, "settings-style-save-bar", 1);
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(false);
-  await expect(style.getByRole("combobox", { name: "French", exact: true })).toHaveValue("default");
+  await expect(address("French").getByRole("radio", { name: "DeepL decides" })).toBeChecked();
   await page.reload();
-  await expect(style.getByRole("combobox", { name: "French", exact: true })).toHaveValue("default");
+  await expect(address("French").getByRole("radio", { name: "DeepL decides" })).toBeChecked();
 
   // As it was (other tests use this store).
-  await style.getByRole("combobox", { name: "German", exact: true }).selectOption("default");
+  await address("German").getByRole("radio", { name: "DeepL decides" }).check();
   await context.fill("");
   await clickSaveBarButton(page, "settings-style-save-bar", 0);
   await expectToast(page, "Saved. New AI translations use this form of address.");
@@ -424,12 +431,12 @@ test("translating shortly after saving says why it waits in the status row, and 
   await expect(row).not.toContainText("UTC");
   if (info.project.name === "mobile") {
     // On a phone the status row leads to its section.
-    await expect(row.locator('s-button[href="/app/settings?section=changes"]')).toHaveText("View");
-    await row.locator('s-button[href="/app/settings?section=changes"]').click();
+    await expect(row.locator('[data-button][href="/app/settings?section=changes"]')).toHaveText("View");
+    await row.locator('[data-button][href="/app/settings?section=changes"]').click();
     await expect(page).toHaveURL(/[?&]section=changes(&|$)/);
   } else {
     // Beside it, the section is already open: no second way to it.
-    await expect(row.locator('s-button[href="/app/settings?section=changes"]')).toBeHidden();
+    await expect(row.locator('[data-button][href="/app/settings?section=changes"]')).toBeHidden();
   }
   const card = section(page, "changes");
   await expect(card).toBeVisible();
@@ -492,14 +499,14 @@ test("plan & usage: the plan, this month's AI characters and the date new ones a
   await expect(plan.getByRole("progressbar", { name: "AI characters used this month" })).toHaveAttribute("aria-valuenow", "31");
   await expect(plan.getByText(`31,000 of 100,000 · new on ${resets}`)).toBeVisible();
   await expect(navEntry(page, "Plan & usage")).toHaveText(/^Plan & usage\s*Business · 31% used$/, { useInnerText: true });
-  await expect(plan.locator('s-button[href="/app/plan"]')).toHaveText("See plans");
+  await expect(plan.locator('[data-button][href="/app/plan"]')).toHaveText("See plans");
   await expectAccessible(page);
 });
 
 test("an empty store: the status row asks for a language with the page's only primary button, no rows per language, and plain locks", async ({ page }) => {
   await openApp(page, "empty", "/app/settings");
   await expect(status(page)).toHaveText(/^No language to translate into yet\s*Add a language in Shopify\. Then you choose here how Linguva translates\./, { useInnerText: true });
-  await expect(status(page).locator('s-button[variant="primary"]')).toHaveAttribute("href", "shopify://admin/settings/languages");
+  await expect(status(page).locator('[data-button][data-variant="primary"]')).toHaveAttribute("href", "shopify://admin/settings/languages");
   expect(await primaries(page)).toEqual(["Open language settings"]);
   // One lock per locked option, without a plans link each (the next step is a language).
   await expect(option(page, "#settings-changes", "Shortly after saving").getByText("In the Starter, Pro and Business plans.")).toBeVisible();
@@ -508,7 +515,7 @@ test("an empty store: the status row asks for a language with the page's only pr
   await nav(page).getByRole("link", { name: /^Publishing/ }).click();
   await expect(option(page, "#settings-publish", "Publish automatically").getByText("In the Pro and Business plans.")).toBeVisible();
   await nav(page).getByRole("link", { name: /^How AI writes/ }).click();
-  await expect(section(page, "style").getByRole("combobox")).toHaveCount(0);
+  await expect(section(page, "style").getByRole("radio")).toHaveCount(0);
   await expect(section(page, "style").getByText("Once you add a language, you choose the form of address here.")).toBeVisible();
   await expect(navEntry(page, "How AI writes")).toHaveText(/^How AI writes\s*No language yet$/, { useInnerText: true });
   expect(await primaries(page)).toEqual(["Open language settings"]);
@@ -551,7 +558,8 @@ test("Settings is German for a German admin user, with one word for each thing, 
   expect(names).toEqual(["Änderungen übersetzen", "Veröffentlichen", "So schreibt die KI", "Übersetzungsspeicher", "KI-Erlaubnis", "Tarif & Nutzung", "Werkzeuge"]);
   for (const name of names) {
     if (name !== names[0]) await sections.getByRole("link", { name: new RegExp(`^${name}`) }).click();
-    await expect(page.locator("section[id^='settings-']:visible h2")).toHaveText(name);
+    // The section's own heading (a dialog in it has its heading too).
+    await expect(page.locator("section[id^='settings-']:visible h2[id$='-heading']")).toHaveText(name);
     const text = await page.locator("s-page").evaluate((el) => (el as HTMLElement).innerText);
     // Interface words only (language and store names are data).
     expect(text, name).not.toMatch(/\b(the|your|and|Settings|Save|Publishing|Current setting|Recommended|Turn on|Tools)\b/);
@@ -569,13 +577,13 @@ test.describe("the way back to a stopped job", () => {
     try {
       await openApp(page, "measure", `/app/settings?section=ai&job=${job.id}`);
       // Not fixed yet: no way back, the permission is the step.
-      await expect(page.locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
+      await expect(page.locator('[data-button][href^="/app/jobs/"]')).toHaveCount(0);
       expect(await primaries(page)).toEqual(["Allow AI translation"]);
       await section(page, "ai").getByRole("button", { name: "Allow AI translation" }).click();
       await expectToast(page, "AI translation is allowed.");
       // From a job, the page stays here and shows the way back above the section's card.
       await expect(page).toHaveURL(new RegExp(`[?&]job=${job.id}`));
-      const back = section(page, "ai").locator(`s-button[href="/app/jobs/${job.id}"]`);
+      const back = section(page, "ai").locator(`[data-button][href="/app/jobs/${job.id}"]`);
       await expect(back).toBeVisible();
       await expect(back).toHaveText("Back to the job");
       await expect(section(page, "ai").getByText("German · Products can go on")).toBeVisible();
@@ -587,7 +595,7 @@ test.describe("the way back to a stopped job", () => {
       await expect(page).not.toHaveURL(/job=/);
       await nav(page).getByRole("link", { name: /^AI permission/ }).click();
       await expect(section(page, "ai")).toBeVisible();
-      await expect(page.locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
+      await expect(page.locator('[data-button][href^="/app/jobs/"]')).toHaveCount(0);
     } finally {
       await job.remove();
       expect((await post(page, "measure", "/app/settings.data", { intent: "revoke-consent" })).ok()).toBe(true);
@@ -598,11 +606,11 @@ test.describe("the way back to a stopped job", () => {
     const job = await stoppedJob("full", "CONSENT_REQUIRED");
     try {
       await openApp(page, "full", `/app/settings?section=publish&job=${job.id}`);
-      await expect(page.locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
+      await expect(page.locator('[data-button][href^="/app/jobs/"]')).toHaveCount(0);
       await openApp(page, "full", `/app/settings?section=ai&job=${randomUUID()}`);
-      await expect(page.locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
+      await expect(page.locator('[data-button][href^="/app/jobs/"]')).toHaveCount(0);
       await openApp(page, "full", `/app/settings?section=ai&job=${job.id}`);
-      await expect(section(page, "ai").locator(`s-button[href="/app/jobs/${job.id}"]`)).toBeVisible();
+      await expect(section(page, "ai").locator(`[data-button][href="/app/jobs/${job.id}"]`)).toBeVisible();
       await expect(section(page, "ai").getByText("German · Products can go on")).toBeVisible();
     } finally {
       await job.remove();
@@ -613,7 +621,7 @@ test.describe("the way back to a stopped job", () => {
     const job = await stoppedJob("full", "PLAN_REQUIRED");
     try {
       await openApp(page, "full", `/app/plan?job=${job.id}`);
-      const back = page.locator(`s-button[href="/app/jobs/${job.id}"]`);
+      const back = page.locator(`[data-button][href="/app/jobs/${job.id}"]`);
       await expect(back).toBeVisible();
       await expect(back).toHaveText("Back to the job");
       await expect(page.getByText("German · Products can go on")).toBeVisible();

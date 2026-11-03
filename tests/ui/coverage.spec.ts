@@ -25,7 +25,7 @@ test("shows the whole store, each language and what to do next @responsive", asy
   // French drafts wait in Review: the next step says so and links there.
   const next = page.locator('s-section[heading="Next step"]');
   await expect(next).toContainText(/Review \d+ drafts in French/);
-  await expect(next.locator('s-button[href^="/app/review?lang=fr"]')).toHaveCount(1);
+  await expect(next.locator('[data-button][href^="/app/review?lang=fr"]')).toHaveCount(1);
   // The action says what it does, not just "Open".
   await expect(next.getByRole("link", { name: "Review drafts" })).toBeVisible();
   // The whole-store bar has a key with every state that has fields.

@@ -47,7 +47,7 @@ test("the app works under the policy and nothing is blocked", async ({ page }) =
   await openApp(page, "full", "/app/review");
   const pictures = page.locator('img[src*="/__fixtures/img/"]');
   await expect.poll(() => pictures.evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.complete && img.naturalWidth > 0))).toBe(true);
-  await page.locator("s-button", { hasText: "Reject all" }).click();
+  await page.locator("[data-button]", { hasText: "Reject all" }).click();
   await expect(page.getByRole("dialog", { name: /^Reject \d+ translations\?$/ })).toBeVisible();
   for (const path of ["/app/settings", "/app/glossary", "/app/coverage", "/app/jobs", "/app/plan"]) await openApp(page, "full", path);
 

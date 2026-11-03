@@ -26,6 +26,7 @@ import { Flag } from "./Flag";
 import { OpenWorkLine, stateSummary, StateKey, TextStateBar } from "./ItemStates";
 import { BIG_HEADING, PLAIN_LIST, StepNumber } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
+import { Button } from "./Button";
 
 type Language = ContentPage["languages"][number];
 type Fetcher = ReturnType<typeof useFetcher>;
@@ -143,7 +144,7 @@ export function LanguageChips({ languages, current, i18n }: { languages: Languag
                 </s-option>
               ))}
             </s-select>
-            <s-button type="submit">{t("content.language.show")}</s-button>
+            <Button type="submit">{t("content.language.show")}</Button>
           </s-grid>
         </Form>
       </nav>
@@ -307,9 +308,9 @@ export function AccessCard({ rows, fetcher, i18n, primary }: { rows: ContentPage
                 <input key={row.scope} type="hidden" name="scope" value={row.scope} />
               ))}
               <s-stack direction="inline" gap="small-200 base" alignItems="center">
-                <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(fetcher.state !== "idle" ? { loading: true } : {})}>
+                <Button type="submit" variant={primary ? "primary" : "secondary"} {...(fetcher.state !== "idle" ? { loading: true } : {})}>
                   {t("content.access.allow")}
-                </s-button>
+                </Button>
                 <s-text color="subdued">{t("content.access.once")}</s-text>
               </s-stack>
             </fetcher.Form>
@@ -355,9 +356,9 @@ export function CountCard({ data, i18n, counter, primary }: { data: ContentPage;
       <counter.Form method="post">
         <input type="hidden" name="intent" value="run" />
         <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-        <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(counter.state !== "idle" ? { loading: true } : {})}>
+        <Button type="submit" variant={primary ? "primary" : "secondary"} {...(counter.state !== "idle" ? { loading: true } : {})}>
           {label}
-        </s-button>
+        </Button>
       </counter.Form>
     ) : undefined;
   switch (kind) {
@@ -411,9 +412,9 @@ export function NoLanguagesCard({ i18n, body }: { i18n: I18n; body?: string }) {
       heading={t("content.noLanguages.heading")}
       wide={560}
       action={
-        <s-button variant="primary" href="shopify://admin/settings/languages" target="_top">
+        <Button variant="primary" href="shopify://admin/settings/languages" target="_top">
           {t("resources.noLanguages.open")}
-        </s-button>
+        </Button>
       }
     >
       <s-paragraph color="subdued">{body ?? t("content.noLanguages.body")}</s-paragraph>

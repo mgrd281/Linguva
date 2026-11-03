@@ -15,6 +15,7 @@ import { languagePath } from "../lib/language-categories";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES } from "../lib/coverage-rules";
 import { localeFlag } from "../lib/flags";
 import { CONTENT_TYPES, isContentType, RESOURCE_KINDS, type ResourceKind } from "../lib/resource-kinds";
+import { Button } from "../components/Button";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const data = await loadCoverageDashboard(request);
@@ -151,14 +152,14 @@ export default function Coverage() {
                 {!scanning && data.lastFullScan ? <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.lastFullScan) })}</s-text> : null}
                 {data.report?.stalled ? <s-text color="subdued">{t("coverage.scan.stalled", { date: i18n.dateTime(data.report.updatedAt) })}</s-text> : null}
               </s-stack>
-              <s-button
+              <Button
                 type="submit"
                 variant={scanned ? "secondary" : "primary"}
                 disabled={!data.jobsAvailable || scanning || data.targets.length === 0}
                 {...(runner.state !== "idle" ? { loading: true } : {})}
               >
                 {scanned ? t("coverage.scan.again") : t("coverage.scan.first")}
-              </s-button>
+              </Button>
             </s-stack>
           </runner.Form>
           {scanning && data.report ? (
@@ -190,7 +191,7 @@ export default function Coverage() {
                   </s-option>
                 ))}
               </s-select>
-              <s-button type="submit">{t("coverage.filter.apply")}</s-button>
+              <Button type="submit">{t("coverage.filter.apply")}</Button>
             </s-stack>
           </Form>
           {data.markets.selected ? (
@@ -298,9 +299,9 @@ export default function Coverage() {
                     {/* Scanning again is the page's own button. */}
                     {step.action ? (
                       <s-stack direction="inline">
-                        <s-button href={step.action.href} variant="primary">
+                        <Button href={step.action.href} variant="primary">
                           {step.action.label}
-                        </s-button>
+                        </Button>
                       </s-stack>
                     ) : null}
                   </>
@@ -415,14 +416,14 @@ export default function Coverage() {
                             <input type="hidden" name="idempotencyKey" value={`${data.idempotencyKey}-${i}`} />
                             <input type="hidden" name="locale" value={selected} />
                             <input type="hidden" name="resourceType" value={type} />
-                            <s-button
+                            <Button
                               type="submit"
                               variant="secondary"
                               disabled={!data.canTranslate || !data.jobsAvailable}
                               accessibilityLabel={`${t("coverage.types.translate")}: ${kindLabel(i18n, type)}, ${selectedName}`}
                             >
                               {t("coverage.types.translate")}
-                            </s-button>
+                            </Button>
                           </fixer.Form>
                         ) : null}
                         {tally.counts.review + tally.counts.draft > 0 ? (

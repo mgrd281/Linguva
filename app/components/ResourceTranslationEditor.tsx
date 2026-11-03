@@ -20,6 +20,7 @@ import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { fieldName, hasMessage, issueName, jobErrorMessage, kindLabel, kindSingular } from "../i18n/labels";
+import { Button } from "./Button";
 
 type EditorLoader = () => ReturnType<typeof loadEditorData>;
 type EditorAction = () => ReturnType<typeof runEditorAction>;
@@ -206,12 +207,12 @@ export function ResourceTranslationEditor() {
         <s-banner tone="warning" heading={t("editor.leave.heading")}>
           <s-paragraph>{t("editor.leave.body")}</s-paragraph>
           <s-stack direction="inline" gap="base">
-            <s-button id="editor-stay" variant="primary" onClick={() => blocker.reset()}>
+            <Button id="editor-stay" variant="primary" onClick={() => blocker.reset()}>
               {t("editor.leave.stay")}
-            </s-button>
-            <s-button tone="critical" onClick={() => blocker.proceed()}>
+            </Button>
+            <Button tone="critical" onClick={() => blocker.proceed()}>
               {t("editor.leave.leave")}
-            </s-button>
+            </Button>
           </s-stack>
         </s-banner>
       ) : null}
@@ -235,9 +236,9 @@ export function ResourceTranslationEditor() {
           <consentFetcher.Form method="post">
             <input type="hidden" name="intent" value="grant-consent" />
             <input type="hidden" name="consentTokens" value={data.ai.consentTokens.join(",")} />
-            <s-button type="submit" {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
+            <Button type="submit" {...(consentFetcher.state !== "idle" ? { loading: true } : {})}>
               {t("editor.consent.allow")}
-            </s-button>
+            </Button>
           </consentFetcher.Form>
         </s-banner>
       ) : null}
@@ -325,14 +326,14 @@ export function ResourceTranslationEditor() {
             {machineKeys.map((k) => (
               <input key={k} type="hidden" name="key" value={k} />
             ))}
-            <s-button
+            <Button
               type="submit"
               variant="primary"
               disabled={!data.ai.available || !data.ai.consent || machineKeys.length === 0}
               {...(translating ? { loading: true } : {})}
             >
               {t("editor.toolbar.translateAi")}
-            </s-button>
+            </Button>
           </aiFetcher.Form>
           {seoMachineKeys.length ? (
             <aiFetcher.Form method="post" onSubmit={() => setFilledFrom("ai")}>
@@ -340,16 +341,16 @@ export function ResourceTranslationEditor() {
               {seoMachineKeys.map((k) => (
                 <input key={k} type="hidden" name="key" value={k} />
               ))}
-              <s-button type="submit" disabled={!data.ai.available || !data.ai.consent}>
+              <Button type="submit" disabled={!data.ai.available || !data.ai.consent}>
                 {t("editor.toolbar.translateSeo")}
-              </s-button>
+              </Button>
             </aiFetcher.Form>
           ) : null}
           <memoryFetcher.Form method="post" onSubmit={() => setFilledFrom("memory")}>
             <input type="hidden" name="intent" value="memory-suggest" />
-            <s-button type="submit" {...(memoryFetcher.state !== "idle" ? { loading: true } : {})}>
+            <Button type="submit" {...(memoryFetcher.state !== "idle" ? { loading: true } : {})}>
               {t("editor.toolbar.fillMemory")}
-            </s-button>
+            </Button>
           </memoryFetcher.Form>
           {data.ai.ownKey && !data.ai.available ? (
             // Own key plan without a usable key: what is missing, and where to add it.
@@ -414,7 +415,7 @@ export function ResourceTranslationEditor() {
                   placeholder={t("editor.paging.findPlaceholder")}
                   value={data.paging.query}
                 />
-                <s-button type="submit">{t("common.action.search")}</s-button>
+                <Button type="submit">{t("common.action.search")}</Button>
               </s-stack>
             </Form>
             <s-text color="subdued">
@@ -427,8 +428,8 @@ export function ResourceTranslationEditor() {
                   })}
             </s-text>
             <s-stack direction="inline" gap="small">
-              {data.paging.page > 1 ? <s-button href={pageHref(data.paging.page - 1)}>{t("common.action.previous")}</s-button> : null}
-              {data.paging.page < data.paging.pages ? <s-button href={pageHref(data.paging.page + 1)}>{t("common.action.next")}</s-button> : null}
+              {data.paging.page > 1 ? <Button href={pageHref(data.paging.page - 1)}>{t("common.action.previous")}</Button> : null}
+              {data.paging.page < data.paging.pages ? <Button href={pageHref(data.paging.page + 1)}>{t("common.action.next")}</Button> : null}
             </s-stack>
           </s-stack>
         </s-section>
@@ -467,9 +468,9 @@ export function ResourceTranslationEditor() {
         ) : null}
         {data.seoPreview ? seoFields.map((field) => renderField(field)) : null}
         <s-stack direction="inline" gap="base">
-          <s-button type="submit" variant="primary" {...(saving ? { loading: true } : {})}>
+          <Button type="submit" variant="primary" {...(saving ? { loading: true } : {})}>
             {t("editor.publish")}
-          </s-button>
+          </Button>
         </s-stack>
       </saveFetcher.Form>
 
@@ -531,9 +532,9 @@ export function ResourceTranslationEditor() {
                 <s-stack direction="inline" gap="small" alignItems="center" justifyContent="space-between">
                   <s-text color="subdued">{t("editor.field.original", { language: sourceName })}</s-text>
                   {field.sourcePreview !== null ? (
-                    <s-button variant="tertiary" onClick={() => toggleCode(field.key)}>
+                    <Button variant="tertiary" onClick={() => toggleCode(field.key)}>
                       {showCode ? t("editor.field.showPreview") : t("editor.field.showHtml")}
-                    </s-button>
+                    </Button>
                   ) : null}
                 </s-stack>
                 {structured ? (
@@ -604,7 +605,7 @@ export function ResourceTranslationEditor() {
                 ) : null}
                 {field.key === "handle" ? (
                   <s-stack direction="block" gap="small">
-                    <s-button
+                    <Button
                       variant="tertiary"
                       onClick={() => {
                         const title = currentValue("title") || fieldByKey.get("title")?.source || "";
@@ -613,7 +614,7 @@ export function ResourceTranslationEditor() {
                       }}
                     >
                       {t("editor.handle.suggest")}
-                    </s-button>
+                    </Button>
                     {currentValue("handle") && validateHandle(currentValue("handle")) ? (
                       <s-text tone="critical">
                         {t(`editor.handle.problem.${validateHandle(currentValue("handle"))!}`, { max: MAX_HANDLE_LENGTH })}
@@ -638,7 +639,7 @@ export function ResourceTranslationEditor() {
                 ) : null}
                 <s-stack direction="inline" gap="small">
                   {field.translation && !(removed?.status === "removed" && removed.key === field.key) ? (
-                    <s-button
+                    <Button
                       variant="tertiary"
                       tone="critical"
                       onClick={() => {
@@ -651,7 +652,7 @@ export function ResourceTranslationEditor() {
                       }}
                     >
                       {confirmRemove === field.key ? t("editor.remove.confirm") : t("editor.remove.button")}
-                    </s-button>
+                    </Button>
                   ) : null}
                 </s-stack>
               </s-stack>
@@ -659,11 +660,11 @@ export function ResourceTranslationEditor() {
           </s-query-container>
           {field.history.length ? (
             <s-stack direction="block" gap="small">
-              <s-button variant="tertiary" onClick={() => toggleHistory(field.key)}>
+              <Button variant="tertiary" onClick={() => toggleHistory(field.key)}>
                 {historyOpen.has(field.key)
                   ? t("editor.history.hide")
                   : t("editor.history.show", { count: field.history.length })}
-              </s-button>
+              </Button>
               {historyOpen.has(field.key) ? (
                 <s-stack direction="block" gap="small">
                   {field.history.map((h) => (
@@ -683,14 +684,14 @@ export function ResourceTranslationEditor() {
                       </s-text>
                       {h.removed ? null : <s-paragraph>{h.value.length > 300 ? `${h.value.slice(0, 300)}…` : h.value}</s-paragraph>}
                       {h.restorable ? (
-                        <s-button
+                        <Button
                           variant="tertiary"
                           onClick={() =>
                             restoreFetcher.submit({ intent: "restore", revisionId: h.id }, { method: "post" })
                           }
                         >
                           {t("editor.history.restore")}
-                        </s-button>
+                        </Button>
                       ) : null}
                     </s-box>
                   ))}

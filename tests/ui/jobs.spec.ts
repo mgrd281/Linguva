@@ -39,8 +39,8 @@ test.describe("the Jobs list", () => {
     await expect(card.getByRole("heading", { level: 2, name: "2 jobs stopped" })).toBeVisible();
     await expect(card.getByText("German · Collections: AI translation not allowed")).toBeVisible();
     await expect(card.getByText("Linguva needs your permission for AI translation.")).toBeVisible();
-    await expect(card.locator("s-button", { hasText: "Allow in Settings" })).toHaveAttribute("href", `/app/settings?section=ai&job=${ids.stopped}`);
-    await expect(card.locator("s-button", { hasText: "View job" })).toHaveAttribute("href", `/app/jobs/${ids.stopped}`);
+    await expect(card.locator("[data-button]", { hasText: "Allow in Settings" })).toHaveAttribute("href", `/app/settings?section=ai&job=${ids.stopped}`);
+    await expect(card.locator("[data-button]", { hasText: "View job" })).toHaveAttribute("href", `/app/jobs/${ids.stopped}`);
     // The translations waiting for approval: a quiet row to Review.
     await expect(card.locator('s-clickable[href="/app/review"]')).toContainText("17 translations wait for your approval");
 
@@ -127,10 +127,10 @@ test.describe("a job's page", () => {
     await expect(legend.locator("li")).toHaveText(["17 wait for your approval", "4 were already up to date", "1 incomplete", "2 failed", "16 still to do"]);
     // Next: approve first (the page's one primary button), then the one item a new try can fix; cancel in the foot.
     await expect(hero.getByText("Approve 17 translations")).toBeVisible();
-    await expect(hero.locator('s-button[variant="primary"]')).toHaveCount(1);
-    await expect(hero.locator('s-button[variant="primary"]')).toHaveAttribute("href", `/app/review?job=${ids.running}`);
+    await expect(hero.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
+    await expect(hero.locator('[data-button][data-variant="primary"]')).toHaveAttribute("href", `/app/review?job=${ids.running}`);
     await expect(hero.getByText("Try 1 product again")).toBeVisible();
-    await expect(hero.locator("s-button", { hasText: "Cancel job" })).toBeVisible();
+    await expect(hero.locator("[data-button]", { hasText: "Cancel job" })).toBeVisible();
 
     // The stats and the problems, by the products' names (read from Shopify), each opening the editor.
     await expect(page.getByText("AI characters", { exact: true })).toBeVisible();
@@ -148,7 +148,7 @@ test.describe("a job's page", () => {
   test("cancelling asks first and says what stays", async ({ page }) => {
     const ids = await jobIds();
     await openApp(page, "jobs", `/app/jobs/${ids.running}`);
-    await page.locator("s-button", { hasText: "Cancel job" }).first().click();
+    await page.locator("[data-button]", { hasText: "Cancel job" }).first().click();
     const dialog = page.locator("s-modal#job-cancel");
     await expect(dialog).toHaveAttribute("heading", "Cancel this job?");
     await expect(dialog.getByText("21 products are done and stay.")).toBeAttached();
@@ -166,8 +166,8 @@ test.describe("a job's page", () => {
     await expect(hero.getByText("What is translated stays. Nothing is lost.")).toBeVisible();
     await expect(hero.getByText("How to continue", { exact: true })).toBeVisible();
     await expect(hero.getByText("Allow AI translation")).toBeVisible();
-    await expect(hero.locator("s-button", { hasText: "Allow in Settings" })).toHaveAttribute("href", `/app/settings?section=ai&job=${ids.stopped}`);
-    await expect(hero.locator("s-button", { hasText: "Resume job" })).toBeVisible();
+    await expect(hero.locator("[data-button]", { hasText: "Allow in Settings" })).toHaveAttribute("href", `/app/settings?section=ai&job=${ids.stopped}`);
+    await expect(hero.locator("[data-button]", { hasText: "Resume job" })).toBeVisible();
     await expectAccessible(page);
   });
 
@@ -182,7 +182,7 @@ test.describe("a job's page", () => {
     await expect(page.getByText("3 of 4 are fine.")).toBeVisible();
     await page.getByText("Results in detail").click();
     await expect(page.getByText(/^Reference for support: [0-9a-f-]{36}$/)).toBeVisible();
-    await expect(page.locator("s-button", { hasText: "Download report (CSV)" })).toBeVisible();
+    await expect(page.locator("[data-button]", { hasText: "Download report (CSV)" })).toBeVisible();
   });
 
   test("a job whose items were all up to date says there was nothing to translate", async ({ page }) => {

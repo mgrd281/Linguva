@@ -91,7 +91,7 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
     return cards.map((c) => ({
       price: top(Array.from(c.querySelectorAll("span")).find((s) => getComputedStyle(s).fontSize === "32px") ?? null),
       button: top(c.querySelector("[data-button]")),
-      sign: top(c.querySelector('s-stack[background="subdued"]')),
+      sign: top(c.querySelector('.lv-icon-square')),
       current: top(c.querySelector('s-badge[color="strong"]')),
     }));
   });

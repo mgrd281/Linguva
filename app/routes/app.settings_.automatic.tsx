@@ -1,6 +1,9 @@
 /**
  * Smart Auto-Translate (Business): when the store is checked, what is
- * translated, publishing, budgets, exclusions and recent checks. Every
+ * translated, publishing, budgets, exclusions and recent checks. How often
+ * is a choice of square tiles (native radio buttons), the weekdays a row of
+ * square toggles, and the next checks follow the form live, with the
+ * problem the server would refuse said in their place. Every
  * value is validated again on the server (smart/validate.ts); the plan is
  * checked in every action, also for a form posted without this page.
  *
@@ -25,6 +28,8 @@ import { getTranslationProvider } from "../.server/providers";
 import { getQueues } from "../.server/queue/client";
 import { getShopSettings, hasCurrentAiConsent, textConsentTokens } from "../.server/settings/shop-settings";
 import { requireShop } from "../.server/shopify/require-shop";
+import { settle, sizedImage } from "../.server/shopify/preview-images";
+import { PREVIEW_NODE_TYPES, readPreviewNodes } from "../.server/shopify/preview-nodes";
 import { fetchShopTimeZone } from "../.server/shopify/shop-time-zone";
 import { getSmartConfig, pauseSmart, removeSmartExclusion, resumeSmart, saveSmartSettings, setSmartEnabled } from "../.server/smart/config";
 import { loadSmartPanel, smartContext } from "../.server/smart/panel";
@@ -37,8 +42,23 @@ import { CARD } from "../components/ContentTiles";
 import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
 import { SUB_HEADING } from "../components/plan/styles";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
-import { FactList, focusById, InlineNotice, SETTING_NAME, SettingCard, StateLine, useFreshResult, type SettingState } from "../components/SettingsParts";
-import { scheduleSummary, smartErrorText, SmartPreview, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
+import { Disclosure } from "../components/Disclosure";
+import { IconSquare, type Tint } from "../components/IconSquare";
+import { FactList, focusById, focusSection, InlineNotice, SETTING_NAME, SettingCard, StateLine, useFreshResult, type SettingState } from "../components/SettingsParts";
+import {
+  BudgetMeter,
+  ChoiceTiles,
+  DayToggles,
+  failedAction,
+  scheduleSummary,
+  smartErrorText,
+  SmartPreview,
+  SmartStateBanner,
+  smartToast,
+  whenIn,
+  type ChoiceTile,
+} from "../components/SmartAutoCard";
+import { Strong } from "../components/Type";
 import { itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
 import { useI18n } from "../i18n/react";
 import { effectivePublishMode } from "../lib/automation-state";
@@ -50,12 +70,28 @@ import { jobName } from "../lib/job-view";
 import { languageList } from "../lib/name-lists";
 import { entitlementsFor } from "../lib/plans";
 import { CONTENT_TYPES, isContentType, stillWithoutAccess } from "../lib/resource-kinds";
-import { formatTime, MAX_TIMES_PER_DAY, nextOccurrence, normaliseSchedule, parseTime, WEEKDAYS } from "../lib/schedule";
+import { formatTime, MAX_TIMES_PER_DAY, normaliseSchedule, parseTime, SCHEDULE_PROBLEMS, suggestTime, upcomingOccurrences, wallClock, WEEKDAYS } from "../lib/schedule";
 import { checkSpec, REALTIME_CHECK_MINUTE, SMART_DEFAULT_TYPES, SMART_FIELD_GROUPS, SMART_PERSONAL_DATA_TYPES, SMART_TYPES, type SmartType } from "../lib/smart-auto";
 import { Button } from "../components/Button";
 
 const SAVE_BAR = "smart-auto-save-bar";
 const MODES = ["realtime", "daily", "weekly", "custom", "manual"] as const;
+type Mode = (typeof MODES)[number];
+/**
+ * Each way's icon and colour: shortly after each change as Settings' "Shortly after saving" (automation,
+ * blue), the timed ones in the schedule's violet, on demand as Settings' "Start it yourself" (slate).
+ */
+const MODE_LOOK: Record<Mode, { icon: IconName; tint: Tint }> = {
+  realtime: { icon: "automation", tint: "blue" },
+  daily: { icon: "calendar-time", tint: "violet" },
+  weekly: { icon: "calendar", tint: "violet" },
+  custom: { icon: "clock", tint: "violet" },
+  manual: { icon: "play-circle", tint: "slate" },
+};
+/** The last checks shown; the earlier ones (up to RECENT_RUNS) fold behind one line, so the settings start high. */
+const RUNS_SHOWN = 3;
+/** Settings' section of the ways changes are translated: where this page is opened from, and leads back to. */
+const SETTINGS_CHANGES = "/app/settings?section=changes";
 /** Times offered in the selects: every 15 minutes. */
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => formatTime(i * 15));
 /** The summary card's schedule ("Every day at 23:00"): smaller than the Plan page's plan name, as it can be a sentence. */
@@ -75,7 +111,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const measured = await loadSmartPanel(shop.id, { ...context, shopTimeZone });
   // Access allowed since the last check: the next one reads the type, there is nothing left to do.
   const granted = measured.noAccess.length ? (await scopes.query()).granted : [];
-  const panel = { ...measured, noAccess: stillWithoutAccess(measured.noAccess, granted) };
+  // The exclusions' names and pictures, read live in one call (Linguva stores no merchant text); a row
+  // Shopify doesn't answer for keeps its kind and number.
+  const readable = measured.exclusions.filter((e) => PREVIEW_NODE_TYPES.has(e.resourceType)).map((e) => e.resourceGid);
+  const nameLocale = measured.config?.locales[0] ?? targets[0]?.locale ?? locales.primary?.locale ?? "en";
+  const nodes = readable.length ? await settle(shop.id, "smart exclusions", readPreviewNodes(admin, readable, nameLocale)) : null;
+  const exclusions = measured.exclusions.map((e) => {
+    const node = nodes?.get(e.resourceGid);
+    return { ...e, title: node?.text ?? null, image: sizedImage(node?.image, 80) };
+  });
+  const panel = { ...measured, noAccess: stillWithoutAccess(measured.noAccess, granted), exclusions };
   // The shop's zone first (Shopify may spell it differently from Intl), then Intl's list.
   const zones = [...new Set([...(panel.config ? [panel.config.timeZone] : []), ...(shopTimeZone ? [shopTimeZone] : []), "UTC", ...Intl.supportedValuesOf("timeZone")])];
   // From a job the schedule stopped for a budget or the main language (`?job=<id>`): the way back, once fixed.
@@ -256,6 +301,7 @@ export default function SmartAutomatic() {
   const { t, number } = i18n;
   const panel = data.panel;
   const config = panel.config;
+  const shopZone = data.shopTimeZone;
   const languageNames = new Map(data.languages.map((l) => [l.locale, i18n.language(l.locale, l.name)]));
   // A job the schedule stopped for a budget or the main language, its cause fixed: the way back to it at
   // the top of the card that fixed it (`?job=…#smart-budgets`, `#smart-scope`), as the page's one primary button.
@@ -264,6 +310,11 @@ export default function SmartAutomatic() {
   ) : null;
   const backIn = (card: "smart-scope" | "smart-budgets") => (back && (data.backToJob?.group === "PRIMARY_LANGUAGE" ? "smart-scope" : "smart-budgets") === card ? back : null);
   const heroVariant = back ? ("secondary" as const) : ("primary" as const);
+  // Where the page came from: Settings' section of the ways changes are translated (a phone shows its back row).
+  const trail = [
+    { href: "/app/settings", label: t("automatic.page.back") },
+    { href: SETTINGS_CHANGES, label: t("settings.changes.heading") },
+  ];
 
   const settingsFetcher = useFetcher<typeof action>();
   const actionFetcher = useFetcher<typeof action>();
@@ -282,7 +333,7 @@ export default function SmartAutomatic() {
     pending?.get("intent") === intent && (!field || pending.get(field[0]) === field[1]) ? { loading: true } : {};
   const act = (intent: string, extra: Record<string, string> = {}) => actionFetcher.submit({ intent, ...extra }, { method: "post" });
 
-  // The form: what the merchant changes before saving (the next checks follow it live).
+  // The form: what the merchant changes before saving (the next checks, and before setup the summary, follow it live).
   const initial = useMemo(
     () => ({
       mode: config?.mode ?? "daily",
@@ -291,11 +342,13 @@ export default function SmartAutomatic() {
       zone: config?.timeZone ?? data.shopTimeZone ?? "UTC",
       fieldsChosen: Boolean(config?.fieldGroups.length),
       publishMode: (config?.publishMode === "AUTO_PUBLISH" ? "AUTO_PUBLISH" : "DRAFT") as PublishMode,
+      locales: config ? [...config.locales] : data.languages.filter((l) => l.inPlan).map((l) => l.locale),
+      types: config ? [...config.resourceTypes] : [...SMART_DEFAULT_TYPES],
     }),
-    [config, data.shopTimeZone],
+    [config, data.shopTimeZone, data.languages],
   );
   const [formKey, setFormKey] = useState(0);
-  const [mode, setMode] = useState(initial.mode);
+  const [mode, setMode] = useState<string>(initial.mode);
   const [fieldsChosen, setFieldsChosen] = useState(initial.fieldsChosen);
   const [publishMode, setPublishMode] = useState<PublishMode>(initial.publishMode);
   // Automatic publishing confirmed in its dialog during this edit (the server requires it).
@@ -307,9 +360,34 @@ export default function SmartAutomatic() {
     publishChosen.current = false;
     focusById(publishMode === "AUTO_PUBLISH" ? "smart-publish-auto" : "smart-publish-review");
   }, [publishMode]);
-  const [preview, setPreview] = useState<{ times: number[]; weekdays: number[]; zone: string }>({ times: [...initial.times], weekdays: [...initial.weekdays], zone: initial.zone });
+  // The schedule as the form holds it: the one time, the custom times, the days and the zone. A field that
+  // is hidden (another mode) keeps its value, and shows it again when it comes back.
+  const [time, setTime] = useState(() => formatTime(initial.times[0] ?? REALTIME_CHECK_MINUTE));
+  const [slots, setSlots] = useState<Slot[]>(() => slotsOf(initial));
+  const [weekdays, setWeekdays] = useState<number[]>(() => [...initial.weekdays]);
+  const [zone, setZone] = useState(initial.zone);
+  // The zone's long list waits behind "Change": few stores need another zone than their own.
+  const [zoneOpen, setZoneOpen] = useState(false);
+  // Before setup the summary shows the form's languages and content as the suggestion it turns on.
+  const [scope, setScope] = useState(() => ({ locales: initial.locales, types: initial.types }));
   const [dirty, setDirty] = useState(false);
+  // The answer to a save that was current when the form last changed: a refused field keeps its error until
+  // the form changes after that answer (a new answer shows its errors again).
+  const [editedAt, setEditedAt] = useState<unknown>(null);
+  const slotIds = useRef(MAX_TIMES_PER_DAY);
+  // An element to focus once the page shows it (a new time, the zone's list, the time before a removed one).
+  const focusAfter = useRef<string | null>(null);
+  useEffect(() => {
+    const id = focusAfter.current;
+    if (!id) return;
+    focusAfter.current = null;
+    document.getElementById(id)?.focus();
+  });
   const formRef = useRef<HTMLFormElement>(null);
+  const changed = () => {
+    setDirty(true);
+    setEditedAt(settingsFetcher.data ?? null);
+  };
   const read = () => {
     const form = formRef.current;
     if (!form) return;
@@ -317,10 +395,20 @@ export default function SmartAutomatic() {
     const nextMode = String(fd.get("mode") ?? mode);
     setMode(nextMode);
     setFieldsChosen(fd.get("fields") === "chosen");
-    const times = (nextMode === "custom" ? fd.getAll("customTime") : [fd.get("time")]).map((v) => parseTime(v)).filter((v): v is number => v !== null);
-    const weekdays = fd.getAll("weekday").flatMap((v) => String(v).split(",")).map(Number).filter((n) => n >= 1 && n <= 7);
-    setPreview({ times, weekdays, zone: String(fd.get("timeZone") ?? initial.zone) });
-    setDirty(true);
+    const field = fd.get("time");
+    const single = typeof field === "string" && parseTime(field) !== null ? field : null;
+    if (single) setTime(single);
+    const customs = fd.getAll("customTime").map(String);
+    if (customs.length) setSlots((current) => current.map((slot, i) => ({ ...slot, value: customs[i] ?? slot.value })));
+    // Between one time and several a day, the first time moves along (09:00 every day → check 1 at 09:00).
+    if (nextMode !== mode && nextMode === "custom" && slots.length === 1) setSlots([{ ...slots[0]!, value: single ?? time }]);
+    if (nextMode !== mode && mode === "custom" && slots[0]) setTime(customs[0] ?? slots[0].value);
+    // The days only while they are shown: hidden, they keep what was chosen.
+    if (form.querySelector('input[name="weekday"]')) setWeekdays(fd.getAll("weekday").map(Number).filter((n) => n >= 1 && n <= 7));
+    const chosenZone = fd.get("timeZone");
+    if (typeof chosenZone === "string" && chosenZone) setZone(chosenZone);
+    setScope({ locales: fd.getAll("locale").map(String), types: fd.getAll("type").map(String) });
+    changed();
   };
   const discard = () => {
     setFormKey((k) => k + 1);
@@ -328,8 +416,32 @@ export default function SmartAutomatic() {
     setFieldsChosen(initial.fieldsChosen);
     setPublishMode(initial.publishMode);
     setPublishConfirmed(false);
-    setPreview({ times: [...initial.times], weekdays: [...initial.weekdays], zone: initial.zone });
+    setTime(formatTime(initial.times[0] ?? REALTIME_CHECK_MINUTE));
+    setSlots(slotsOf(initial));
+    setWeekdays([...initial.weekdays]);
+    setZone(initial.zone);
+    setZoneOpen(false);
+    setScope({ locales: initial.locales, types: initial.types });
     setDirty(false);
+  };
+  // "+ Add a time": a new check as far from the others as it can be, focused; × takes one away.
+  const addSlot = () => {
+    const taken = slots.map((s) => parseTime(s.value)).filter((m): m is number => m !== null);
+    const slot = { id: slotIds.current++, value: formatTime(suggestTime(taken)) };
+    setSlots([...slots, slot]);
+    focusAfter.current = `smart-slot-${slot.id}`;
+    changed();
+  };
+  const removeSlot = (id: number) => {
+    const index = slots.findIndex((s) => s.id === id);
+    const next = slots.filter((s) => s.id !== id);
+    setSlots(next);
+    focusAfter.current = `smart-slot-${next[Math.max(0, index - 1)]!.id}`;
+    changed();
+  };
+  const openZone = () => {
+    setZoneOpen(true);
+    focusAfter.current = "smart-zone";
   };
   // Saved: the form is clean again, once per save (later edits show the save bar again).
   const savedResult = useRef<unknown>(null);
@@ -359,27 +471,25 @@ export default function SmartAutomatic() {
     return () => clearInterval(timer);
   }, [running, dirty, revalidator]);
 
-  // The next three checks of the schedule as it is in the form now.
+  // The schedule as it is in the form now, checked as the server checks it; its next three checks.
+  const schedule = useMemo(
+    () =>
+      normaliseSchedule({
+        mode: mode === "realtime" ? "daily" : mode,
+        timeZone: zone,
+        times: mode === "custom" ? slots.map((s) => s.value) : [time],
+        weekdays: mode === "daily" || mode === "realtime" ? [...WEEKDAYS] : weekdays,
+        shopTimeZone: data.shopTimeZone,
+      }),
+    [mode, zone, slots, time, weekdays, data.shopTimeZone],
+  );
   const upcoming = useMemo(() => {
-    const spec = normaliseSchedule({
-      mode: mode === "realtime" ? "daily" : mode,
-      timeZone: preview.zone,
-      times: preview.times,
-      weekdays: mode === "daily" || mode === "realtime" ? [...WEEKDAYS] : preview.weekdays,
-      shopTimeZone: data.shopTimeZone,
-    });
-    if (!spec.ok) return [];
-    const check = checkSpec({ ...spec.spec, mode });
-    const out: number[] = [];
-    let from = data.now;
-    while (check && out.length < 3) {
-      const next = nextOccurrence(check, from);
-      if (next === null) break;
-      out.push(next);
-      from = next;
-    }
-    return out;
-  }, [mode, preview, data.shopTimeZone, data.now]);
+    if (!schedule.ok) return [];
+    const check = checkSpec({ ...schedule.spec, mode });
+    return check ? upcomingOccurrences(check, data.now, 3) : [];
+  }, [schedule, mode, data.now]);
+  // What the server would refuse ("at least an hour apart"), said live where the next checks would be.
+  const liveProblem = schedule.ok ? null : schedule.problem;
 
   // The form's refusal is shown at the top and moved to; an action's beside its buttons.
   const error = settingsFetcher.data && !settingsFetcher.data.ok ? settingsFetcher.data.error : null;
@@ -392,13 +502,27 @@ export default function SmartAutomatic() {
     errorRef.current?.scrollIntoView({ block: "start" });
     errorRef.current?.focus({ preventScroll: true });
   }, [error, settingsFetcher.state, settingsFetcher.data]);
+  // After a refused save the field to change says so too: the schedule's from the live check (gone once it
+  // is fixed), every other one until the next change.
+  const edited = editedAt !== null && editedAt === settingsFetcher.data;
+  const fieldError = (codes: readonly string[]) => (error && codes.includes(error) && !edited ? smartErrorText(i18n, error) : undefined);
+  // A zone the server refused is shown in its list.
+  const zoneShown = zoneOpen || error === "TIME_ZONE";
+  const scheduleError = error && SCHEDULE_PROBLEMS.has(error) && liveProblem ? smartErrorText(i18n, liveProblem) : undefined;
+  const timeError = liveProblem === "TIMES" || liveProblem === "TIMES_TOO_CLOSE" || liveProblem === "TOO_MANY_TIMES" ? scheduleError : undefined;
+  const daysError = liveProblem === "WEEKDAYS" ? scheduleError : undefined;
+  const zoneError = fieldError(["TIME_ZONE"]);
+  const languagesError = fieldError(["NO_LANGUAGE", "PLAN_LANGUAGE", "UNKNOWN_LANGUAGE"]);
+  const typesError = fieldError(["NO_TYPE", "UNKNOWN_TYPE"]);
+  const groupsError = fieldError(["NO_FIELD_GROUP", "UNKNOWN_FIELD_GROUP"]);
+  const budgetError = fieldError(["BUDGET"]);
 
   // Where access to the first chosen type without it is allowed (its content page asks for the scope).
   const accessType = panel.noAccess.find(isContentType);
   const accessHref = accessType ? `/app/content/${CONTENT_TYPES[accessType].slug}` : null;
 
   const outside = data.languages.filter((l) => !l.inPlan);
-  const chosenTypes = new Set<string>(config?.resourceTypes ?? SMART_DEFAULT_TYPES);
+  const chosenTypes = new Set<string>(initial.types);
   const publishing = effectivePublishMode({ mode: publishMode, inPlan: data.autoPublishInPlan });
   const turnOnSubmit = () => {
     const form = formRef.current;
@@ -448,21 +572,27 @@ export default function SmartAutomatic() {
         : panel.status.state === "waiting"
           ? { label: t("automatic.state.waiting"), icon: "clock", tone: "warning" }
           : { label: t("automatic.state.off"), icon: "minus-circle", tone: "neutral" };
+  // Turning off is the quiet, red one: it isn't undone by Resume (it switches to "Start it yourself").
+  const turnOff = (
+    <Button variant="tertiary" tone="critical" onClick={() => act("turn-off")} {...loading("turn-off")}>
+      {t("automatic.action.turnOff")}
+    </Button>
+  );
   const heroActions = readOnly ? (
     <>
       <Button href="/app/plan">{t("automatic.upsell.cta")}</Button>
-      {panel.status.state !== "off" ? (
-        <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
-          {t("automatic.action.turnOff")}
-        </Button>
-      ) : null}
+      {panel.status.state !== "off" ? turnOff : null}
     </>
   ) : panel.status.state === "off" ? (
     canTurnOn ? (
       notConfigured ? (
-        <Button variant={heroVariant} onClick={turnOnSubmit} {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
-          {t("automatic.action.turnOnWithThese")}
-        </Button>
+        <>
+          <Button variant={heroVariant} onClick={turnOnSubmit} {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
+            {t("automatic.action.turnOnWithThese")}
+          </Button>
+          {/* The suggestions are the form below: "Adjust" goes to its first card. */}
+          <Button onClick={() => focusSection("smart-schedule")}>{t("automatic.action.adjust")}</Button>
+        </>
       ) : (
         <Button variant={heroVariant} onClick={() => act("turn-on", data.basicOn ? { replaceBasic: "true" } : {})} {...loading("turn-on")}>
           {t("automatic.action.turnOn")}
@@ -473,600 +603,756 @@ export default function SmartAutomatic() {
     ) : null
   ) : panel.status.state === "paused" ? (
     <>
-      <Button variant={heroVariant} onClick={() => act("resume")} {...loading("resume")}>
+      <Button variant={heroVariant} icon="play-circle" onClick={() => act("resume")} {...loading("resume")}>
         {t("automatic.action.resume")}
       </Button>
-      <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
-        {t("automatic.action.turnOff")}
-      </Button>
+      {turnOff}
     </>
   ) : panel.status.state === "on" ? (
     <>
-      <Button variant={heroVariant} onClick={() => act("check-now", { key: data.checkKey })} {...loading("check-now")}>
+      <Button variant={heroVariant} icon="play" onClick={() => act("check-now", { key: data.checkKey })} {...loading("check-now")}>
         {t("automatic.action.checkNow")}
       </Button>
-      <Button onClick={() => act("pause")} {...loading("pause")}>
+      <Button icon="pause-circle" onClick={() => act("pause")} {...loading("pause")}>
         {t("automatic.action.pause")}
       </Button>
-      <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
-        {t("automatic.action.turnOff")}
-      </Button>
+      {turnOff}
     </>
   ) : (
     // Waiting: the reason says what to do; turning off stays possible.
-    <Button onClick={() => act("turn-off")} {...loading("turn-off")}>
-      {t("automatic.action.turnOff")}
-    </Button>
+    turnOff
   );
+  // Pause and Turn off side by side: how they differ, in one line under them.
+  const actionsNote = !readOnly && panel.status.state === "on" ? t("automatic.hero.pauseOrOff", { manual: t("settings.changes.manual.title") }) : null;
+  const nextCheck = panel.nextChecks[0];
 
   if (!data.entitled && !config) {
     // Never set up and not in the plan: what it would add, and the way to it (no form to fill in for nothing).
     return (
       <s-page heading={t("automatic.page.heading")}>
-        <s-link slot="breadcrumb-actions" href="/app/settings">
+        <s-link slot="breadcrumb-actions" href={SETTINGS_CHANGES}>
           {t("automatic.page.back")}
         </s-link>
-        <s-stack direction="block" gap="base">
-          <Breadcrumbs i18n={i18n} trail={[{ href: "/app/settings", label: t("automatic.page.back") }]} current={t("automatic.page.heading")} />
-          {/* No subtitle: the card says what it would do. */}
-          <h1 style={BIG_HEADING}>{t("automatic.page.heading")}</h1>
-          <SettingCard id="smart-status" icon="calendar-time" heading={t("automatic.locked.heading")} extra={<s-badge icon="lock">{t("automatic.business")}</s-badge>} lead={t("automatic.locked.body")}>
-            <FactList
-              label={t("automatic.page.heading")}
-              facts={[
-                { icon: "calendar-time", text: t("automatic.locked.schedule") },
-                { icon: "gauge", text: t("automatic.locked.budgets") },
-                { icon: "clipboard-checklist", text: t("automatic.locked.log") },
-              ]}
-            />
-            <s-stack direction="inline">
-              <Button href="/app/plan">{t("automatic.upsell.cta")}</Button>
-            </s-stack>
-          </SettingCard>
-        </s-stack>
+        <s-query-container>
+          <s-stack direction="block" gap="base">
+            <Breadcrumbs i18n={i18n} trail={trail} current={t("automatic.page.heading")} touch />
+            {/* No subtitle: the card says what it would do. */}
+            <h1 style={BIG_HEADING}>{t("automatic.page.heading")}</h1>
+            <SettingCard id="smart-status" icon="calendar-time" heading={t("automatic.locked.heading")} extra={<s-badge icon="lock">{t("automatic.business")}</s-badge>} lead={t("automatic.locked.body")}>
+              <FactList
+                label={t("automatic.page.heading")}
+                facts={[
+                  { icon: "calendar-time", text: t("automatic.locked.schedule") },
+                  { icon: "gauge", text: t("automatic.locked.budgets") },
+                  { icon: "clipboard-checklist", text: t("automatic.locked.log") },
+                ]}
+              />
+              <s-stack direction="inline">
+                <Button href="/app/plan">{t("automatic.upsell.cta")}</Button>
+              </s-stack>
+            </SettingCard>
+          </s-stack>
+        </s-query-container>
       </s-page>
     );
   }
 
+  // Before setup the summary shows what turning on would use: the form's schedule, languages, content and publishing.
+  const suggestion = notConfigured
+    ? { mode, times: schedule.ok ? schedule.spec.times : [], weekdays: schedule.ok ? schedule.spec.weekdays : [], locales: scope.locales }
+    : null;
+  const checkNow = t("automatic.action.checkNow");
+  const modeKey: Mode = (MODES as readonly string[]).includes(mode) ? (mode as Mode) : "daily";
+  const modeTiles: ChoiceTile[] = MODES.map((m) => ({
+    value: m,
+    name: t(`automatic.mode.${m}` as "automatic.mode.daily"),
+    line: t(`automatic.mode.${m}.line` as "automatic.mode.manual.line", { checkNow }),
+    ...MODE_LOOK[m],
+  }));
+  const runRow = (run: (typeof panel.runs)[number], index: number) => {
+    const when = whenIn(i18n, run.createdAt, panel.zone, data.now, shopZone);
+    const status = RUN_STATUS[run.status] ?? RUN_STATUS.QUEUED!;
+    const failed = failedAction(run);
+    return (
+      <li key={run.id}>
+        {index > 0 ? <s-divider /> : null}
+        <s-box paddingBlock="small-100">
+          <s-stack direction="block" gap="small-300">
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-icon type={run.trigger === "MANUAL" ? "play-circle" : "calendar-time"} color="subdued" />
+              <span style={SETTING_NAME}>{when}</span>
+              <s-badge tone={status.tone} icon={status.icon}>
+                {t(`automatic.activity.status.${run.status}` as "automatic.activity.status.COMPLETED")}
+              </s-badge>
+              <s-text color="subdued">{t(`automatic.activity.trigger.${run.trigger}` as "automatic.activity.trigger.MANUAL")}</s-text>
+            </s-stack>
+            {run.status === "SKIPPED" ? (
+              <s-text color="subdued">{runReason(i18n, run.errorCode)}</s-text>
+            ) : (
+              <s-text>
+                {[
+                  t("automatic.activity.checked", { count: run.resourcesChecked }),
+                  t("automatic.activity.changed", { count: run.resourcesChanged, fields: number(run.fieldsDetected), chars: number(run.charsEstimated) }),
+                  run.excludedSkipped ? t("automatic.activity.excluded", { count: run.excludedSkipped }) : null,
+                  run.billed || run.fromMemory ? t("automatic.activity.billed", { billed: number(run.billed), memory: number(run.fromMemory) }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </s-text>
+            )}
+            {/* Why it didn't finish, or why its translation stopped (a budget, the plan's allowance). */}
+            {run.status !== "SKIPPED" && run.errorCode ? (
+              <StateLine icon="alert-triangle" tone={run.status === "FAILED" ? "critical" : "caution"}>
+                {runReason(i18n, run.errorCode)}
+              </StateLine>
+            ) : null}
+            {run.failed || run.jobs.length ? (
+              <s-stack direction="inline" gap="small-200 base" alignItems="center">
+                {run.failed ? (
+                  <s-stack direction="inline" gap="small-300" alignItems="center">
+                    <s-icon type="alert-circle" tone="critical" />
+                    <s-text tone="critical">{t("automatic.activity.failed", { count: run.failed })}</s-text>
+                  </s-stack>
+                ) : null}
+                {/* Only what a new try can fix, and only while it runs: retried items would be cancelled again while paused or off. */}
+                {failed.retry && panel.status.state === "on" && !readOnly ? (
+                  <Button
+                    variant="tertiary"
+                    accessibilityLabel={`${t("automatic.action.retryFailed", { count: failed.retry })}: ${when}`}
+                    onClick={() => act("retry", { runId: run.id })}
+                    {...loading("retry", ["runId", run.id])}
+                  >
+                    {t("automatic.action.retryFailed", { count: failed.retry })}
+                  </Button>
+                ) : null}
+                {/* The rest is fixed in the editor: its job lists them. */}
+                {failed.job ? <s-link href={`/app/jobs/${failed.job}`}>{t("automatic.activity.seeJob")}</s-link> : null}
+                {run.jobs.slice(0, 3).map((job) => (
+                  <s-link key={job.id} href={`/app/jobs/${job.id}`}>
+                    {`${kindLabel(i18n, job.resourceType)} · ${languageNames.get(job.locale) ?? job.locale}`}
+                  </s-link>
+                ))}
+              </s-stack>
+            ) : null}
+          </s-stack>
+        </s-box>
+      </li>
+    );
+  };
+  const recent = panel.runs.slice(0, RUNS_SHOWN);
+  const earlier = panel.runs.slice(RUNS_SHOWN);
+
   return (
     <s-page heading={t("automatic.page.heading")}>
-      <s-link slot="breadcrumb-actions" href="/app/settings">
+      <s-link slot="breadcrumb-actions" href={SETTINGS_CHANGES}>
         {t("automatic.page.back")}
       </s-link>
 
-      <s-stack direction="block" gap="base">
-        <Breadcrumbs i18n={i18n} trail={[{ href: "/app/settings", label: t("automatic.page.back") }]} current={t("automatic.page.heading")} />
-        <s-stack direction="block" gap="small-500">
-          <h1 style={BIG_HEADING}>{t("automatic.page.heading")}</h1>
-          <s-text color="subdued">{t("automatic.page.subtitle")}</s-text>
-        </s-stack>
+      <s-query-container>
+        <s-stack direction="block" gap="base">
+          <Breadcrumbs i18n={i18n} trail={trail} current={t("automatic.page.heading")} touch />
+          <s-stack direction="block" gap="small-500">
+            <h1 style={BIG_HEADING}>{t("automatic.page.heading")}</h1>
+            <s-text color="subdued">{t("automatic.page.subtitle")}</s-text>
+          </s-stack>
 
-        {/* The form's refusal, at the top, where focus moves when it appears. */}
-        {error ? (
-          <div ref={errorRef} tabIndex={-1} style={{ outline: "none", scrollMarginTop: 16 }}>
-            <s-banner tone="critical" heading={t("automatic.error.heading")}>
-              <s-paragraph>{smartErrorText(i18n, error)}</s-paragraph>
-            </s-banner>
-          </div>
-        ) : null}
+          {/* The form's refusal, at the top, where focus moves when it appears. */}
+          {error ? (
+            <div ref={errorRef} tabIndex={-1} style={{ outline: "none", scrollMarginTop: 16 }}>
+              <s-banner tone="critical" heading={t("automatic.error.heading")}>
+                <s-paragraph>{smartErrorText(i18n, error)}</s-paragraph>
+              </s-banner>
+            </div>
+          ) : null}
 
-        {/* The schedule as it is: its state, when it checks next, its actions, and what the last checks found. */}
-        <section id="smart-status" aria-labelledby="smart-status-heading">
-          <s-box {...CARD} padding="base">
-            <s-stack direction="block" gap="base">
-              <s-query-container>
-                <s-grid gridTemplateColumns="@container (inline-size > 680px) 1fr auto, 1fr" gap="base" alignItems="start">
-                  <s-grid gridTemplateColumns="@container (inline-size > 520px) auto 1fr, 1fr" gap="base" alignItems="start">
-                    <s-box display="@container (inline-size > 520px) auto, none">
-                      <IconTile icon="calendar-time" size={48} color="base" />
-                    </s-box>
-                    <s-stack direction="block" gap="small-300">
-                      <s-stack direction="block" gap="small-500">
-                        {/* The visual label; screen readers hear it inside the heading. */}
-                        <span aria-hidden="true">
-                          <s-text color="subdued">{t("automatic.hero.label")}</s-text>
-                        </span>
-                        <h2 id="smart-status-heading" tabIndex={-1} style={{ ...HERO_NAME, outline: "none" }}>
-                          <s-text accessibilityVisibility="exclusive">{`${t("automatic.hero.spokenLabel")} `}</s-text>
-                          {config ? scheduleSummary(i18n, config) : t("automatic.hero.notSetUp")}
-                        </h2>
-                      </s-stack>
-                      <s-stack direction="inline" gap="small-200" alignItems="center">
-                        <s-badge tone={stateBadge.tone === "neutral" ? undefined : stateBadge.tone} icon={stateBadge.icon}>
-                          {stateBadge.label}
-                        </s-badge>
-                        <s-badge {...(data.entitled ? {} : { icon: "lock" as const })}>{t("automatic.business")}</s-badge>
-                      </s-stack>
-                      {config && panel.nextChecks[0] !== undefined ? (
-                        <StateLine icon="calendar-time">
-                          {t("automatic.hero.nextCheck", { time: t("automatic.schedule.zone", { time: i18n.dateTimeIn(panel.nextChecks[0], panel.zone), zone: panel.zone }) })}
-                        </StateLine>
-                      ) : null}
-                      {config ? (
-                        <StateLine icon="language">{config.locales.length ? languageList(i18n, config.locales.map((l) => languageNames.get(l) ?? l), Infinity) : t("automatic.preview.none")}</StateLine>
-                      ) : null}
-                    </s-stack>
-                  </s-grid>
-                  {/* Beside the summary on a wide card; on a narrow one under it, one per line at full width (never a ragged row). */}
-                  <s-grid gridTemplateColumns="@container (inline-size > 680px) auto auto auto, 1fr" gap="small-200" alignItems="center">
-                    {heroActions}
-                  </s-grid>
-                </s-grid>
-              </s-query-container>
-              {readOnly ? (
-                <InlineNotice icon={stoppedByPlan ? "pause-circle" : "lock"} heading={t("settings.changes.line.notInPlan")}>
-                  {stoppedByPlan ? t("automatic.page.notInPlan") : t("automatic.page.keptOff")}
+          {/* The schedule as it is: its state, when it checks next, its actions, and what the last checks found. */}
+          <section id="smart-status" aria-labelledby="smart-status-heading">
+            <s-box {...CARD} padding="base">
+              <div className="lv-smart-hero">
+                <s-stack direction="block" gap="base">
+                  <s-query-container>
+                    <s-grid gridTemplateColumns="@container (inline-size > 680px) 1fr auto, 1fr" gap="base" alignItems="start">
+                      <s-grid gridTemplateColumns="@container (inline-size > 520px) auto 1fr, 1fr" gap="base" alignItems="start">
+                        <s-box display="@container (inline-size > 520px) auto, none">
+                          <IconSquare icon="calendar-time" tint="violet" size={48} />
+                        </s-box>
+                        <s-stack direction="block" gap="small-300">
+                          <s-stack direction="block" gap="small-500">
+                            {/* The visual label; screen readers hear it inside the heading. */}
+                            <span aria-hidden="true">
+                              <s-text color="subdued">{t("automatic.hero.label")}</s-text>
+                            </span>
+                            <h2 id="smart-status-heading" tabIndex={-1} style={{ ...HERO_NAME, outline: "none" }}>
+                              <s-text accessibilityVisibility="exclusive">{`${t("automatic.hero.spokenLabel")} `}</s-text>
+                              {config ? scheduleSummary(i18n, config) : t("automatic.hero.notSetUp")}
+                            </h2>
+                          </s-stack>
+                          <s-stack direction="inline" gap="small-200" alignItems="center">
+                            <s-badge tone={stateBadge.tone === "neutral" ? undefined : stateBadge.tone} icon={stateBadge.icon}>
+                              {stateBadge.label}
+                            </s-badge>
+                            <s-badge {...(data.entitled ? {} : { icon: "lock" as const })}>{t("automatic.business")}</s-badge>
+                          </s-stack>
+                          {/* "today, 11:00 PM": the zone only where it isn't the store's own. */}
+                          {config && nextCheck !== undefined ? (
+                            <StateLine icon="clock">{t("automatic.hero.nextCheck", { time: whenIn(i18n, nextCheck, panel.zone, data.now, shopZone, true) })}</StateLine>
+                          ) : null}
+                          {config ? (
+                            <StateLine icon="language">{config.locales.length ? languageList(i18n, config.locales.map((l) => languageNames.get(l) ?? l), Infinity) : t("automatic.preview.none")}</StateLine>
+                          ) : null}
+                        </s-stack>
+                      </s-grid>
+                      {/* Beside the summary on a wide card; on a phone under it, the main action at full width and the others side by side. */}
+                      <div>
+                        <div className="lv-smart-actions">{heroActions}</div>
+                        {actionsNote ? <span className="lv-caption lv-smart-actions__note">{actionsNote}</span> : null}
+                      </div>
+                    </s-grid>
+                  </s-query-container>
+                  {readOnly ? (
+                    <InlineNotice icon={stoppedByPlan ? "pause-circle" : "lock"} heading={t("settings.changes.line.notInPlan")}>
+                      {stoppedByPlan ? t("automatic.page.notInPlan") : t("automatic.page.keptOff")}
+                    </InlineNotice>
+                  ) : (
+                    <SmartStateBanner
+                      status={panel.status}
+                      zone={panel.zone}
+                      onChooseLanguages={() => focusSection("smart-scope")}
+                      consentAction={
+                        consentNote ? (
+                          <s-stack direction="block" gap="small-200">
+                            {consentNote}
+                            <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
+                          </s-stack>
+                        ) : (
+                          <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
+                        )
+                      }
+                    />
+                  )}
+                  {!readOnly && notConfigured ? <StateLine icon="info">{canTurnOn ? t("automatic.hero.setUpHint") : !data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine> : null}
+                  {!readOnly && panel.status.state === "off" && data.basicOn && canTurnOn ? <StateLine icon="info">{t("settings.changes.replacesBasic")}</StateLine> : null}
+                  {!readOnly && !notConfigured && panel.status.state === "off" && !canTurnOn ? (
+                    <StateLine icon="info">{!data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine>
+                  ) : null}
+                  {/* Next to the summary's grant button: what it agrees to. */}
+                  {!readOnly && panel.status.state === "off" && !data.consent ? consentNote : null}
+                  {panel.noAccess.length ? (
+                    <InlineNotice icon="lock" heading={t("automatic.noAccess.heading")} actions={accessHref ? <Button href={accessHref}>{t("coverage.types.allowAccess")}</Button> : undefined}>
+                      {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => kindLabel(i18n, type)), 4) })}
+                    </InlineNotice>
+                  ) : null}
+                  {actionError ? (
+                    <s-banner tone="critical" heading={t("automatic.error.actionHeading")}>
+                      <s-paragraph>{smartErrorText(i18n, actionError)}</s-paragraph>
+                    </s-banner>
+                  ) : null}
+                  {suggestion ? (
+                    // Before setup: the suggestion the form holds, which "Turn on with these settings" saves, and what the first check may use.
+                    <SmartPreview
+                      data={{ ...panel, config: suggestion, publishing, types: scope.types, scheduleNote: liveProblem ? smartErrorText(i18n, liveProblem) : null }}
+                      languageNames={languageNames}
+                      omit={["nextCheck", "lastSuccess", "lastRun"]}
+                      now={data.now}
+                      shopZone={shopZone}
+                      firstCheck
+                    />
+                  ) : (
+                    <SmartPreview
+                      // How results go out now: automatically only while the plan includes it.
+                      data={{ ...panel, publishing: panel.publishing ? effectivePublishMode({ mode: panel.publishing, inPlan: data.autoPublishInPlan }) : null }}
+                      languageNames={languageNames}
+                      // The summary names schedule, next check and languages; stopped by the plan nothing waits for a check.
+                      omit={["languages", "schedule", "content", "nextCheck", ...(readOnly ? (["waiting"] as const) : [])]}
+                      now={data.now}
+                      shopZone={shopZone}
+                    />
+                  )}
+                </s-stack>
+              </div>
+            </s-box>
+          </section>
+
+          {/* Recent checks: when, how it ended (icon and word), what it found and sent, and its jobs; the earlier ones folded. Before setup only if there are any. */}
+          {config || panel.runs.length ? (
+            <SettingCard id="smart-activity" icon="clipboard-checklist" heading={t("automatic.section.activity")} lead={t("automatic.section.activity.lead")}>
+              {panel.runs.length === 0 ? (
+                <InlineNotice icon="calendar-check" heading={t("automatic.activity.empty")}>
+                  {t("automatic.activity.emptyBody")}
                 </InlineNotice>
               ) : (
-                <SmartStateBanner
-                  status={panel.status}
-                  zone={panel.zone}
-                  consentAction={
-                    consentNote ? (
-                      <s-stack direction="block" gap="small-200">
-                        {consentNote}
-                        <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
-                      </s-stack>
-                    ) : (
-                      <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
-                    )
-                  }
-                />
+                <>
+                  <ul aria-label={t("automatic.section.activity")} style={PLAIN_LIST}>
+                    {recent.map(runRow)}
+                  </ul>
+                  {earlier.length ? (
+                    <Disclosure summary={t("automatic.activity.more", { count: earlier.length })}>
+                      <ul aria-label={t("automatic.activity.more", { count: earlier.length })} style={PLAIN_LIST}>
+                        {earlier.map(runRow)}
+                      </ul>
+                    </Disclosure>
+                  ) : null}
+                </>
               )}
-              {!readOnly && notConfigured ? <StateLine icon="info">{canTurnOn ? t("automatic.hero.setUpHint") : !data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine> : null}
-              {!readOnly && panel.status.state === "off" && data.basicOn && canTurnOn ? <StateLine icon="info">{t("settings.changes.replacesBasic")}</StateLine> : null}
-              {!readOnly && !notConfigured && panel.status.state === "off" && !canTurnOn ? (
-                <StateLine icon="info">{!data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine>
-              ) : null}
-              {/* Next to the summary's grant button: what it agrees to. */}
-              {!readOnly && panel.status.state === "off" && !data.consent ? consentNote : null}
-              {panel.noAccess.length ? (
-                <InlineNotice icon="lock" heading={t("automatic.noAccess.heading")} actions={accessHref ? <Button href={accessHref}>{t("coverage.types.allowAccess")}</Button> : undefined}>
-                  {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => kindLabel(i18n, type)), 4) })}
-                </InlineNotice>
-              ) : null}
-              {actionError ? (
-                <s-banner tone="critical" heading={t("automatic.error.actionHeading")}>
-                  <s-paragraph>{smartErrorText(i18n, actionError)}</s-paragraph>
-                </s-banner>
-              ) : null}
-              <SmartPreview
-                // How results go out now: automatically only while the plan includes it.
-                data={{ ...panel, publishing: panel.publishing ? effectivePublishMode({ mode: panel.publishing, inPlan: data.autoPublishInPlan }) : null }}
-                languageNames={languageNames}
-                // The summary names schedule, next check and languages; before setup only the estimates count; stopped by the plan nothing waits for a check.
-                omit={[
-                  "languages",
-                  "schedule",
-                  "nextCheck",
-                  ...(config ? [] : (["lastSuccess", "lastRun", "publishing"] as const)),
-                  ...(readOnly ? (["waiting"] as const) : []),
-                ]}
-              />
-            </s-stack>
-          </s-box>
-        </section>
-
-        {/* Recent checks: when, how it ended (icon and word), what it found and sent, and its jobs. Before setup only if there are any. */}
-        {config || panel.runs.length ? (
-        <SettingCard id="smart-activity" icon="clipboard-checklist" heading={t("automatic.section.activity")} lead={t("automatic.section.activity.lead")}>
-          {panel.runs.length === 0 ? (
-            <InlineNotice icon="calendar-check" heading={t("automatic.activity.empty")}>
-              {t("automatic.activity.emptyBody")}
-            </InlineNotice>
-          ) : (
-            <ul aria-label={t("automatic.section.activity")} style={PLAIN_LIST}>
-              {panel.runs.map((run, index) => {
-                const when = t("automatic.schedule.zone", { time: i18n.dateTimeIn(run.createdAt, panel.zone), zone: panel.zone });
-                const status = RUN_STATUS[run.status] ?? RUN_STATUS.QUEUED!;
-                return (
-                  <li key={run.id}>
-                    {index > 0 ? <s-divider /> : null}
-                    <s-box paddingBlock="small-100">
-                      <s-stack direction="block" gap="small-300">
-                        <s-stack direction="inline" gap="small-200" alignItems="center">
-                          <s-icon type={run.trigger === "MANUAL" ? "play-circle" : "calendar-time"} color="subdued" />
-                          <span style={SETTING_NAME}>{when}</span>
-                          <s-badge tone={status.tone} icon={status.icon}>
-                            {t(`automatic.activity.status.${run.status}` as "automatic.activity.status.COMPLETED")}
-                          </s-badge>
-                          <s-text color="subdued">{t(`automatic.activity.trigger.${run.trigger}` as "automatic.activity.trigger.MANUAL")}</s-text>
-                        </s-stack>
-                        {run.status === "SKIPPED" ? (
-                          <s-text color="subdued">{runReason(i18n, run.errorCode)}</s-text>
-                        ) : (
-                          <s-text>
-                            {[
-                              t("automatic.activity.checked", { count: run.resourcesChecked }),
-                              t("automatic.activity.changed", { count: run.resourcesChanged, fields: number(run.fieldsDetected), chars: number(run.charsEstimated) }),
-                              run.excludedSkipped ? t("automatic.activity.excluded", { count: run.excludedSkipped }) : null,
-                              run.billed || run.fromMemory ? t("automatic.activity.billed", { billed: number(run.billed), memory: number(run.fromMemory) }) : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </s-text>
-                        )}
-                        {/* Why it didn't finish, or why its translation stopped (a budget, the plan's allowance). */}
-                        {run.status !== "SKIPPED" && run.errorCode ? (
-                          <StateLine icon="alert-triangle" tone={run.status === "FAILED" ? "critical" : "caution"}>
-                            {runReason(i18n, run.errorCode)}
-                          </StateLine>
-                        ) : null}
-                        {run.failed || run.jobs.length ? (
-                          <s-stack direction="inline" gap="small-200 base" alignItems="center">
-                            {run.failed ? (
-                              <s-stack direction="inline" gap="small-300" alignItems="center">
-                                <s-icon type="alert-circle" tone="critical" />
-                                <s-text tone="critical">{t("automatic.activity.failed", { count: run.failed })}</s-text>
-                              </s-stack>
-                            ) : null}
-                            {/* Only while it runs: retried items would be cancelled again while paused or off. */}
-                            {run.failed && panel.status.state === "on" && !readOnly ? (
-                              <Button
-                                variant="tertiary"
-                                accessibilityLabel={`${t("automatic.action.retryFailed")}: ${when}`}
-                                onClick={() => act("retry", { runId: run.id })}
-                                {...loading("retry", ["runId", run.id])}
-                              >
-                                {t("automatic.action.retryFailed")}
-                              </Button>
-                            ) : null}
-                            {run.jobs.slice(0, 3).map((job) => (
-                              <s-link key={job.id} href={`/app/jobs/${job.id}`}>
-                                {`${kindLabel(i18n, job.resourceType)} · ${languageNames.get(job.locale) ?? job.locale}`}
-                              </s-link>
-                            ))}
-                          </s-stack>
-                        ) : null}
-                      </s-stack>
-                    </s-box>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </SettingCard>
-        ) : null}
-
-        {/* What it never translates: one row each, removable here, added from an item's editor. Before setup only if there are any. */}
-        {config || panel.exclusions.length ? (
-        <SettingCard id="smart-exclusions" icon="hide" heading={t("automatic.section.exclusions")} lead={t("automatic.exclusions.body")}>
-          {panel.exclusions.length ? (
-            <ul aria-label={t("automatic.section.exclusions")} style={PLAIN_LIST}>
-              {panel.exclusions.map((e, index) => {
-                const name = `${itemKindLabel(i18n, e.resourceType)} ${e.resourceGid.split("/").pop()}`;
-                return (
-                  <li key={e.resourceGid}>
-                    {index > 0 ? <s-divider /> : null}
-                    <s-box paddingBlock="small-200">
-                      <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
-                        <s-icon type="hide" color="subdued" />
-                        {e.href ? <s-link href={e.href}>{name}</s-link> : <s-text>{e.resourceGid}</s-text>}
-                        <Button
-                          variant="tertiary"
-                          accessibilityLabel={`${t("automatic.action.remove")}: ${name}`}
-                          onClick={() => act("remove-exclusion", { resourceGid: e.resourceGid })}
-                          {...loading("remove-exclusion", ["resourceGid", e.resourceGid])}
-                        >
-                          {t("automatic.action.remove")}
-                        </Button>
-                      </s-grid>
-                    </s-box>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <InlineNotice icon="check-circle" heading={t("automatic.exclusions.empty")}>
-              {t("automatic.exclusions.emptyBody")}
-            </InlineNotice>
-          )}
-        </SettingCard>
-        ) : null}
-
-        {readOnly ? null : (
-          <ui-save-bar id={SAVE_BAR}>
-            <button variant="primary" onClick={() => formRef.current?.requestSubmit()} {...(settingsFetcher.state !== "idle" ? { loading: "" } : {})}>
-              {saveTurnsOn ? t("automatic.action.saveAndTurnOn") : t("automatic.action.save")}
-            </button>
-            <button onClick={discard}>{t("automatic.action.discard")}</button>
-          </ui-save-bar>
-        )}
-
-        <settingsFetcher.Form key={formKey} method="post" ref={formRef} onChange={read} onInput={read}>
-          <input type="hidden" name="intent" value="save" />
-          <input type="hidden" name="version" value={config?.version ?? 0} />
-          {saveTurnsOn ? <input type="hidden" name="turnOn" value="true" /> : null}
-          {saveTurnsOn && data.basicOn ? <input type="hidden" name="replaceBasic" value="true" /> : null}
-          <input type="hidden" name="publishMode" value={publishMode} />
-          {publishConfirmed ? <input type="hidden" name="confirmPublish" value="on" /> : null}
-          <s-stack direction="block" gap="base">
-            {/* When: the mode on the left; its time, days and zone with the next checks on the right. */}
-            <SettingCard id="smart-schedule" icon="calendar-time" heading={t("automatic.section.schedule")} lead={t("automatic.section.schedule.lead")}>
-              <s-query-container>
-                <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr" gap="large" alignItems="start">
-                  <s-choice-list name="mode" label={t("automatic.mode.label")} disabled={readOnly}>
-                    {MODES.map((m) => (
-                      <s-choice key={m} value={m} defaultSelected={initial.mode === m}>
-                        {t(`automatic.mode.${m}` as "automatic.mode.daily")}
-                        <s-text slot="details">{t(`automatic.mode.${m}.details` as "automatic.mode.daily.details")}</s-text>
-                      </s-choice>
-                    ))}
-                  </s-choice-list>
-                  <s-box background="subdued" borderRadius="large-100" padding="base">
-                    <s-stack direction="block" gap="base">
-                      {mode === "custom" ? (
-                        <s-stack direction="block" gap="small-200">
-                          <s-text>{t("automatic.times.label")}</s-text>
-                          <s-query-container>
-                            <s-grid gridTemplateColumns="@container (inline-size > 420px) 1fr 1fr 1fr, 1fr 1fr" gap="small-200">
-                              {Array.from({ length: MAX_TIMES_PER_DAY }, (_, i) => {
-                                const value =
-                                  initial.mode === "custom" && initial.times[i] !== undefined
-                                    ? formatTime(initial.times[i]!)
-                                    : i === 0
-                                      ? formatTime(initial.times[0] ?? REALTIME_CHECK_MINUTE)
-                                      : "none";
-                                return (
-                                  <s-select key={i} name="customTime" label={t("automatic.times.slot", { number: i + 1 })} value={value} disabled={readOnly}>
-                                    <s-option value="none">{t("automatic.times.none")}</s-option>
-                                    {TIME_OPTIONS.map((o) => (
-                                      <s-option key={o} value={o}>
-                                        {o}
-                                      </s-option>
-                                    ))}
-                                  </s-select>
-                                );
-                              })}
-                            </s-grid>
-                          </s-query-container>
-                        </s-stack>
-                      ) : mode !== "manual" ? (
-                        <s-select
-                          name="time"
-                          label={mode === "realtime" ? t("automatic.time.dailyCheck") : t("automatic.time.label")}
-                          value={formatTime(initial.times[0] ?? REALTIME_CHECK_MINUTE)}
-                          disabled={readOnly}
-                        >
-                          {TIME_OPTIONS.map((o) => (
-                            <s-option key={o} value={o}>
-                              {o}
-                            </s-option>
-                          ))}
-                        </s-select>
-                      ) : null}
-                      {mode === "weekly" || mode === "custom" ? (
-                        <s-choice-list name="weekday" label={t("automatic.weekdays.label")} multiple disabled={readOnly}>
-                          {WEEKDAYS.map((d) => (
-                            <s-choice key={d} value={String(d)} defaultSelected={initial.weekdays.includes(d)}>
-                              {i18n.weekday(d)}
-                            </s-choice>
-                          ))}
-                        </s-choice-list>
-                      ) : null}
-                      {mode !== "manual" ? (
-                        <s-select name="timeZone" label={t("automatic.zone.label")} value={initial.zone} disabled={readOnly}>
-                          {data.zones.map((z) => (
-                            <s-option key={z} value={z}>
-                              {z === data.shopTimeZone ? t("automatic.zone.shop", { zone: z }) : z}
-                            </s-option>
-                          ))}
-                        </s-select>
-                      ) : (
-                        <input type="hidden" name="timeZone" value={initial.zone} />
-                      )}
-                      <s-divider />
-                      <s-stack direction="block" gap="small-200">
-                        <s-stack direction="inline" gap="small-200" alignItems="center">
-                          <s-icon type="calendar-check" color="subdued" />
-                          <h3 style={SUB_HEADING}>{t("automatic.next.label")}</h3>
-                        </s-stack>
-                        {upcoming.length ? (
-                          <s-ordered-list>
-                            {upcoming.map((at) => (
-                              <s-list-item key={at}>{t("automatic.schedule.zone", { time: i18n.dateTimeIn(at, preview.zone), zone: preview.zone })}</s-list-item>
-                            ))}
-                          </s-ordered-list>
-                        ) : (
-                          <s-text color="subdued">{t("automatic.next.none")}</s-text>
-                        )}
-                      </s-stack>
-                    </s-stack>
-                  </s-box>
-                </s-grid>
-              </s-query-container>
             </SettingCard>
+          ) : null}
 
-            {/* What: languages, the content by area (as the Content page groups it), and the fields; three labels at one level. */}
-            <SettingCard id="smart-scope" icon="language-translate" heading={t("automatic.section.scope")} lead={t("automatic.section.scope.lead")}>
-              {backIn("smart-scope")}
-              <s-stack direction="block" gap="small-200">
-                <h3 style={SUB_HEADING}>{t("automatic.languages.label")}</h3>
-                <s-choice-list name="locale" label={t("automatic.languages.label")} labelAccessibilityVisibility="exclusive" multiple disabled={readOnly}>
-                  {data.languages
-                    .filter((l) => l.inPlan)
-                    .map((l) => (
-                      <s-choice key={l.locale} value={l.locale} defaultSelected={config ? config.locales.includes(l.locale) : true}>
-                        {languageNames.get(l.locale)}
-                      </s-choice>
-                    ))}
-                </s-choice-list>
-                {outside.length ? (
-                  <StateLine icon="lock">
-                    {t("settings.auto.outsidePlan", {
-                      languages: languageList(i18n, outside.map((l) => languageNames.get(l.locale) ?? l.locale), Infinity),
-                      count: outside.length,
-                    })}{" "}
-                    <s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link>
-                  </StateLine>
-                ) : null}
-              </s-stack>
-              <s-divider />
-              <s-stack direction="block" gap="small-200">
-                <h3 id="smart-types" style={SUB_HEADING}>
-                  {t("automatic.types.label")}
-                </h3>
-                {/* One row per area of the Content page: its icon, its name, and its kinds of content side by side. */}
-                <s-box border="base" borderRadius="large-100" paddingInline="base">
-                  <ul aria-labelledby="smart-types" style={PLAIN_LIST}>
-                    {TYPE_AREAS.map(({ area, icon, types }, index) => (
-                      <li key={area}>
+          {/* What it never translates: one row each with its name and picture, removable here, added from an item's editor. Before setup only if there are any. */}
+          {config || panel.exclusions.length ? (
+            <SettingCard id="smart-exclusions" icon="hide" heading={t("automatic.section.exclusions")} lead={t("automatic.exclusions.body")}>
+              {panel.exclusions.length ? (
+                <ul aria-label={t("automatic.section.exclusions")} style={PLAIN_LIST}>
+                  {panel.exclusions.map((e, index) => {
+                    const kind = itemKindLabel(i18n, e.resourceType);
+                    // Its name as Shopify has it; its kind and number where Shopify didn't answer.
+                    const name = e.title ?? `${kind} ${e.resourceGid.split("/").pop()}`;
+                    return (
+                      <li key={e.resourceGid}>
                         {index > 0 ? <s-divider /> : null}
-                        <s-box paddingBlock="small-100">
-                          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
-                            <IconTile icon={icon} size={28} color="base" iconSize="base" />
-                            {types.length === 1 ? (
-                              <div style={{ paddingTop: 4 }}>
-                                <TypeCheckbox type={types[0]!} checked={chosenTypes.has(types[0]!)} i18n={i18n} disabled={readOnly} engines={data.engines.text} />
-                              </div>
-                            ) : (
-                              <div role="group" aria-labelledby={`smart-area-${area}`} style={{ paddingTop: 4 }}>
-                                <s-stack direction="block" gap="small-200">
-                                  <span id={`smart-area-${area}`} style={SETTING_NAME}>
-                                    {area === "other" ? t("automatic.types.label") : categoryName(i18n, area)}
-                                  </span>
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px" }}>
-                                    {types.map((type) => (
-                                      <TypeCheckbox key={type} type={type} checked={chosenTypes.has(type)} i18n={i18n} disabled={readOnly} engines={data.engines.text} />
-                                    ))}
-                                  </div>
-                                </s-stack>
-                              </div>
-                            )}
+                        <s-box paddingBlock="small-200">
+                          <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-300" alignItems="center">
+                            {e.image ? <img className="lv-smart-thumb" src={e.image.url} alt="" width={40} height={40} loading="lazy" /> : <IconSquare icon={kindIcon(e.resourceType)} />}
+                            <s-stack direction="block" gap="small-500">
+                              {e.href ? <s-link href={e.href}>{name}</s-link> : <Strong>{name}</Strong>}
+                              {e.title ? <s-text color="subdued">{kind}</s-text> : null}
+                            </s-stack>
+                            <Button
+                              variant="tertiary"
+                              accessibilityLabel={`${t("automatic.action.remove")}: ${name}`}
+                              onClick={() => act("remove-exclusion", { resourceGid: e.resourceGid })}
+                              {...loading("remove-exclusion", ["resourceGid", e.resourceGid])}
+                            >
+                              {t("automatic.action.remove")}
+                            </Button>
                           </s-grid>
                         </s-box>
                       </li>
-                    ))}
-                  </ul>
-                </s-box>
-                <s-checkbox
-                  name="attached"
-                  label={t("automatic.attached.label")}
-                  details={t("automatic.attached.details")}
-                  disabled={readOnly}
-                  {...(config?.includeAttached ? { defaultChecked: true } : {})}
-                />
-              </s-stack>
-              <s-divider />
-              <s-stack direction="block" gap="small-200">
-                <h3 style={SUB_HEADING}>{t("automatic.fields.label")}</h3>
-                <s-choice-list name="fields" label={t("automatic.fields.label")} labelAccessibilityVisibility="exclusive" disabled={readOnly}>
-                  <s-choice value="all" defaultSelected={!initial.fieldsChosen}>
-                    {t("automatic.fields.all")}
-                  </s-choice>
-                  <s-choice value="chosen" defaultSelected={initial.fieldsChosen}>
-                    {t("automatic.fields.chosen")}
-                  </s-choice>
-                </s-choice-list>
-                {fieldsChosen ? (
-                  <s-box background="subdued" borderRadius="large-100" padding="base">
-                    <s-choice-list name="group" label={t("automatic.fields.groups")} multiple disabled={readOnly}>
-                      {SMART_FIELD_GROUPS.map((g) => (
-                        <s-choice key={g} value={g} defaultSelected={config?.fieldGroups.includes(g) ?? false}>
-                          {/* The Coverage page's names for the field groups ("Titles and names", "SEO titles"), never the codes. */}
-                          {t(`coverage.group.${g}`)}
+                    );
+                  })}
+                </ul>
+              ) : (
+                <InlineNotice icon="check-circle" heading={t("automatic.exclusions.empty")}>
+                  {t("automatic.exclusions.emptyBody")}
+                </InlineNotice>
+              )}
+            </SettingCard>
+          ) : null}
+
+          {readOnly ? null : (
+            <ui-save-bar id={SAVE_BAR}>
+              <button variant="primary" onClick={() => formRef.current?.requestSubmit()} {...(settingsFetcher.state !== "idle" ? { loading: "" } : {})}>
+                {saveTurnsOn ? t("automatic.action.saveAndTurnOn") : t("automatic.action.save")}
+              </button>
+              <button onClick={discard}>{t("automatic.action.discard")}</button>
+            </ui-save-bar>
+          )}
+
+          <settingsFetcher.Form key={formKey} method="post" ref={formRef} onChange={read} onInput={read}>
+            <input type="hidden" name="intent" value="save" />
+            <input type="hidden" name="version" value={config?.version ?? 0} />
+            {saveTurnsOn ? <input type="hidden" name="turnOn" value="true" /> : null}
+            {saveTurnsOn && data.basicOn ? <input type="hidden" name="replaceBasic" value="true" /> : null}
+            <input type="hidden" name="publishMode" value={publishMode} />
+            {publishConfirmed ? <input type="hidden" name="confirmPublish" value="on" /> : null}
+            <s-stack direction="block" gap="base">
+              {/* When: how often as square tiles; under them the chosen way's time, days and zone with its next checks. */}
+              <SettingCard id="smart-schedule" icon="calendar-time" heading={t("automatic.section.schedule")} lead={t("automatic.section.schedule.lead")}>
+                <ChoiceTiles name="mode" legend={t("automatic.mode.label")} options={modeTiles} defaultValue={initial.mode} disabled={readOnly} />
+                <div className="lv-option-panel">
+                  <s-stack direction="block" gap="base">
+                    <s-stack direction="block" gap="small-300">
+                      <s-stack direction="inline" gap="small-200" alignItems="center">
+                        <IconSquare icon={MODE_LOOK[modeKey].icon} tint={MODE_LOOK[modeKey].tint} size={28} />
+                        <Strong>{t(`automatic.mode.${modeKey}` as "automatic.mode.daily")}</Strong>
+                      </s-stack>
+                      <s-text color="subdued">{t(`automatic.mode.${modeKey}.details` as "automatic.mode.realtime.details", { basic: t("settings.changes.basic.title"), checkNow })}</s-text>
+                    </s-stack>
+                    <s-query-container>
+                      <s-grid gridTemplateColumns={modeKey === "manual" ? "1fr" : "@container (inline-size > 640px) 1fr 1fr, 1fr"} gap="large" alignItems="start">
+                        {modeKey === "manual" ? (
+                          <input type="hidden" name="timeZone" value={zone} />
+                        ) : (
+                          <s-stack direction="block" gap="base">
+                            {modeKey === "custom" ? (
+                              <s-stack direction="block" gap="small-200">
+                                <s-text>{t("automatic.times.label")}</s-text>
+                                <s-query-container>
+                                  <s-grid gridTemplateColumns="@container (inline-size > 380px) 1fr 1fr, 1fr" gap="small-200">
+                                    {slots.map((slot, i) => (
+                                      <s-grid key={slot.id} gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="end">
+                                        <s-select id={`smart-slot-${slot.id}`} name="customTime" label={t("automatic.times.slot", { number: i + 1 })} value={slot.value} icon="clock" disabled={readOnly}>
+                                          {TIME_OPTIONS.map((o) => (
+                                            <s-option key={o} value={o}>
+                                              {o}
+                                            </s-option>
+                                          ))}
+                                        </s-select>
+                                        {slots.length > 1 && !readOnly ? (
+                                          <Button
+                                            variant="tertiary"
+                                            icon="x"
+                                            accessibilityLabel={t("automatic.times.remove", { number: i + 1 })}
+                                            tooltip={t("automatic.times.remove", { number: i + 1 })}
+                                            onClick={() => removeSlot(slot.id)}
+                                          />
+                                        ) : null}
+                                      </s-grid>
+                                    ))}
+                                  </s-grid>
+                                </s-query-container>
+                                {slots.length < MAX_TIMES_PER_DAY && !readOnly ? (
+                                  <s-stack direction="inline">
+                                    <Button variant="tertiary" icon="plus" onClick={addSlot}>
+                                      {t("automatic.times.add")}
+                                    </Button>
+                                  </s-stack>
+                                ) : null}
+                                {timeError ? (
+                                  <StateLine icon="alert-circle" tone="critical">
+                                    {timeError}
+                                  </StateLine>
+                                ) : null}
+                              </s-stack>
+                            ) : (
+                              <s-select
+                                id="smart-time"
+                                name="time"
+                                label={modeKey === "realtime" ? t("automatic.time.dailyCheck") : t("automatic.time.label")}
+                                value={time}
+                                icon="clock"
+                                disabled={readOnly}
+                                {...(timeError ? { error: timeError } : {})}
+                              >
+                                {TIME_OPTIONS.map((o) => (
+                                  <s-option key={o} value={o}>
+                                    {o}
+                                  </s-option>
+                                ))}
+                              </s-select>
+                            )}
+                            {modeKey === "weekly" || modeKey === "custom" ? (
+                              <s-stack direction="block" gap="small-200">
+                                <DayToggles name="weekday" legend={t("automatic.weekdays.label")} checked={weekdays} disabled={readOnly} {...(daysError ? { errorId: "smart-days-error" } : {})} />
+                                {daysError ? (
+                                  <div id="smart-days-error">
+                                    <StateLine icon="alert-circle" tone="critical">
+                                      {daysError}
+                                    </StateLine>
+                                  </div>
+                                ) : null}
+                              </s-stack>
+                            ) : null}
+                            {/* The zone in one line; its long list only after "Change". */}
+                            {zoneShown ? (
+                              <s-select id="smart-zone" name="timeZone" label={t("automatic.zone.label")} value={zone} disabled={readOnly} {...(zoneError ? { error: zoneError } : {})}>
+                                {data.zones.map((z) => (
+                                  <s-option key={z} value={z}>
+                                    {z === data.shopTimeZone ? t("automatic.zone.shop", { zone: z }) : z}
+                                  </s-option>
+                                ))}
+                              </s-select>
+                            ) : (
+                              <s-stack direction="inline" gap="small-200" alignItems="center">
+                                <input type="hidden" name="timeZone" value={zone} />
+                                <s-text>{t("automatic.zone.line", { zone: zone === data.shopTimeZone ? t("automatic.zone.shop", { zone }) : zone })}</s-text>
+                                {readOnly ? null : (
+                                  <Button variant="tertiary" accessibilityLabel={`${t("automatic.zone.change")}: ${t("automatic.zone.label")}`} onClick={openZone}>
+                                    {t("automatic.zone.change")}
+                                  </Button>
+                                )}
+                              </s-stack>
+                            )}
+                          </s-stack>
+                        )}
+                        <s-stack direction="block" gap="small-200">
+                          <s-stack direction="inline" gap="small-200" alignItems="center">
+                            <s-icon type="calendar-list" color="subdued" />
+                            <h3 style={SUB_HEADING}>{t("automatic.next.label")}</h3>
+                          </s-stack>
+                          {upcoming.length ? (
+                            <s-ordered-list>
+                              {upcoming.map((at) => (
+                                <s-list-item key={at}>{t("automatic.schedule.zone", { time: i18n.dateTimeIn(at, zone), zone })}</s-list-item>
+                              ))}
+                            </s-ordered-list>
+                          ) : liveProblem ? (
+                            <StateLine icon="alert-triangle" tone="caution">
+                              {smartErrorText(i18n, liveProblem)}
+                            </StateLine>
+                          ) : (
+                            <s-text color="subdued">{t("automatic.next.none")}</s-text>
+                          )}
+                        </s-stack>
+                      </s-grid>
+                    </s-query-container>
+                  </s-stack>
+                </div>
+              </SettingCard>
+
+              {/* What: languages, the content by area (as the Content page groups it), the fields, and outdated translations; four labels at one level. */}
+              <SettingCard id="smart-scope" icon="language-translate" heading={t("automatic.section.scope")} lead={t("automatic.section.scope.lead")}>
+                {backIn("smart-scope")}
+                <s-stack direction="block" gap="small-200">
+                  <h3 style={SUB_HEADING}>{t("automatic.languages.label")}</h3>
+                  <s-choice-list
+                    name="locale"
+                    label={t("automatic.languages.label")}
+                    labelAccessibilityVisibility="exclusive"
+                    multiple
+                    disabled={readOnly}
+                    {...(languagesError ? { error: languagesError } : {})}
+                  >
+                    {data.languages
+                      .filter((l) => l.inPlan)
+                      .map((l) => (
+                        <s-choice key={l.locale} value={l.locale} defaultSelected={initial.locales.includes(l.locale)}>
+                          {languageNames.get(l.locale)}
                         </s-choice>
                       ))}
-                    </s-choice-list>
+                  </s-choice-list>
+                  {outside.length ? (
+                    <StateLine icon="lock">
+                      {t("settings.auto.outsidePlan", {
+                        languages: languageList(i18n, outside.map((l) => languageNames.get(l.locale) ?? l.locale), Infinity),
+                        count: outside.length,
+                      })}{" "}
+                      <s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link>
+                    </StateLine>
+                  ) : null}
+                </s-stack>
+                <s-divider />
+                <s-stack direction="block" gap="small-200">
+                  <h3 id="smart-types" style={SUB_HEADING}>
+                    {t("automatic.types.label")}
+                  </h3>
+                  {/* One row per area of the Content page: its icon, its name, and its kinds of content side by side. */}
+                  <s-box border="base" borderRadius="large-100" paddingInline="base">
+                    <ul aria-labelledby="smart-types" style={PLAIN_LIST}>
+                      {TYPE_AREAS.map(({ area, icon, types }, index) => (
+                        <li key={area}>
+                          {index > 0 ? <s-divider /> : null}
+                          <s-box paddingBlock="small-100">
+                            <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
+                              <IconTile icon={icon} size={28} color="base" iconSize="base" />
+                              {types.length === 1 ? (
+                                <div style={{ paddingTop: 4 }}>
+                                  <TypeCheckbox
+                                    type={types[0]!}
+                                    // An area named apart from its kind says both ("Size charts & more (Metaobjects)").
+                                    label={areaLabel(i18n, area, types[0]!)}
+                                    checked={chosenTypes.has(types[0]!)}
+                                    i18n={i18n}
+                                    disabled={readOnly}
+                                    engines={data.engines.text}
+                                  />
+                                </div>
+                              ) : (
+                                <div role="group" aria-labelledby={`smart-area-${area}`} style={{ paddingTop: 4 }}>
+                                  <s-stack direction="block" gap="small-200">
+                                    <span id={`smart-area-${area}`} style={SETTING_NAME}>
+                                      {area === "other" ? t("automatic.types.label") : categoryName(i18n, area)}
+                                    </span>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px" }}>
+                                      {types.map((type) => (
+                                        <TypeCheckbox key={type} type={type} label={kindLabel(i18n, type)} checked={chosenTypes.has(type)} i18n={i18n} disabled={readOnly} engines={data.engines.text} />
+                                      ))}
+                                    </div>
+                                  </s-stack>
+                                </div>
+                              )}
+                            </s-grid>
+                          </s-box>
+                        </li>
+                      ))}
+                    </ul>
                   </s-box>
-                ) : null}
-              </s-stack>
-            </SettingCard>
-
-            {/* Publishing: the same choice as on Settings, for the smart schedule's own results. */}
-            <SettingCard id="smart-publishing" icon="send" heading={t("automatic.section.publishing")} lead={t("automatic.section.publishing.lead")}>
-              <PublishingChoice
-                id="smart-publish"
-                mode={publishing}
-                inPlan={data.autoPublishInPlan}
-                busy={readOnly}
-                onChoose={(next, confirmed) => {
-                  if (next === publishMode) return;
-                  publishChosen.current = true;
-                  setPublishMode(next);
-                  setPublishConfirmed(confirmed);
-                  setDirty(true);
-                }}
-              />
-            </SettingCard>
-
-            <SettingCard id="smart-outdated" icon="refresh" heading={t("automatic.section.outdated")} lead={t("automatic.section.outdated.lead")}>
-              <s-choice-list name="outdated" label={t("automatic.section.outdated")} labelAccessibilityVisibility="exclusive" disabled={readOnly}>
-                <s-choice value="replace" defaultSelected={config?.replaceOutdatedMachine ?? true}>
-                  {t("automatic.outdated.replace")}
-                  <s-text slot="details">{t("automatic.outdated.replace.details")}</s-text>
-                </s-choice>
-                <s-choice value="keep" defaultSelected={config ? !config.replaceOutdatedMachine : false}>
-                  {t("automatic.outdated.keep")}
-                  <s-text slot="details">{t("automatic.outdated.keep.details")}</s-text>
-                </s-choice>
-              </s-choice-list>
-            </SettingCard>
-
-            {/* Budgets: optional caps below the plan's AI characters. */}
-            <SettingCard id="smart-budgets" icon="gauge" heading={t("automatic.section.budgets")} lead={t("automatic.section.budgets.lead")}>
-              {backIn("smart-budgets")}
-              <s-query-container>
-                <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, 1fr" gap="base">
-                  <s-number-field
-                    name="dailyBudget"
-                    label={t("automatic.budget.daily")}
-                    min={1}
-                    max={data.allowance}
-                    step={1}
+                  {typesError ? (
+                    <StateLine icon="alert-circle" tone="critical">
+                      {typesError}
+                    </StateLine>
+                  ) : null}
+                  <s-checkbox
+                    name="attached"
+                    label={t("automatic.attached.label")}
+                    details={t("automatic.attached.details")}
                     disabled={readOnly}
-                    defaultValue={config?.dailyBudget ? String(config.dailyBudget) : ""}
-                    {...(config?.dailyBudget ? { details: t("automatic.budget.saved", { chars: number(config.dailyBudget) }) } : {})}
+                    {...(config?.includeAttached ? { defaultChecked: true } : {})}
                   />
-                  <s-number-field
-                    name="monthlyBudget"
-                    label={t("automatic.budget.monthly")}
-                    min={1}
-                    max={data.allowance}
-                    step={1}
-                    disabled={readOnly}
-                    defaultValue={config?.monthlyBudget ? String(config.monthlyBudget) : ""}
-                    {...(config?.monthlyBudget ? { details: t("automatic.budget.saved", { chars: number(config.monthlyBudget) }) } : {})}
-                  />
-                </s-grid>
-              </s-query-container>
-              <FactList
-                label={t("automatic.section.budgets")}
-                facts={[
-                  { key: "help", icon: "info", text: t("automatic.budget.help", { allowance: number(data.allowance) }) },
-                  ...(data.trial
-                    ? [{ key: "trial", icon: "clock" as const, text: t("automatic.budget.trial", { date: i18n.date(data.trial.endsAt), trial: number(data.allowance), limit: number(data.trial.limit) }) }]
-                    : []),
-                  { key: "used", icon: "gauge", text: t("automatic.budget.used", { today: number(panel.usage.today), month: number(panel.usage.month) }) },
-                ]}
-              />
-            </SettingCard>
+                </s-stack>
+                <s-divider />
+                <s-stack direction="block" gap="small-200">
+                  <h3 style={SUB_HEADING}>{t("automatic.fields.label")}</h3>
+                  <s-choice-list name="fields" label={t("automatic.fields.label")} labelAccessibilityVisibility="exclusive" disabled={readOnly}>
+                    <s-choice value="all" defaultSelected={!initial.fieldsChosen}>
+                      {t("automatic.fields.all")}
+                    </s-choice>
+                    <s-choice value="chosen" defaultSelected={initial.fieldsChosen}>
+                      {t("automatic.fields.chosen")}
+                    </s-choice>
+                  </s-choice-list>
+                  {fieldsChosen ? (
+                    <s-box background="subdued" borderRadius="large-100" padding="base">
+                      <s-choice-list name="group" label={t("automatic.fields.groups")} multiple disabled={readOnly} {...(groupsError ? { error: groupsError } : {})}>
+                        {SMART_FIELD_GROUPS.map((g) => (
+                          <s-choice key={g} value={g} defaultSelected={config?.fieldGroups.includes(g) ?? false}>
+                            {/* The Coverage page's names for the field groups ("Titles and names", "SEO titles"), never the codes. */}
+                            {t(`coverage.group.${g}`)}
+                          </s-choice>
+                        ))}
+                      </s-choice-list>
+                    </s-box>
+                  ) : null}
+                </s-stack>
+                <s-divider />
+                {/* Outdated translations: the app's state word, its two choices as tiles like the schedule's. */}
+                <div id="smart-outdated">
+                  <s-stack direction="block" gap="small-200">
+                    <s-stack direction="block" gap="small-500">
+                      <h3 style={SUB_HEADING}>{t("automatic.outdated.label")}</h3>
+                      <s-text color="subdued">{t("automatic.section.outdated.lead")}</s-text>
+                    </s-stack>
+                    <ChoiceTiles
+                      name="outdated"
+                      legend={t("automatic.outdated.label")}
+                      legendHidden
+                      disabled={readOnly}
+                      defaultValue={config?.replaceOutdatedMachine === false ? "keep" : "replace"}
+                      options={[
+                        { value: "replace", name: t("automatic.outdated.replace"), line: t("automatic.outdated.replace.details") },
+                        { value: "keep", name: t("automatic.outdated.keep"), line: t("automatic.outdated.keep.details", { outdated: t("coverage.state.outdated") }) },
+                      ]}
+                    />
+                  </s-stack>
+                </div>
+              </SettingCard>
 
-            {readOnly ? null : (
-              // The save bar is the main way to save; this one stays for pages opened without it, and is secondary.
-              <s-stack direction="inline" gap="small-200 base" alignItems="center">
-                <Button type="submit" {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
-                  {saveTurnsOn ? t("automatic.action.saveAndTurnOn") : t("automatic.action.save")}
-                </Button>
-                <s-text color="subdued">{t("automatic.save.note")}</s-text>
-              </s-stack>
-            )}
-          </s-stack>
-        </settingsFetcher.Form>
-      </s-stack>
+              {/* Publishing: the same choice as on Settings, for the smart schedule's own results. */}
+              <SettingCard id="smart-publishing" icon="send" heading={t("automatic.section.publishing")} lead={t("automatic.section.publishing.lead")}>
+                <PublishingChoice
+                  id="smart-publish"
+                  mode={publishing}
+                  inPlan={data.autoPublishInPlan}
+                  busy={readOnly}
+                  onChoose={(next, confirmed) => {
+                    if (next === publishMode) return;
+                    publishChosen.current = true;
+                    setPublishMode(next);
+                    setPublishConfirmed(confirmed);
+                    changed();
+                  }}
+                />
+              </SettingCard>
+
+              {/* Budgets: optional caps below the plan's AI characters, each with how much of it is used. */}
+              <SettingCard id="smart-budgets" icon="gauge" heading={t("automatic.section.budgets")} lead={t("automatic.section.budgets.lead")}>
+                {backIn("smart-budgets")}
+                <s-query-container>
+                  <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, 1fr" gap="large base">
+                    <s-stack direction="block" gap="base">
+                      <s-number-field
+                        name="dailyBudget"
+                        label={t("automatic.budget.daily")}
+                        placeholder={t("automatic.budget.none")}
+                        suffix={t("automatic.budget.unit")}
+                        min={1}
+                        max={data.allowance}
+                        step={1}
+                        disabled={readOnly}
+                        defaultValue={config?.dailyBudget ? String(config.dailyBudget) : ""}
+                        {...(config?.dailyBudget ? { details: t("automatic.budget.saved", { chars: number(config.dailyBudget) }) } : {})}
+                        {...(budgetError ? { error: budgetError } : {})}
+                      />
+                      <BudgetMeter label={t("automatic.budget.usedToday")} used={panel.usage.today} budget={config?.dailyBudget ?? null} />
+                    </s-stack>
+                    <s-stack direction="block" gap="base">
+                      <s-number-field
+                        name="monthlyBudget"
+                        label={t("automatic.budget.monthly")}
+                        placeholder={t("automatic.budget.none")}
+                        suffix={t("automatic.budget.unit")}
+                        min={1}
+                        max={data.allowance}
+                        step={1}
+                        disabled={readOnly}
+                        defaultValue={config?.monthlyBudget ? String(config.monthlyBudget) : ""}
+                        {...(config?.monthlyBudget ? { details: t("automatic.budget.saved", { chars: number(config.monthlyBudget) }) } : {})}
+                        {...(budgetError ? { error: budgetError } : {})}
+                      />
+                      <BudgetMeter label={t("automatic.budget.usedMonth", { month: i18n.month(monthOf(data.now, panel.zone)) })} used={panel.usage.month} budget={config?.monthlyBudget ?? null} />
+                    </s-stack>
+                  </s-grid>
+                </s-query-container>
+                <FactList
+                  label={t("automatic.section.budgets")}
+                  facts={[
+                    { key: "help", icon: "info", text: t("automatic.budget.help", { allowance: number(data.allowance) }) },
+                    ...(data.trial
+                      ? [{ key: "trial", icon: "clock" as const, text: t("automatic.budget.trial", { date: i18n.date(data.trial.endsAt), trial: number(data.allowance), limit: number(data.trial.limit) }) }]
+                      : []),
+                  ]}
+                />
+              </SettingCard>
+
+              {/* The save bar is the main way to save; this one is for pages opened without it, secondary, and only while there is something to save. */}
+              {readOnly || !dirty ? null : (
+                <s-stack direction="inline" gap="small-200 base" alignItems="center">
+                  <Button type="submit" {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
+                    {saveTurnsOn ? t("automatic.action.saveAndTurnOn") : t("automatic.action.save")}
+                  </Button>
+                  <s-text color="subdued">{t("automatic.save.note")}</s-text>
+                </s-stack>
+              )}
+            </s-stack>
+          </settingsFetcher.Form>
+        </s-stack>
+      </s-query-container>
     </s-page>
   );
+}
+
+/** One custom check time in the form, with a key that stays when another one is taken away. */
+interface Slot {
+  id: number;
+  value: string;
+}
+
+/** The custom times the form starts with: the saved ones, or the one time of another mode. */
+function slotsOf(initial: { mode: string; times: readonly number[] }): Slot[] {
+  const times = initial.mode === "custom" && initial.times.length ? initial.times : [initial.times[0] ?? REALTIME_CHECK_MINUTE];
+  return times.slice(0, MAX_TIMES_PER_DAY).map((minute, id) => ({ id, value: formatTime(minute) }));
+}
+
+/** The month a budget counts in ("2026-11"), in the schedule's zone. */
+function monthOf(now: number, zone: string): string {
+  const { year, month } = wallClock(now, zone);
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+/** An excluded item's icon when it has no picture: its area's, as on the Content page. */
+function kindIcon(resourceType: string): IconName {
+  const area = categoryOf(resourceType);
+  return area && isCategoryId(area) ? CATEGORIES[area].icon : "content";
+}
+
+/** A single-kind area's checkbox: the area's name, with the kind where the two differ ("Size charts & more (Metaobjects)"). */
+function areaLabel(i18n: ReturnType<typeof useI18n>, area: CategoryId | "other", type: SmartType): string {
+  const kind = kindLabel(i18n, type);
+  if (area === "other") return kind;
+  const name = categoryName(i18n, area);
+  return name === kind ? kind : `${name} (${kind})`;
 }
 
 /** A content type of the smart schedule, with the personal-data note where it applies. */
 function TypeCheckbox({
   type,
+  label,
   checked,
   i18n,
   disabled,
   engines,
 }: {
   type: SmartType;
+  label: string;
   checked: boolean;
   i18n: ReturnType<typeof useI18n>;
   disabled: boolean;
@@ -1078,7 +1364,7 @@ function TypeCheckbox({
     <s-checkbox
       name="type"
       value={type}
-      label={kindLabel(i18n, type)}
+      label={label}
       disabled={disabled}
       {...(SMART_PERSONAL_DATA_TYPES.has(type) ? { details: personal } : {})}
       {...(checked ? { defaultChecked: true } : {})}
@@ -1113,7 +1399,7 @@ const TYPE_AREAS: Array<{ area: CategoryId | "other"; icon: IconName; types: Sma
 
 const RUN_REASONS = ["PAUSED", "COALESCED", "AI_NOT_CONFIGURED", "QUEUES_UNAVAILABLE", "NO_LANGUAGE", "SMART_OFF", "SCAN_FAILED", "STALLED", "PARTIAL"];
 
-/** Why a check was skipped, didn't finish or stopped translating. */
+/** Why a check was skipped, didn't finish or stopped translating, as a sentence. */
 function runReason(i18n: ReturnType<typeof useI18n>, code: string | null): string {
   if (code && RUN_REASONS.includes(code)) return i18n.t(`automatic.activity.reason.${code}` as "automatic.activity.reason.other");
   return (code ? jobErrorMessage(i18n, code) : null) ?? i18n.t("automatic.activity.reason.other");

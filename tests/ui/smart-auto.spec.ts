@@ -160,28 +160,48 @@ test("after a move to a plan without the schedule: paused with the plan named, i
 test("the smart page: summary, recent checks and exclusions first, then the schedule and budgets @responsive", async ({ page }) => {
   await openApp(page, "business", "/app/settings/automatic");
   await expect(page.locator("s-page")).toHaveAttribute("heading", "Smart schedule");
+  // The way back leads to Settings' section it was opened from (the trail on a wide page, the 44 px back row on a phone).
+  await expect(page.getByRole("link", { name: "Translating changes", exact: true })).toHaveAttribute("href", "/app/settings?section=changes");
   const order = await page.locator("[id^='smart-']:is(section)").evaluateAll((sections) => sections.map((s) => s.id));
   expect(order.slice(0, 4)).toEqual(["smart-status", "smart-activity", "smart-exclusions", "smart-schedule"]);
   const status = page.locator("#smart-status");
   await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Every day at 23:00$/);
+  // The next check as a day and a time; the zone is the store's own, so it isn't repeated.
+  await expect(status.getByText(/^Next check: (today|tomorrow), 11:00\s?PM$/)).toBeVisible();
   await expect(status.getByText("3 changes in 12 fields")).toBeVisible();
   // Nothing being translated: no line for it.
   await expect(status.getByText("Translating now")).toHaveCount(0);
+  // The actions with their icons; Turn off is the quiet red one, and one line says how it differs from Pause.
+  await expect(status.locator('[data-button][data-tone="critical"]')).toHaveText("Turn off");
+  await expect(status.locator('[data-button][data-tone="critical"]')).toHaveAttribute("data-variant", "tertiary");
+  await expect(status.getByText("Pause stops it and keeps everything. Turn off switches to “Start it yourself”.")).toBeVisible();
   const activity = page.locator("#smart-activity");
   await expect(activity.getByText("64 items checked · 3 needed translation (fields: 12, about 1,840 characters)", { exact: false })).toBeVisible();
-  await expect(activity.getByText("1,200 characters sent to AI, 640 not sent", { exact: false })).toBeVisible();
+  await expect(activity.getByText("1,200 characters sent to AI, 640 from earlier translations", { exact: false })).toBeVisible();
   await expect(activity.getByText("On schedule").first()).toBeVisible();
-  await expect(activity.getByText("paused")).toBeVisible();
+  await expect(activity.getByText("The schedule was paused.")).toBeVisible();
   await expect(activity.getByRole("link", { name: "Products · French" })).toBeVisible();
+  // Two checks: no fold for earlier ones.
+  await expect(activity.locator("details")).toHaveCount(0);
   await expect(page.locator("#smart-exclusions").getByText("No exclusions")).toBeVisible();
-  // The schedule: "How often", the time, the next three checks in its zone.
-  await expect(page.getByRole("radiogroup", { name: "How often" }).or(page.getByRole("group", { name: "How often" })).first()).toBeVisible();
+  // The schedule: "How often" as five tiles (native radios), the time, the next three checks in its zone.
+  const often = page.getByRole("group", { name: "How often" });
+  await expect(often.getByRole("radio")).toHaveCount(5);
   await expect(page.getByRole("radio", { name: /^Every day/ })).toBeChecked();
+  await expect(often.getByRole("radio", { name: "Only on demand", exact: true })).toHaveAccessibleDescription("When you press “Check now”");
   await expect(page.getByRole("combobox", { name: "Time", exact: true })).toHaveValue("23:00");
   await expect(page.locator("s-ordered-list s-list-item")).toHaveCount(3);
-  // Budgets with the saved value written out.
-  await expect(page.locator("#smart-budgets").getByText("Saved: 50,000 characters")).toBeVisible();
-  await expect(page.getByText("Used by the smart schedule: 0 today, 0 this month")).toBeVisible();
+  // The zone in one line; its list only after "Change".
+  const schedule = page.locator("#smart-schedule");
+  await expect(schedule.getByText("Time zone: Europe/Berlin (your store's time zone)")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Time zone" })).toHaveCount(0);
+  await schedule.getByRole("button", { name: "Change: Time zone" }).click();
+  await expect(page.getByRole("combobox", { name: "Time zone" })).toHaveValue("Europe/Berlin");
+  // Budgets with the saved value written out, and each one's meter.
+  const budgets = page.locator("#smart-budgets");
+  await expect(budgets.getByText("Saved: 50,000 characters")).toBeVisible();
+  await expect(budgets.getByRole("progressbar", { name: "Used today: 0 of 50,000" })).toBeVisible();
+  await expect(budgets.getByRole("progressbar", { name: /^Used in \w+ \d{4}: 0 of 1,000,000$/ })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -192,6 +212,13 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await expect(status.locator("s-badge").first()).toHaveText("Off");
   await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Not set up yet$/);
   await expect(status.getByText("The suggestions below suit most stores. Adjust them, or turn the schedule on right away.")).toBeVisible();
+  // The suggestion itself, in the summary: what "Turn on with these settings" would use, and the first check's characters.
+  await expect(status.getByText("Every day at 03:00")).toBeVisible();
+  await expect(status.getByText("Products, Collections, Pages, Blog posts, and Blogs")).toBeVisible();
+  await expect(status.getByText("At the first check")).toBeVisible();
+  // "Adjust" goes to the form's first card.
+  await status.getByRole("button", { name: "Adjust", exact: true }).click();
+  await expect(page.locator("#smart-schedule-heading")).toBeFocused();
   // Nothing to show yet, so no empty cards before the form; and never a disabled primary button.
   await expect(page.locator("#smart-activity, #smart-exclusions")).toHaveCount(0);
   await expect(page.locator('[data-button][data-variant="primary"]:disabled')).toHaveCount(0);
@@ -200,11 +227,15 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await isCurrent(page, "#smart-publishing", "Review first");
 
   await page.getByRole("radio", { name: /^On chosen weekdays/ }).check();
+  // The days as one row of seven toggles, each named by its whole day.
+  await expect(page.getByRole("group", { name: "Days", exact: true }).getByRole("checkbox")).toHaveCount(7);
   for (const day of ["Tuesday", "Wednesday", "Friday", "Saturday", "Sunday"]) await page.getByRole("checkbox", { name: day, exact: true }).uncheck();
   await page.getByRole("combobox", { name: "Time", exact: true }).selectOption("09:00");
   const next = page.locator("s-ordered-list s-list-item");
   await expect(next).toHaveCount(3);
   for (const text of await next.allInnerTexts()) expect(text).toMatch(/^(Mon|Thu), .*9:00\s?AM \(Europe\/Berlin\)$/);
+  // The summary's suggestion follows the form.
+  await expect(status.getByText("Every Monday and Thursday at 09:00")).toBeVisible();
   // The save bar saves and turns on in this state too.
   await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
   await expect(page.locator("ui-save-bar#smart-auto-save-bar button").first()).toHaveText("Save and turn on");
@@ -228,15 +259,27 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
 
 test("a refused save is shown at the top and focused; Discard brings back what is saved", async ({ page }) => {
   await openApp(page, "businessEdit", "/app/settings/automatic");
+  const schedule = page.locator("#smart-schedule");
   await page.getByRole("radio", { name: /^Several times a day/ }).check();
+  // Only the times in use: one, the time the schedule had, and a way to add more (as far from it as it can be).
+  await expect(page.getByRole("combobox", { name: /^Check \d$/ })).toHaveCount(1);
+  await expect(page.getByRole("combobox", { name: "Check 1", exact: true })).toHaveValue("09:00");
   await page.getByRole("combobox", { name: "Check 1", exact: true }).selectOption("09:00");
+  await schedule.getByRole("button", { name: "Add a time" }).click();
+  await expect(page.getByRole("combobox", { name: "Check 2", exact: true })).toHaveValue("21:00");
   await page.getByRole("combobox", { name: "Check 2", exact: true }).selectOption("09:30");
+  // Said live where the next checks would be, before saving.
+  await expect(schedule.getByText("Checks need to be at least an hour apart.")).toBeVisible();
+  await expect(page.locator("s-ordered-list")).toHaveCount(0);
   await clickSaveBarButton(page, "smart-auto-save-bar", 0);
   const banner = page.locator('s-banner[heading="Not saved"]');
   await expect(banner).toContainText("Checks need to be at least an hour apart.");
   const top = page.locator("div:has(> s-banner[heading='Not saved'])");
   await expect(top).toBeFocused();
   await expect(top).toBeInViewport();
+  // A time taken away: the problem is gone and the next checks are back.
+  await schedule.getByRole("button", { name: "Remove check 2" }).click();
+  await expect(page.locator("s-ordered-list s-list-item")).toHaveCount(3);
   await clickSaveBarButton(page, "smart-auto-save-bar", 1);
   await expect(page.getByRole("radio", { name: /^On chosen weekdays/ })).toBeChecked();
 });
@@ -324,8 +367,10 @@ test("an item is left out of the smart schedule from its editor, and taken back 
   await openApp(page, "businessPause", "/app/settings/automatic");
   const section = page.locator("#smart-exclusions");
   await expect(section.getByRole("heading", { level: 2 })).toHaveText("Exclusions");
-  await expect(section.getByRole("link", { name: "Product 1" })).toBeVisible();
-  await section.getByRole("button", { name: "Remove" }).click();
+  // By its name as Shopify has it (not its number), with its kind under it.
+  await expect(section.getByRole("link", { name: "Product 1 jacket", exact: true })).toBeVisible();
+  await expect(section.getByText("Product", { exact: true })).toBeVisible();
+  await section.getByRole("button", { name: "Remove: Product 1 jacket" }).click();
   await expectToast(page, "Removed from the exclusions.");
   await expect(section.getByText("No exclusions")).toBeVisible();
 });
@@ -352,6 +397,18 @@ test("the smart page is German for a German admin user, with one word for each t
   expect(text).not.toMatch(/Ausgenommen|Maschinenübersetz|maschinell|Kontingent|URL-Handles|In Echtzeit|live gehen|Geplant\b/);
   await expect(page.getByText("Jeden Tag um 23:00").first()).toBeVisible();
   await expect(page.getByText("3 Änderungen in 12 Feldern")).toBeVisible();
+  // The ways in the merchant's words, the one that differs from Settings' "Selbst starten" named apart.
+  for (const name of ["Kurz nach jeder Änderung", "Jeden Tag", "An gewählten Wochentagen", "Mehrmals täglich", "Nur auf Knopfdruck"]) {
+    await expect(page.getByRole("group", { name: "Wie oft" }).getByRole("radio", { name, exact: true })).toBeAttached();
+  }
+  await expect(page.locator("#smart-activity").getByText("Der Zeitplan war pausiert.")).toBeVisible();
+  // Only certain fields: the Coverage page's names for the field groups, never their codes ("seo_title").
+  await page.getByRole("radio", { name: "Nur bestimmte Felder" }).check();
+  const groups = page.locator("#smart-scope");
+  for (const name of ["Titel und Namen", "Beschreibungen", "SEO-Titel", "Meta-Beschreibungen", "Alt-Texte von Bildern", "Werte benutzerdefinierter Felder", "Weitere Texte"]) {
+    await expect(groups.getByRole("checkbox", { name, exact: true })).toBeVisible();
+  }
+  expect(await groups.innerText()).not.toMatch(/\b(seo_title|seo_description|title|description|alt|value|other)\b/);
   await expectAccessible(page);
 });
 
@@ -398,20 +455,29 @@ test("the smart page on a plan without it shows what it would add and the way to
   await expect(status.getByRole("link", { name: "See plans" }).or(status.getByRole("button", { name: "See plans" })).first()).toBeVisible();
   await expect(page.locator("#smart-schedule")).toHaveCount(0);
   await expect(page.locator("ui-save-bar")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Turn on smart schedule" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Turn on/ })).toHaveCount(0);
   await expectAccessible(page);
 });
 
-test("the smart page groups content by the Content page's areas, under three labels of one level @responsive", async ({ page }) => {
+test("the smart page groups content by the Content page's areas, under four labels of one level @responsive", async ({ page }) => {
   await openApp(page, "business", "/app/settings/automatic");
   const scope = page.locator("#smart-scope");
-  await expect(scope.getByRole("heading", { level: 3 })).toHaveText(["Languages", "Content", "Fields"]);
+  await expect(scope.getByRole("heading", { level: 3 })).toHaveText(["Languages", "Content", "Fields", "Outdated translations"]);
   const menus = scope.getByRole("group", { name: "Menus & filters" });
   for (const name of ["Menus", "Menu links", "Storefront filters"]) await expect(menus.getByRole("checkbox", { name, exact: true })).toBeVisible();
-  // An area with one kind of content is that checkbox alone; the saved choice is kept.
+  // An area with one kind of content is that checkbox alone (named like the Content page's area); the saved choice is kept.
   await expect(scope.getByRole("checkbox", { name: "Products", exact: true })).toBeChecked();
+  await expect(scope.getByRole("checkbox", { name: "Size charts & more (Metaobjects)" })).not.toBeChecked();
   await expect(scope.getByRole("checkbox", { name: "Menus", exact: true })).not.toBeChecked();
   await expect(scope.getByRole("radio", { name: "All fields (except web addresses)" })).toBeChecked();
+  // Outdated translations: two tiles, the saved choice chosen.
+  const outdated = scope.getByRole("group", { name: "Outdated translations" });
+  await expect(outdated.getByRole("radio")).toHaveCount(2);
+  await expect(outdated.getByRole("radio", { name: "Translate again", exact: true })).toBeChecked();
+  const keep = outdated.getByRole("radio", { name: "Keep them as they are", exact: true });
+  await expect(keep).not.toBeChecked();
+  // A tile's line is its radio's description.
+  await expect(keep).toHaveAccessibleDescription("They stay and are marked “Outdated”.");
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

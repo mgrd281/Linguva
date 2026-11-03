@@ -204,7 +204,33 @@ export function formatTime(minuteOfDay: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/**
+ * A time for one more check of a custom schedule ("+ Add a time"): the middle
+ * of the longest gap between the chosen times, also across midnight, on the
+ * selects' 15-minute grid, so the new check is as far from the others as it
+ * can be (09:00 → 21:00; 09:00 and 21:00 → 03:00). With up to five times
+ * chosen it is always more than two hours from both neighbours. `fallback`
+ * when none is chosen.
+ */
+export function suggestTime(times: readonly number[], fallback = 9 * 60): number {
+  const sorted = [...new Set(times)].filter((t) => Number.isInteger(t) && t >= 0 && t < MINUTES_PER_DAY).sort((a, b) => a - b);
+  if (!sorted.length) return fallback;
+  // The gap after the last time runs through midnight to the first one.
+  let start = sorted[sorted.length - 1]!;
+  let gap = sorted[0]! + MINUTES_PER_DAY - start;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i]! - sorted[i - 1]! > gap) {
+      start = sorted[i - 1]!;
+      gap = sorted[i]! - start;
+    }
+  }
+  return (Math.round((start + gap / 2) / 15) * 15) % MINUTES_PER_DAY;
+}
+
 export type ScheduleProblem = "MODE" | "TIME_ZONE" | "TIMES" | "WEEKDAYS" | "TIMES_TOO_CLOSE" | "TOO_MANY_TIMES";
+
+/** The problems a schedule's own fields can have (the rest of the form has others). */
+export const SCHEDULE_PROBLEMS: ReadonlySet<string> = new Set<ScheduleProblem>(["MODE", "TIME_ZONE", "TIMES", "WEEKDAYS", "TIMES_TOO_CLOSE", "TOO_MANY_TIMES"]);
 
 /**
  * A schedule as the merchant chose it, made consistent: daily runs every

@@ -10,7 +10,7 @@
  * badge rules; inline styles only for type sizes, list resets and the
  * current option's ring. Every state is an icon and words.
  */
-import { Children, Fragment, isValidElement, useEffect, useRef, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useEffect, useRef, type ReactNode, type SyntheticEvent } from "react";
 import type { IconName } from "../lib/icons";
 import { IconTile } from "./CategoryCard";
 import { CARD, H2 } from "./ContentTiles";
@@ -333,9 +333,9 @@ export function FactList({ label, facts }: { label: string; facts: Array<{ icon:
 }
 
 /** More words on demand, closed at first (a native disclosure, 44 px high, like the Plan page's questions); `open`: open at first. */
-export function More({ summary, children, open }: { summary: string; children: ReactNode; open?: boolean }) {
+export function More({ summary, children, open, onToggle }: { summary: string; children: ReactNode; open?: boolean; onToggle?: (open: boolean) => void }) {
   return (
-    <details {...(open ? { open: true } : {})}>
+    <details {...(open ? { open: true } : {})} {...(onToggle ? { onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => onToggle(event.currentTarget.open) } : {})}>
       <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", fontWeight: 600 }}>{summary}</summary>
       <div style={{ padding: "0 0 8px 18px" }}>
         <s-stack direction="block" gap="small-200">

@@ -6,7 +6,7 @@
  * detail with the CSV report and the support reference. While the job runs
  * (or a cancelled job's items still settle) the page refreshes itself.
  */
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -444,7 +444,7 @@ function Problems({ data, groups, words }: { data: Data; groups: JobGroups; word
             return (
               <li key={p.id}>
                 {p.href ? (
-                  <s-clickable href={p.href} padding="small-200" borderRadius="base" accessibilityLabel={`${name}: ${outcome}`}>
+                  <s-clickable href={p.href} padding="small-200" borderRadius="base">
                     {row}
                   </s-clickable>
                 ) : (
@@ -460,14 +460,15 @@ function Problems({ data, groups, words }: { data: Data; groups: JobGroups; word
   );
 }
 
-/** Every outcome by reason, the CSV report and the support reference, folded. */
+/** Every outcome by reason, the CSV report and the support reference, folded (the table is drawn once opened). */
 function Details({ data, words }: { data: Data; words: JobWords }) {
   const { t } = words.i18n;
   const kind = jobKindLabel(words.i18n, data.job.resourceType);
+  const [open, setOpen] = useState(false);
   return (
     <s-section>
-      <More summary={t("jobs.detail.outcomes.heading")}>
-        {data.outcomes.length ? (
+      <More summary={t("jobs.detail.outcomes.heading")} onToggle={setOpen}>
+        {!open ? null : data.outcomes.length ? (
           <s-table>
             <s-table-header-row>
               <s-table-header listSlot="primary">{t("jobs.report.reason")}</s-table-header>

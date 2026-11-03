@@ -79,7 +79,7 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     path: "/app/jobs",
     check: async (page) => {
       // Language names, not codes: one name per job.
-      await expect(page.getByText("French · Products", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("French · Products", { exact: true }).filter({ visible: true }).first()).toBeVisible();
     },
   },
   {

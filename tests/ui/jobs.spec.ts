@@ -107,7 +107,8 @@ test.describe("the Jobs list", () => {
     await expect(page.getByRole("heading", { level: 2, name: "2 Aufträge wurden angehalten" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: /^Heute · / })).toBeVisible();
     await expect(page.getByText("Läuft gerade", { exact: true })).toBeVisible();
-    await expect(page.getByText("Deutsch · Kollektionen: KI-Übersetzung nicht erlaubt")).toBeVisible();
+    // German keeps "KI-" compounds whole with a non-breaking hyphen.
+    await expect(page.getByText(/^Deutsch · Kollektionen: KI.Übersetzung nicht erlaubt$/)).toBeVisible();
   });
 });
 

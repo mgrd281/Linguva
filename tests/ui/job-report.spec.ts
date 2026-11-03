@@ -7,8 +7,9 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
-/** The first job row of the list (the full store's seeded French job). */
-const firstJob = (page: import("@playwright/test").Page) => page.locator('section[aria-labelledby^="day-"] s-clickable[href^="/app/jobs/"]').first();
+/** The first job row of the list: the full store's seeded French job (still finding its items: running now). */
+const firstJob = (page: import("@playwright/test").Page) =>
+  page.locator('section[aria-labelledby="jobs-live"], section[aria-labelledby^="day-"]').locator('s-clickable[href^="/app/jobs/"]').first();
 
 test("a job page explains every result and offers a report @responsive", async ({ page }) => {
   await openApp(page, "full", "/app/jobs");

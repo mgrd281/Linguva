@@ -527,7 +527,7 @@ function Filters({ data, words }: { data: Data; words: JobWords }) {
     .map((code) => ({ code, name: words.i18n.language(code, data.names[code]) }))
     .sort((a, b) => a.name.localeCompare(b.name, words.i18n.locale));
   const fields = (
-    <s-grid gridTemplateColumns="@container (inline-size > 400px) 1fr 1fr, (inline-size > 760px) 1fr 1fr 1fr 1fr, 1fr" gap="small-200 base">
+    <s-grid gridTemplateColumns="@container (inline-size > 300px) 1fr 1fr, (inline-size > 760px) 1fr 1fr 1fr 1fr, 1fr" gap="small-200 base">
       <s-select name="lang" label={t("common.language")} value={q.lang ?? ALL} onChange={onChange}>
         <s-option value={ALL}>{t("common.allLanguages")}</s-option>
         {languages.map((l) => (
@@ -571,15 +571,7 @@ function Filters({ data, words }: { data: Data; words: JobWords }) {
           <s-search-field name="q" label={t("jobs.search.label")} labelAccessibilityVisibility="exclusive" placeholder={t("jobs.search.placeholder")} value={q.q ?? ""} />
           <s-button type="submit">{t("common.action.search")}</s-button>
         </s-grid>
-        <s-box display={WIDE}>{fields}</s-box>
-        <s-box display={NARROW}>
-          <details {...(set ? { open: true } : {})}>
-            <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", fontWeight: 600 }}>
-              {set ? t("jobs.filter.toggleCount", { count: set }) : t("jobs.filter.toggle")}
-            </summary>
-            {fields}
-          </details>
-        </s-box>
+        {fields}
         {set || q.q ? (
           <s-stack direction="inline">
             <s-link href={jobsHref({ ...q, lang: null, area: null, type: null, by: null, since: null, q: null }, { page: 1 })}>{t("jobs.filter.clear")}</s-link>

@@ -1,14 +1,15 @@
 /**
  * "Übersetzungen prüfen" (/app/review) in the browser: the header with its
- * promise, the control card, the cards, and what the page shows once the
- * merchant decided (each text's outcome, a banner for a partial page
- * result, "This page is done", "All reviewed"). The page doesn't reload
+ * icon and promise, the control card, the cards, and what the page shows
+ * once the merchant decided (each text's outcome, a banner for a partial
+ * page result, "This page is done", "All reviewed"). The page doesn't reload
  * after an action: it keeps each text's outcome and lowers its counts
  * itself, so nothing unseen moves in. New data (a filter, the next page,
- * "Reload") starts it afresh.
+ * "Reload") starts it afresh. While the control card's strip is scrolled out
+ * of view, the page's count and actions float at the window's foot.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useFetcher, useFetchers, useLocation, useNavigate, useRevalidator } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useBlocker, useFetcher, useFetchers, useLocation, useNavigate, useRevalidator } from "react-router";
 import type { ReviewDraft, ReviewPageData } from "../.server/review/page";
 import type { ReviewPreviews } from "../.server/review/previews";
 import type { clientLoader as previewsLoader } from "../routes/app.review_.previews";
@@ -18,20 +19,26 @@ import { localeCountry } from "../lib/flags";
 import { validateHandle } from "../lib/handles";
 import { languagePath } from "../lib/language-categories";
 import { liveIssues, type ReviewIssue } from "../lib/review-hints";
-import { currentFacets, isProblem, leftWaiting, reviewHref, type ClientOutcome, type ReviewActionResult, type ReviewQuery } from "../lib/review-view";
+import {
+  currentFacets,
+  isProblem,
+  languageOrder,
+  leftWaiting,
+  nextToTranslate,
+  reviewHref,
+  type ClientOutcome,
+  type ReviewActionResult,
+  type ReviewQuery,
+} from "../lib/review-view";
 import { showToast } from "./app-bridge";
 import { ConfirmModal } from "./ConfirmModal";
-import { STATE_COLOURS } from "./Coverage";
 import { Flag } from "./Flag";
-import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "./LanguageLayout";
+import { IconSquare } from "./IconSquare";
+import { ProgressBar } from "./ProgressBar";
 import { ReviewApproveConfirm, type ApproveSummary } from "./ReviewApproveConfirm";
 import { firstSight, focusSoon, languageLabel, outcomeText, ReviewCardView, textLabel, visible, type CardContext } from "./ReviewCard";
-import { ReviewControls, type PageActions } from "./ReviewControls";
+import { FloatingBar, ReviewControls, type PageActions } from "./ReviewControls";
 import { Button } from "./Button";
-
-const PANEL_HEADING = { margin: 0, fontSize: 15, lineHeight: "22px", fontWeight: 600 } as const;
-// A label that heads what follows (Polaris "strong" text keeps the body weight).
-const LABEL = { fontWeight: 650 } as const;
 
 // New loader data (a filter, the next page, "Reload") starts the page's state afresh.
 const dataKeys = new WeakMap<object, number>();
@@ -55,18 +62,14 @@ export function ReviewPage({ data }: { data: ReviewPageData }) {
   return (
     <s-page heading={t("review.page.heading")}>
       <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-200">
-          <Breadcrumbs i18n={i18n} trail={[{ href: "/app", label: t("common.nav.overview") }]} current={t("common.nav.review")} />
-          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-            <s-stack background="subdued" borderRadius="base" inlineSize="44px" blockSize="44px" alignItems="center" justifyContent="center">
-              <s-icon type="clock" color="subdued" />
-            </s-stack>
-            <s-stack direction="block" gap="small-500">
-              <h1 style={BIG_HEADING}>{t("review.page.heading")}</h1>
-              <s-text color="subdued">{t("review.header.promise")}</s-text>
-            </s-stack>
-          </s-grid>
-        </s-stack>
+        {/* One of the five menu pages (no trail): its icon is the app's "waiting for approval" clock, in the page's tint. */}
+        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
+          <IconSquare icon="clock" tint="blue" size={44} />
+          <s-stack direction="block" gap="small-500">
+            <h1 className="lv-h1">{t("review.page.heading")}</h1>
+            <s-text color="subdued">{t("review.header.promise")}</s-text>
+          </s-stack>
+        </s-grid>
         {/* While a new page's pictures load, its cards wait for them (empty squares), not for the last page's answer. */}
         <ReviewBody key={keyOf(data)} data={data} previews={previews.state === "idle" ? (previews.data ?? null) : null} />
       </s-stack>
@@ -233,6 +236,9 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     window.scrollTo({ top: 0 });
     focusSoon(() => document.getElementById("review-stay"));
   }, [blocker.state]);
+  // The page drawn afresh with the newer texts. Edits not yet approved would be lost: then it's a navigation to this
+  // same address, which the leave guard asks about first.
+  const reload = () => void (unsaved > 0 ? navigate(`${location.pathname}${location.search}`, { replace: true }) : revalidator.revalidate());
 
   // The page's figures as the merchant decides.
   const facets = currentFacets(
@@ -248,8 +254,11 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
   );
   const undecided = drafts.filter((x) => !outcomes[x.draft.id]);
   const approvable = undecided.filter((x) => x.draft.kind !== "handle");
+  // The safe, fast way when some have a note: the others first, the noted ones after a closer look.
+  const clean = approvable.filter((x) => issuesOf(x.draft).length === 0);
   const blocked: PageActions["blocked"] = undecided.some((x) => problemOf(x.draft)) ? "empty" : asking ? "question" : null;
   const actions: PageActions = {
+    total: drafts.length,
     undecided: undecided.length,
     approvable: approvable.length,
     allOnPage: data.page.matching <= data.page.size,
@@ -259,6 +268,21 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     waiting: busy.size > 0,
     blocked,
   };
+
+  // The strip with the page's actions: while it is scrolled out of view (above the window), the same count and
+  // actions float at the window's foot, so the merchant decides the page after its last card without scrolling back.
+  const [strip, setStrip] = useState<HTMLDivElement | null>(null);
+  const [floating, setFloating] = useState(false);
+  useEffect(() => {
+    if (!strip || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry) setFloating(!entry.isIntersecting && entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0));
+    });
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [strip]);
+  const barShown = floating && strip !== null && undecided.length > 0;
 
   const submitPage = (intent: "approve" | "reject", list: readonly ReviewDraft[]) => {
     sentPage.current = list.map((d) => d.id);
@@ -273,7 +297,7 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     count: approvable.length,
     live: approveLocales.filter((l) => data.published[l] !== false).map(languageName),
     hidden: approveLocales.filter((l) => data.published[l] === false).map(languageName),
-    hints: approvable.filter((x) => issuesOf(x.draft).length > 0).length,
+    hints: approvable.length - clean.length,
     edited: approvable.filter((x) => isEdited(x.draft)).length,
     handles: undecided.length - approvable.length,
     elsewhere: Math.max(0, data.page.matching - data.page.size),
@@ -311,9 +335,7 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
     cancelAsk: () => setAsking(null),
     form,
     onResult: (result, ids) => onResult(result, ids, "card"),
-    // The page drawn afresh with the newer texts. Edits not yet approved would be lost: then it's a
-    // navigation to this same address, which the leave guard asks about first.
-    reload: () => void (unsaved > 0 ? navigate(`${location.pathname}${location.search}`, { replace: true }) : revalidator.revalidate()),
+    reload,
   };
 
   // What is left once nothing on the page is undecided.
@@ -354,12 +376,16 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
       ) : null}
 
       {allDecided && elsewhere === 0 ? null : (
-        <ReviewControls data={data} facets={facets} query={query} actions={actions} previewsFailed={Boolean(previews?.error)} i18n={i18n} />
+        <ReviewControls data={data} facets={facets} query={query} actions={actions} previewsFailed={Boolean(previews?.error)} i18n={i18n} stripRef={setStrip} />
       )}
 
+      {/* The page's request failed: the way to try again is right here (it asks first when edits would be lost). */}
       {failed ? (
         <s-banner tone="critical">
           <s-paragraph>{t("review.result.error")}</s-paragraph>
+          <s-stack direction="inline">
+            <Button onClick={reload}>{t("review.result.reload")}</Button>
+          </s-stack>
         </s-banner>
       ) : null}
       {banner ? <PartialBanner key={banner.key} heading={banner.heading} body={t("review.result.partial.body")} onDismiss={() => setBanner(null)} /> : null}
@@ -408,12 +434,18 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
         </s-box>
       ) : null}
 
-      {/* The page's two questions (opened from the strip). */}
-      <ReviewApproveConfirm id="review-approve" summary={summary} i18n={i18n} onConfirm={() => submitPage("approve", approvable.map((x) => x.draft))} />
+      {/* The page's two questions (opened from the strip or the bar). */}
+      <ReviewApproveConfirm
+        id="review-approve"
+        summary={summary}
+        i18n={i18n}
+        onConfirm={() => submitPage("approve", approvable.map((x) => x.draft))}
+        clean={summary.hints > 0 && clean.length > 0 ? { count: clean.length, onConfirm: () => submitPage("approve", clean.map((x) => x.draft)) } : null}
+      />
       <ConfirmModal
         id="review-reject"
         heading={t("review.reject.heading", { count: undecided.length })}
-        body={t("review.reject.body")}
+        body={t("review.reject.body", { count: undecided.length })}
         confirmLabel={t("review.reject.confirm", { count: undecided.length })}
         onConfirm={() => submitPage("reject", undecided.map((x) => x.draft))}
       />
@@ -422,24 +454,15 @@ function ReviewBody({ data, previews }: { data: ReviewPageData; previews: Review
       <div role="status" aria-live="polite">
         <s-text accessibilityVisibility="exclusive">{live}</s-text>
       </div>
-    </>
-  );
-}
 
-/**
- * The round tick of "This page is done" and "All reviewed" (decorative: the heading says it; Polaris boxes aren't
- * round, and its icons stop at 16 px, so the tick is scaled to the circle).
- */
-function DoneMark({ size }: { size: number }) {
-  return (
-    <div
-      aria-hidden="true"
-      style={{ width: size, height: size, borderRadius: "50%", background: `${STATE_COLOURS.complete}14`, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}
-    >
-      <div style={{ display: "flex", transform: `scale(${size >= 56 ? 1.5 : 1.25})` }}>
-        <s-icon type="check-circle-filled" tone="success" />
-      </div>
-    </div>
+      {/* The bar at the window's foot, and room for it under the page's last line. */}
+      {barShown ? (
+        <>
+          <div className="lv-review-bar-space" aria-hidden="true" />
+          <FloatingBar data={data} actions={actions} i18n={i18n} />
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -456,6 +479,32 @@ function PartialBanner({ heading, body, onDismiss }: { heading: string; body: st
     <s-banner ref={ref} tone="warning" heading={heading} dismissible>
       <s-paragraph>{body}</s-paragraph>
     </s-banner>
+  );
+}
+
+/**
+ * "This page is done" and "All reviewed": Settings' green status row (ui.css, .lv-status) with a focusable heading
+ * of its own (focus moves there once nothing is left), what happened or what comes next, and where to go on:
+ * beside the words where there is room, under them at the end (the thumb's side) on a phone.
+ */
+function DoneRow({ id, heading, detail, action }: { id: string; heading: string; detail: string | null; action: ReactNode }) {
+  return (
+    <div className="lv-status lv-review-done" data-tone="success">
+      <div className="lv-status__row">
+        <span className="lv-status__mark" aria-hidden="true">
+          <s-icon type="check-circle-filled" tone="success" />
+        </span>
+        <div className="lv-status__body">
+          <s-stack direction="block" gap="small-500">
+            <h2 id={id} tabIndex={-1} className="lv-status__title lv-review-done__title">
+              {heading}
+            </h2>
+            {detail ? <s-text color="subdued">{detail}</s-text> : null}
+          </s-stack>
+          {action ? <div className="lv-review-done__action">{action}</div> : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -492,92 +541,107 @@ function PageDone({
   const next = elsewhere > 0 ? t("review.done.remaining", { count: elsewhere }) : everything ? null : t("review.done.nothingLeft");
   const link = elsewhere > 0 ? { href: continueHref, label: t("review.done.next") } : everything ? { href: everything, label: t("review.filter.showAll") } : null;
   return (
-    // Its own heading names it (an accessibilityLabel would repeat it as a second heading).
-    <s-section padding="none">
-      <s-query-container>
-        <s-box padding="base">
-          {/* The tick beside the rest; on a phone the button goes under the words, at the end (thumb side). */}
-          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-            <DoneMark size={40} />
-            <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="small-200 base" alignItems="center">
-              <s-stack direction="block" gap="small-500">
-                <h2 id="review-done-heading" tabIndex={-1} style={PANEL_HEADING}>
-                  {t("review.done.heading")}
-                </h2>
-                <s-text color="subdued">{[parts.length ? `${parts.join(" · ")}.` : null, next].filter(Boolean).join(" ")}</s-text>
-              </s-stack>
-              {link ? (
-                <s-stack direction="inline" justifyContent="end">
-                  <Button variant="primary" href={link.href}>
-                    {link.label}
-                  </Button>
-                </s-stack>
-              ) : null}
-            </s-grid>
-          </s-grid>
-        </s-box>
-      </s-query-container>
-    </s-section>
+    <DoneRow
+      id="review-done-heading"
+      heading={t("review.done.heading")}
+      detail={[parts.length ? `${parts.join(" · ")}.` : null, next].filter(Boolean).join(" ") || null}
+      action={
+        link ? (
+          <Button variant="primary" href={link.href}>
+            {link.label}
+          </Button>
+        ) : null
+      }
+    />
   );
 }
 
-/** Nothing waits: what happens next, and the languages to look at. */
+interface ReviewedLanguage {
+  locale: string;
+  name: string;
+  hidden: boolean;
+  /** Its translated share; null: not counted; undefined: not known here (reached by deciding). */
+  percent: number | null | undefined;
+}
+
+/** A language of "Your languages" as a link tile (Settings' tools): its flag, name, how far it is with its bar. */
+function LanguageTile({ language, data, i18n }: { language: ReviewedLanguage; data: ReviewPageData; i18n: I18n }) {
+  const { t } = i18n;
+  const figure =
+    language.percent === undefined ? null : language.percent === null ? t("language.hero.notCounted") : t("review.empty.percent", { percent: i18n.percent(language.percent) });
+  return (
+    <li className="lv-links__item">
+      <Link to={languagePath(language.locale)} className="lv-link-tile">
+        <span className="lv-icon-square" data-tint="grey" aria-hidden="true">
+          <Flag country={localeCountry(language.locale, data.marketCountries)} fallback={language.locale} size={28} />
+        </span>
+        <div className="lv-link-tile__text">
+          <div className="lv-review-tile__name">
+            <span className="lv-link-tile__name">{language.name}</span>
+            {language.hidden ? (
+              <span className="lv-review-hidden">
+                <s-icon type="hide" color="subdued" size="small" />
+                {t("review.lang.hidden")}
+              </span>
+            ) : null}
+          </div>
+          {figure ? <span className="lv-link-tile__detail">{figure}</span> : null}
+          {/* The language page's figure as a bar (decorative: the words say it). */}
+          {typeof language.percent === "number" ? (
+            <div className="lv-review-tile__bar" aria-hidden="true">
+              <ProgressBar value={language.percent} label={figure ?? language.name} />
+            </div>
+          ) : null}
+        </div>
+        <s-icon type="chevron-right" color="subdued" />
+      </Link>
+    </li>
+  );
+}
+
+/**
+ * Nothing waits: the green row with what happens next and, while a language is under 100 %, the one way on (the
+ * least translated visible language; a hidden one only when every visible one is done), then the languages as tiles,
+ * visible ones first.
+ */
 function AllReviewed({ data, i18n }: { data: ReviewPageData; i18n: I18n }) {
   const { t } = i18n;
   // Counted at load when nothing waited; reached here by deciding, the figures would be from before: names only.
-  const languages = (data.languages ?? Object.keys(data.published).map((locale) => ({ locale, percent: undefined as number | null | undefined })))
-    .map((l) => ({ ...l, name: languageLabel(i18n, l.locale, data.names) }))
-    .sort((a, b) => a.name.localeCompare(b.name, i18n.locale));
+  const languages = languageOrder(
+    (data.languages ?? Object.keys(data.published).map((locale) => ({ locale, percent: undefined as number | null | undefined }))).map(
+      (l): ReviewedLanguage => ({ locale: l.locale, percent: l.percent, name: languageLabel(i18n, l.locale, data.names), hidden: data.published[l.locale] === false }),
+    ),
+    i18n.locale,
+  );
+  const next = nextToTranslate(languages);
   return (
-    <s-section>
-      <s-stack direction="block" gap="base" alignItems="center">
-        <DoneMark size={56} />
-        <h2 id="review-empty-heading" tabIndex={-1} style={PANEL_HEADING}>
-          {t("review.empty.heading")}
-        </h2>
-        <s-box maxInlineSize="520px">
-          {/* Centred under the heading (Polaris text has no alignment of its own; a paragraph keeps its start alignment). */}
-          <div style={{ textAlign: "center" }}>
-            <s-text color="subdued">{t("review.empty.body")}</s-text>
-          </div>
-        </s-box>
-        {languages.length ? (
-          <s-box inlineSize="100%" maxInlineSize="520px">
-            <s-stack direction="block" gap="small-200">
-              <s-text type="strong">
-                <span style={LABEL}>{t("review.empty.languages")}</span>
-              </s-text>
-              <ul style={PLAIN_LIST}>
-                {languages.map((language) => {
-                  const hidden = data.published[language.locale] === false;
-                  const figure =
-                    language.percent === undefined ? null : language.percent === null ? t("language.hero.notCounted") : t("review.empty.percent", { percent: i18n.percent(language.percent) });
-                  return (
-                    <li key={language.locale}>
-                      <s-clickable href={languagePath(language.locale)} padding="small-200 small-100" borderRadius="base" minBlockSize="44px">
-                        <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto auto" gap="small-200" alignItems="center" minBlockSize="28px">
-                          <Flag country={localeCountry(language.locale, data.marketCountries)} fallback={language.locale} size={20} />
-                          <s-stack direction="inline" gap="small-200" alignItems="center">
-                            <s-text>{language.name}</s-text>
-                            {hidden ? (
-                              <s-stack direction="inline" gap="small-500" alignItems="center">
-                                <s-icon type="hide" color="subdued" size="small" />
-                                <s-text color="subdued">{t("review.lang.hidden")}</s-text>
-                              </s-stack>
-                            ) : null}
-                          </s-stack>
-                          {figure ? <s-text color="subdued">{figure}</s-text> : <span />}
-                          <s-icon type="chevron-right" color="subdued" />
-                        </s-grid>
-                      </s-clickable>
-                    </li>
-                  );
-                })}
-              </ul>
-            </s-stack>
-          </s-box>
-        ) : null}
-      </s-stack>
-    </s-section>
+    <s-stack direction="block" gap="base">
+      <DoneRow
+        id="review-empty-heading"
+        heading={t("review.empty.heading")}
+        detail={t("review.empty.body")}
+        action={
+          next ? (
+            <Button variant="primary" href={languagePath(next.locale)}>
+              {t("review.empty.continue", { language: i18n.language(next.locale, data.names[next.locale]) })}
+            </Button>
+          ) : null
+        }
+      />
+      {languages.length ? (
+        <section aria-labelledby="review-languages-heading">
+          <s-stack direction="block" gap="small-200">
+            <h2 id="review-languages-heading" className="lv-h3">
+              {t("review.empty.languages")}
+            </h2>
+            <ul className="lv-links">
+              {languages.map((language) => (
+                <LanguageTile key={language.locale} language={language} data={data} i18n={i18n} />
+              ))}
+            </ul>
+          </s-stack>
+        </section>
+      ) : null}
+    </s-stack>
   );
 }

@@ -5,6 +5,11 @@
  * texts go live as written, that new web addresses are approved one by one,
  * and that only this page is approved. Each point only where it applies.
  * Open it with a button that has `commandFor={id}` and `command="--show"`.
+ *
+ * With notes among the texts (`clean`), a second answer approves only the
+ * texts without one ("Nur die 3 ohne Hinweis freigeben"), the safe and fast
+ * way: the others keep waiting, and "Mit Hinweisen" shows them. Its buttons
+ * stay the dialog's own (Polaris, UI_REVIEW §3g).
  */
 import type { I18n } from "../i18n/i18n";
 import { INTL_LOCALE } from "../i18n/i18n";
@@ -25,15 +30,29 @@ export interface ApproveSummary {
   elsewhere: number;
 }
 
-export function ReviewApproveConfirm({ id, summary, i18n, onConfirm }: { id: string; summary: ApproveSummary; i18n: I18n; onConfirm: () => void }) {
+export function ReviewApproveConfirm({
+  id,
+  summary,
+  i18n,
+  onConfirm,
+  clean,
+}: {
+  id: string;
+  summary: ApproveSummary;
+  i18n: I18n;
+  onConfirm: () => void;
+  /** The texts without a note, when some others have one: the second answer approves only these. */
+  clean?: { count: number; onConfirm: () => void } | null;
+}) {
   const { t } = i18n;
   const list = (names: string[]) => new Intl.ListFormat(INTL_LOCALE[i18n.locale], { type: "conjunction" }).format(names);
   const heading = t("review.approve.heading", { count: summary.count });
   return (
     <s-modal id={id} heading={heading} accessibilityLabel={heading}>
       <s-stack direction="block" gap="base">
+        {/* An open eye beside the next point's crossed-out one: who sees the texts, and who doesn't yet. */}
         {summary.live.length ? (
-          <DialogPoint icon="check-circle">
+          <DialogPoint icon="view">
             <s-text>{t("review.approve.live", { count: summary.count, languages: list(summary.live) })}</s-text>
           </DialogPoint>
         ) : null}
@@ -63,12 +82,18 @@ export function ReviewApproveConfirm({ id, summary, i18n, onConfirm }: { id: str
           </DialogPoint>
         ) : null}
       </s-stack>
+      {/* With the second answer beside it, the first says "all" ("Alle 4 freigeben"), as the button that opened it. */}
       <s-button slot="primary-action" variant="primary" commandFor={id} command="--hide" onClick={onConfirm}>
-        {t("review.approve.confirm", { count: summary.count })}
+        {clean ? t("review.page.approveAll", { count: summary.count }) : t("review.approve.confirm", { count: summary.count })}
       </s-button>
       <s-button slot="secondary-actions" commandFor={id} command="--hide">
         {t("common.action.cancel")}
       </s-button>
+      {clean ? (
+        <s-button slot="secondary-actions" commandFor={id} command="--hide" onClick={clean.onConfirm}>
+          {t("review.approve.onlyClean", { count: clean.count })}
+        </s-button>
+      ) : null}
     </s-modal>
   );
 }

@@ -7,6 +7,10 @@ export const en = {
 
   "review.lang.label": "Languages",
   "review.lang.hidden": "hidden",
+  "review.lang.select": "Language",
+  "review.lang.show": "Show",
+  "review.lang.option": { one: "{language} – {count} waiting", other: "{language} – {count} waiting" },
+  "review.lang.optionHidden": { one: "{language} (hidden) – {count} waiting", other: "{language} (hidden) – {count} waiting" },
 
   "review.filter.searchPlaceholder": "Title, original or translation",
   "review.filter.areaLabel": "Areas",
@@ -25,6 +29,7 @@ export const en = {
   "review.previews.error": "Pictures can't be loaded right now.",
 
   "review.page.summary": { one: "{count} translation on this page", other: "{count} translations on this page" },
+  "review.page.open": { one: "{count} of {total} still open", other: "{count} of {total} still open" },
   "review.page.position": "{from}–{to} of {total}",
   "review.page.approveAll": { one: "Approve {count}", other: "Approve all {count}" },
   "review.page.approveAllOnPage": { one: "Approve {count} on this page", other: "Approve all {count} on this page" },
@@ -45,9 +50,13 @@ export const en = {
   "review.approve.handlesLeft": { one: "You approve the new web address on its own.", other: "You approve the {count} new web addresses one by one." },
   "review.approve.pageOnly": { one: "Only this page: {count} more keeps waiting for you.", other: "Only this page: the other {count} keep waiting for you." },
   "review.approve.confirm": { one: "Approve {count}", other: "Approve {count}" },
+  "review.approve.onlyClean": { one: "Approve only the one without a note", other: "Approve only the {count} without notes" },
 
   "review.reject.heading": { one: "Reject {count} translation?", other: "Reject {count} translations?" },
-  "review.reject.body": "Rejected translations are not published, and bulk jobs won't translate the same original text again. This can't be undone.",
+  "review.reject.body": {
+    one: "Nothing changes in your store, and Linguva won't translate this text again by itself while the original stays the same. This can't be undone.",
+    other: "Nothing changes in your store, and Linguva won't translate these texts again by itself while their originals stay the same. This can't be undone.",
+  },
   "review.reject.confirm": { one: "Reject {count}", other: "Reject {count}" },
   "review.rejected.body": {
     one: "{count} translation rejected. It won't be published.",
@@ -76,6 +85,7 @@ export const en = {
   "review.field.handle": "Web address",
   "review.field.handleNote": "New web address: old links to this page in {language} stop working afterwards.",
   "review.field.handleQuestion": "Approve the new web address? Old links in {language} stop working afterwards.",
+  "review.field.handleEmpty": "Enter a web address.",
   "review.field.edit": "Edit",
   "review.field.editHtml": "Edit HTML",
   "review.field.editLabel": "Edit: {field} – {title}",
@@ -88,7 +98,6 @@ export const en = {
   "review.field.reject": "Reject",
   "review.field.rejectLabel": "Reject: {field} – {title}",
   "review.field.rejectQuestion": "Reject this translation?",
-  "review.field.rejectNote": "This can't be undone.",
   "review.field.asShown": "Approved as shown – to change single items, open the editor.",
   "review.field.empty": "Empty – write a translation or reject it.",
   "review.field.fromImport": "From your import",
@@ -103,11 +112,11 @@ export const en = {
   "review.hint.LENGTH_SHORT": "Much shorter than the original",
   "review.hint.LENGTH_LONG": "Much longer than the original",
   "review.hint.UNTRANSLATED": "Looks untranslated",
-  "review.hint.WRONG_SCRIPT": "Not in the language's script",
+  "review.hint.WRONG_SCRIPT": "Wrong script for this language",
   "review.hint.FORMALITY_MISMATCH": "Other form of address",
   "review.hint.SEO_TOO_LONG": "Too long for Google ({width} characters, max. {max})",
-  "review.hint.SEO_TOO_SHORT": "Short for Google ({width} characters, min. {min})",
-  "review.hint.SEO_SAME_AS_SOURCE": "Same as the original",
+  "review.hint.SEO_TOO_SHORT": "Too short for Google ({width} characters, min. {min})",
+  "review.hint.SEO_SAME_AS_SOURCE": "Same as the original – not translated",
   "review.hint.EMPTY_TRANSLATION": "Empty",
 
   "review.result.approved": "Approved – customers see it now.",
@@ -136,14 +145,15 @@ export const en = {
     "No translation is waiting for you right now. AI translations and imports wait here until you approve them. With automatic publishing on, only texts with notes come here.",
   "review.empty.languages": "Your languages",
   "review.empty.percent": "{percent} translated",
+  "review.empty.continue": "Continue translating {language}",
   "review.filtered.none": "No translations for this selection.",
 
   "review.done.heading": "This page is done",
   "review.done.approved": "{count} approved",
   "review.done.rejected": "{count} rejected",
   "review.done.notPublished": "{count} not published",
-  "review.done.remaining": { one: "{count} more is waiting.", other: "{count} more are waiting." },
-  "review.done.next": "Continue",
+  "review.done.remaining": { one: "{count} more translation is waiting.", other: "{count} more translations are waiting." },
+  "review.done.next": "Continue reviewing",
   "review.done.nothingLeft": "Nothing else is waiting.",
 
   "review.leave.heading": "Discard your edits?",
@@ -162,6 +172,10 @@ export const de: Translation<typeof en> = {
 
   "review.lang.label": "Sprachen",
   "review.lang.hidden": "versteckt",
+  "review.lang.select": "Sprache",
+  "review.lang.show": "Anzeigen",
+  "review.lang.option": { one: "{language} – {count} wartet", other: "{language} – {count} warten" },
+  "review.lang.optionHidden": { one: "{language} (versteckt) – {count} wartet", other: "{language} (versteckt) – {count} warten" },
 
   "review.filter.searchPlaceholder": "Titel, Original oder Übersetzung",
   "review.filter.areaLabel": "Bereiche",
@@ -180,6 +194,7 @@ export const de: Translation<typeof en> = {
   "review.previews.error": "Bilder lassen sich gerade nicht laden.",
 
   "review.page.summary": { one: "{count} Übersetzung auf dieser Seite", other: "{count} Übersetzungen auf dieser Seite" },
+  "review.page.open": { one: "Noch {count} von {total} offen", other: "Noch {count} von {total} offen" },
   "review.page.position": "{from}–{to} von {total}",
   "review.page.approveAll": { one: "{count} freigeben", other: "Alle {count} freigeben" },
   "review.page.approveAllOnPage": { one: "{count} auf dieser Seite freigeben", other: "Alle {count} auf dieser Seite freigeben" },
@@ -203,9 +218,13 @@ export const de: Translation<typeof en> = {
   "review.approve.handlesLeft": { one: "Die neue Webadresse gibst du einzeln frei.", other: "Die {count} neuen Webadressen gibst du einzeln frei." },
   "review.approve.pageOnly": { one: "Nur diese Seite: {count} weitere wartet danach weiter auf dich.", other: "Nur diese Seite: Die übrigen {count} warten danach weiter auf dich." },
   "review.approve.confirm": { one: "{count} freigeben", other: "{count} freigeben" },
+  "review.approve.onlyClean": { one: "Nur die eine ohne Hinweis freigeben", other: "Nur die {count} ohne Hinweis freigeben" },
 
   "review.reject.heading": { one: "{count} Übersetzung ablehnen?", other: "{count} Übersetzungen ablehnen?" },
-  "review.reject.body": "Abgelehnte Übersetzungen werden nicht veröffentlicht, und Massenübersetzungen übersetzen denselben Originaltext nicht erneut. Das kann nicht rückgängig gemacht werden.",
+  "review.reject.body": {
+    one: "Im Shop ändert sich nichts, und Linguva übersetzt diesen Text nicht noch einmal automatisch, solange das Original gleich bleibt. Das lässt sich nicht rückgängig machen.",
+    other: "Im Shop ändert sich nichts, und Linguva übersetzt diese Texte nicht noch einmal automatisch, solange ihre Originale gleich bleiben. Das lässt sich nicht rückgängig machen.",
+  },
   "review.reject.confirm": { one: "{count} ablehnen", other: "{count} ablehnen" },
   "review.rejected.body": {
     one: "{count} Übersetzung abgelehnt. Sie wird nicht veröffentlicht.",
@@ -232,8 +251,9 @@ export const de: Translation<typeof en> = {
 
   "review.field.customField": "Zusatzinfo: {name}",
   "review.field.handle": "Webadresse",
-  "review.field.handleNote": "Neue Webadresse: Alte Links auf diese Seite auf {language} funktionieren danach nicht mehr.",
+  "review.field.handleNote": "Neue Webadresse: Alte Links zu dieser Seite auf {language} funktionieren danach nicht mehr.",
   "review.field.handleQuestion": "Neue Webadresse freigeben? Alte Links auf {language} funktionieren danach nicht mehr.",
+  "review.field.handleEmpty": "Gib eine Webadresse ein.",
   "review.field.edit": "Bearbeiten",
   "review.field.editHtml": "HTML bearbeiten",
   "review.field.editLabel": "Bearbeiten: {field} – {title}",
@@ -246,7 +266,6 @@ export const de: Translation<typeof en> = {
   "review.field.reject": "Ablehnen",
   "review.field.rejectLabel": "Ablehnen: {field} – {title}",
   "review.field.rejectQuestion": "Diese Übersetzung ablehnen?",
-  "review.field.rejectNote": "Das lässt sich nicht rückgängig machen.",
   "review.field.asShown": "Wird so freigegeben, wie angezeigt – einzelne Einträge änderst du im Editor.",
   "review.field.empty": "Leer – schreib eine Übersetzung oder lehne sie ab.",
   "review.field.fromImport": "Aus deinem Import",
@@ -261,11 +280,11 @@ export const de: Translation<typeof en> = {
   "review.hint.LENGTH_SHORT": "Viel kürzer als das Original",
   "review.hint.LENGTH_LONG": "Viel länger als das Original",
   "review.hint.UNTRANSLATED": "Sieht nicht übersetzt aus",
-  "review.hint.WRONG_SCRIPT": "Nicht in der Schrift der Sprache",
+  "review.hint.WRONG_SCRIPT": "Falsche Schrift für diese Sprache",
   "review.hint.FORMALITY_MISMATCH": "Andere Anrede",
   "review.hint.SEO_TOO_LONG": "Zu lang für Google ({width} Zeichen, max. {max})",
-  "review.hint.SEO_TOO_SHORT": "Kurz für Google ({width} Zeichen, mind. {min})",
-  "review.hint.SEO_SAME_AS_SOURCE": "Gleich wie das Original",
+  "review.hint.SEO_TOO_SHORT": "Zu kurz für Google ({width} Zeichen, mind. {min})",
+  "review.hint.SEO_SAME_AS_SOURCE": "Wie im Original – nicht übersetzt",
   "review.hint.EMPTY_TRANSLATION": "Leer",
 
   "review.result.approved": "Freigegeben – Kunden sehen es jetzt.",
@@ -291,17 +310,18 @@ export const de: Translation<typeof en> = {
 
   "review.empty.heading": "Alles geprüft",
   "review.empty.body":
-    "Gerade wartet keine Übersetzung auf dich. KI-Übersetzungen und Importe warten hier, bis du sie freigibst. Ist automatisches Veröffentlichen an, kommen nur Texte mit Hinweisen hierher.",
+    "Gerade wartet keine Übersetzung auf dich. KI‑Übersetzungen und Importe warten hier, bis du sie freigibst. Ist automatisches Veröffentlichen an, kommen nur Texte mit Hinweisen hierher.",
   "review.empty.languages": "Deine Sprachen",
   "review.empty.percent": "{percent} übersetzt",
+  "review.empty.continue": "{language} weiter übersetzen",
   "review.filtered.none": "Keine Übersetzungen für diese Auswahl.",
 
   "review.done.heading": "Diese Seite ist erledigt",
   "review.done.approved": "{count} freigegeben",
   "review.done.rejected": "{count} abgelehnt",
   "review.done.notPublished": "{count} nicht veröffentlicht",
-  "review.done.remaining": { one: "Es wartet noch {count}.", other: "Es warten noch {count}." },
-  "review.done.next": "Weiter",
+  "review.done.remaining": { one: "Es wartet noch {count} Übersetzung.", other: "Es warten noch {count} Übersetzungen." },
+  "review.done.next": "Weiter prüfen",
   "review.done.nothingLeft": "Sonst wartet nichts mehr.",
 
   "review.leave.heading": "Änderungen verwerfen?",
@@ -320,6 +340,10 @@ export const fr: Translation<typeof en> = {
 
   "review.lang.label": "Langues",
   "review.lang.hidden": "masquée",
+  "review.lang.select": "Langue",
+  "review.lang.show": "Afficher",
+  "review.lang.option": { one: "{language} – {count} en attente", other: "{language} – {count} en attente" },
+  "review.lang.optionHidden": { one: "{language} (masquée) – {count} en attente", other: "{language} (masquée) – {count} en attente" },
 
   "review.filter.searchPlaceholder": "Titre, original ou traduction",
   "review.filter.areaLabel": "Domaines",
@@ -338,6 +362,7 @@ export const fr: Translation<typeof en> = {
   "review.previews.error": "Les images ne peuvent pas être chargées pour le moment.",
 
   "review.page.summary": { one: "{count} traduction sur cette page", other: "{count} traductions sur cette page" },
+  "review.page.open": { one: "Encore {count} sur {total} à traiter", other: "Encore {count} sur {total} à traiter" },
   "review.page.position": "{from}–{to} sur {total}",
   "review.page.approveAll": { one: "Approuver {count}", other: "Approuver les {count}" },
   "review.page.approveAllOnPage": { one: "Approuver {count} sur cette page", other: "Approuver les {count} de cette page" },
@@ -367,10 +392,13 @@ export const fr: Translation<typeof en> = {
     other: "Cette page uniquement : les {count} autres restent en attente.",
   },
   "review.approve.confirm": { one: "Approuver {count}", other: "Approuver {count}" },
+  "review.approve.onlyClean": { one: "Approuver seulement celle sans remarque", other: "Approuver seulement les {count} sans remarque" },
 
   "review.reject.heading": { one: "Rejeter {count} traduction ?", other: "Rejeter {count} traductions ?" },
-  "review.reject.body":
-    "Les traductions rejetées ne sont pas publiées, et les tâches de traduction groupée ne retraduiront pas le même texte original. Cette action est irréversible.",
+  "review.reject.body": {
+    one: "Rien ne change dans votre boutique, et Linguva ne retraduira pas ce texte automatiquement tant que l'original reste le même. Cette action est irréversible.",
+    other: "Rien ne change dans votre boutique, et Linguva ne retraduira pas ces textes automatiquement tant que leurs originaux restent les mêmes. Cette action est irréversible.",
+  },
   "review.reject.confirm": { one: "Rejeter {count}", other: "Rejeter {count}" },
   "review.rejected.body": {
     one: "{count} traduction rejetée. Elle ne sera pas publiée.",
@@ -399,6 +427,7 @@ export const fr: Translation<typeof en> = {
   "review.field.handle": "Adresse web",
   "review.field.handleNote": "Nouvelle adresse web : les anciens liens vers cette page en {language} ne fonctionneront plus.",
   "review.field.handleQuestion": "Approuver la nouvelle adresse web ? Les anciens liens en {language} ne fonctionneront plus.",
+  "review.field.handleEmpty": "Saisissez une adresse web.",
   "review.field.edit": "Modifier",
   "review.field.editHtml": "Modifier le HTML",
   "review.field.editLabel": "Modifier : {field} – {title}",
@@ -411,7 +440,6 @@ export const fr: Translation<typeof en> = {
   "review.field.reject": "Rejeter",
   "review.field.rejectLabel": "Rejeter : {field} – {title}",
   "review.field.rejectQuestion": "Rejeter cette traduction ?",
-  "review.field.rejectNote": "Cette action est irréversible.",
   "review.field.asShown": "Approuvé tel qu'affiché – pour modifier des éléments, ouvrez l'éditeur.",
   "review.field.empty": "Vide – saisissez une traduction ou rejetez-la.",
   "review.field.fromImport": "De votre import",
@@ -426,11 +454,11 @@ export const fr: Translation<typeof en> = {
   "review.hint.LENGTH_SHORT": "Beaucoup plus court que l'original",
   "review.hint.LENGTH_LONG": "Beaucoup plus long que l'original",
   "review.hint.UNTRANSLATED": "Semble non traduit",
-  "review.hint.WRONG_SCRIPT": "N'utilise pas l'écriture de la langue",
+  "review.hint.WRONG_SCRIPT": "Système d'écriture incorrect pour cette langue",
   "review.hint.FORMALITY_MISMATCH": "Autre forme de politesse",
   "review.hint.SEO_TOO_LONG": "Trop long pour Google ({width} caractères, max. {max})",
-  "review.hint.SEO_TOO_SHORT": "Court pour Google ({width} caractères, min. {min})",
-  "review.hint.SEO_SAME_AS_SOURCE": "Identique à l'original",
+  "review.hint.SEO_TOO_SHORT": "Trop court pour Google ({width} caractères, min. {min})",
+  "review.hint.SEO_SAME_AS_SOURCE": "Identique à l'original – non traduit",
   "review.hint.EMPTY_TRANSLATION": "Vide",
 
   "review.result.approved": "Approuvé – vos clients le voient maintenant.",
@@ -459,6 +487,7 @@ export const fr: Translation<typeof en> = {
     "Aucune traduction ne vous attend pour le moment. Les traductions IA et les imports attendent ici jusqu'à votre approbation. Si la publication automatique est activée, seuls les textes avec des remarques arrivent ici.",
   "review.empty.languages": "Vos langues",
   "review.empty.percent": "{percent} traduit",
+  "review.empty.continue": "Continuer la traduction en {language}",
   "review.filtered.none": "Aucune traduction pour cette sélection.",
 
   "review.done.heading": "Cette page est terminée",
@@ -466,7 +495,7 @@ export const fr: Translation<typeof en> = {
   "review.done.rejected": "{count} rejetées",
   "review.done.notPublished": "{count} non publiées",
   "review.done.remaining": { one: "{count} autre traduction attend.", other: "{count} autres traductions attendent." },
-  "review.done.next": "Continuer",
+  "review.done.next": "Continuer la révision",
   "review.done.nothingLeft": "Rien d'autre n'attend.",
 
   "review.leave.heading": "Abandonner vos modifications ?",
@@ -485,6 +514,10 @@ export const es: Translation<typeof en> = {
 
   "review.lang.label": "Idiomas",
   "review.lang.hidden": "oculto",
+  "review.lang.select": "Idioma",
+  "review.lang.show": "Mostrar",
+  "review.lang.option": { one: "{language} – {count} pendiente", other: "{language} – {count} pendientes" },
+  "review.lang.optionHidden": { one: "{language} (oculto) – {count} pendiente", other: "{language} (oculto) – {count} pendientes" },
 
   "review.filter.searchPlaceholder": "Título, original o traducción",
   "review.filter.areaLabel": "Áreas",
@@ -503,6 +536,7 @@ export const es: Translation<typeof en> = {
   "review.previews.error": "Las imágenes no se pueden cargar ahora.",
 
   "review.page.summary": { one: "{count} traducción en esta página", other: "{count} traducciones en esta página" },
+  "review.page.open": { one: "Queda {count} de {total} por revisar", other: "Quedan {count} de {total} por revisar" },
   "review.page.position": "{from}–{to} de {total}",
   "review.page.approveAll": { one: "Aprobar {count}", other: "Aprobar las {count}" },
   "review.page.approveAllOnPage": { one: "Aprobar {count} en esta página", other: "Aprobar las {count} de esta página" },
@@ -529,10 +563,13 @@ export const es: Translation<typeof en> = {
   },
   "review.approve.pageOnly": { one: "Solo esta página: {count} más sigue esperándote.", other: "Solo esta página: las otras {count} siguen esperándote." },
   "review.approve.confirm": { one: "Aprobar {count}", other: "Aprobar {count}" },
+  "review.approve.onlyClean": { one: "Aprobar solo la que no tiene aviso", other: "Aprobar solo las {count} sin aviso" },
 
   "review.reject.heading": { one: "¿Rechazar {count} traducción?", other: "¿Rechazar {count} traducciones?" },
-  "review.reject.body":
-    "Las traducciones rechazadas no se publican y las tareas de traducción masiva no volverán a traducir el mismo texto original. Esta acción no se puede deshacer.",
+  "review.reject.body": {
+    one: "No cambia nada en tu tienda, y Linguva no volverá a traducir este texto automáticamente mientras el original siga igual. Esta acción no se puede deshacer.",
+    other: "No cambia nada en tu tienda, y Linguva no volverá a traducir estos textos automáticamente mientras sus originales sigan iguales. Esta acción no se puede deshacer.",
+  },
   "review.reject.confirm": { one: "Rechazar {count}", other: "Rechazar {count}" },
   "review.rejected.body": {
     one: "{count} traducción rechazada. No se publicará.",
@@ -561,6 +598,7 @@ export const es: Translation<typeof en> = {
   "review.field.handle": "Dirección web",
   "review.field.handleNote": "Nueva dirección web: los enlaces antiguos a esta página en {language} dejarán de funcionar.",
   "review.field.handleQuestion": "¿Aprobar la nueva dirección web? Los enlaces antiguos en {language} dejarán de funcionar.",
+  "review.field.handleEmpty": "Ingresa una dirección web.",
   "review.field.edit": "Editar",
   "review.field.editHtml": "Editar HTML",
   "review.field.editLabel": "Editar: {field} – {title}",
@@ -573,7 +611,6 @@ export const es: Translation<typeof en> = {
   "review.field.reject": "Rechazar",
   "review.field.rejectLabel": "Rechazar: {field} – {title}",
   "review.field.rejectQuestion": "¿Rechazar esta traducción?",
-  "review.field.rejectNote": "No se puede deshacer.",
   "review.field.asShown": "Se aprueba tal como se muestra; para cambiar elementos concretos, abre el editor.",
   "review.field.empty": "Vacío: escribe una traducción o recházala.",
   "review.field.fromImport": "De tu importación",
@@ -588,11 +625,11 @@ export const es: Translation<typeof en> = {
   "review.hint.LENGTH_SHORT": "Mucho más corto que el original",
   "review.hint.LENGTH_LONG": "Mucho más largo que el original",
   "review.hint.UNTRANSLATED": "Parece sin traducir",
-  "review.hint.WRONG_SCRIPT": "No usa la escritura del idioma",
+  "review.hint.WRONG_SCRIPT": "Sistema de escritura incorrecto para este idioma",
   "review.hint.FORMALITY_MISMATCH": "Otro tratamiento",
   "review.hint.SEO_TOO_LONG": "Demasiado largo para Google ({width} caracteres, máx. {max})",
-  "review.hint.SEO_TOO_SHORT": "Corto para Google ({width} caracteres, mín. {min})",
-  "review.hint.SEO_SAME_AS_SOURCE": "Igual que el original",
+  "review.hint.SEO_TOO_SHORT": "Demasiado corto para Google ({width} caracteres, mín. {min})",
+  "review.hint.SEO_SAME_AS_SOURCE": "Igual que el original: sin traducir",
   "review.hint.EMPTY_TRANSLATION": "Vacío",
 
   "review.result.approved": "Aprobado: tus clientes ya lo ven.",
@@ -621,14 +658,15 @@ export const es: Translation<typeof en> = {
     "Ahora mismo no te espera ninguna traducción. Las traducciones con IA y las importaciones esperan aquí hasta que las apruebes. Si la publicación automática está activada, solo llegan aquí los textos con avisos.",
   "review.empty.languages": "Tus idiomas",
   "review.empty.percent": "{percent} traducido",
+  "review.empty.continue": "Seguir traduciendo al {language}",
   "review.filtered.none": "No hay traducciones para esta selección.",
 
   "review.done.heading": "Esta página está lista",
   "review.done.approved": "{count} aprobadas",
   "review.done.rejected": "{count} rechazadas",
   "review.done.notPublished": "{count} sin publicar",
-  "review.done.remaining": { one: "Queda {count} más por revisar.", other: "Quedan {count} más por revisar." },
-  "review.done.next": "Continuar",
+  "review.done.remaining": { one: "Queda {count} traducción más por revisar.", other: "Quedan {count} traducciones más por revisar." },
+  "review.done.next": "Seguir revisando",
   "review.done.nothingLeft": "No queda nada más pendiente.",
 
   "review.leave.heading": "¿Descartar tus cambios?",

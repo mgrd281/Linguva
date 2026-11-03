@@ -60,6 +60,42 @@ export function reviewHref(query: ReviewQuery, changes: Partial<ReviewQuery> & {
   return search ? `/app/review?${search}` : "/app/review";
 }
 
+/**
+ * The order the language tabs (and "Your languages") are read in: visible languages first, then hidden ones,
+ * each group by its name in the interface language, as the Content page orders its chips (Shopify orders them by
+ * their English names, which reads as random in German).
+ */
+export function languageOrder<T extends { name: string; hidden: boolean }>(languages: readonly T[], locale: string): T[] {
+  return [...languages].sort((a, b) => Number(a.hidden) - Number(b.hidden) || a.name.localeCompare(b.name, locale));
+}
+
+/**
+ * Where to go on once nothing waits: the least translated visible language under 100 %, else the least
+ * translated hidden one (a language being prepared); null when every counted language is complete or none is
+ * counted. Ties: the first in the given order.
+ */
+export function nextToTranslate<T extends { percent: number | null | undefined; hidden: boolean }>(languages: readonly T[]): T | null {
+  for (const hidden of [false, true]) {
+    let best: T | null = null;
+    for (const language of languages) {
+      if (language.hidden !== hidden || typeof language.percent !== "number" || language.percent >= 100) continue;
+      if (!best || language.percent < (best.percent as number)) best = language;
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+/**
+ * The page strip's count: "6 on this page" until the first decision ("fresh"), then "4 of 6 still open" with the
+ * share decided ("open"), and "done" once nothing on the page is open.
+ */
+export function pageProgress(total: number, open: number): { kind: "fresh" | "open" | "done"; decided: number; percent: number } {
+  const decided = Math.max(0, total - open);
+  const percent = total > 0 ? Math.round((decided * 100) / total) : 0;
+  return { kind: open <= 0 ? "done" : decided === 0 ? "fresh" : "open", decided, percent };
+}
+
 export interface FacetDraft {
   locale: string;
   area: AreaKey;

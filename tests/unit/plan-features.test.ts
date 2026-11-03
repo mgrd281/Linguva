@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { featureTableCounts } from "../../app/components/plan/PlanFeatureTable";
-import { everyPlanRows, FEATURE_ICON, PLAN_CARD_FEATURES, PLAN_FEATURE_ROWS, PLAN_ICON, PRICE_ROW, STATE_ICON, type FeatureKey } from "../../app/lib/plan-features";
+import { everyPlanRows, FEATURE_ICON, FEATURE_TINT, OWN_KEY_ICON, PLAN_CARD_FEATURES, PLAN_FEATURE_ROWS, PLAN_ICON, PLAN_TINT, PRICE_ROW, STATE_ICON, type FeatureKey } from "../../app/lib/plan-features";
 import { PLAN_PRICES, PLANS, type PlanHandle } from "../../app/lib/plans";
 
 const HANDLES = Object.keys(PLANS) as PlanHandle[];
@@ -74,5 +74,40 @@ describe("icons", () => {
     for (const icon of [...Object.values(PLAN_ICON), ...Object.values(STATE_ICON)]) expect(features.has(icon), icon).toBe(false);
     expect(new Set(Object.values(PLAN_ICON)).size).toBe(4);
     expect([...Object.values(PLAN_ICON), ...Object.values(STATE_ICON)].some((icon) => icon.startsWith("star"))).toBe(false);
+  });
+
+  it("keeps one icon per concept across the app: no plan sign that means something else in Settings", () => {
+    // play-circle is Settings' "Start it yourself"; key is the app's sign for translation keys (Own key's).
+    expect(PLAN_ICON.free).toBe("nature");
+    expect(Object.values(PLAN_ICON)).not.toContain("play-circle");
+    expect(OWN_KEY_ICON).toBe("key");
+    expect(STATE_ICON.complimentary).toBe("shield-person");
+    expect(Object.values(STATE_ICON)).not.toContain(OWN_KEY_ICON);
+  });
+});
+
+describe("tints", () => {
+  it("draws every plan's sign in the Plan page's colour, Settings' 'Plan & usage' tile", () => {
+    expect(PLAN_TINT).toBe("rose");
+  });
+
+  it("gives every feature's square the colour Settings gives the same icon, grey where Settings has none", () => {
+    expect(Object.keys(FEATURE_TINT).sort()).toEqual(Object.keys(FEATURE_ICON).sort());
+    // Settings' sections, choices and tools (app.settings.tsx: SECTION_LOOK, the option tiles, the tools' links).
+    const SETTINGS: Record<string, string> = {
+      automation: "blue",
+      "calendar-time": "violet",
+      wand: "violet",
+      "book-open": "violet",
+      "eye-check-mark": "green",
+      "chart-donut": "green",
+      send: "amber",
+      database: "amber",
+      globe: "teal",
+      transfer: "slate",
+      language: "blue",
+      gauge: "rose",
+    };
+    for (const [key, icon] of Object.entries(FEATURE_ICON) as Array<[FeatureKey, string]>) expect(FEATURE_TINT[key], key).toBe(SETTINGS[icon] ?? "grey");
   });
 });

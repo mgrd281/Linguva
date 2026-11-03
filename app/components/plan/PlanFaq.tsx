@@ -1,25 +1,22 @@
 /**
- * "Good to know": four questions in native <details>, closed by default.
- * The answers state what the code does (a smaller plan deletes nothing,
- * what counts as an AI character, the UTC month, how a plan is changed).
+ * "Good to know": four questions in the app's fold (Disclosure), closed by
+ * default, each a full-width row with the chevron at its end, between
+ * dividers. The answers state what the code does (a smaller plan deletes
+ * nothing, what counts as an AI character, the UTC month, how a plan is
+ * changed).
  */
 import type { ReactNode } from "react";
 import { INTL_LOCALE, type I18n } from "../../i18n/i18n";
 import { yearlyHandles } from "../../lib/plan-prices";
 import { planName } from "../../lib/plan-view";
-import { EMPHASIS } from "./styles";
+import { Disclosure } from "../Disclosure";
 
+/** One question: its row in semibold, 44 px high, the answer under it (app/styles/ui.css, .lv-plan-fold). */
 function Question({ question, children }: { question: string; children: ReactNode }) {
   return (
-    <details>
-      {/* Semibold like the language page's summaries (Polaris draws type="strong" at the body weight). */}
-      <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", ...EMPHASIS }}>{question}</summary>
-      <div style={{ padding: "0 0 16px 18px" }}>
-        <s-stack direction="block" gap="small-200">
-          {children}
-        </s-stack>
-      </div>
-    </details>
+    <div className="lv-plan-fold">
+      <Disclosure summary={question}>{children}</Disclosure>
+    </div>
   );
 }
 

@@ -67,8 +67,8 @@ describe("the plan's name and sign", () => {
     expect(planName("Own-Key")).toBe("Own-Key");
   });
 
-  it("has a sign of its own: no feature's, no other plan's, not the complimentary key", () => {
-    expect(OWN_KEY_ICON).toBe("connect");
+  it("has a sign of its own: the app's sign for translation keys, no feature's, no other plan's, not owner access's", () => {
+    expect(OWN_KEY_ICON).toBe("key");
     expect(Object.values(FEATURE_ICON)).not.toContain(OWN_KEY_ICON);
     expect(Object.values(PLAN_ICON)).not.toContain(OWN_KEY_ICON);
     expect(OWN_KEY_ICON).not.toBe(STATE_ICON.complimentary);
@@ -78,8 +78,9 @@ describe("the plan's name and sign", () => {
 describe("the hero on Own key", () => {
   it("without a usable key: 'Add your key' first, changing the plan beside it, and the missing line", () => {
     const hero = planView(active("own-key", { ownKeys: { engines: [] } }));
-    expect(hero).toMatchObject({ kind: "active", current: "own-key", icon: "connect", primary: "addKey", secondary: "change", freeAppliesNow: false, allowanceRisesAt: null });
-    expect(hero.lines.map((l) => l.words.key)).toEqual(["plan.hero.line.ownKey.missing"]);
+    expect(hero).toMatchObject({ kind: "active", current: "own-key", icon: "key", primary: "addKey", secondary: "change", freeAppliesNow: false, allowanceRisesAt: null });
+    // The missing key carries the keys' sign, as Settings draws it.
+    expect(hero.lines).toEqual([{ icon: "key", words: { key: "plan.hero.line.ownKey.missing" } }]);
     // Without a plan page to link to: still the key first.
     expect(planView(active("own-key", { choosePlanUrl: null })).primary).toBe("addKey");
     expect(planView(active("own-key", { choosePlanUrl: null })).secondary).toBeNull();
@@ -88,7 +89,7 @@ describe("the hero on Own key", () => {
   it("with a usable key: changing the plan is the main action, the line names the keys' services", () => {
     const hero = planView(active("ownkey", { ownKeys: { engines: ["deepl", "google"] } }));
     expect(hero).toMatchObject({ current: "ownkey", primary: "change", secondary: null });
-    expect(hero.lines).toEqual([{ icon: "connect", words: { key: "plan.hero.line.ownKey.ready", engines: { engines: ["deepl", "google"] } } }]);
+    expect(hero.lines).toEqual([{ icon: "key", words: { key: "plan.hero.line.ownKey.ready", engines: { engines: ["deepl", "google"] } } }]);
     const html = text(
       renderToStaticMarkup(
         createElement(PlanHero, {
@@ -137,7 +138,7 @@ describe("the hero on Own key", () => {
     expect(hero.primary).toBe("change");
     const html = text(cards("en", active("pro", {}, { pendingPlanHandle: "own-key", currentPeriodEnd: "2026-11-28T00:00:00.000Z" }), { ...OWN_PLAN, pending: true }));
     expect(html).toContain("Own key");
-    expect(html).toContain("from November 28");
+    expect(html).toContain("From November 28");
   });
 });
 
@@ -166,10 +167,22 @@ describe("the Own key card", () => {
       expect(words, locale).toContain(text(i18n.t("plan.ownKey.noFallback")));
       expect(words, locale).toContain(text(i18n.t("plan.compare.languages", { count: 10 })));
       expect(words, locale).toContain(text(i18n.t("plan.compare.choose", { plan: "Own key" })));
+      // Pro's features with the plan's own number of languages (from OWN_KEY_PLAN, never typed into the text).
+      expect(words, locale).toContain(text(i18n.t("plan.ownKey.features", { count: OWN_KEY_PLAN.maxTargetLocales })));
       expect(words, locale).not.toContain(text(i18n.t("plan.price.trial", { count: TRIAL_DAYS, chars: i18n.number(TRIAL_AI_CHARS) })));
       // The card itself (after the four): its figure is the key's quota, never "0 AI characters per month".
       const card = text(html.slice(html.indexOf('aria-labelledby="plan-own-key"')));
       expect(card, locale).not.toContain(text(i18n.t("plan.compare.chars")));
+      // Its sign is the keys' in the Plan page's colour; the features end in the cards' marks (two ✓, the smart
+      // schedule's –), the rules on cost and a used-up key in none; its button sits at the card's foot.
+      // The card alone: up to the price footnote after it.
+      const start = html.indexOf('aria-labelledby="plan-own-key"');
+      const markup = html.slice(start, html.indexOf("<s-paragraph", start));
+      expect(markup).toContain('<span class="lv-icon-square" data-tint="rose" aria-hidden="true"><s-icon type="key"');
+      expect(markup.match(/<li>/g)).toHaveLength(5);
+      expect(markup.match(/<s-icon type="check" tone="success" size="small">/g)).toHaveLength(2);
+      expect(markup.match(/<s-icon type="minus" color="subdued" size="small">/g)).toHaveLength(1);
+      expect(markup.indexOf("lv-plan-card__foot")).toBeGreaterThan(markup.lastIndexOf("</li>"));
       // No popularity claim.
       const badges = [...html.matchAll(/<s-badge[^>]*>(.*?)<\/s-badge>/g)].map((m) => text(m[1]!));
       for (const badge of badges) expect(badge).not.toMatch(/popular|beliebt|empfohlen|recommended|best/i);

@@ -16,7 +16,7 @@ import { backToJob } from "../.server/jobs/back-to-job";
 import { requireShop } from "../.server/shopify/require-shop";
 import { useResultToast } from "../components/app-bridge";
 import { BackToJob } from "../components/jobs/BackToJob";
-import { BIG_HEADING, Breadcrumbs } from "../components/LanguageLayout";
+import { Breadcrumbs } from "../components/LanguageLayout";
 import { PlanCards } from "../components/plan/PlanCards";
 import { PlanFaq } from "../components/plan/PlanFaq";
 import { PlanFeatureTable } from "../components/plan/PlanFeatureTable";
@@ -150,13 +150,17 @@ export default function Plan() {
   return (
     <s-page heading={t("common.nav.plan")}>
       <s-stack direction="block" gap="large">
-        <s-stack direction="block" gap="base">
-          <Breadcrumbs i18n={i18n} trail={[{ href: "/app/settings", label: t("common.nav.settings") }]} current={t("common.nav.plan")} />
-          <s-stack direction="block" gap="small-300">
-            <h1 style={BIG_HEADING}>{t("common.nav.plan")}</h1>
-            <s-text color="subdued">{t("plan.page.subtitle")}</s-text>
+        {/* Back to Settings' "Plan & usage", whose "See plans" leads here: the trail on a wide page, a 44 px
+            back row ("‹ Settings") on a phone, as Settings' own sections and a job's page have. */}
+        <s-query-container>
+          <s-stack direction="block" gap="base">
+            <Breadcrumbs i18n={i18n} trail={[{ href: "/app/settings?section=plan", label: t("common.nav.settings") }]} current={t("common.nav.plan")} touch />
+            <s-stack direction="block" gap="small-300">
+              <h1 className="lv-h1">{t("common.nav.plan")}</h1>
+              <s-text color="subdued">{t("plan.page.subtitle")}</s-text>
+            </s-stack>
           </s-stack>
-        </s-stack>
+        </s-query-container>
         {data.welcome && data.state === "ACTIVE" ? (
           <s-banner tone="success" heading={t("plan.welcome.heading")}>
             {ownKeyMissing ? (

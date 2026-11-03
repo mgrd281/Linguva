@@ -1448,6 +1448,199 @@ a.lv-filter:focus-visible {
 
 /* ── Plan (app.plan.tsx, components/plan): its own rules here, media queries included. ── */
 
+/* The plan's name in the hero ("Pro", "Kein Tarif gewählt"): as big as a figure on the scale, wrapping where a state's name is long. */
+.lv-plan-name {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+/* A card's list price: the page's largest figure, level across the cards (plan.spec.ts finds it by its 32 px). */
+.lv-plan-price {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 36px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A card's allowance ("1.200.000") above its caption, with .lv-figure-row. */
+.lv-plan-stat {
+  display: block;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+/*
+ * A plan's card: its rows are the grid row's own (CSS subgrid), so prices, figures, features and buttons
+ * line up across the cards. The frame lies behind the rows: a white card, or the current plan's blue
+ * ring and tint (.lv-selected-frame), which lies inside the card so the cards' edges line up.
+ */
+.lv-plan-card {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: subgrid;
+  row-gap: 16px;
+  min-width: 0;
+  padding: 16px;
+}
+/* The Own key plan's card under the four: one wide card, not part of the subgrid. */
+.lv-plan-card--wide {
+  display: block;
+}
+.lv-plan-card__back {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+.lv-plan-frame {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-surface);
+}
+/* Its button at the card's foot, as on the four cards. */
+.lv-plan-card__foot {
+  margin-top: 16px;
+}
+
+/* The Plan page's folds (the questions, the full comparison): a full-width row, the chevron at its end. */
+.lv-plan-fold > .lv-more > .lv-more__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lv-plan-fold > .lv-more > .lv-more__summary > .lv-more__chevron {
+  flex: none;
+}
+.lv-plan-fold > .lv-more > .lv-more__body {
+  padding: 0 0 16px;
+}
+/* The full comparison fills its section: the row inside the section's edge, the table from edge to edge. */
+.lv-plan-fold--table > .lv-more > .lv-more__summary {
+  padding: 12px 16px;
+}
+.lv-plan-fold--table > .lv-more > .lv-more__summary:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--lv-radius-card);
+}
+.lv-plan-fold--table > .lv-more > .lv-more__body {
+  padding: 0;
+}
+/* "18 features in 5 groups": quiet, and one unit that moves to the next line whole on a phone. */
+.lv-plan-fold__detail {
+  display: inline-block;
+  font-weight: 450;
+}
+
+/*
+ * The full comparison: one fixed-layout table with short figures, so four plan columns fit 390 px. The
+ * current plan's column in the chosen look (the cards' blue), the groups' rows grey.
+ */
+.lv-plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  line-height: 18px;
+}
+.lv-plan-table th,
+.lv-plan-table td {
+  border-top: 1px solid #ebebeb;
+  vertical-align: middle;
+}
+.lv-plan-table__head {
+  padding: 12px 1px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.lv-plan-table th.lv-plan-table__head {
+  vertical-align: bottom;
+}
+.lv-plan-table__head--feature {
+  width: 40%;
+  padding-inline-start: 16px;
+  text-align: start;
+}
+.lv-plan-table__head--plan {
+  width: 15%;
+}
+.lv-plan-table__label {
+  padding: 10px 4px 10px 16px;
+  font-weight: 500;
+  text-align: start;
+  overflow-wrap: break-word;
+}
+.lv-plan-table__label--price {
+  font-weight: 650;
+}
+.lv-plan-table__value {
+  padding: 10px 1px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* The prices: the word "Free" may break only where its message allows (a soft hyphen in German). */
+.lv-plan-table__value--price {
+  font-weight: 700;
+  white-space: normal;
+}
+.lv-plan-table__group {
+  padding: 8px 16px;
+  background: #ebebeb80;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+  text-align: start;
+}
+.lv-plan-table [data-current] {
+  background: var(--lv-selected-bg);
+}
+.lv-plan-table th.lv-plan-table__head[data-current] {
+  box-shadow: inset 0 2px 0 var(--lv-selected-ring);
+}
+/* "Dein Tarif" under the current plan's name, in the ring's blue. */
+.lv-plan-table__mine {
+  display: block;
+  color: var(--lv-selected-ring);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+}
+.lv-plan-table__feature {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+}
+.lv-plan-table__feature > span {
+  min-width: 0;
+}
+/* Only long words break, at a hyphen ("Übersetzungs-speicher"); short ones never. */
+.lv-plan-table__name {
+  -webkit-hyphens: auto;
+  hyphens: auto;
+  hyphenate-limit-chars: 10 4 4;
+}
+.lv-plan-table__detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+.lv-plan-table__note {
+  padding: 12px 16px 16px;
+}
+
 /* ── Editor, lists and tools (the editor, the content lists, glossary, memory, coverage, markets, import & export): its own rules here, media queries included. ── */
 
 /* ── Smart schedule (app.settings_.automatic.tsx, SmartAutoCard): its own rules here, media queries included. ── */

@@ -11,7 +11,9 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { UI_ENV, UI_SHOPS, type UiShopKey } from "./fixtures/shops";
+import { SMART_REQUESTED_BY } from "../../app/lib/smart-auto";
 import { clickSaveBarButton, expectAccessible, expectNoHorizontalScroll, expectToast, openApp, saveBarShown, sessionToken, setWorkerRunning } from "./helpers";
+import { stoppedJob } from "./stopped-jobs";
 
 // The smart schedule runs in the worker: these pages are tested with background jobs running.
 test.beforeAll(() => setWorkerRunning(true));
@@ -26,8 +28,12 @@ const post = async (page: Page, shop: UiShopKey, path: string, form: Record<stri
   return response.text();
 };
 
-test("Settings shows the smart schedule as the current way changes are translated, with real values @responsive", async ({ page }) => {
+test("Settings shows the smart schedule as the current way changes are translated, with real values @responsive", async ({ page }, info) => {
+  // The sections' list on a phone, the nav beside the section on a wide page: the schedule's summary.
   await openApp(page, "business", "/app/settings");
+  const entry = page.getByRole("navigation", { name: "Settings sections" }).locator("li").filter({ hasText: "Translating changes" });
+  await expect(entry).toHaveText(info.project.name === "desktop" ? /^Translating changes\s*On a schedule$/ : /^Translating changes\s*Every day at 23:00$/, { useInnerText: true });
+  await openApp(page, "business", "/app/settings?section=changes");
   const card = page.locator("#settings-changes");
   await expect(card.locator("s-badge").first()).toHaveText("On");
   // When it checks next, in the schedule's own time zone, on the interface language's clock (12-hour in English).
@@ -38,7 +44,6 @@ test("Settings shows the smart schedule as the current way changes are translate
   await expect(smart.getByText("Every day at 23:00 · French and German")).toBeVisible();
   await expect(smart.getByRole("button", { name: "Check now" })).toBeVisible();
   await expect(smart.getByRole("link", { name: "Schedule and options" })).toHaveAttribute("href", "/app/settings/automatic");
-  await expect(page.getByRole("region", { name: "At a glance" }).locator("li").nth(1)).toHaveText(/On\s*Every day at 23:00$/, { useInnerText: true });
   // The other way that would follow the same changes says it would replace this one.
   await expect(option(page, "#settings-changes", "Shortly after saving").getByText("Current setting")).toHaveCount(0);
   await expectAccessible(page);
@@ -123,7 +128,8 @@ test("after a move to a plan without the schedule: paused with the plan named, i
   await expect(card.locator("s-badge").nth(1)).toHaveText("Business");
   await expect(card.getByText("Your plan no longer includes the smart schedule. Since then, changes aren't translated automatically. Your settings stay saved.")).toBeVisible();
   await expect(card.getByRole("link", { name: "View schedule" })).toHaveAttribute("href", "/app/settings/automatic");
-  await expect(page.getByRole("region", { name: "At a glance" }).locator("li").nth(1)).toHaveText(/Paused\s*Not in your plan$/, { useInnerText: true });
+  // The status row says so too: the one thing that needs the merchant.
+  await expect(page.locator("#settings-status")).toHaveText(/^Translating changes\s*Paused\s*Not in your plan$/, { useInnerText: true });
 
   // The page shows the kept settings, read-only, and no action that can't work.
   await openApp(page, "smartDowngraded", "/app/settings/automatic");
@@ -351,6 +357,31 @@ test("the smart page fits a tablet and an iPhone without sideways scrolling", as
     await expectNoHorizontalScroll(page);
     await openApp(page, "business", "/app/settings");
     await expectNoHorizontalScroll(page);
+    await openApp(page, "business", "/app/settings?section=changes");
+    await expectNoHorizontalScroll(page);
+  }
+});
+
+test("a job the schedule stopped for its budget: its card leads back once the budget allows it, as the page's one primary button", async ({ page }) => {
+  // Its daily budget (50,000) isn't used up today: the stop's cause is gone.
+  const job = await stoppedJob("business", "SMART_BUDGET_DAILY", { requestedBy: SMART_REQUESTED_BY });
+  try {
+    await openApp(page, "business", `/app/settings/automatic?job=${job.id}#smart-budgets`);
+    const budgets = page.locator("#smart-budgets");
+    const back = budgets.locator(`s-button[href="/app/jobs/${job.id}"]`);
+    await expect(back).toBeVisible();
+    await expect(back).toHaveText("Back to the job");
+    await expect(back).toHaveAttribute("variant", "primary");
+    await expect(budgets.getByText("German · Products can go on")).toBeVisible();
+    // Only there, and the hero's own main button steps back.
+    await expect(page.locator("#smart-scope").locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
+    await expect(page.locator('#smart-status s-button[variant="primary"]')).toHaveCount(0);
+    await expectAccessible(page);
+    // Without the job in the address, nothing.
+    await openApp(page, "business", "/app/settings/automatic");
+    await expect(page.locator('s-button[href^="/app/jobs/"]')).toHaveCount(0);
+  } finally {
+    await job.remove();
   }
 });
 

@@ -54,11 +54,11 @@ test("a DeepL-only consent: the language only Azure serves waits for consent, Se
   await openApp(page, "enginesLegacy", "/app/languages");
   const thai = page.locator("s-table-row").filter({ hasText: "Thai" });
   await expect(thai.getByText("Available with Microsoft Azure once you allow it in Settings")).toBeVisible();
-  await expect(thai.getByRole("link", { name: "Open Settings" })).toBeVisible();
+  await expect(thai.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/app/settings?section=ai");
   const german = page.locator("s-table-row").filter({ hasText: "German" });
   await expect(german.getByText("with DeepL")).toBeVisible();
 
-  await openApp(page, "enginesLegacy", "/app/settings");
+  await openApp(page, "enginesLegacy", "/app/settings?section=ai");
   // The permission the shop gave: today's DeepL text, word for word.
   await expect(page.getByText("Linguva sends only your store's texts (such as products, pages and menus) to DeepL SE in Germany, no customer or order data.")).toBeVisible();
   const extra = page.locator("s-box").filter({ has: page.getByRole("heading", { name: "More translation services" }) });
@@ -89,7 +89,7 @@ test("the smart schedule names the services next to its Allow button, and says w
 });
 
 test("allowing the other services too keeps focus on the permission card", async ({ page }) => {
-  await openApp(page, "enginesExtend", "/app/settings");
+  await openApp(page, "enginesExtend", "/app/settings?section=ai");
   const extra = page.locator("s-box").filter({ has: page.getByRole("heading", { name: "More translation services" }) });
   await extra.getByRole("button", { name: "Allow these too" }).click();
   await expectToast(page, "AI translation is allowed.");

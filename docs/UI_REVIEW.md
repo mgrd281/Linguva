@@ -228,6 +228,21 @@ The Jobs list and a job's page, rebuilt on the shared view logic (`app/lib/job-v
 
 Status: **Implemented; content checked locally** (every state of `tests/ui/fixtures/jobs-store.ts` rendered from the production build). This development container can't load Polaris from Shopify's CDN (network policy), so the layout itself is checked in CI: `tests/ui/jobs.spec.ts` and the `jobs-completed` and `job` screenshot comparisons, whose `*-ci.png` images come from the first CI run.
 
+## 3f. Redesign 3: Settings in sections (owner-approved design, 2026-11, Tested in tests only)
+
+Settings was one long stack of cards under six "At a glance" tiles. It is now sections, one shown at a time and addressed by `?section=<key>` (`changes`, `publish`, `style`, `memory`, `keys` on the Own key plan, `ai`, `plan`, `tools`):
+
+| Before | After | Why |
+|---|---|---|
+| Six glance tiles, then every card | Under the heading one status row: "Everything is set up" with a green check, or the one thing that needs the merchant (a language, a key, the AI permission, translating changes paused or waiting) in its tone with its fix | One answer to "is anything wrong?" |
+| Cards in a stack; the permission moved to the top while missing | A nav card (260 px) beside the section: each section's name and its state in one line ("Translating changes · Start it yourself"), the current one filled (`aria-current`), the two groups apart by a divider; without `?section` the first section that needs the merchant | Short page, every state still in view |
+| The same stack on a phone | The sections as two cards of rows (icon tile, name, a summary of up to two lines, chevron); a chosen section opens alone under a 44 px back row "‹ Settings" | Phone-sized decisions |
+| "AI characters" tile linking to the Plan page; tools without glossary and memory | "Plan & usage" (plan, this month's AI characters, the date new ones come, the way to the Plan page); "Tools" with six links including glossary and translation memory | Every page beside the settings in one place |
+
+Behaviour kept: every action, toast and focus move; giving the permission moves on to "Translating changes"; switching keeps a choice being made and unsaved text (every section stays mounted; only `?section` changes, so the data isn't loaded again); the cards' old `#settings-*` addresses open their section; links from the Overview, editor, language and content pages open `?section=keys` or `?section=ai`. A job stopped for the permission, a key, the plan, the month's AI characters or a smart budget links to its fix with `?job=<id>`; once the cause is fixed there (`app/.server/jobs/back-to-job.ts`), the section, the smart page's card or the Plan page shows "Back to the job" as the page's one primary button.
+
+Screenshots (German, 1,280 px at scale 1 and an iPhone 13): `UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign3 pnpm test:ui tests/ui/ui-review-screenshots.spec.ts -g "settings-sections"` writes `settings-desktop.png` and `settings-phone.png`. They couldn't be taken where this was built (Polaris' script from Shopify's CDN wasn't reachable there); the browser tests run in CI.
+
 ## 4. Tests for the changes
 
 | Change | Test |

@@ -43,7 +43,7 @@ function Counts({ i18n, firstChoice, canStepIn, total, allowed }: { i18n: I18n; 
   if (!allowed) {
     return (
       <s-text>
-        {i18n.t("overview.engines.notAllowed")} <s-link href="/app/settings">{i18n.t("common.nav.settings")}</s-link>
+        {i18n.t("overview.engines.notAllowed")} <s-link href="/app/settings?section=ai">{i18n.t("common.nav.settings")}</s-link>
       </s-text>
     );
   }

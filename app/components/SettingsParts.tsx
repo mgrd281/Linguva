@@ -1,10 +1,10 @@
 /**
  * The Settings area's pieces (Settings and the smart schedule's page): a
- * card with its icon, heading and state; the "At a glance" tiles that move
- * to the cards; option cards whose whole header chooses them and that mark
- * the current choice like the Plan page marks the current plan; the one
- * lock pattern for what a plan doesn't include; short facts; and tiles of
- * links.
+ * section of the Settings page (its heading, state and lead above one
+ * card); a card with its icon, heading and state (the smart schedule's
+ * page); option cards whose whole header chooses them and that mark the
+ * current choice like the Plan page marks the current plan; the one lock
+ * pattern for what a plan doesn't include; short facts; and tiles of links.
  *
  * Polaris web components with the Content and Plan pages' card, tile and
  * badge rules; inline styles only for type sizes, list resets and the
@@ -16,7 +16,6 @@ import { IconTile } from "./CategoryCard";
 import { CARD, H2 } from "./ContentTiles";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { METER_LABEL } from "./plan/styles";
-import { ProgressBar } from "./ProgressBar";
 
 export type StateTone = "success" | "warning" | "critical" | "info" | "neutral";
 
@@ -37,23 +36,23 @@ export function StateBadge({ state }: { state: SettingState }) {
 
 /** An option's or a tile's name: the meters' label size (13/20, semibold). */
 export const SETTING_NAME = { ...METER_LABEL, display: "block" } as const;
-/** A name that stays on one line ("Änderungen übersetzen"), cut with "…" where it can't. */
-const ONE_LINE = { ...SETTING_NAME, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
-/** The figure on a glance tile. */
-const TILE_FIGURE = { display: "block", fontSize: 20, lineHeight: "24px", fontWeight: 700, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" } as const;
+/** A Settings section's heading: the Content page's areas heading (17/24, semibold). */
+const SECTION_HEADING = { margin: 0, fontSize: 17, lineHeight: "24px", fontWeight: 650 } as const;
 /** A heading moved to by script: no ring for a mouse click (the browser still shows it for the keyboard). */
 const FOCUS_TARGET = { outline: "none" } as const;
 
 /**
- * Moves to a card: scrolls it into view and focuses its heading, so the
- * keyboard and screen readers continue there. No navigation, so the page's
- * data isn't loaded again.
+ * Moves to a section that is shown now: focuses its heading, so the keyboard
+ * and screen readers continue there, and scrolls only when the heading isn't
+ * in view (a new address already starts at the top of the page).
  */
-export function focusCard(id: string) {
+export function focusSection(id: string) {
   if (typeof document === "undefined") return;
-  const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  document.getElementById(`${id}-heading`)?.focus({ preventScroll: true });
+  const heading = document.getElementById(`${id}-heading`);
+  if (!heading) return;
+  heading.focus({ preventScroll: true });
+  const top = heading.getBoundingClientRect().top;
+  if (top < 0 || top > window.innerHeight - 48) document.getElementById(id)?.scrollIntoView({ block: "start" });
 }
 
 /** Focuses an element by id once it is on the page (after a switch, the newly current option). */
@@ -73,8 +72,61 @@ export function useFreshResult<T>(fetcher: { state: string; data?: T }, onResult
 }
 
 /**
+ * A section of the Settings page, shown one at a time: its heading (h2,
+ * focusable: switching sections moves there) with its state, one short
+ * lead, an optional card above the content (the way back to a stopped
+ * job), then its content in one card.
+ */
+export function SettingSection({
+  id,
+  heading,
+  state,
+  extra,
+  lead,
+  top,
+  children,
+}: {
+  id: string;
+  heading: string;
+  state?: SettingState | null;
+  /** Beside the state (the plan's badge). */
+  extra?: ReactNode;
+  lead?: ReactNode;
+  /** Between the lead and the content's card. */
+  top?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <section id={id} aria-labelledby={`${id}-heading`} style={{ scrollMarginTop: 16 }}>
+      <s-stack direction="block" gap="base">
+        <s-stack direction="block" gap="small-400">
+          <s-stack direction="inline" gap="small-200" alignItems="center">
+            <h2 id={`${id}-heading`} tabIndex={-1} style={{ ...SECTION_HEADING, ...FOCUS_TARGET }}>
+              {heading}
+            </h2>
+            {state ? <StateBadge state={state} /> : null}
+            {extra}
+          </s-stack>
+          {lead ? <s-text color="subdued">{lead}</s-text> : null}
+        </s-stack>
+        {top}
+        {Children.toArray(children).length ? (
+          <s-box {...CARD} padding="base">
+            <s-query-container>
+              <s-stack direction="block" gap="base">
+                {children}
+              </s-stack>
+            </s-query-container>
+          </s-box>
+        ) : null}
+      </s-stack>
+    </section>
+  );
+}
+
+/**
  * A card of the page: its icon (hidden on a narrow screen), heading (h2,
- * focusable for the glance tiles), state, one short lead, then its content.
+ * focusable), state, one short lead, then its content.
  */
 export function SettingCard({
   id,
@@ -118,95 +170,6 @@ export function SettingCard({
           </s-stack>
         </s-query-container>
       </s-box>
-    </section>
-  );
-}
-
-/** One "At a glance" tile: a button that moves to its card, or a link to another page. */
-export interface GlanceTile {
-  key: string;
-  /** The card it moves to (its id). */
-  target?: string;
-  /** Another page (the Plan page for the AI characters). */
-  href?: string;
-  icon: IconName;
-  label: string;
-  /** The name on a narrow tile (a phone), where the card's full name doesn't fit on one line. */
-  short?: string;
-  /** Its state; `short`: the words on a narrow tile. */
-  state?: SettingState & { short?: string };
-  /** A figure instead of a state (the AI characters). */
-  figure?: { value: string; percent: number; tone: "success" | "warning" | "critical"; label: string };
-  line: string;
-}
-
-/** A tile is wide enough for its icon and the card's full name (three across on a desktop page, not two on a phone). */
-const WIDE_TILE = "inline-size > 230px";
-
-/** Text for a wide and for a narrow tile; only one of them is shown (and read). */
-function ByWidth({ wide, narrow }: { wide: ReactNode; narrow?: ReactNode }) {
-  if (narrow === undefined) return <>{wide}</>;
-  return (
-    <>
-      <s-box display={`@container (${WIDE_TILE}) auto, none`}>{wide}</s-box>
-      <s-box display={`@container (${WIDE_TILE}) none, auto`}>{narrow}</s-box>
-    </>
-  );
-}
-
-export function Glance({ label, tiles }: { label: string; tiles: GlanceTile[] }) {
-  return (
-    <section aria-label={label}>
-      <s-query-container>
-        {/* Three across on a wide page, two on a phone (with a little less padding). */}
-        <ul style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(150px, 30%), 1fr))", gap: 12 }}>
-          {tiles.map((tile) => (
-            <li key={tile.key} style={{ display: "flex", minWidth: 0 }}>
-              <s-clickable
-                {...CARD}
-                padding="@container (inline-size > 500px) base, small"
-                inlineSize="100%"
-                {...(tile.href ? { href: tile.href } : { onClick: () => tile.target && focusCard(tile.target) })}
-              >
-                {/* As high as the row's highest tile, its content at the top (a button centres it otherwise). */}
-                <div style={{ height: "100%" }}>
-                  <s-query-container>
-                    <s-stack direction="block" gap="small-200">
-                      {/* The icon only where there is room; the name on one line, and the chevron. */}
-                      <s-grid gridTemplateColumns={`@container (${WIDE_TILE}) auto 1fr auto, 1fr auto`} gap="small-200" alignItems="center">
-                        <s-box display={`@container (${WIDE_TILE}) auto, none`}>
-                          <IconTile icon={tile.icon} size={28} color="base" iconSize="base" />
-                        </s-box>
-                        <div style={{ minWidth: 0, overflow: "hidden" }}>
-                          <ByWidth wide={<span style={ONE_LINE}>{tile.label}</span>} narrow={tile.short === undefined ? undefined : <span style={ONE_LINE}>{tile.short}</span>} />
-                        </div>
-                        <s-icon type="chevron-right" color="subdued" />
-                      </s-grid>
-                      {tile.figure ? (
-                        <s-stack direction="block" gap="small-300">
-                          <s-stack direction="inline" gap="small-200" alignItems="center">
-                            <span style={TILE_FIGURE}>{tile.figure.value}</span>
-                            {tile.state ? <StateBadge state={tile.state} /> : null}
-                          </s-stack>
-                          <ProgressBar value={tile.figure.percent} label={tile.figure.label} tone={tile.figure.tone} />
-                        </s-stack>
-                      ) : tile.state ? (
-                        <s-stack direction="inline">
-                          <ByWidth
-                            wide={<StateBadge state={tile.state} />}
-                            narrow={tile.state.short === undefined ? undefined : <StateBadge state={{ ...tile.state, label: tile.state.short }} />}
-                          />
-                        </s-stack>
-                      ) : null}
-                      <s-text color="subdued">{tile.line}</s-text>
-                    </s-stack>
-                  </s-query-container>
-                </div>
-              </s-clickable>
-            </li>
-          ))}
-        </ul>
-      </s-query-container>
     </section>
   );
 }

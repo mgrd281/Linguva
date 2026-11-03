@@ -3,15 +3,19 @@
  * used, every plan side by side with its list price, and the way to change
  * it, which is always Shopify's plan page (a link, target _top). The app
  * never creates, changes or cancels a subscription; prices are display only
- * (PLAN_PRICES must equal the Partner Dashboard).
+ * (PLAN_PRICES must equal the Partner Dashboard). A job stopped by the plan
+ * or the month's AI characters links here with `?job=<id>`; once the plan
+ * allows it, the page leads back to it.
  */
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { shopBilling } from "../.server/billing/billing";
 import { loadPlanPage, REFRESH_MIN_INTERVAL_MS } from "../.server/billing/plan-page";
+import { backToJob } from "../.server/jobs/back-to-job";
 import { requireShop } from "../.server/shopify/require-shop";
 import { useResultToast } from "../components/app-bridge";
+import { BackToJob } from "../components/jobs/BackToJob";
 import { BIG_HEADING, Breadcrumbs } from "../components/LanguageLayout";
 import { PlanCards } from "../components/plan/PlanCards";
 import { PlanFaq } from "../components/plan/PlanFaq";
@@ -19,14 +23,24 @@ import { PlanFeatureTable } from "../components/plan/PlanFeatureTable";
 import { PlanHero } from "../components/plan/PlanHero";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
+import { jobName } from "../lib/job-view";
 import { showTrial } from "../lib/plan-prices";
 import { planName, planView, recommendPlan, usableEngines, type HeroView } from "../lib/plan-view";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
+  const url = new URL(request.url);
   // Back from Shopify's plan page: only forces a fresh check; the plan itself always comes from Shopify.
-  const welcome = new URL(request.url).searchParams.get("welcome") === "1";
-  return loadPlanPage({ admin, shop, welcome, billing: shopBilling(admin, shop, { force: welcome }) });
+  const welcome = url.searchParams.get("welcome") === "1";
+  const billing = shopBilling(admin, shop, { force: welcome });
+  // From a job stopped by the plan or the month's AI characters (`?job=<id>`): the way back, once the plan
+  // allows it. Never breaks the page (a failed billing check is the page's own to show).
+  const jobId = url.searchParams.get("job");
+  const [page, back] = await Promise.all([
+    loadPlanPage({ admin, shop, welcome, billing }),
+    jobId ? billing.then((b) => backToJob({ shopId: shop.id, billing: b, jobId, target: "/app/plan" }), () => null) : null,
+  ]);
+  return { ...page, backToJob: back };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -44,13 +58,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 type Refresh = ReturnType<typeof useFetcher<typeof action>>;
 
-/** The hero's main action (a link to Shopify's plan page, or "Try again") and the quiet refresh beside "As of …". */
-function HeroActions({ i18n, hero, choosePlanUrl, refresh }: { i18n: I18n; hero: HeroView; choosePlanUrl: string | null; refresh: Refresh }) {
+/**
+ * The hero's main action (a link to Shopify's plan page, or "Try again") and the quiet refresh beside
+ * "As of …"; `lead`: secondary while the way back to a stopped job is the page's primary button.
+ */
+function HeroActions({ i18n, hero, choosePlanUrl, refresh, lead = "primary" }: { i18n: I18n; hero: HeroView; choosePlanUrl: string | null; refresh: Refresh; lead?: "primary" | "secondary" }) {
   const { t } = i18n;
   const busy = refresh.state !== "idle";
   // Own key plan without a usable key: the key comes first (Settings › Your translation keys).
   const addKey = (
-    <s-button variant="primary" href="/app/settings#settings-keys">
+    <s-button variant={lead} href="/app/settings?section=keys">
       {t("plan.hero.addKey")}
     </s-button>
   );
@@ -64,7 +81,7 @@ function HeroActions({ i18n, hero, choosePlanUrl, refresh }: { i18n: I18n; hero:
     hero.primary === "retry" ? (
       <s-stack direction="inline" gap="small-200">
         <refresh.Form method="post">
-          <s-button type="submit" variant="primary" icon="refresh" {...(busy ? { loading: true } : {})}>
+          <s-button type="submit" variant={lead} icon="refresh" {...(busy ? { loading: true } : {})}>
             {t("plan.action.retry")}
           </s-button>
         </refresh.Form>
@@ -76,7 +93,7 @@ function HeroActions({ i18n, hero, choosePlanUrl, refresh }: { i18n: I18n; hero:
         {hero.secondary ? link(hero.secondary, "secondary") : null}
       </s-stack>
     ) : hero.primary ? (
-      link(hero.primary, "primary")
+      link(hero.primary, lead)
     ) : null;
   const checked =
     hero.checkedAt && hero.refresh ? (
@@ -124,6 +141,10 @@ export default function Plan() {
           ? t("plan.toast.confirmed", { plan: planName(result.planHandle) })
           : null;
   useResultToast(result, toast, { isError: Boolean(result && !result.ok) });
+  // A job stopped by the plan or the month's AI characters, its cause fixed: the way back, at the top.
+  const back = data.backToJob ? (
+    <BackToJob jobId={data.backToJob.id} name={jobName(i18n, data.backToJob, Object.fromEntries((data.languages?.items ?? []).map((l) => [l.locale, l.name])))} />
+  ) : null;
 
   return (
     <s-page heading={t("common.nav.plan")}>
@@ -139,13 +160,14 @@ export default function Plan() {
           <s-banner tone="success" heading={t("plan.welcome.heading")}>
             {ownKeyMissing ? (
               <s-paragraph>
-                {t("plan.welcome.body.ownKey")} <s-link href="/app/settings#settings-keys">{t("plan.welcome.action.ownKey")}</s-link>
+                {t("plan.welcome.body.ownKey")} <s-link href="/app/settings?section=keys">{t("plan.welcome.action.ownKey")}</s-link>
               </s-paragraph>
             ) : (
               <s-paragraph>{t("plan.welcome.body")}</s-paragraph>
             )}
           </s-banner>
         ) : null}
+        {back}
         <PlanHero
           i18n={i18n}
           hero={hero}
@@ -157,7 +179,7 @@ export default function Plan() {
           aiAvailable={data.aiAvailable}
           languages={data.languages}
           costPerMillion={data.costPerMillion}
-          actions={<HeroActions i18n={i18n} hero={hero} choosePlanUrl={choosePlanUrl} refresh={refresh} />}
+          actions={<HeroActions i18n={i18n} hero={hero} choosePlanUrl={choosePlanUrl} refresh={refresh} lead={back ? "secondary" : "primary"} />}
           ownKeys={data.ownKeys}
         />
         <PlanCards

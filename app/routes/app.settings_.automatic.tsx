@@ -7,6 +7,8 @@
  * Without Business and never set up, the page only shows what it would
  * add. After a move to a plan without it, the settings are shown read-only.
  * Set up once, saving can turn it on in the same step (an explicit flag).
+ * A job the schedule stopped for a budget or the main language links here
+ * with `?job=<id>`; once its cause is fixed, its card leads back to it.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
@@ -14,6 +16,7 @@ import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { allowedTargetLocales } from "../.server/billing/subscription";
+import { backToJob } from "../.server/jobs/back-to-job";
 import { enqueueCoveragePage, enqueueItems } from "../.server/jobs/queues";
 import { engineConsentTokens, getConfig } from "../.server/lib/config";
 import { prisma } from "../.server/lib/db";
@@ -29,6 +32,7 @@ import { requestSmartRun, retrySmartRun } from "../.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsProblem } from "../.server/smart/validate";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
 import { categoryName, IconTile } from "../components/CategoryCard";
+import { BackToJob } from "../components/jobs/BackToJob";
 import { CARD } from "../components/ContentTiles";
 import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
 import { SUB_HEADING } from "../components/plan/styles";
@@ -42,6 +46,7 @@ import { consentLead, enginesText, isDeepLOnly } from "../lib/engine-texts";
 import type { ConsentToken } from "../lib/engines";
 import type { IconName } from "../lib/icons";
 import { CATEGORIES, categoryOf, isCategoryId, TIERS, type CategoryId } from "../lib/language-categories";
+import { jobName } from "../lib/job-view";
 import { languageList } from "../lib/name-lists";
 import { entitlementsFor } from "../lib/plans";
 import { CONTENT_TYPES, isContentType, stillWithoutAccess } from "../lib/resource-kinds";
@@ -72,7 +77,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const panel = { ...measured, noAccess: stillWithoutAccess(measured.noAccess, granted) };
   // The shop's zone first (Shopify may spell it differently from Intl), then Intl's list.
   const zones = [...new Set([...(panel.config ? [panel.config.timeZone] : []), ...(shopTimeZone ? [shopTimeZone] : []), "UTC", ...Intl.supportedValuesOf("timeZone")])];
+  // From a job the schedule stopped for a budget or the main language (`?job=<id>`): the way back, once fixed.
+  const back = await backToJob({ shopId: shop.id, billing, jobId: new URL(request.url).searchParams.get("job"), target: "/app/settings/automatic" });
   return {
+    backToJob: back,
     // The translation services in use (posted with "allow") and the ones the texts name.
     engines: { configured: engineConsentTokens(getConfig()), text: textConsentTokens(settings) },
     entitled: billing.entitlements.smartAuto,
@@ -248,6 +256,13 @@ export default function SmartAutomatic() {
   const panel = data.panel;
   const config = panel.config;
   const languageNames = new Map(data.languages.map((l) => [l.locale, i18n.language(l.locale, l.name)]));
+  // A job the schedule stopped for a budget or the main language, its cause fixed: the way back to it at
+  // the top of the card that fixed it (`?job=…#smart-budgets`, `#smart-scope`), as the page's one primary button.
+  const back = data.backToJob ? (
+    <BackToJob jobId={data.backToJob.id} name={jobName(i18n, data.backToJob, Object.fromEntries(data.languages.map((l) => [l.locale, l.name])))} />
+  ) : null;
+  const backIn = (card: "smart-scope" | "smart-budgets") => (back && (data.backToJob?.group === "PRIMARY_LANGUAGE" ? "smart-scope" : "smart-budgets") === card ? back : null);
+  const heroVariant = back ? ("secondary" as const) : ("primary" as const);
 
   const settingsFetcher = useFetcher<typeof action>();
   const actionFetcher = useFetcher<typeof action>();
@@ -444,20 +459,20 @@ export default function SmartAutomatic() {
   ) : panel.status.state === "off" ? (
     canTurnOn ? (
       notConfigured ? (
-        <s-button variant="primary" onClick={turnOnSubmit} {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
+        <s-button variant={heroVariant} onClick={turnOnSubmit} {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
           {t("automatic.action.turnOnWithThese")}
         </s-button>
       ) : (
-        <s-button variant="primary" onClick={() => act("turn-on", data.basicOn ? { replaceBasic: "true" } : {})} {...loading("turn-on")}>
+        <s-button variant={heroVariant} onClick={() => act("turn-on", data.basicOn ? { replaceBasic: "true" } : {})} {...loading("turn-on")}>
           {t("automatic.action.turnOn")}
         </s-button>
       )
     ) : !data.consent ? (
-      grantButton("primary")
+      grantButton(heroVariant)
     ) : null
   ) : panel.status.state === "paused" ? (
     <>
-      <s-button variant="primary" onClick={() => act("resume")} {...loading("resume")}>
+      <s-button variant={heroVariant} onClick={() => act("resume")} {...loading("resume")}>
         {t("automatic.action.resume")}
       </s-button>
       <s-button onClick={() => act("turn-off")} {...loading("turn-off")}>
@@ -466,7 +481,7 @@ export default function SmartAutomatic() {
     </>
   ) : panel.status.state === "on" ? (
     <>
-      <s-button variant="primary" onClick={() => act("check-now", { key: data.checkKey })} {...loading("check-now")}>
+      <s-button variant={heroVariant} onClick={() => act("check-now", { key: data.checkKey })} {...loading("check-now")}>
         {t("automatic.action.checkNow")}
       </s-button>
       <s-button onClick={() => act("pause")} {...loading("pause")}>
@@ -589,10 +604,10 @@ export default function SmartAutomatic() {
                     consentNote ? (
                       <s-stack direction="block" gap="small-200">
                         {consentNote}
-                        <s-stack direction="inline">{grantButton("primary")}</s-stack>
+                        <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
                       </s-stack>
                     ) : (
-                      <s-stack direction="inline">{grantButton("primary")}</s-stack>
+                      <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
                     )
                   }
                 />
@@ -863,6 +878,7 @@ export default function SmartAutomatic() {
 
             {/* What: languages, the content by area (as the Content page groups it), and the fields; three labels at one level. */}
             <SettingCard id="smart-scope" icon="language-translate" heading={t("automatic.section.scope")} lead={t("automatic.section.scope.lead")}>
+              {backIn("smart-scope")}
               <s-stack direction="block" gap="small-200">
                 <h3 style={SUB_HEADING}>{t("automatic.languages.label")}</h3>
                 <s-choice-list name="locale" label={t("automatic.languages.label")} labelAccessibilityVisibility="exclusive" multiple disabled={readOnly}>
@@ -987,6 +1003,7 @@ export default function SmartAutomatic() {
 
             {/* Budgets: optional caps below the plan's AI characters. */}
             <SettingCard id="smart-budgets" icon="gauge" heading={t("automatic.section.budgets")} lead={t("automatic.section.budgets.lead")}>
+              {backIn("smart-budgets")}
               <s-query-container>
                 <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, 1fr" gap="base">
                   <s-number-field

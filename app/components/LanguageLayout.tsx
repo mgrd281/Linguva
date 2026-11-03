@@ -24,8 +24,8 @@ export function languageErrorText(i18n: I18n, code: string): string {
  * there. Null for a gate fixed elsewhere (the plan, the jobs, the installation).
  */
 export function settingsLinkFor(code: string): string | null {
-  if (code === "CONSENT_REQUIRED" || code === "ENGINE_CONSENT") return "/app/settings";
-  if (code === "OWN_KEY_MISSING" || code === "OWN_KEY_REFUSED") return "/app/settings#settings-keys";
+  if (code === "CONSENT_REQUIRED" || code === "ENGINE_CONSENT") return "/app/settings?section=ai";
+  if (code === "OWN_KEY_MISSING" || code === "OWN_KEY_REFUSED") return "/app/settings?section=keys";
   return null;
 }
 

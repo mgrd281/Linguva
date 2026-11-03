@@ -640,13 +640,13 @@ export function hasFix(group: StopGroup): group is FixGroup {
   return (FIX_GROUPS as readonly string[]).includes(group);
 }
 
-/** The place a fix text names ({section}): where the step's button lands (until the Settings redesign names it settings.section.keys, the keys card's name). */
+/** The place a fix text names ({section}): where the step's button lands (the Settings section the button opens). */
 const FIX_SECTION: Readonly<Partial<Record<FixGroup, MessageKey>>> = {
   CONSENT_REQUIRED: "settings.ai.heading",
   ENGINE_CONSENT: "settings.ai.heading",
-  OWN_KEY_MISSING: "settings.glance.keys.label",
-  OWN_KEY_QUOTA: "settings.glance.keys.label",
-  OWN_KEY_AUTH: "settings.glance.keys.label",
+  OWN_KEY_MISSING: "settings.section.keys",
+  OWN_KEY_QUOTA: "settings.section.keys",
+  OWN_KEY_AUTH: "settings.section.keys",
   PRIMARY_LANGUAGE: "automatic.section.scope",
 };
 

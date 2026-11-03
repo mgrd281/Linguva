@@ -283,12 +283,12 @@ export function ResourceTranslationEditor() {
             {actionError.code === "ENGINE_CONSENT" ? (
               <>
                 {" "}
-                <s-link href="/app/settings">{t("common.nav.settings")}</s-link>
+                <s-link href="/app/settings?section=ai">{t("common.nav.settings")}</s-link>
               </>
             ) : isOwnKeyError(actionError.code) ? (
               <>
                 {" "}
-                <s-link href="/app/settings#settings-keys">{t("common.nav.settings")}</s-link>
+                <s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>
               </>
             ) : null}
           </s-paragraph>
@@ -354,7 +354,7 @@ export function ResourceTranslationEditor() {
           {data.ai.ownKey && !data.ai.available ? (
             // Own key plan without a usable key: what is missing, and where to add it.
             <s-text color="subdued">
-              {ownKeyHint(i18n, data.ai.ownKey.unavailable)} <s-link href="/app/settings#settings-keys">{t("common.nav.settings")}</s-link>
+              {ownKeyHint(i18n, data.ai.ownKey.unavailable)} <s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>
             </s-text>
           ) : (
             <s-text color="subdued">

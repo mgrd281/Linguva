@@ -144,7 +144,7 @@ export async function loadOverview(
       label: { key: "overview.checklist.consent.label" },
       detail: { key: "overview.checklist.consent.detail" },
       done: consent,
-      href: "/app/settings",
+      href: "/app/settings?section=ai",
       action: { key: "overview.checklist.consent.action" },
     },
     {

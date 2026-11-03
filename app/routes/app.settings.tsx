@@ -1,22 +1,32 @@
 /**
- * Settings: what Linguva may do and how it translates. At a glance first
- * (each state with its reason, a tile per card), then the cards in the
- * order a merchant needs them: the AI permission while it is missing, how
- * changes are translated (nothing, shortly after saving, on a schedule),
- * publishing, the form of address, translation memory, the permission once
- * given, and the tools. On the Own key plan (or with saved keys) the
- * merchant's translation keys come right before the permission, wherever
- * it is. Every state says what really happens: "On" only when the work
- * runs (plan, installation, permission, pause, languages).
+ * Settings: what Linguva may do and how it translates, in sections shown one
+ * at a time (`?section=<key>`). Under the heading the status row: all set
+ * up, or the one thing that needs the merchant (a language, a key, the AI
+ * permission, translating changes paused or waiting) with its fix. On a
+ * wide container a nav card lists the sections beside the chosen one (none
+ * chosen: the first that needs the merchant, else "Translating changes");
+ * on a phone the sections are a list of rows, and a chosen one shows alone
+ * under a back row. The sections: how changes are translated (nothing,
+ * shortly after saving, on a schedule), publishing, how AI writes,
+ * translation memory; then (Own key plan, or saved keys) the merchant's
+ * keys right before the AI permission, the plan with this month's AI
+ * characters, and the tools. Every state says what really happens: "On"
+ * only when the work runs (plan, installation, permission, pause, languages).
+ *
+ * Every section stays mounted (only the chosen one is shown), so a choice
+ * being made or unsaved text survives a switch, and switching never loads
+ * the page's data again. A job stopped for the permission or a key links
+ * here with `?job=<id>`; once its cause is fixed, the section leads back.
  */
-import { useRef, useState, type ReactNode } from "react";
-import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
+import { useFetcher, useLoaderData, useLocation, useNavigate, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { aiLimitsFor, shopBilling } from "../.server/billing/billing";
 import { checkEngineKey, ownKeysView, removeEngineKey, saveEngineKey, type EngineKeyErrorCode } from "../.server/credentials/service";
 import { allowedTargetLocales } from "../.server/billing/subscription";
 import { countTerms } from "../.server/glossary/glossary";
+import { backToJob } from "../.server/jobs/back-to-job";
 import { getConfig } from "../.server/lib/config";
 import { prisma } from "../.server/lib/db";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
@@ -44,27 +54,30 @@ import { loadSmartPanel, smartContext } from "../.server/smart/panel";
 import { settleAfterConsent } from "../.server/smart/runs";
 import { getMonthlyUsage, nextPeriodStart, periodKey } from "../.server/usage/usage-ledger";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
-import { NoLanguagesCard } from "../components/ContentTiles";
+import { BackToJob } from "../components/jobs/BackToJob";
 import { KEYS_CARD, keysState, ownKeyCostNote, OwnKeysCard, type KeyFetcher } from "../components/OwnKeysCard";
 import { Flag } from "../components/Flag";
-import { BIG_HEADING, PLAIN_LIST } from "../components/LanguageLayout";
+import { BIG_HEADING, Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
+import { STAT, SUB_HEADING } from "../components/plan/styles";
+import { ProgressBar } from "../components/ProgressBar";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
+import { NARROW_ONLY, SectionList, SectionNav, StatusRow, WIDE_ONLY, type SectionEntry, type StatusView } from "../components/SettingsNav";
 import {
   Actions,
   FactList,
   focusById,
-  focusCard,
-  Glance,
+  focusSection,
   InlineNotice,
   LinkTiles,
   LockLine,
   More,
   OptionCard,
   OptionGrid,
-  SettingCard,
+  SETTING_NAME,
+  SettingSection,
+  StateBadge,
   StateLine,
   useFreshResult,
-  type GlanceTile,
   type SettingState,
 } from "../components/SettingsParts";
 import { scheduleSummary, smartErrorText, SmartStateBanner, smartToast } from "../components/SmartAutoCard";
@@ -76,14 +89,27 @@ import { consentLead, enginesText, isDeepLOnly, orderTexts, processorsText } fro
 import { ENGINE_NAMES, engineOfToken, isEngineId, type ConsentToken, type EngineId } from "../lib/engines";
 import { localeCountry } from "../lib/flags";
 import { formalityPronouns, supportsFormality } from "../lib/formality";
+import type { IconName } from "../lib/icons";
+import { jobName } from "../lib/job-view";
 import { languageList } from "../lib/name-lists";
 import { isOwnKeyCode, usableOwnKey } from "../lib/own-keys";
 import { entitlementsFor, TRIAL_AI_CHARS } from "../lib/plans";
-import { usagePercent } from "../lib/plan-view";
+import { planName, usagePercent } from "../lib/plan-view";
 import { usageLevel } from "../lib/usage";
+
+/** The sections in the nav's order: how Linguva translates, then what it may use (keys right before the permission). */
+const SECTION_KEYS = ["changes", "publish", "style", "memory", "keys", "ai", "plan", "tools"] as const;
+type SectionKey = (typeof SECTION_KEYS)[number];
+/** The nav's first group; a divider, then the rest. */
+const FIRST_GROUP: readonly SectionKey[] = ["changes", "publish", "style", "memory"];
+const isSectionKey = (value: string | null | undefined): value is SectionKey => (SECTION_KEYS as readonly string[]).includes(value ?? "");
+/** A section's element id ("settings-keys" is the keys card's KEYS_CARD). */
+const sectionId = (key: SectionKey) => `settings-${key}`;
+const sectionHref = (key: SectionKey) => `/app/settings?section=${key}`;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
+  const url = new URL(request.url);
   // One clock for the month, its renewal and the dates shown.
   const now = new Date();
   const [settings, locales, billing, smartConfig, glossaryTerms] = await Promise.all([
@@ -115,6 +141,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Azure or Google alone serve every language without a form of address, too. The provider is
   // opened only for the engines' language lists and dropped right after (never in the page's data).
   const { servedBy, noFormality } = await formalityEngines((await openShopTranslation(shop.id, billing, { settings })).provider, targets, text.map(engineOfToken));
+  // The Own key plan's keys (summaries: never a key, hints of four characters): on the plan, with a
+  // pending change to it, or saved under another plan (to remove them). Null for every other shop.
+  const ownKeys = await ownKeysView(shop.id, billing);
+  // From a job stopped for the permission or a key (`?section=ai|keys&job=<id>`): the way back, once its
+  // cause is fixed. Only a FAILED job of this shop whose cause this section fixes; never breaks the page.
+  const section = url.searchParams.get("section");
+  const fixSection = section === "ai" || (section === "keys" && ownKeys) ? section : null;
+  const back = fixSection ? await backToJob({ shopId: shop.id, billing, jobId: url.searchParams.get("job"), target: `/app/settings?section=${fixSection}`, now }) : null;
   return {
     engines: {
       configured,
@@ -164,10 +198,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     resetsOn: (trialRise ?? nextMonth).toISOString(),
     used: await getMonthlyUsage(shop.id, period),
     limit: limits.limit,
-    // The Own key plan's keys (summaries: never a key, hints of four characters): on the plan, with a
-    // pending change to it, or saved under another plan (to remove them). Null for every other shop.
-    ownKeys: await ownKeysView(shop.id, billing),
+    // The plan section's name (as the Plan page's hero names it).
+    plan: { state: billing.state, configured: billing.configured, handle: billing.subscription?.planHandle ?? null },
+    ownKeys,
+    backToJob: back && fixSection ? { ...back, section: fixSection } : null,
   };
+};
+
+/**
+ * Choosing another section changes only `?section`: every section is already on the page, so the
+ * data isn't loaded again. Anything else (an action, another `job`, a reload) loads as usual.
+ */
+export const shouldRevalidate = ({ currentUrl, nextUrl, formMethod, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) => {
+  if (formMethod || currentUrl.pathname !== nextUrl.pathname || currentUrl.search === nextUrl.search) return defaultShouldRevalidate;
+  const rest = (url: URL) => {
+    const params = new URLSearchParams(url.search);
+    params.delete("section");
+    params.sort();
+    return params.toString();
+  };
+  return rest(currentUrl) === rest(nextUrl) ? false : defaultShouldRevalidate;
 };
 
 /** A key form's failure: its code, the engine only when it was a valid id, and the wait (never the key). */
@@ -300,10 +350,12 @@ const PAUSE_SHORT: Record<string, string> = {
   PRIMARY_LANGUAGE: "PRIMARY_LANGUAGE",
 };
 
-/** The pages beside the settings that aren't in the navigation (the glossary and memory open from their cards). */
+/** The pages beside the settings that aren't in the navigation (the glossary and memory also open from their sections). */
 const TOOLS = [
+  { href: "/app/glossary", icon: "book-open", label: "common.nav.glossary", detail: "settings.tools.glossary.detail" },
   { href: "/app/languages", icon: "language", label: "common.languages", detail: "settings.tools.languages.detail" },
   { href: "/app/markets", icon: "globe", label: "settings.tools.markets.label", detail: "settings.tools.markets.detail" },
+  { href: "/app/memory", icon: "database", label: "common.nav.memory", detail: "settings.tools.memory.detail" },
   { href: "/app/coverage", icon: "chart-donut", label: "settings.tools.coverage.label", detail: "settings.tools.coverage.detail" },
   { href: "/app/translations", icon: "transfer", label: "transfer.page.heading", detail: "settings.tools.transfer.detail" },
 ] as const;
@@ -342,6 +394,9 @@ export default function Settings() {
   const data = useLoaderData<typeof loader>();
   const i18n = useI18n();
   const { t } = i18n;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const consentFetcher = useFetcher<typeof action>();
   const modeFetcher = useFetcher<typeof action>();
   const memoryFetcher = useFetcher<typeof action>();
@@ -372,6 +427,40 @@ export default function Settings() {
     consentFetcher.data && "granted" in consentFetcher.data ? (consentFetcher.data.granted ? t("settings.ai.savedAllowed") : t("settings.ai.savedRevoked")) : null,
   );
 
+  const hasLanguages = data.style.languages.length > 0;
+  // The page's one primary button is the next step that is needed: a language, then (Own key plan)
+  // a working key, then the permission.
+  const noKey = ownKeyMissing(data);
+  const consentPrimary = hasLanguages && !noKey && !data.consent;
+  const status = pageStatus(data, i18n);
+
+  // The sections this store has (its keys only on the Own key plan or with saved keys), the one the
+  // address asks for, and the one shown. Without one asked for, the first that needs the merchant,
+  // decided when the address was opened: a key saved or a permission given doesn't move the page.
+  const available = SECTION_KEYS.filter((key) => key !== "keys" || data.ownKeys);
+  const asked = searchParams.get("section");
+  const requested = isSectionKey(asked) && available.includes(asked) ? asked : null;
+  const firstNeeded = status.section ?? "changes";
+  const [opened, setOpened] = useState({ key: location.key, section: firstNeeded });
+  if (opened.key !== location.key) setOpened({ key: location.key, section: firstNeeded });
+  const openedSection = opened.key === location.key ? opened.section : firstNeeded;
+  const current: SectionKey = requested ?? (available.includes(openedSection) ? openedSection : "changes");
+  const jobParam = searchParams.get("job");
+
+  // Another section chosen: its heading takes focus (the new address starts at the top of the page).
+  const shown = useRef(current);
+  useEffect(() => {
+    if (shown.current === current) return;
+    shown.current = current;
+    focusSection(sectionId(current));
+  }, [current]);
+  // The cards' old addresses (/app/settings#settings-keys) open their section.
+  const hasKeys = Boolean(data.ownKeys);
+  useEffect(() => {
+    const key = /^#settings-([a-z]+)$/.exec(location.hash)?.[1];
+    if (!requested && isSectionKey(key) && (key !== "keys" || hasKeys)) navigate(sectionHref(key), { replace: true });
+  }, [location.hash, requested, hasKeys, navigate]);
+
   // After a switch, focus moves to the choice that is now current.
   useFreshResult(memoryFetcher, (result) => {
     if (result && "reuse" in result) focusById(result.reuse ? "settings-memory-machine" : "settings-memory-approved");
@@ -385,45 +474,93 @@ export default function Settings() {
   useFreshResult(smartFetcher, (result) => {
     if (result?.ok && (result.done === "on" || result.done === "off")) focusById(result.done === "on" ? "settings-changes-smart" : "settings-changes-manual");
   });
-  // Permission given: on to the next step, the card that is now where the permission was. More services
-  // allowed, or permission withdrawn: back to the permission card (it stays, or is now first).
+  // Permission given: on to the next step, translating changes (from a stopped job: here, where the
+  // way back to it now shows). More services allowed, or permission withdrawn: the permission's heading.
   useFreshResult(consentFetcher, (result) => {
-    if (result && "granted" in result) focusCard(result.granted && !result.extended ? "settings-changes" : "settings-ai");
+    if (!(result && "granted" in result)) return;
+    if (!result.granted || result.extended) return focusSection(sectionId("ai"));
+    if (jobParam || current === "changes") return focusSection(sectionId(current));
+    navigate(sectionHref("changes"));
   });
 
-  const hasLanguages = data.style.languages.length > 0;
-  // The page's one primary button is the next step that is needed: a language, then (Own key plan)
-  // a working key, then the permission.
-  const noKey = ownKeyMissing(data);
-  const consentPrimary = hasLanguages && !noKey && !data.consent;
+  // Back to the job that stopped for the permission or a key, once its cause is fixed (the loader's check).
+  const back =
+    data.backToJob && data.backToJob.id === jobParam ? (
+      <BackToJob jobId={data.backToJob.id} name={jobName(i18n, data.backToJob, Object.fromEntries(data.style.languages.map((l) => [l.locale, l.name])))} />
+    ) : null;
 
-  const glance = glanceTiles(data, i18n);
-  const permission = <PermissionCard data={data} i18n={i18n} fetcher={consentFetcher} primary={consentPrimary} />;
-  // Right before the permission, wherever it is: the permission covers the keys' services. Its key
-  // keeps it the same card when it moves (the typed key's form, its result's toast and focus).
-  const keys = data.ownKeys ? <OwnKeysCard key={KEYS_CARD} data={data.ownKeys} i18n={i18n} fetchers={keyFetchers} primary={hasLanguages && noKey} /> : null;
+  // Right before the permission: the permission covers the keys' services.
+  const sections: Array<[SectionKey, ReactNode]> = [
+    ["changes", <ChangesCard key="changes" data={data} i18n={i18n} autoFetcher={autoFetcher} smartFetcher={smartFetcher} consentFetcher={consentFetcher} />],
+    ["publish", <PublishingCard key="publish" data={data} i18n={i18n} fetcher={modeFetcher} />],
+    ["style", <StyleCard key="style" data={data} i18n={i18n} fetcher={styleFetcher} />],
+    ["memory", <MemoryCard key="memory" data={data} i18n={i18n} fetcher={memoryFetcher} />],
+    ...(data.ownKeys
+      ? ([
+          [
+            "keys",
+            <OwnKeysCard key={KEYS_CARD} data={data.ownKeys} i18n={i18n} fetchers={keyFetchers} primary={hasLanguages && noKey} top={data.backToJob?.section === "keys" ? back : null} />,
+          ],
+        ] as Array<[SectionKey, ReactNode]>)
+      : []),
+    ["ai", <PermissionCard key="ai" data={data} i18n={i18n} fetcher={consentFetcher} primary={consentPrimary} top={data.backToJob?.section === "ai" ? back : null} />],
+    ["plan", <PlanCard key="plan" data={data} i18n={i18n} />],
+    ["tools", <ToolsCard key="tools" i18n={i18n} />],
+  ];
+
+  const texts = sectionTexts(data, i18n);
+  const entry = (key: SectionKey): SectionEntry => ({ key, href: sectionHref(key), ...texts[key] });
+  const groups = [available.filter((key) => FIRST_GROUP.includes(key)).map(entry), available.filter((key) => !FIRST_GROUP.includes(key)).map(entry)];
+
+  // The status row's fix: the page's primary button where it is the next step. Where its section is
+  // shown beside it (a wide page), that section's own button is the way, so only the phone list has it.
+  const fix = status.action;
+  const fixButton = fix ? (
+    <s-button variant={back ? "secondary" : "primary"} href={fix.href} {...(fix.external ? { target: "_top" as const } : {})}>
+      {fix.label}
+    </s-button>
+  ) : null;
+  const statusAction = !fixButton ? null : status.section !== current ? fixButton : requested ? null : <s-box display={NARROW_ONLY}>{fixButton}</s-box>;
 
   return (
     <s-page heading={t("common.nav.settings")}>
-      <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-500">
-          <h1 style={BIG_HEADING}>{t("common.nav.settings")}</h1>
-          <s-text color="subdued">{t("settings.subtitle")}</s-text>
+      <s-query-container>
+        <s-stack direction="block" gap="base">
+          {/* A chosen section on a phone: the way back to the list, then the section alone. */}
+          {requested ? (
+            <s-box display={NARROW_ONLY}>
+              <Breadcrumbs i18n={i18n} trail={[{ href: "/app/settings", label: t("common.nav.settings") }]} current={texts[requested].name} touch />
+            </s-box>
+          ) : null}
+          <s-box display={requested ? WIDE_ONLY : "auto"}>
+            <s-stack direction="block" gap="base">
+              <s-stack direction="block" gap="small-500">
+                <h1 style={BIG_HEADING}>{t("common.nav.settings")}</h1>
+                <s-text color="subdued">{t("settings.subtitle")}</s-text>
+              </s-stack>
+              <StatusRow id="settings-status" status={status} action={statusAction} />
+            </s-stack>
+          </s-box>
+          <s-grid gridTemplateColumns="@container (inline-size > 640px) 260px 1fr, 1fr" gap="base" alignItems="start">
+            <s-box display={WIDE_ONLY}>
+              <SectionNav label={t("settings.section.nav")} groups={groups} current={current} />
+            </s-box>
+            {requested ? null : (
+              <s-box display={NARROW_ONLY}>
+                <SectionList label={t("settings.section.nav")} groups={groups} />
+              </s-box>
+            )}
+            {/* Every section stays on the page; only the chosen one is shown (a phone without one shows the list). */}
+            <s-box display={requested ? "auto" : WIDE_ONLY} minInlineSize="0">
+              {sections.map(([key, node]) => (
+                <div key={key} hidden={key !== current}>
+                  {node}
+                </div>
+              ))}
+            </s-box>
+          </s-grid>
         </s-stack>
-        {hasLanguages ? null : <NoLanguagesCard i18n={i18n} body={t("settings.noLanguages.body")} />}
-        <Glance label={t("settings.glance")} tiles={glance} />
-        {data.consent ? null : keys}
-        {data.consent ? null : permission}
-        <ChangesCard data={data} i18n={i18n} autoFetcher={autoFetcher} smartFetcher={smartFetcher} consentFetcher={consentFetcher} />
-        <PublishingCard data={data} i18n={i18n} fetcher={modeFetcher} />
-        <StyleCard data={data} i18n={i18n} fetcher={styleFetcher} />
-        <MemoryCard data={data} i18n={i18n} fetcher={memoryFetcher} />
-        {data.consent ? keys : null}
-        {data.consent ? permission : null}
-        <SettingCard id="settings-tools" icon="wrench" heading={t("settings.tools.heading")}>
-          <LinkTiles label={t("settings.tools.heading")} links={TOOLS.map((tool) => ({ href: tool.href, icon: tool.icon, name: t(tool.label), detail: t(tool.detail) }))} />
-        </SettingCard>
-      </s-stack>
+      </s-query-container>
     </s-page>
   );
 }
@@ -446,114 +583,208 @@ function hasFormalityChoice(data: Data, locale: string): boolean {
   return supportsFormality(locale) && !(engine && data.engines.noFormality.includes(engine));
 }
 
-// ─── At a glance ──────────────────────────────────────────────────────────────
+// ─── The sections in the nav and the status row ───────────────────────────────
 
-/** Six tiles: each state with its reason or value, never a generic sentence. */
-function glanceTiles(data: Data, i18n: I18n): GlanceTile[] {
+/** A section's name, icon and state: one line for the wide nav, up to two for the phone list. */
+interface SectionText {
+  name: string;
+  icon: IconName;
+  summary: string;
+  detail: string;
+}
+
+/** The form of address in a few words: DeepL decides, formal, informal, per language, or no language yet. */
+function addressSummary(data: Data, i18n: I18n): string {
   const { t } = i18n;
-  const changes = changesView(data, i18n);
-  const publish = effectivePublishMode({ mode: data.publishMode, inPlan: data.autoPublishInPlan });
-  const publishLine =
-    data.publishMode === "AUTO_PUBLISH" && !data.autoPublishInPlan
-      ? t("settings.glance.publish.notInPlan")
-      : publish === "AUTO_PUBLISH"
-        ? t("settings.glance.publish.auto")
-        : t("settings.glance.publish.review");
   // With several engines, only languages DeepL serves have a choice.
   const formalities = data.style.languages.filter((l) => hasFormalityChoice(data, l.locale)).map((l) => l.formality);
-  const address = !data.style.languages.length
-    ? t("settings.glance.style.noLanguage")
-    : data.engines.servedBy && formalities.length === 0
-      ? t("settings.style.noChoice")
-      : formalities.every((f) => f === "default")
-      ? t("settings.style.deeplDecides")
-      : formalities.every((f) => f === "more")
-        ? t("settings.style.formal")
-        : formalities.every((f) => f === "less")
-          ? t("settings.style.informal")
-          : t("settings.glance.style.mixed");
+  if (!data.style.languages.length) return t("settings.summary.style.noLanguage");
+  if (data.engines.servedBy && formalities.length === 0) return t("settings.style.noChoice");
+  if (formalities.every((f) => f === "default")) return t("settings.style.deeplDecides");
+  if (formalities.every((f) => f === "more")) return t("settings.style.formal");
+  if (formalities.every((f) => f === "less")) return t("settings.style.informal");
+  return t("settings.summary.style.mixed");
+}
+
+/** The keys in a few words: they work, one needs attention, none yet, or unused on this plan. */
+function keysSummary(data: Data, i18n: I18n): string {
+  const { t } = i18n;
+  const own = data.ownKeys;
+  if (!own) return "";
+  if (own.access === "off") return t("settings.keys.offPlan.heading");
+  if (own.keys.some((k) => k.status !== "OK")) return t("settings.summary.keys.problem");
+  const usable = own.keys.filter(usableOwnKey).length;
+  return usable ? t("settings.summary.keys.ok", { count: usable }) : t("settings.summary.keys.none");
+}
+
+/** The plan's name as the Plan page's hero names it ("Pro", "Owner access", "No plan chosen"). */
+function planLabel(data: Data, i18n: I18n): string {
+  const { t } = i18n;
+  if (data.plan.state === "COMPLIMENTARY") return t("plan.hero.name.complimentary");
+  if (!data.plan.configured) return t("plan.hero.name.unconfigured");
+  if (data.plan.state === "UNKNOWN") return t("plan.hero.name.unknown");
+  if (data.plan.state === "ACTIVE" && data.plan.handle) return planName(data.plan.handle);
+  return t("plan.hero.name.none");
+}
+
+/** "Pro · <1 % used": the plan and how much of this month's AI characters is used (Own key: no allowance). */
+function planSummary(data: Data, i18n: I18n): string {
+  const name = planLabel(data, i18n);
+  if (data.ownKeys?.plan) return name;
+  const usage = usagePercent(data.used, data.limit);
+  return `${name} · ${i18n.t("settings.summary.plan.used", { percent: usage.tiny ? i18n.t("settings.usage.tiny") : i18n.percent(usage.percent) })}`;
+}
+
+function sectionTexts(data: Data, i18n: I18n): Record<SectionKey, SectionText> {
+  const { t } = i18n;
+  const changes = changesView(data, i18n);
+  const way = changes.mode === "basic" ? t("settings.changes.basic.title") : changes.mode === "smart" ? t("settings.changes.smart.title") : t("settings.changes.manual.title");
+  // Paused, stopped or waiting: said in the nav too.
+  const attention = changes.badge.tone === "warning" || changes.badge.tone === "critical";
+  const publish = effectivePublishMode({ mode: data.publishMode, inPlan: data.autoPublishInPlan });
+  const publishTitle = publish === "AUTO_PUBLISH" ? t("settings.publish.auto.title") : t("settings.publish.review.title");
+  const publishLine =
+    data.publishMode === "AUTO_PUBLISH" && !data.autoPublishInPlan
+      ? t("settings.summary.publish.notInPlan")
+      : publish === "AUTO_PUBLISH"
+        ? t("settings.summary.publish.auto")
+        : t("settings.summary.publish.review");
+  const address = addressSummary(data, i18n);
+  const memory = data.reuseMachineMemory ? t("settings.memory.machine.title") : t("settings.memory.approved.title");
+  const keys = keysSummary(data, i18n);
+  const tokens = data.engines.text;
+  const ai = data.consent ? t("common.state.allowed") : t("settings.ai.notAllowed");
+  // Allowed: who translates (one service by its legal name, several by their names).
+  const aiDetail = !data.consent ? t("settings.summary.ai.missing") : tokens.length === 1 ? processorsText(i18n, tokens) : tokens.length ? enginesText(i18n, tokens) : ai;
+  const plan = planSummary(data, i18n);
+  const tools = t("settings.summary.tools");
+  return {
+    changes: { name: t("settings.changes.heading"), icon: "settings", summary: attention ? `${way} · ${changes.badge.label}` : way, detail: changes.line },
+    publish: { name: t("settings.publish.heading"), icon: "send", summary: publishTitle, detail: `${publishTitle} · ${publishLine}` },
+    style: {
+      name: t("settings.section.style"),
+      icon: "chat",
+      summary: address,
+      detail: `${address} · ${data.style.storeContext ? t("settings.summary.style.withContext") : t("settings.summary.style.withoutContext")}`,
+    },
+    memory: { name: t("common.nav.memory"), icon: "database", summary: memory, detail: memory },
+    keys: { name: t("settings.section.keys"), icon: "key", summary: keys, detail: keys },
+    ai: { name: t("settings.ai.heading"), icon: "shield-check-mark", summary: ai, detail: aiDetail },
+    plan: { name: t("settings.section.plan"), icon: "gauge", summary: plan, detail: plan },
+    tools: { name: t("settings.tools.heading"), icon: "wrench", summary: tools, detail: tools },
+  };
+}
+
+/** The status row with the section that fixes what it names (none: all set up, or a language in Shopify). */
+interface PageStatus extends StatusView {
+  section: SectionKey | null;
+  action: { label: string; href: string; external?: boolean } | null;
+}
+
+/** The one thing that needs the merchant, in the order of the page's next steps: a language, a key, the permission, translating changes. */
+function pageStatus(data: Data, i18n: I18n): PageStatus {
+  const { t } = i18n;
+  if (!data.style.languages.length) {
+    return {
+      tone: "warning",
+      title: t("content.noLanguages.heading"),
+      detail: t("settings.noLanguages.body"),
+      section: null,
+      action: { label: t("resources.noLanguages.open"), href: "shopify://admin/settings/languages", external: true },
+    };
+  }
+  const own = data.ownKeys?.plan ? data.ownKeys : null;
+  if (own?.keys.some((k) => k.status !== "OK")) {
+    const state = keysState(i18n, own.keys);
+    return {
+      tone: state.tone === "critical" ? "critical" : "warning",
+      title: t("settings.summary.keys.problem"),
+      detail: state.label,
+      section: "keys",
+      action: { label: t("settings.status.keys.action"), href: sectionHref("keys") },
+    };
+  }
+  if (ownKeyMissing(data)) {
+    return {
+      tone: "warning",
+      title: t("overview.checklist.ownKey.label"),
+      detail: t("settings.status.noKey"),
+      section: "keys",
+      action: { label: t("overview.checklist.ownKey.action"), href: sectionHref("keys") },
+    };
+  }
+  if (!data.consent) {
+    return {
+      tone: "warning",
+      title: t("settings.status.consent"),
+      detail: t("settings.summary.ai.missing"),
+      section: "ai",
+      action: { label: t("settings.status.consent.action"), href: sectionHref("ai") },
+    };
+  }
+  const changes = changesView(data, i18n);
+  if (changes.badge.tone === "warning" || changes.badge.tone === "critical") {
+    return {
+      tone: changes.badge.tone,
+      title: t("settings.changes.heading"),
+      badge: changes.badge,
+      detail: changes.line,
+      section: "changes",
+      action: { label: t("settings.status.changes.action"), href: sectionHref("changes") },
+    };
+  }
+  return { tone: "success", title: t("settings.status.ok"), section: null, action: null };
+}
+
+// ─── Plan and tools ───────────────────────────────────────────────────────────
+
+/** The plan, this month's AI characters of its allowance and when new ones come (Own key: what went through the keys), and the way to the Plan page. */
+function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
+  const { t } = i18n;
+  const own = data.ownKeys?.plan ? data.ownKeys : null;
   const usage = usagePercent(data.used, data.limit);
   const level = usageLevel(data.used, data.limit);
-  // Own key plan: no Linguva allowance to show; the keys take the tile's place (still six tiles).
-  const own = data.ownKeys?.plan ? data.ownKeys : null;
-  const ownProblem = own?.keys.some((k) => k.status !== "OK");
-  const ownUsable = own?.keys.filter(usableOwnKey).length ?? 0;
-  const keysTile: GlanceTile | null = own
-    ? {
-        key: "keys",
-        target: KEYS_CARD,
-        icon: "connect",
-        label: t("settings.glance.keys.label"),
-        short: t("settings.glance.short.keys"),
-        state: keysState(i18n, own.keys),
-        line: ownProblem ? t("settings.glance.keys.problem") : ownUsable ? t("settings.glance.keys.ok", { count: ownUsable }) : t("settings.glance.keys.none"),
-      }
-    : null;
-  return [
-    {
-      key: "ai",
-      target: "settings-ai",
-      icon: "shield-check-mark",
-      label: t("settings.ai.heading"),
-      short: t("settings.glance.short.ai"),
-      state: data.consent ? { label: t("common.state.allowed"), icon: "check-circle", tone: "success" } : { label: t("settings.ai.notAllowed"), icon: "minus-circle", tone: "warning" },
-      line: data.consent && data.consentAt ? t("settings.ai.since", { date: i18n.date(data.consentAt, "long") }) : t("settings.glance.ai.missing"),
-    },
-    {
-      key: "changes",
-      target: "settings-changes",
-      icon: "automation",
-      label: t("settings.changes.heading"),
-      short: t("settings.glance.short.changes"),
-      state: changes.badge,
-      line: changes.line,
-    },
-    {
-      key: "publish",
-      target: "settings-publish",
-      icon: "send",
-      label: t("settings.publish.heading"),
-      state: publish === "AUTO_PUBLISH" ? { label: t("settings.publish.state.auto"), icon: "bolt", tone: "warning" } : { label: t("settings.publish.state.review"), icon: "eye-check-mark", tone: "success" },
-      line: publishLine,
-    },
-    {
-      key: "style",
-      target: "settings-style",
-      icon: "chat",
-      label: t("settings.style.heading"),
-      state: { label: address, icon: "chat", tone: "neutral" },
-      line: data.style.storeContext ? t("settings.glance.style.withContext") : t("settings.glance.style.withoutContext"),
-    },
-    {
-      key: "memory",
-      target: "settings-memory",
-      icon: "database",
-      label: t("common.nav.memory"),
-      short: t("settings.glance.short.memory"),
-      state: data.reuseMachineMemory
-        ? { label: t("settings.memory.machine.title"), short: t("settings.glance.memory.machineShort"), icon: "wand", tone: "neutral" }
-        : { label: t("settings.memory.approved.title"), icon: "check-circle", tone: "neutral" },
-      line: data.reuseMachineMemory ? t("settings.glance.memory.machine") : t("settings.glance.memory.approved"),
-    },
-    keysTile ?? {
-      key: "usage",
-      href: "/app/plan",
-      icon: "gauge",
-      label: t("settings.usage.short"),
-      figure: {
-        value: usage.tiny ? t("settings.usage.tiny") : i18n.percent(usage.percent),
-        percent: usage.percent,
-        tone: level === "exhausted" ? "critical" : level === "high" ? "warning" : "success",
-        label: t("settings.usage.progress"),
-      },
-      ...(level === "exhausted"
-        ? { state: { label: t("settings.usage.exhausted"), icon: "alert-circle" as const, tone: "critical" as const } }
-        : level === "high"
-          ? { state: { label: t("settings.usage.high"), icon: "alert-triangle" as const, tone: "warning" as const } }
-          : {}),
-      line: t("settings.usage.line", { used: i18n.number(data.used), limit: i18n.number(data.limit), date: i18n.dayMonth(data.resetsOn, data.now) }),
-    },
-  ];
+  const levelState: SettingState | null =
+    level === "exhausted"
+      ? { label: t("settings.usage.exhausted"), icon: "alert-circle", tone: "critical" }
+      : level === "high"
+        ? { label: t("settings.usage.high"), icon: "alert-triangle", tone: "warning" }
+        : null;
+  return (
+    <SettingSection id="settings-plan" heading={t("settings.section.plan")} lead={own ? t("settings.plan.lead.ownKey") : t("settings.plan.lead")}>
+      <s-stack direction="block" gap="small-500">
+        <s-text color="subdued">{t("common.nav.plan")}</s-text>
+        <strong style={STAT}>{planLabel(data, i18n)}</strong>
+      </s-stack>
+      {own ? (
+        <s-text color="subdued">{own.usage.total > 0 ? t("settings.keys.usage", { chars: own.usage.total }) : t("settings.keys.usage.none")}</s-text>
+      ) : (
+        <s-stack direction="block" gap="small-300">
+          <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="center">
+            <span style={SETTING_NAME}>{t("settings.usage.short")}</span>
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              {levelState ? <StateBadge state={levelState} /> : null}
+              <span style={STAT}>{usage.tiny ? t("settings.usage.tiny") : i18n.percent(usage.percent)}</span>
+            </s-stack>
+          </s-grid>
+          <ProgressBar value={usage.percent} label={t("settings.usage.progress")} tone={level === "exhausted" ? "critical" : level === "high" ? "warning" : "success"} />
+          <s-text color="subdued">{t("settings.usage.line", { used: i18n.number(data.used), limit: i18n.number(data.limit), date: i18n.dayMonth(data.resetsOn, data.now) })}</s-text>
+        </s-stack>
+      )}
+      <s-stack direction="inline">
+        <s-button href="/app/plan">{t("common.action.seePlans")}</s-button>
+      </s-stack>
+    </SettingSection>
+  );
+}
+
+function ToolsCard({ i18n }: { i18n: I18n }) {
+  const { t } = i18n;
+  return (
+    <SettingSection id="settings-tools" heading={t("settings.tools.heading")} lead={t("settings.tools.lead")}>
+      <LinkTiles label={t("settings.tools.heading")} links={TOOLS.map((tool) => ({ href: tool.href, icon: tool.icon, name: t(tool.label), detail: t(tool.detail) }))} />
+    </SettingSection>
+  );
 }
 
 // ─── Translating changes ──────────────────────────────────────────────────────
@@ -569,13 +800,11 @@ function ownKeyMissing(data: Data): boolean {
   return Boolean(data.ownKeys?.plan) && !data.ownKeys!.keys.some(usableOwnKey);
 }
 
-/** "Add your translation key first.", leading to the keys card (no navigation). */
+/** "Add your translation key first.", leading to the keys section. */
 function NoKeyLine({ i18n }: { i18n: I18n }) {
   return (
     <StateLine icon="connect">
-      <s-link href={`#${KEYS_CARD}`} onClick={() => focusCard(KEYS_CARD)}>
-        {i18n.t("settings.changes.line.noKey")}
-      </s-link>
+      <s-link href={sectionHref("keys")}>{i18n.t("settings.changes.line.noKey")}</s-link>
     </StateLine>
   );
 }
@@ -837,9 +1066,8 @@ function ChangesCard({
   const lockedBusiness = <s-badge icon="lock">{t("automatic.business")}</s-badge>;
 
   return (
-    <SettingCard
+    <SettingSection
       id="settings-changes"
-      icon="automation"
       heading={t("settings.changes.heading")}
       state={view.badge}
       extra={mode === "smart" && smart === "plan" ? lockedBusiness : null}
@@ -954,7 +1182,7 @@ function ChangesCard({
           />
         </More>
       )}
-    </SettingCard>
+    </SettingSection>
   );
 }
 
@@ -1005,9 +1233,8 @@ function PublishingCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetch
   const choose = (next: PublishMode, confirmed: boolean) =>
     fetcher.submit({ intent: "publish-mode", mode: next, ...(confirmed ? { confirm: "on" } : {}) }, { method: "post" });
   return (
-    <SettingCard
+    <SettingSection
       id="settings-publish"
-      icon="send"
       heading={t("settings.publish.heading")}
       state={mode === "AUTO_PUBLISH" ? { label: t("settings.publish.state.auto"), icon: "bolt", tone: "warning" } : { label: t("settings.publish.state.review"), icon: "eye-check-mark", tone: "success" }}
       lead={t("settings.publish.scope")}
@@ -1028,7 +1255,7 @@ function PublishingCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetch
       <s-stack direction="inline">
         <s-link href="/app/review">{t("settings.publish.toReview")}</s-link>
       </s-stack>
-    </SettingCard>
+    </SettingSection>
   );
 }
 
@@ -1058,7 +1285,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
     return kind === "formal" ? t("settings.style.formalWith", { pronoun: pronouns.formal }) : t("settings.style.informalWith", { pronoun: pronouns.informal });
   };
   return (
-    <SettingCard id="settings-style" icon="chat" heading={t("settings.style.heading")} lead={t("settings.style.lead")}>
+    <SettingSection id="settings-style" heading={t("settings.section.style")} lead={t("settings.style.lead")}>
       <ui-save-bar id={STYLE_SAVE_BAR}>
         <button variant="primary" onClick={() => formRef.current?.requestSubmit()} {...(fetcher.state !== "idle" ? { loading: "" } : {})}>
           {t("automatic.action.save")}
@@ -1068,6 +1295,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
       <fetcher.Form key={formKey} ref={formRef} method="post" onChange={() => setDirty(true)} onInput={() => setDirty(true)}>
         <input type="hidden" name="intent" value="style" />
         <s-stack direction="block" gap="base">
+          <h3 style={SUB_HEADING}>{t("settings.style.heading")}</h3>
           {data.style.languages.length ? (
             <ul aria-label={t("settings.style.address")} style={PLAIN_LIST}>
               {data.style.languages.map((l, index) => {
@@ -1138,7 +1366,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
           </StateLine>
         </s-stack>
       </fetcher.Form>
-    </SettingCard>
+    </SettingSection>
   );
 }
 
@@ -1149,9 +1377,8 @@ function MemoryCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: 
   const busy = fetcher.state !== "idle";
   const choose = (enabled: boolean) => fetcher.submit({ intent: "reuse-memory", enabled: String(enabled) }, { method: "post" });
   return (
-    <SettingCard
+    <SettingSection
       id="settings-memory"
-      icon="database"
       heading={t("common.nav.memory")}
       state={data.reuseMachineMemory ? { label: t("settings.memory.machine.title"), icon: "wand", tone: "neutral" } : { label: t("settings.memory.approved.title"), icon: "check-circle", tone: "neutral" }}
       lead={t("settings.memory.lead")}
@@ -1177,7 +1404,7 @@ function MemoryCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: 
       <s-stack direction="inline">
         <s-link href="/app/memory">{t("settings.memory.open")}</s-link>
       </s-stack>
-    </SettingCard>
+    </SettingSection>
   );
 }
 
@@ -1192,7 +1419,20 @@ function ownKeyLead(i18n: I18n, tokens: readonly ConsentToken[]): string {
   return i18n.t("settings.ai.lead.ownKey.one", { processors: processorsText(i18n, tokens) });
 }
 
-function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I18n; fetcher: ReturnType<typeof useFetcher<typeof action>>; primary: boolean }) {
+function PermissionCard({
+  data,
+  i18n,
+  fetcher,
+  primary,
+  top,
+}: {
+  data: Data;
+  i18n: I18n;
+  fetcher: ReturnType<typeof useFetcher<typeof action>>;
+  primary: boolean;
+  /** Above the card: the way back to a job stopped for the permission, once it is given. */
+  top?: ReactNode;
+}) {
   const { t } = i18n;
   const busy = fetcher.state !== "idle";
   const revoke = () => fetcher.submit({ intent: "revoke-consent" }, { method: "post" });
@@ -1205,12 +1445,14 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
   const noKey = own && data.engines.configured.length === 0;
   const lead = (shown: readonly ConsentToken[]) => (own ? ownKeyLead(i18n, shown) : consentLead(i18n, shown));
   return (
-    <SettingCard
+    <SettingSection
       id="settings-ai"
-      icon="shield-check-mark"
       heading={t("settings.ai.heading")}
       state={data.consent ? { label: t("common.state.allowed"), icon: "check-circle", tone: "success" } : { label: t("settings.ai.notAllowed"), icon: "minus-circle", tone: "warning" }}
+      // Since when: "Allowed  since November 3, 2026".
+      extra={data.consent && data.consentAt ? <s-text color="subdued">{t("settings.ai.since", { date: i18n.date(data.consentAt, "long") })}</s-text> : null}
       lead={noKey ? undefined : lead(tokens)}
+      top={top}
     >
       {changed ? (
         <s-banner tone="warning">
@@ -1279,7 +1521,7 @@ function PermissionCard({ data, i18n, fetcher, primary }: { data: Data; i18n: I1
           {t("common.action.cancel")}
         </s-button>
       </s-modal>
-    </SettingCard>
+    </SettingSection>
   );
 }
 

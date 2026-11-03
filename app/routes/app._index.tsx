@@ -171,14 +171,14 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
         title: t("overview.checklist.ownKey.label"),
         detail: t("overview.checklist.ownKey.detail"),
         icon: <s-icon type="connect" />,
-        action: { href: "/app/settings#settings-keys", label: t("overview.checklist.ownKey.action") },
+        action: { href: "/app/settings?section=keys", label: t("overview.checklist.ownKey.action") },
       };
     case "consent":
       return {
         title: t("overview.checklist.consent.label"),
         detail: t("overview.checklist.consent.detail"),
         icon: <s-icon type="settings" />,
-        action: { href: "/app/settings", label: t("overview.checklist.consent.action") },
+        action: { href: "/app/settings?section=ai", label: t("overview.checklist.consent.action") },
       };
     case "first-translation":
       return {
@@ -731,7 +731,7 @@ export default function Overview() {
         {ownKeyProblem(data, i18n) ? (
           <s-banner tone="warning" heading={t("overview.banner.ownKey.heading")}>
             <s-paragraph>
-              {ownKeyProblem(data, i18n)} <s-link href="/app/settings#settings-keys">{t("overview.banner.ownKey.action")}</s-link>
+              {ownKeyProblem(data, i18n)} <s-link href="/app/settings?section=keys">{t("overview.banner.ownKey.action")}</s-link>
             </s-paragraph>
           </s-banner>
         ) : null}
@@ -740,7 +740,7 @@ export default function Overview() {
           <s-banner tone="info">
             <s-paragraph>
               {t("overview.banner.ownKeyPending", { date: i18n.date(data.ownKeys.startsOn, "long") })}{" "}
-              <s-link href="/app/settings#settings-keys">{t("overview.checklist.ownKey.action")}</s-link>
+              <s-link href="/app/settings?section=keys">{t("overview.checklist.ownKey.action")}</s-link>
             </s-paragraph>
           </s-banner>
         ) : null}

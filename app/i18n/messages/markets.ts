@@ -2,6 +2,7 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
+  "markets.page.lead": "Which language your customers read in each country, and what stops them from seeing your translations.",
   "markets.access.heading": "See your languages per market",
   "markets.access.body":
     "Linguva can show which languages each of your markets offers, under which web address, and what stops customers from seeing your translations. For this, Linguva needs permission to read your markets. It never changes them.",
@@ -11,23 +12,23 @@ export const en = {
   "markets.checks.none": "No problems found",
   "markets.checks.allOffered": "Every published language is offered in a market.",
   "markets.checks.coverageBefore": "How complete each language is: see",
-  "markets.checks.coverageLink": "Coverage",
   "markets.checks.coverageAfter": ".",
 
-  "markets.finding.UNPUBLISHED_LOCALE":
-    "{market} offers {language}, but the language isn't published, so customers see the default language. Publish it under Languages.",
-  "markets.finding.LOCALE_IN_NO_MARKET":
-    "{language} is published, but no active market offers it, so no storefront address serves it. Add it to a market in Shopify.",
+  "markets.finding.UNPUBLISHED_LOCALE": "{market} offers {language}, but the language is hidden, so customers there see the default language.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "{language} is published, but no active market offers it, so no address of your store shows it.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "{language} is offered in a market, but your plan doesn't include AI translation into it.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} has no domain or subfolder of its own; customers reach it through your primary domain and the country selector.",
+  "markets.fix.publish": "Publish it in Shopify",
+  "markets.fix.markets": "Open markets in Shopify",
 
+  "markets.details.summary": "Markets in detail ({count})",
   "markets.market.active": "Active",
   "markets.market.status.DRAFT": "draft",
-  "markets.market.number": "Market number {id} (for glossary terms)",
   "markets.market.primaryDomain": "Uses your primary domain.",
   "markets.market.address": "Address",
   "markets.market.default": "default",
+  "markets.market.hidden": "Hidden",
 
   "markets.countries.heading": "Countries and their languages",
   "markets.countries.intro": "Every country in your active markets: the languages customers there read, whether your store offers them there, and how much is translated.",
@@ -47,32 +48,33 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
+  "markets.page.lead": "Welche Sprache deine Kundschaft in jedem Land liest und was sie daran hindert, deine Übersetzungen zu sehen.",
   "markets.access.heading": "Deine Sprachen pro Markt ansehen",
   "markets.access.body":
     "Linguva kann zeigen, welche Sprachen jeder deiner Märkte anbietet, unter welcher Webadresse und was Kunden daran hindert, deine Übersetzungen zu sehen. Dafür braucht Linguva die Berechtigung, deine Märkte zu lesen. Linguva ändert sie nie.",
   "markets.access.allow": "Lesen der Märkte erlauben",
 
-  "markets.checks.heading": "Prüfungen",
+  "markets.checks.heading": "Hinweise",
   "markets.checks.none": "Keine Probleme gefunden",
   "markets.checks.allOffered": "Jede veröffentlichte Sprache wird in einem Markt angeboten.",
   "markets.checks.coverageBefore": "Wie vollständig jede Sprache ist, siehst du unter",
-  "markets.checks.coverageLink": "Abdeckung",
   "markets.checks.coverageAfter": ".",
 
-  "markets.finding.UNPUBLISHED_LOCALE":
-    "{market} bietet {language} an, aber die Sprache ist nicht veröffentlicht, daher sehen Kunden die Standardsprache. Veröffentliche sie unter „Sprachen“.",
-  "markets.finding.LOCALE_IN_NO_MARKET":
-    "{language} ist veröffentlicht, wird aber von keinem aktiven Markt angeboten und ist daher unter keiner Shop-Adresse erreichbar. Füge die Sprache in Shopify einem Markt hinzu.",
+  "markets.finding.UNPUBLISHED_LOCALE": "{market} bietet {language} an, aber die Sprache ist versteckt, daher sehen Kunden dort die Standardsprache.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "{language} ist veröffentlicht, wird aber von keinem aktiven Markt angeboten und ist daher unter keiner Adresse deines Shops zu sehen.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "{language} wird in einem Markt angeboten, aber dein Tarif enthält keine KI-Übersetzung in diese Sprache.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} hat keine eigene Domain und keinen eigenen Unterordner; Kunden erreichen den Markt über deine Hauptdomain und die Länderauswahl.",
+  "markets.fix.publish": "In Shopify veröffentlichen",
+  "markets.fix.markets": "Märkte in Shopify öffnen",
 
+  "markets.details.summary": "Märkte im Detail ({count})",
   "markets.market.active": "Aktiv",
   "markets.market.status.DRAFT": "Entwurf",
-  "markets.market.number": "Marktnummer {id} (für Glossarbegriffe)",
   "markets.market.primaryDomain": "Verwendet deine Hauptdomain.",
   "markets.market.address": "Adresse",
   "markets.market.default": "Standard",
+  "markets.market.hidden": "Versteckt",
 
   "markets.countries.heading": "Länder und ihre Sprachen",
   "markets.countries.intro": "Jedes Land deiner aktiven Märkte: die Sprachen, die Kunden dort lesen, ob dein Shop sie dort anbietet und wie viel übersetzt ist.",
@@ -85,13 +87,14 @@ export const de: Translation<typeof en> = {
   "markets.countries.state.partial": "Teilweise",
   "markets.countries.state.ok": "In ihrer Sprache",
   "markets.countries.reason.not-added": "{language} (nicht hinzugefügt)",
-  "markets.countries.reason.unpublished": "{language} (ausgeblendet)",
+  "markets.countries.reason.unpublished": "{language} (versteckt)",
   "markets.countries.reason.not-in-market": "{language} (nicht in diesem Markt)",
   "markets.countries.none": "Keiner deiner aktiven Märkte enthält Länder.",
   "markets.countries.error": "Die Länder konnten gerade nicht gelesen werden. Lade die Seite gleich neu.",
 };
 
 export const fr: Translation<typeof en> = {
+  "markets.page.lead": "La langue que lit votre clientèle dans chaque pays, et ce qui l'empêche de voir vos traductions.",
   "markets.access.heading": "Voir vos langues par marché",
   "markets.access.body":
     "Linguva peut afficher les langues proposées par chacun de vos marchés, sous quelle adresse web, et ce qui empêche les clients de voir vos traductions. Pour cela, Linguva a besoin de l'autorisation de lire vos marchés. Linguva ne les modifie jamais.",
@@ -101,23 +104,23 @@ export const fr: Translation<typeof en> = {
   "markets.checks.none": "Aucun problème détecté",
   "markets.checks.allOffered": "Chaque langue publiée est proposée dans un marché.",
   "markets.checks.coverageBefore": "Consultez l'avancement de chaque langue sur la page",
-  "markets.checks.coverageLink": "Couverture",
   "markets.checks.coverageAfter": ".",
 
-  "markets.finding.UNPUBLISHED_LOCALE":
-    "{market} propose la langue {language}, mais elle n'est pas publiée : les clients voient donc la langue par défaut. Publiez-la dans Langues.",
-  "markets.finding.LOCALE_IN_NO_MARKET":
-    "La langue {language} est publiée, mais aucun marché actif ne la propose : aucune adresse de la boutique en ligne ne la dessert. Ajoutez-la à un marché dans Shopify.",
+  "markets.finding.UNPUBLISHED_LOCALE": "{market} propose la langue {language}, mais elle est masquée : les clients de ce marché voient donc la langue par défaut.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "La langue {language} est publiée, mais aucun marché actif ne la propose : aucune adresse de votre boutique ne l'affiche.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "La langue {language} est proposée dans un marché, mais votre forfait n'inclut pas la traduction IA vers cette langue.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} n'a ni domaine ni sous-dossier propre ; les clients y accèdent via votre domaine principal et le sélecteur de pays.",
+  "markets.fix.publish": "La publier dans Shopify",
+  "markets.fix.markets": "Ouvrir les marchés dans Shopify",
 
+  "markets.details.summary": "Marchés en détail ({count})",
   "markets.market.active": "Actif",
   "markets.market.status.DRAFT": "brouillon",
-  "markets.market.number": "Numéro de marché {id} (pour les termes du glossaire)",
   "markets.market.primaryDomain": "Utilise votre domaine principal.",
   "markets.market.address": "Adresse",
   "markets.market.default": "par défaut",
+  "markets.market.hidden": "Masquée",
 
   "markets.countries.heading": "Pays et leurs langues",
   "markets.countries.intro": "Chaque pays de vos marchés actifs : les langues que les clients y lisent, si votre boutique les y propose et quelle part est traduite.",
@@ -137,6 +140,7 @@ export const fr: Translation<typeof en> = {
 };
 
 export const es: Translation<typeof en> = {
+  "markets.page.lead": "Qué idioma lee tu clientela en cada país y qué le impide ver tus traducciones.",
   "markets.access.heading": "Ver tus idiomas por mercado",
   "markets.access.body":
     "Linguva puede mostrar qué idiomas ofrece cada uno de tus mercados, en qué dirección web y qué impide que los clientes vean tus traducciones. Para ello, Linguva necesita permiso para leer tus mercados. Linguva nunca los modifica.",
@@ -146,23 +150,23 @@ export const es: Translation<typeof en> = {
   "markets.checks.none": "No se encontraron problemas",
   "markets.checks.allOffered": "Cada idioma publicado se ofrece en un mercado.",
   "markets.checks.coverageBefore": "Consulta el avance de cada idioma en la página",
-  "markets.checks.coverageLink": "Cobertura",
   "markets.checks.coverageAfter": ".",
 
-  "markets.finding.UNPUBLISHED_LOCALE":
-    "{market} ofrece el idioma {language}, pero no está publicado, por lo que los clientes ven el idioma predeterminado. Publícalo en Idiomas.",
-  "markets.finding.LOCALE_IN_NO_MARKET":
-    "El idioma {language} está publicado, pero ningún mercado activo lo ofrece, así que no está disponible en ninguna dirección de la tienda online. Agrégalo a un mercado en Shopify.",
+  "markets.finding.UNPUBLISHED_LOCALE": "{market} ofrece el idioma {language}, pero está oculto, por lo que los clientes de ese mercado ven el idioma predeterminado.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "El idioma {language} está publicado, pero ningún mercado activo lo ofrece, así que ninguna dirección de tu tienda lo muestra.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "El idioma {language} se ofrece en un mercado, pero tu plan no incluye la traducción con IA a este idioma.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} no tiene dominio ni subcarpeta propios; los clientes acceden a él a través de tu dominio principal y el selector de país.",
+  "markets.fix.publish": "Publicarlo en Shopify",
+  "markets.fix.markets": "Abrir los mercados en Shopify",
 
+  "markets.details.summary": "Mercados en detalle ({count})",
   "markets.market.active": "Activo",
   "markets.market.status.DRAFT": "borrador",
-  "markets.market.number": "Número de mercado {id} (para términos del glosario)",
   "markets.market.primaryDomain": "Usa tu dominio principal.",
   "markets.market.address": "Dirección",
   "markets.market.default": "predeterminado",
+  "markets.market.hidden": "Oculto",
 
   "markets.countries.heading": "Países y sus idiomas",
   "markets.countries.intro": "Cada país de tus mercados activos: los idiomas que leen allí los clientes, si tu tienda los ofrece allí y cuánto está traducido.",

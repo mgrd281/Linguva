@@ -9,11 +9,14 @@ import { redirect } from "react-router";
 import { requireShop } from "../shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { fetchMarkets, MARKETS_SCOPE, MarketsAccessError } from "../markets/markets";
+import { peekMarketCountries } from "../markets/countries";
 import { getQueues } from "../queue/client";
 import { shopTranslationFacts } from "../providers/shop-translation";
 import { getShopSettings, hasCurrentAiConsent } from "../settings/shop-settings";
-import { shopBilling } from "../billing/billing";
+import { aiLimitsFor, shopBilling } from "../billing/billing";
 import { allowedTargetLocales } from "../billing/subscription";
+import { getConfig } from "../lib/config";
+import { getMonthlyUsage } from "../usage/usage-ledger";
 import { BackgroundJobsUnavailableError, startBulkJob, startCoverageReport } from "../jobs/start-job";
 import { isBulkResourceType, type BulkResourceType } from "../jobs/bulk-jobs";
 import { withTenant } from "../tenancy/with-tenant";
@@ -36,8 +39,9 @@ import { AccessDeniedError } from "../shopify/translations-api";
 import { translatableByIds } from "../shopify/attached-resources";
 import { isSearchableType, searchIds } from "../shopify/search-ids";
 import { COVERAGE_TYPES, segmentOf, STALE_REPORT_MS } from "./coverage";
-import { listCoverageItems, loadCoverageSummary, type ItemStateFilter } from "./summary";
+import { listCoverageItems, loadCoverageState, loadCoverageSummary, type ItemStateFilter } from "./summary";
 import { loadSmartCoverageNote, smartBadge, smartContext, smartWorkOn } from "../smart/panel";
+import { bulkTypes, openTexts, type OpenTexts } from "../../lib/coverage-bulk";
 
 /** Types with a title of their own (images and custom fields are named by their text or owner). */
 function kindOfAny(type: string): TranslatableKind | null {
@@ -57,6 +61,22 @@ export function bulkTargetOf(coverageType: string): { resourceType: BulkResource
 }
 
 const SEO_GROUPS: readonly FieldGroup[] = ["seo_title", "seo_description"];
+
+/**
+ * What the question before a bulk job says (as on the language pages): whether its translations wait for
+ * approval or go live (the merchant's setting, on a plan that allows it), and the AI characters left this
+ * month (null on the Own key plan: the merchant's own service bills them).
+ */
+async function bulkFacts(
+  shopId: string,
+  billing: Awaited<ReturnType<typeof shopBilling>>,
+  settings: { bulkPublishMode: string },
+  payer: string,
+): Promise<{ publishMode: "DRAFT" | "AUTO_PUBLISH"; aiRemaining: number | null }> {
+  const publishMode = settings.bulkPublishMode === "AUTO_PUBLISH" && billing.entitlements.autoPublish ? ("AUTO_PUBLISH" as const) : ("DRAFT" as const);
+  if (payer === "merchant") return { publishMode, aiRemaining: null };
+  return { publishMode, aiRemaining: Math.max(0, aiLimitsFor(getConfig(), billing).limit - (await getMonthlyUsage(shopId))) };
+}
 
 type MarketsResult = Awaited<ReturnType<typeof readMarkets>>;
 /**
@@ -123,14 +143,19 @@ export async function loadCoverageDashboard(request: Request) {
   const smartState = await smartContext(billing, settings, allTargets.map((l) => l.locale));
   // Who translates for the shop (the operator's engines or its own keys), without decrypting.
   const facts = await shopTranslationFacts(shop.id, billing);
-  const [jobs, smart] = await Promise.all([
+  const [jobs, smart, bulk] = await Promise.all([
     withTenant(shop.id, (tx) =>
       tx.translationJob.findMany({ where: { shopId: shop.id, status: { in: [...ACTIVE_JOBS] } }, orderBy: { createdAt: "desc" }, take: 10 }),
     ),
     loadSmartCoverageNote(shop.id, smartState),
+    bulkFacts(shop.id, billing, settings, facts.payer),
   ]);
   const now = new Date();
   return {
+    /** For the question before a row's "Translate": approval or live, and the AI characters left. */
+    bulk,
+    /** The countries the store sells to, if read in the last minutes (never a Shopify read): a language's flag picks one of them. */
+    marketCountries: peekMarketCountries(shop.id),
     /** The smart schedule beside the figures (null while off), with the same state as Settings. */
     smart: smart
       ? {
@@ -284,6 +309,7 @@ export async function loadCoverageItemsPage(request: Request) {
   const search = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
   const after = param("after");
   const filter = { locale, type, fieldGroup, state, search };
+  const target = type ? bulkTargetOf(type) : null;
   const base = {
     targets: targets.map((l) => ({ locale: l.locale, name: l.name, published: l.published })),
     filter,
@@ -292,10 +318,12 @@ export async function loadCoverageItemsPage(request: Request) {
     idempotencyKey: randomUUID(),
     jobsAvailable: getQueues() !== null,
     canTranslate: false,
-    bulk: type ? bulkTargetOf(type) !== null : false,
+    bulk: target !== null,
+    /** The job the bulk button starts (its owner type, with image descriptions and extra details or without). */
+    target,
     isFirstPage: !after,
   };
-  if (!locale) return { ...base, items: [], nextCursor: null, searchUnavailable: false, smartNextCheck: null, smartZone: null };
+  if (!locale) return { ...base, items: [], nextCursor: null, searchUnavailable: false, smartNextCheck: null, smartZone: null, confirm: null, countedAt: null };
 
   let resourceGids: string[] | null = null;
   const searchUnavailable = Boolean(search) && !isSearchableType(type);
@@ -322,6 +350,12 @@ export async function loadCoverageItemsPage(request: Request) {
   const smart = await loadSmartCoverageNote(shop.id, await smartContext(billing, settings, targets.map((l) => l.locale)));
   const facts = await shopTranslationFacts(shop.id, billing);
   const work = smart ? await smartWorkOn(shop.id, locale, page.items) : null;
+  // The question before the bulk job: what it translates (the texts for Google only, as the action decides), and when the store was last counted (said once).
+  const coverage = await loadCoverageState(shop.id);
+  const seoOnly = target !== null && fieldGroup !== null && SEO_GROUPS.includes(fieldGroup) && !target.includeAttached;
+  const confirm: { publishMode: "DRAFT" | "AUTO_PUBLISH"; aiRemaining: number | null; open: OpenTexts } | null = target
+    ? { ...(await bulkFacts(shop.id, billing, settings, facts.payer)), open: openTexts(coverage.counts, locale, bulkTypes(target), seoOnly ? SEO_GROUPS : null) }
+    : null;
   const titleOf = (gid: string, kind: string) => {
     const c = content.get(gid);
     const k = kindOfAny(kind);
@@ -351,5 +385,7 @@ export async function loadCoverageItemsPage(request: Request) {
     }),
     smartNextCheck: smart?.nextCheck ?? null,
     smartZone: smart?.zone ?? null,
+    confirm,
+    countedAt: coverage.lastCompleted?.finishedAt ?? null,
   };
 }

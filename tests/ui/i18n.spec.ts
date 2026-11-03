@@ -21,9 +21,12 @@ const GERMAN_PAGES = [
   { path: "/app/jobs", heading: "Übersetzungsaufträge" },
   // Review lists the store's own (English) texts, so only the interface parts are checked there.
   { path: "/app/review", heading: "Übersetzungen prüfen", merchantText: true },
-  { path: "/app/coverage", heading: "Übersetzungsabdeckung" },
+  // The tools pages carry their tile's name from Settings › Tools.
+  { path: "/app/coverage", heading: "Abdeckung im Detail" },
   { path: "/app/glossary", heading: "Glossar" },
   { path: "/app/memory", heading: "Übersetzungsspeicher" },
+  { path: "/app/markets", heading: "Länder & Märkte" },
+  { path: "/app/translations", heading: "Import & Export" },
   { path: "/app/plan", heading: "Tarif" },
   { path: "/app/languages", heading: null },
   { path: "/app/content", heading: "Inhalte" },

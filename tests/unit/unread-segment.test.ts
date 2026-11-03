@@ -63,10 +63,10 @@ describe("what the page says about it", () => {
 
   it("reads correctly with the plural type names", () => {
     expect(de.t(unreadMessage({ ahead: true }, true), vars)).toBe(
-      "Bei der letzten Prüfung nicht vollständig gelesen: Seiten (Französisch). Die Zahlen sind vielleicht älter oder unvollständig, bis die laufende Prüfung diese Inhalte erneut gelesen hat.",
+      "Beim letzten Zählen nicht vollständig gelesen: Seiten (Französisch). Die Zahlen sind vielleicht älter oder unvollständig, bis das laufende Zählen diese Inhalte erneut gelesen hat.",
     );
     expect(de.t(unreadMessage({ ahead: false }, true), vars)).toBe(
-      "Nicht vollständig gelesen: Seiten (Französisch). Die Zahlen sind vielleicht älter oder unvollständig; prüfe den Shop erneut, sobald die laufende Prüfung fertig ist.",
+      "Nicht vollständig gelesen: Seiten (Französisch). Die Zahlen sind vielleicht älter oder unvollständig; zähle den Shop neu, sobald das laufende Zählen fertig ist.",
     );
     expect(translator("fr").t("coverage.next.unreadScanning", { type: "Pages", language: "allemand" })).toMatch(/ait relu ces contenus\.$/);
     expect(translator("en").t("coverage.next.unreadScanning", { type: "Pages", language: "German" })).toMatch(/The figures may .* has read this content again\.$/);

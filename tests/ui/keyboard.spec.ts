@@ -117,3 +117,19 @@ test("Plan: the plan links and both lists of details are reached by keyboard, En
   await page.keyboard.press("Enter");
   await expect(page.getByText(/^Every character of your original text that the AI translates/)).toBeVisible();
 });
+
+test("Glossary: the rule is one choice of tiles; Tab reaches it with a visible focus, the arrow keys change it", async ({ page }) => {
+  await openApp(page, "full", "/app/glossary");
+  await page.locator("body").focus();
+  const rule = await tabTo(page, (f) => f.tag === "input" && f.name === "rule", 40);
+  expect(rule.visible).toBe(true);
+  const rules = page.getByRole("group", { name: "Rule" });
+  await expect(rules.getByRole("radio", { name: "Never translate" })).toBeFocused();
+  // A radio group: the arrow keys move to the next rule and choose it; only "Always translate as" asks for a translation.
+  await page.keyboard.press("ArrowRight");
+  await expect(rules.getByRole("radio", { name: "Always translate as" })).toBeChecked();
+  await expect(page.locator('s-text-field[name="translation"]')).toHaveCount(1);
+  await page.keyboard.press("ArrowRight");
+  await expect(rules.getByRole("radio", { name: "Never use" })).toBeChecked();
+  await expect(page.locator('s-text-field[name="translation"]')).toHaveCount(0);
+});

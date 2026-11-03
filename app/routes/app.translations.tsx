@@ -6,8 +6,11 @@ import { prisma } from "../.server/lib/db";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { importTranslations, MAX_IMPORT_BYTES, type ImportResult } from "../.server/translation/csv-transfer";
+import { Disclosure } from "../components/Disclosure";
+import { StepNumber } from "../components/LanguageLayout";
+import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
 import { useI18n } from "../i18n/react";
-import { kindLabel } from "../i18n/labels";
+import { areaName, contentTypeName, typesByArea } from "../lib/content-type-names";
 import { CONTENT_TYPES, IMAGE_COVERAGE_TYPES, RESOURCE_KINDS } from "../lib/resource-kinds";
 import { Button } from "../components/Button";
 
@@ -49,15 +52,29 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionRes
 
 /** fetch() inside the embedded app carries the session token (App Bridge), a plain link wouldn't. */
 async function download(params: URLSearchParams): Promise<{ rows: number; next: string | null } | null> {
-  const response = await fetch(`/app/translations/export?${params.toString()}`);
-  if (!response.ok) return null;
-  const url = URL.createObjectURL(await response.blob());
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `linguva-${params.get("type")?.toLowerCase()}-${params.get("lang")}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-  return { rows: Number(response.headers.get("X-Linguva-Rows") ?? 0), next: response.headers.get("X-Linguva-Next") };
+  try {
+    const response = await fetch(`/app/translations/export?${params.toString()}`);
+    if (!response.ok) return null;
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `linguva-${params.get("type")?.toLowerCase()}-${params.get("lang")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    return { rows: Number(response.headers.get("X-Linguva-Rows") ?? 0), next: response.headers.get("X-Linguva-Next") };
+  } catch {
+    return null;
+  }
+}
+
+/** A step's number beside its heading (the three steps: download, fill in, import). */
+function StepHeading({ n, children }: { n: number; children: string }) {
+  return (
+    <div className="lv-tools-step">
+      <StepNumber n={n} first={n === 1} />
+      <h2 className="lv-h2">{children}</h2>
+    </div>
+  );
 }
 
 export default function Translations() {
@@ -69,129 +86,171 @@ export default function Translations() {
   const [type, setType] = useState("PRODUCT");
   const [gaps, setGaps] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [exported, setExported] = useState<{ rows: number; next: string | null } | "failed" | null>(null);
+  const [exported, setExported] = useState<{ rows: number; next: string | null; locale: string } | "failed" | null>(null);
 
   async function exportPart(after: string | null) {
     setExporting(true);
     const params = new URLSearchParams({ lang, type, ...(gaps ? { gaps: "1" } : {}), ...(after ? { after } : {}) });
-    setExported((await download(params)) ?? "failed");
+    const result = await download(params);
+    setExported(result ? { ...result, locale: lang } : "failed");
     setExporting(false);
   }
 
   const imported = importer.data?.kind === "imported" ? importer.data.result : null;
   const importError = importer.data?.kind === "error" ? importer.data.code : null;
+  const languageName = (locale: string) => i18n.language(locale, data.targets.find((l) => l.locale === locale)?.name);
+  const header = <ToolHeader tool="transfer" title={t("transfer.page.heading")} lead={t("transfer.intro")} i18n={i18n} />;
 
   if (!data.targets.length) {
     return (
       <s-page heading={t("transfer.page.heading")}>
-        <s-section>
-          <s-paragraph>{t("transfer.noLanguages")}</s-paragraph>
-        </s-section>
+        <ToolsBreadcrumbSlot i18n={i18n} />
+        <s-stack direction="block" gap="base">
+          {header}
+          <s-section>
+            <s-paragraph>{t("transfer.noLanguages")}</s-paragraph>
+          </s-section>
+        </s-stack>
       </s-page>
     );
   }
 
   return (
     <s-page heading={t("transfer.page.heading")}>
-      <s-section>
-        <s-paragraph>{t("transfer.intro")}</s-paragraph>
-      </s-section>
+      <ToolsBreadcrumbSlot i18n={i18n} />
+      <s-stack direction="block" gap="base">
+        {header}
 
-      <s-section heading={t("transfer.export.heading")}>
-        <s-stack direction="block" gap="base">
-          <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 500px) 1fr 1fr, 1fr" gap="base">
-              <s-select label={t("common.language")} value={lang} onChange={(e) => setLang(e.currentTarget.value)}>
-                {data.targets.map((l) => (
-                  <s-option key={l.locale} value={l.locale}>
-                    {i18n.language(l.locale, l.name)}
-                  </s-option>
-                ))}
-              </s-select>
-              <s-select label={t("coverage.types.type")} value={type} onInput={(e) => setType(e.currentTarget.value)} onChange={(e) => setType(e.currentTarget.value)}>
-                {data.types.map((k) => (
-                  <s-option key={k} value={k}>
-                    {kindLabel(i18n, k)}
-                  </s-option>
-                ))}
-              </s-select>
-            </s-grid>
-          </s-query-container>
-          <s-checkbox
-            label={t("transfer.export.onlyGaps")}
-            {...(gaps ? { checked: true } : {})}
-            // React 18 sends no onChange for a web component; its input event comes through.
-            onInput={(e) => setGaps(e.currentTarget.checked)}
-            onChange={(e) => setGaps(e.currentTarget.checked)}
-          />
-          <s-text color="subdued">{t("transfer.export.columns")}</s-text>
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <Button variant="primary" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>
-              {t("transfer.export.download")}
-            </Button>
-            {exported && exported !== "failed" && exported.next ? (
-              <Button onClick={() => exportPart(exported.next)} {...(exporting ? { loading: true } : {})}>
-                {t("transfer.export.next")}
-              </Button>
-            ) : null}
-          </s-stack>
-          {exported === "failed" ? <s-text tone="critical">{t("transfer.export.failed")}</s-text> : null}
-          {exported && exported !== "failed" ? <s-text>{t("transfer.export.done", { count: exported.rows })}</s-text> : null}
-          <s-text color="subdued">{t("transfer.export.parts")}</s-text>
-        </s-stack>
-      </s-section>
-
-      <s-section heading={t("transfer.import.heading")}>
-        <importer.Form method="post" encType="multipart/form-data">
+        <s-section>
           <s-stack direction="block" gap="base">
-            <s-paragraph>{t("transfer.import.safety")}</s-paragraph>
-            <s-drop-zone name="file" accept=".csv,text/csv" label={t("transfer.import.file")} />
-            <Button type="submit" {...(importer.state !== "idle" ? { loading: true } : {})}>
-              {t("transfer.import.submit")}
-            </Button>
-            {importError ? (
-              <s-banner tone="critical">
-                <s-paragraph>{t(`transfer.import.${importError}`)}</s-paragraph>
-              </s-banner>
-            ) : null}
-            {imported ? (
-              <s-banner tone={imported.drafts ? "success" : "warning"}>
-                <s-stack direction="block" gap="small">
-                  <s-paragraph>{t("transfer.import.done", { count: imported.drafts })}</s-paragraph>
-                  <s-text color="subdued">
-                    {t("transfer.import.summary", { rows: i18n.number(imported.rows), skipped: i18n.number(Object.values(imported.skipped).reduce((n, c) => n + c, 0)) })}
-                  </s-text>
-                  {imported.drafts ? <s-link href="/app/review">{t("transfer.import.openReview")}</s-link> : null}
-                </s-stack>
-              </s-banner>
-            ) : null}
+            <StepHeading n={1}>{t("transfer.step.export")}</StepHeading>
+            <s-query-container>
+              <s-grid gridTemplateColumns="@container (inline-size > 500px) 1fr 1fr, 1fr" gap="base">
+                {/* React 18 sends no onChange for a web component; its input event comes through (so the CSV is in the language shown). */}
+                <s-select label={t("common.language")} value={lang} onInput={(e) => setLang(e.currentTarget.value)} onChange={(e) => setLang(e.currentTarget.value)}>
+                  {data.targets.map((l) => (
+                    <s-option key={l.locale} value={l.locale}>
+                      {i18n.language(l.locale, l.name)}
+                    </s-option>
+                  ))}
+                </s-select>
+                <s-select label={t("transfer.export.content")} value={type} onInput={(e) => setType(e.currentTarget.value)} onChange={(e) => setType(e.currentTarget.value)}>
+                  {/* The language page's areas, each type in the merchant's words. */}
+                  {typesByArea(data.types).map((group) =>
+                    group.area ? (
+                      <s-option-group key={group.area} label={areaName(i18n, group.area)}>
+                        {group.types.map((k) => (
+                          <s-option key={k} value={k}>
+                            {contentTypeName(i18n, k)}
+                          </s-option>
+                        ))}
+                      </s-option-group>
+                    ) : (
+                      group.types.map((k) => (
+                        <s-option key={k} value={k}>
+                          {contentTypeName(i18n, k)}
+                        </s-option>
+                      ))
+                    ),
+                  )}
+                </s-select>
+              </s-grid>
+            </s-query-container>
+            <s-checkbox
+              label={t("transfer.export.onlyGaps")}
+              {...(gaps ? { checked: true } : {})}
+              // React 18 sends no onChange for a web component; its input event comes through.
+              onInput={(e) => setGaps(e.currentTarget.checked)}
+              onChange={(e) => setGaps(e.currentTarget.checked)}
+            />
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <Button variant="primary" icon="export" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>
+                {t("transfer.export.download")}
+              </Button>
+              {exported && exported !== "failed" && exported.next ? (
+                <Button icon="export" onClick={() => exportPart(exported.next)} {...(exporting ? { loading: true } : {})}>
+                  {t("transfer.export.next")}
+                </Button>
+              ) : null}
+            </s-stack>
+            {exported === "failed" ? <s-text tone="critical">{t("transfer.export.failed")}</s-text> : null}
+            {exported && exported !== "failed" ? <s-text>{t("transfer.export.done", { count: exported.rows, language: languageName(exported.locale) })}</s-text> : null}
+            <s-text color="subdued">{t("transfer.export.parts")}</s-text>
           </s-stack>
-        </importer.Form>
-      </s-section>
-
-      {imported && imported.problems.length ? (
-        <s-section heading={t("transfer.import.skippedHeading")} padding="none">
-          <s-table>
-            <s-table-header-row>
-              <s-table-header listSlot="primary">{t("transfer.import.line", { line: "" }).trim()}</s-table-header>
-              <s-table-header>{t("transfer.import.reason")}</s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {imported.problems.map((p) => (
-                <s-table-row key={`${p.line}-${p.code}`}>
-                  <s-table-cell>{t("transfer.import.line", { line: String(p.line) })}</s-table-cell>
-                  <s-table-cell>{t(`transfer.problem.${p.code}`)}</s-table-cell>
-                </s-table-row>
-              ))}
-            </s-table-body>
-          </s-table>
-          {imported.problems.length >= 50 ? (
-            <s-box padding="base">
-              <s-text color="subdued">{t("transfer.import.more")}</s-text>
-            </s-box>
-          ) : null}
         </s-section>
-      ) : null}
+
+        <s-section>
+          <s-stack direction="block" gap="base">
+            <StepHeading n={2}>{t("transfer.step.fill")}</StepHeading>
+            <s-text>{t("transfer.fill.body")}</s-text>
+            <Disclosure summary={t("transfer.file.heading")}>
+              <s-unordered-list>
+                <s-list-item>{t("transfer.file.item")}</s-list-item>
+                <s-list-item>{t("transfer.file.language")}</s-list-item>
+                <s-list-item>{t("transfer.file.digest")}</s-list-item>
+                <s-list-item>{t("transfer.file.original")}</s-list-item>
+                <s-list-item>{t("transfer.file.translation")}</s-list-item>
+                <s-list-item>{t("transfer.file.status")}</s-list-item>
+              </s-unordered-list>
+            </Disclosure>
+          </s-stack>
+        </s-section>
+
+        <s-section>
+          <importer.Form method="post" encType="multipart/form-data">
+            <s-stack direction="block" gap="base">
+              <StepHeading n={3}>{t("transfer.step.import")}</StepHeading>
+              <s-text color="subdued">{t("transfer.import.safety")}</s-text>
+              <s-drop-zone name="file" accept=".csv,text/csv" label={t("transfer.import.file")} />
+              <s-stack direction="inline">
+                <Button type="submit" icon="import" {...(importer.state !== "idle" ? { loading: true } : {})}>
+                  {t("transfer.import.submit")}
+                </Button>
+              </s-stack>
+              {importError ? (
+                <s-banner tone="critical">
+                  <s-paragraph>{t(`transfer.import.${importError}`)}</s-paragraph>
+                </s-banner>
+              ) : null}
+              {imported ? (
+                <s-banner tone={imported.drafts ? "success" : "warning"}>
+                  <s-stack direction="block" gap="small">
+                    <s-paragraph>{t("transfer.import.done", { count: imported.drafts })}</s-paragraph>
+                    <s-text color="subdued">
+                      {t("transfer.import.summary", { rows: i18n.number(imported.rows), skipped: i18n.number(Object.values(imported.skipped).reduce((n, c) => n + c, 0)) })}
+                    </s-text>
+                    {imported.drafts ? <s-link href="/app/review">{t("transfer.import.openReview")}</s-link> : null}
+                  </s-stack>
+                </s-banner>
+              ) : null}
+            </s-stack>
+          </importer.Form>
+        </s-section>
+
+        {imported && imported.problems.length ? (
+          <s-section heading={t("transfer.import.skippedHeading")} padding="none">
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">{t("transfer.import.line", { line: "" }).trim()}</s-table-header>
+                <s-table-header>{t("transfer.import.reason")}</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {imported.problems.map((p) => (
+                  <s-table-row key={`${p.line}-${p.code}`}>
+                    <s-table-cell>{t("transfer.import.line", { line: String(p.line) })}</s-table-cell>
+                    <s-table-cell>{t(`transfer.problem.${p.code}`)}</s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+            {imported.problems.length >= 50 ? (
+              <s-box padding="base">
+                <s-text color="subdued">{t("transfer.import.more")}</s-text>
+              </s-box>
+            ) : null}
+          </s-section>
+        ) : null}
+      </s-stack>
     </s-page>
   );
 }

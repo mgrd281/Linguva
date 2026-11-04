@@ -42,7 +42,24 @@ Same file and the same 50,000 pending drafts, of which 5 % are image description
 
 Per query: the page 47–55 ms, the matching count 14 ms, the position 33 ms, the tab and chip counts 55–62 ms. The page query stays under 100 ms, so no index was added for the card order. The tab and chip counts are the largest part of every load: if CI comes close to its limit, keeping them for a short time or an expression index would cut it. `tests/integration/review-cards.test.ts` also opens pages with 20,000 waiting texts (under 3 s each, a generous bound).
 
-The pictures load after the page (`app/routes/app.review_.previews.tsx`): one `nodes()` read per 100 items, kept a minute per shop and item.
+The pictures load after the page (`app/routes/app.review_.previews.tsx`): one `nodes()` read per 100 items, kept a minute per shop and item. The smart schedule's exclusions are named the same way (`app/.server/smart/exclusion-names.ts`): one `nodes()` read per 100, kept a minute per shop and item, so the page's refresh every 10 s while a check runs asks Shopify at most once a minute.
+
+### The Jobs list (Redesign 3, 2026-11-02)
+
+Same file, a third shop with the list's worst case: 5,000 jobs over a week (all inside the 14-day problem window; every French one a stop that no newer job supersedes, about 1,000 problems), and 20 jobs of 2,000 items each on the first page (5 running), with 12,000 pending drafts. The functions are in `app/.server/jobs/bulk-jobs.ts`.
+
+| Operation | Median | CI limit |
+|---|---|---|
+| List loader data: tab counts, live group, page, attention card, then every row's outcomes (`rowOutcomesByJob`, 30 jobs) | 63 ms | 300 ms |
+| Problems tab: its page and its count | 10 ms | 300 ms |
+| Next page / previous page (keyset both ways) | 4 / 6 ms | 300 ms |
+| Live data: active rows with their outcomes, counts, attention, pending drafts | 29 ms | 100 ms |
+
+Two query shapes matter at this size, and neither needs an index:
+- The supersede rule ("no newer active or completed job of the same type and language") reads the newest such job per type and language once per statement, in a `MATERIALIZED` CTE. Written as a correlated `NOT EXISTS`, PostgreSQL re-read the shop's jobs once per problem (and compiled the query with JIT): 1.3–2 s for the count. A plain CTE is folded back into the subquery, hence `MATERIALIZED`.
+- An item waits for approval through its own drafts or its images' and custom fields' (`parentGid`). One join with an `OR` in its condition became a 7.8-million-row join filter (1.7 s); two equality joins over the jobs' pending drafts take 27 ms.
+
+The optional indexes of the Jobs spec (§7.8: `TranslationJob (shopId, resourceType, targetLocale, createdAt)` and a partial index for the row outcomes) are not needed.
 
 ## 2. Bulk jobs with a large catalog
 
@@ -68,7 +85,7 @@ Not measured: real Shopify and DeepL latency and limits, several worker processe
 | Page | Server response |
 |---|---|
 | Overview | 39 ms |
-| Products list | 31 ms |
+| Products' list (the area's, `/app/languages/de/products`) | Not recorded here yet (the spec prints it in CI); the 31 ms measured before were the old `/app/products` list, which now redirects here |
 | Product editor | 43 ms |
 | Review | 54 ms |
 | Jobs | 22 ms |

@@ -12,7 +12,11 @@
  *   texts, notification templates and the URL handles of every type.
  * - What a category's scan state is, what to do next in a language, and the
  *   one state of an item in a list.
+ * - Image descriptions and custom fields go with their owners (ATTACHED): a
+ *   translation of products can include them, so they get no step of their
+ *   own while their owner has one.
  */
+import type { Tint } from "../components/IconSquare";
 import {
   coveragePercent,
   emptyCounts,
@@ -26,6 +30,7 @@ import {
   type StateCounts,
 } from "./coverage-rules";
 import { tally, type CountInput, type Tally } from "./coverage-view";
+import type { IconName } from "./icons";
 import { CONTENT_TYPES, isContentType, RESOURCE_KINDS } from "./resource-kinds";
 
 /** The tiers and their categories, in display order. Ids are URL slugs. */
@@ -45,24 +50,79 @@ const TIER_INDEX = new Map<CategoryId, number>(TIERS.flatMap((tier, index) => ti
 /**
  * Per category: `types`, the coverage types of its texts; `itemTypes`, the
  * types of the things its item count names ("48 products"; none where its
- * texts belong to things of many kinds); `icon`, its Polaris icon.
+ * texts belong to things of many kinds); `icon`, its Polaris icon (Shopify's
+ * own for the place); `tint`, the colour of its icon square (a place, never
+ * a state: no two areas of a tier share one, and image descriptions and
+ * extra details take their products' blue).
  */
 export const CATEGORIES = {
-  products: { types: ["PRODUCT"], itemTypes: ["PRODUCT"], icon: "product" },
-  collections: { types: ["COLLECTION"], itemTypes: ["COLLECTION"], icon: "collection" },
-  navigation: { types: ["MENU", "LINK", "FILTER"], itemTypes: [], icon: "menu" },
-  options: { types: ["PRODUCT_OPTION", "PRODUCT_OPTION_VALUE"], itemTypes: [], icon: "variant" },
+  products: { types: ["PRODUCT"], itemTypes: ["PRODUCT"], icon: "product", tint: "blue" },
+  collections: { types: ["COLLECTION"], itemTypes: ["COLLECTION"], icon: "collection", tint: "violet" },
+  navigation: { types: ["MENU", "LINK", "FILTER"], itemTypes: [], icon: "menu", tint: "slate" },
+  options: { types: ["PRODUCT_OPTION", "PRODUCT_OPTION_VALUE"], itemTypes: [], icon: "variant", tint: "amber" },
   checkout: {
     types: ["SHOP", "SHOP_POLICY", "DELIVERY_METHOD_DEFINITION", "PAYMENT_GATEWAY", "SELLING_PLAN_GROUP", "SELLING_PLAN"],
     itemTypes: [],
     icon: "cart",
+    tint: "green",
   },
-  customFields: { types: ["PRODUCT_METAFIELD", "COLLECTION_METAFIELD", "PAGE_METAFIELD", "ARTICLE_METAFIELD"], itemTypes: [], icon: "metafields" },
-  metaobjects: { types: ["METAOBJECT"], itemTypes: ["METAOBJECT"], icon: "table" },
-  pages: { types: ["PAGE"], itemTypes: ["PAGE"], icon: "page" },
-  blog: { types: ["BLOG", "ARTICLE"], itemTypes: ["ARTICLE"], icon: "blog" },
-  images: { types: ["MEDIA_IMAGE", "COLLECTION_IMAGE", "ARTICLE_IMAGE"], itemTypes: ["MEDIA_IMAGE", "COLLECTION_IMAGE", "ARTICLE_IMAGE"], icon: "image" },
-} as const satisfies Record<CategoryId, { types: readonly string[]; itemTypes: readonly string[]; icon: string }>;
+  customFields: { types: ["PRODUCT_METAFIELD", "COLLECTION_METAFIELD", "PAGE_METAFIELD", "ARTICLE_METAFIELD"], itemTypes: [], icon: "metafields", tint: "blue" },
+  metaobjects: { types: ["METAOBJECT"], itemTypes: ["METAOBJECT"], icon: "metaobject", tint: "rose" },
+  pages: { types: ["PAGE"], itemTypes: ["PAGE"], icon: "page", tint: "teal" },
+  blog: { types: ["BLOG", "ARTICLE"], itemTypes: ["ARTICLE"], icon: "blog", tint: "amber" },
+  images: { types: ["MEDIA_IMAGE", "COLLECTION_IMAGE", "ARTICLE_IMAGE"], itemTypes: ["MEDIA_IMAGE", "COLLECTION_IMAGE", "ARTICLE_IMAGE"], icon: "image-alt", tint: "blue" },
+} as const satisfies Record<CategoryId, { types: readonly string[]; itemTypes: readonly string[]; icon: IconName; tint: Tint }>;
+
+/** Image descriptions and custom fields: translated with the things they belong to (ATTACHED). */
+export type AttachedPart = "images" | "customFields";
+
+export function isAttachedPart(id: string): id is AttachedPart {
+  return id === "images" || id === "customFields";
+}
+
+/**
+ * Per owner area, the coverage types of its image descriptions and custom
+ * fields: a bulk job of the owner with "Also translate image descriptions
+ * and extra details" (includeAttached) translates them with its items.
+ */
+export const ATTACHED = {
+  products: { images: ["MEDIA_IMAGE"], customFields: ["PRODUCT_METAFIELD"] },
+  collections: { images: ["COLLECTION_IMAGE"], customFields: ["COLLECTION_METAFIELD"] },
+  pages: { images: [], customFields: ["PAGE_METAFIELD"] },
+  blog: { images: ["ARTICLE_IMAGE"], customFields: ["ARTICLE_METAFIELD"] },
+} as const satisfies Partial<Record<CategoryId, Record<AttachedPart, readonly string[]>>>;
+
+export type AttachedArea = keyof typeof ATTACHED;
+
+/** The owner areas, in the areas' order. */
+export const ATTACHED_AREAS = Object.keys(ATTACHED) as AttachedArea[];
+
+export function hasAttached(area: CategoryId): area is AttachedArea {
+  return Object.hasOwn(ATTACHED, area);
+}
+
+/** Open texts of image descriptions and of extra details. */
+export type AttachedOpen = Record<AttachedPart, number>;
+
+const OWNER_OF = new Map<string, readonly [AttachedArea, AttachedPart]>(
+  ATTACHED_AREAS.flatMap((area) => (["images", "customFields"] as const).flatMap((part) => (ATTACHED[area][part] as readonly string[]).map((type) => [type, [area, part] as const] as const))),
+);
+
+/**
+ * Per owner area, the texts to translate (missing, outdated, failed) of its
+ * image descriptions and extra details in a language: what translating the
+ * owner with them would also do. URL handles never count.
+ */
+export function attachedOpen(rows: readonly CountInput[], locale: string): Record<AttachedArea, AttachedOpen> {
+  const open = Object.fromEntries(ATTACHED_AREAS.map((area) => [area, { images: 0, customFields: 0 }])) as Record<AttachedArea, AttachedOpen>;
+  for (const row of rows) {
+    if (row.locale !== locale || (HEADLINE_EXCLUDED_GROUPS as readonly string[]).includes(row.fieldGroup)) continue;
+    if (row.state !== "missing" && row.state !== "outdated" && row.state !== "failed") continue;
+    const owner = OWNER_OF.get(row.resourceType);
+    if (owner) open[owner[0]][owner[1]] += row.count;
+  }
+  return open;
+}
 
 /** Areas the language's percentage leaves out, shown last ("not in the N %"). */
 export const EXTRA_IDS = ["theme", "notifications", "urls"] as const;
@@ -148,8 +208,16 @@ export type CategoryState =
   | { kind: "counting" }
   /** Not fully read: skipped after errors, left by a measurement that stopped, or not read yet. Count again. */
   | { kind: "incomplete" }
-  /** Linguva may not read these types (an optional permission): never counted. `href` asks for the first one's permission. */
+  /**
+   * Linguva may not read these types: never counted. `href`: the Content page's permission card, which
+   * asks Shopify for every missing permission at once (null when none of them has one to ask for).
+   */
   | { kind: "no-access"; types: string[]; href: string | null };
+
+/** The Content page's card that asks for every missing permission at once, in a language. */
+export function contentAccessPath(locale: string): string {
+  return `/app/content?lang=${encodeURIComponent(locale)}#content-access`;
+}
 
 /**
  * A category's (or the theme's or notifications') scan state in a language,
@@ -167,8 +235,9 @@ export function categoryState(
   const rows = new Map(segments.filter((s) => s.locale === locale && types.includes(s.resourceType)).map((s) => [s.resourceType, s]));
   const denied = types.filter((type) => rows.get(type)?.status === "DENIED");
   if (denied.length) {
-    const permission = denied.find(isContentType);
-    return { kind: "no-access", types: denied, href: permission ? `/app/content/${CONTENT_TYPES[permission].slug}` : null };
+    // Only a permission the merchant can give leads anywhere: one Shopify screen for all of them.
+    const permission = denied.some((type) => isContentType(type) && CONTENT_TYPES[type].scope !== null);
+    return { kind: "no-access", types: denied, href: permission ? contentAccessPath(locale) : null };
   }
   const unread = types.filter((type) => rows.get(type)?.status !== "SCANNED");
   if (!unread.length) return { kind: "ok" };
@@ -179,21 +248,48 @@ export function categoryState(
   return options.scanning && unread.every(reading) ? { kind: "counting" } : { kind: "incomplete" };
 }
 
+/**
+ * Why translating in bulk can't start, where the merchant can change it: the
+ * AI permission (or a translation service it doesn't cover), the own key, the
+ * plan or the plan's languages. The app's own setup (background jobs, the
+ * operator's AI) isn't one: nothing on these pages fixes it.
+ */
+export const UNLOCK_GATES = ["CONSENT_REQUIRED", "ENGINE_CONSENT", "OWN_KEY_MISSING", "OWN_KEY_REFUSED", "PLAN_BULK", "PLAN_LANGUAGE"] as const;
+export type UnlockGate = (typeof UNLOCK_GATES)[number];
+
+export function isUnlockGate(code: string | null | undefined): code is UnlockGate {
+  return (UNLOCK_GATES as readonly string[]).includes(code ?? "");
+}
+
+/** Where a gate is lifted: the AI permission or the keys in Settings, or the Plan page. */
+export function unlockHref(gate: UnlockGate): string {
+  if (gate === "CONSENT_REQUIRED" || gate === "ENGINE_CONSENT") return "/app/settings?section=ai";
+  if (gate === "OWN_KEY_MISSING" || gate === "OWN_KEY_REFUSED") return "/app/settings?section=keys";
+  return "/app/plan";
+}
+
 export type LanguageStep =
   /** The language isn't counted yet: count the store. */
   | { kind: "count" }
   /** Drafts wait for approval; `payoff`: the percentage once approved (reviewPayoff). */
   | { kind: "review"; count: number; payoff: number | null; href: string }
-  /** A category has texts to translate: translate them in bulk (after confirming), or open its list when bulk isn't possible. */
-  | { kind: "category"; category: CategoryId; missing: number; outdated: number; failed: number; action: "translate" | "view"; href: string }
+  /** Translating can't start until the merchant lifts this (the AI permission, a key, the plan): its fix. */
+  | { kind: "unlock"; gate: UnlockGate; href: string }
+  /**
+   * A category has texts to translate: translate them in bulk (after confirming), or open its list when bulk
+   * isn't possible. `attached`: its items' image descriptions and extra details that also wait, translated
+   * with them (none for image descriptions and extra details themselves).
+   */
+  | { kind: "category"; category: CategoryId; missing: number; outdated: number; failed: number; attached: AttachedOpen; action: "translate" | "view"; href: string }
   /** These categories weren't fully read: count the store again. */
   | { kind: "recount"; categories: CategoryId[] }
-  /** Linguva may not read these categories: allow access (`href`: the first one's permission page). */
+  /** Linguva may not read these categories: allow access (`href`: the Content page's permission card). */
   | { kind: "access"; categories: CategoryId[]; href: string | null }
   /** Everything was read, and every counted text is translated and live. */
   | { kind: "done" };
 
 const MAX_STEPS = 3;
+const NO_ATTACHED: AttachedOpen = { images: 0, customFields: 0 };
 
 export interface LanguageStepsInput {
   locale: string;
@@ -207,18 +303,24 @@ export interface LanguageStepsInput {
    * Every category, those without texts too: its figure (categoryTallies),
    * its state (categoryState), and `bulk`: translating can start jobs for it
    * now (bulk types with open texts, and plan, consent, provider and queue
-   * allow it).
+   * allow it); for an owner of image descriptions and extra details,
+   * `attached`: theirs that wait (attachedOpen).
    */
-  categories: ReadonlyArray<{ id: CategoryId; tally: Tally; state: CategoryState; bulk: boolean }>;
+  categories: ReadonlyArray<{ id: CategoryId; tally: Tally; state: CategoryState; bulk: boolean; attached?: AttachedOpen }>;
   /** A measurement is under way: types it hasn't reached yet still show their last read, so never "done". */
   scanning?: boolean;
+  /** Translating in bulk waits for the merchant (an UnlockGate) while there is something to translate: its fix comes next. */
+  unlock?: UnlockGate | null;
 }
 
 /**
- * Up to three numbered next steps for a language. Approving comes first:
- * drafts are done work, only waiting to go live. Then the categories with
- * texts to translate, the first tier first and within a tier the most open
- * texts first; then content that wasn't read, never "done" over it. The
+ * Up to three next steps for a language. Approving comes first: drafts are
+ * done work, only waiting to go live. Then what keeps translating from
+ * starting, where the merchant can lift it. Then the categories with texts
+ * to translate, the first tier first and within a tier the most open texts
+ * first; image descriptions and extra details go with their owner's step
+ * (a step of their own only for those whose owner has nothing else to
+ * translate). Then content that wasn't read, never "done" over it. The
  * first step's action is the page's one primary button.
  */
 export function nextSteps(input: LanguageStepsInput): LanguageStep[] {
@@ -228,19 +330,30 @@ export function nextSteps(input: LanguageStepsInput): LanguageStep[] {
   if (waiting > 0) {
     steps.push({ kind: "review", count: waiting, payoff: reviewPayoff(input.headline), href: `/app/review?lang=${encodeURIComponent(input.locale)}` });
   }
+  if (input.unlock) steps.push({ kind: "unlock", gate: input.unlock, href: unlockHref(input.unlock) });
   const order = (id: CategoryId) => CATEGORY_IDS.indexOf(id);
   const inOrder = [...input.categories].sort((a, b) => order(a.id) - order(b.id));
+  const own = (c: (typeof inOrder)[number]) => stepCounts(c.tally.counts).open;
+  const attachedOf = (c: (typeof inOrder)[number]) => (isAttachedPart(c.id) ? NO_ATTACHED : (c.attached ?? NO_ATTACHED));
+  // Image descriptions and extra details whose owner has a step of its own go with it.
+  const covered = { images: 0, customFields: 0 };
+  for (const c of inOrder) {
+    if (isAttachedPart(c.id) || own(c) === 0) continue;
+    covered.images += attachedOf(c).images;
+    covered.customFields += attachedOf(c).customFields;
+  }
   const open = inOrder
-    .map((c) => ({ ...c, open: stepCounts(c.tally.counts).open }))
-    .filter((c) => c.open > 0)
-    .sort((a, b) => TIER_INDEX.get(a.id)! - TIER_INDEX.get(b.id)! || b.open - a.open || order(a.id) - order(b.id));
-  for (const c of open.slice(0, MAX_STEPS - steps.length)) {
+    .filter((c) => (isAttachedPart(c.id) ? own(c) > covered[c.id] : own(c) > 0))
+    .map((c) => ({ ...c, work: own(c) + attachedOf(c).images + attachedOf(c).customFields }))
+    .sort((a, b) => TIER_INDEX.get(a.id)! - TIER_INDEX.get(b.id)! || b.work - a.work || order(a.id) - order(b.id));
+  for (const c of open.slice(0, Math.max(0, MAX_STEPS - steps.length))) {
     steps.push({
       kind: "category",
       category: c.id,
       missing: c.tally.counts.missing,
       outdated: c.tally.counts.outdated,
       failed: c.tally.counts.failed,
+      attached: attachedOf(c),
       action: c.bulk ? "translate" : "view",
       href: categoryPath(input.locale, c.id),
     });
@@ -307,4 +420,24 @@ export function languagePath(locale: string): string {
 /** A category's list in a language (app/routes/app.languages_.$locale_.$category.tsx). */
 export function categoryPath(locale: string, category: CategoryId): string {
   return `${languagePath(locale)}/${category}`;
+}
+
+/**
+ * Where a language's page or an area's list was opened from: Content
+ * ("Inhalte") gives it the trail "Inhalte › Deutsch › Produkte", so the way
+ * back leads where the merchant came from; anything else the Overview's.
+ * A view choice of the address (`?from=content`), nothing more.
+ */
+export type Origin = "content" | null;
+
+export function originOf(value: string | null | undefined): Origin {
+  return value === "content" ? "content" : null;
+}
+
+/** An address on the language pages that keeps where the merchant came from. */
+export function withOrigin(href: string, origin: Origin): string {
+  if (!origin) return href;
+  const at = href.indexOf("#");
+  const [path, hash] = at < 0 ? [href, ""] : [href.slice(0, at), href.slice(at)];
+  return `${path}${path.includes("?") ? "&" : "?"}from=${origin}${hash}`;
 }

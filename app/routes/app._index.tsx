@@ -1,10 +1,15 @@
 /**
- * The Overview (`/app`): how far the store is in every language customers
- * can choose, next to the one next step (the page's only primary button) and
- * what else needs the merchant; the translations running now; then the
- * customers by country (or by language), each card the way to that
+ * The Overview (`/app`): the one next step (the page's only primary button)
+ * and what else needs the merchant, first, beside how far the store is in
+ * every language customers can choose; the translations running now; then
+ * the customers by country (or by language), each card the way to that
  * language's page. The page reloads itself only while a count or a
- * translation runs.
+ * translation runs. Back from Shopify's plan page (`?welcome=1`, the welcome
+ * link: app.welcome.tsx) it welcomes the merchant above the next step.
+ *
+ * Every card keeps its edge on a phone too (CARD), sections have one heading
+ * size (.lv-h2), and each step shows the icon of the place it opens in its
+ * tinted square; a state's icon marks the quieter rows.
  */
 import { randomUUID } from "node:crypto";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -24,18 +29,24 @@ import { deeplApiKeys, getConfig, isOperatorShop, translationEngineOrder } from 
 import { getQueues, getWorkerStatus } from "../.server/queue/client";
 import { consentedEngines, getShopSettings } from "../.server/settings/shop-settings";
 import { ProgressBar } from "../components/ProgressBar";
-import { durationText, percentLabel, SURFACE_COLOUR, TRACK_COLOUR } from "../components/Coverage";
+import { durationText, percentLabel, STATE_COLOURS } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
 import { DeepLQuota } from "../components/DeepLQuota";
 import { TranslationEngines } from "../components/TranslationEngines";
 import { CountryCards, LanguageCards } from "../components/CountryCards";
 import { categoryName } from "../components/CategoryCard";
+import { CARD } from "../components/ContentTiles";
 import { Flag } from "../components/Flag";
+import { IconSquare } from "../components/IconSquare";
 import { StateIcon, StateLines } from "../components/ItemStates";
-import { BIG_HEADING, PLAIN_LIST } from "../components/LanguageLayout";
+import { TintMark } from "../components/jobs/TintMark";
+import { PLAIN_LIST } from "../components/LanguageLayout";
+import { SegmentedButtons } from "../components/Segmented";
+import { Strong } from "../components/Type";
 import type { MissingReason } from "../lib/country-coverage";
 import { emptyCounts } from "../lib/coverage-rules";
 import { localeCountry } from "../lib/flags";
+import type { IconName } from "../lib/icons";
 import { categoryOf, languagePath } from "../lib/language-categories";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { jobErrorMessage } from "../i18n/labels";
@@ -43,6 +54,8 @@ import { ENGINE_IDS, ENGINE_NAMES } from "../lib/engines";
 import { usableOwnKey } from "../lib/own-keys";
 import { languageList, upperFirst } from "../lib/name-lists";
 import { useI18n } from "../i18n/react";
+import { Button } from "../components/Button";
+import { PageHeader } from "../components/PageHeader";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -69,7 +82,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const workerStopped = waiting && (await getWorkerStatus()).state === "stopped";
   // Counted among the engines this store allowed: one it hasn't translates nothing for it yet.
   const engines = operator && multi ? await operatorEngines(config, overview.targetLocales, { allowed: consentedEngines(await getShopSettings(shop.id)) }) : null;
-  return { ...overview, idempotencyKey: randomUUID(), jobsAvailable, workerStopped, deeplQuota: deeplQuota ? await deeplQuota : null, engines };
+  // Back from Shopify's plan page (the welcome link): only a plan that is active is welcomed.
+  const welcome = new URL(request.url).searchParams.get("welcome") === "1" && billing.configured && billing.state === "ACTIVE";
+  return { ...overview, idempotencyKey: randomUUID(), jobsAvailable, workerStopped, deeplQuota: deeplQuota ? await deeplQuota : null, engines, welcome };
 };
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
@@ -83,9 +98,6 @@ const POLL_MS: Partial<Record<MeasurementState, number>> = { queued: 3_000, runn
 const JOBS_POLL_MS = 5_000;
 const MEASURING: ReadonlySet<MeasurementState> = new Set(["queued", "waiting", "running"]);
 
-/** Visually hidden, still read out (a live region repeating text that is on screen). */
-const VISUALLY_HIDDEN = { position: "absolute", width: 1, height: 1, margin: -1, padding: 0, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 } as const;
-
 const COUNTRY_DETAIL: Record<MissingReason, MessageKey> = {
   "not-in-market": "overview.next.countries.notInMarket",
   unpublished: "overview.next.countries.unpublished",
@@ -95,12 +107,30 @@ const COUNTRY_DETAIL: Record<MissingReason, MessageKey> = {
 const LANGUAGE_SETTINGS = "shopify://admin/settings/languages";
 const MARKETS_SETTINGS = "shopify://admin/settings/markets";
 
+/** A link a step's button follows: an app page, or Shopify's settings (target _top). */
+interface LinkAction {
+  href: string;
+  label: string;
+  external?: boolean;
+  /** The destination's icon, on a secondary button (the next step's own icon is its square). */
+  icon?: IconName;
+}
+
 interface StepView {
   title: string;
   detail?: string;
+  /** The next step: the icon of the place it opens, in its tinted square; a quieter row: its state's icon. */
   icon: ReactNode;
-  /** A link to an app page or to Shopify's settings (target _top), or the counting form. */
-  action?: { href: string; label: string; external?: boolean; accessibilityLabel?: string } | { measure: string };
+  /** A link, or the counting form. */
+  action?: LinkAction | { measure: string };
+}
+
+/** Shopify's settings, each with one label and one icon wherever the page opens them (CountryCards too). */
+function languageSettings(i18n: I18n): LinkAction {
+  return { href: LANGUAGE_SETTINGS, label: i18n.t("overview.checklist.languageSettings"), external: true, icon: "language" };
+}
+function marketsSettings(i18n: I18n): LinkAction {
+  return { href: MARKETS_SETTINGS, label: i18n.t("overview.countries.marketsSettings"), external: true, icon: "globe" };
 }
 
 /** The store's original language in the admin's language, mid-sentence (Shopify names it in English). */
@@ -114,7 +144,7 @@ function namesOf(data: Data, i18n: I18n) {
   return (locale: string, name?: string | null) => i18n.language(locale, name ?? names.get(locale));
 }
 
-function countriesView(step: Extract<Step, { id: "countries" }>, data: Data, i18n: I18n): StepView {
+function countriesView(step: Extract<Step, { id: "countries" }>, data: Data, i18n: I18n, icon: ReactNode): StepView {
   const { t } = i18n;
   const languageName = namesOf(data, i18n);
   const languages = languageList(i18n, step.locales.map((l) => languageName(l.locale, l.name)));
@@ -122,14 +152,18 @@ function countriesView(step: Extract<Step, { id: "countries" }>, data: Data, i18
   return {
     title: t("overview.next.countries.label", { count: step.countries }),
     detail: addSome ? t("overview.next.countries.addSome", { max: data.maxLocales, count: step.free, missing: step.notAdded }) : t(COUNTRY_DETAIL[step.reason], { languages }),
-    icon: <s-icon type="globe" tone="caution" />,
-    action:
-      step.reason === "not-in-market"
-        ? { href: MARKETS_SETTINGS, label: t("overview.countries.marketsSettings"), external: true }
-        : { href: LANGUAGE_SETTINGS, label: t("overview.checklist.languageSettings"), external: true },
+    icon,
+    action: step.reason === "not-in-market" ? marketsSettings(i18n) : languageSettings(i18n),
   };
 }
 
+/**
+ * The next step, with the icon and tint of the place it opens (as in
+ * Settings): Shopify's languages (language, blue), counting (chart-donut,
+ * green), approving (eye-check-mark), the keys (key, slate), the AI
+ * permission (shield-check-mark, teal), translating (language-translate),
+ * the countries (globe, teal), no access (lock). Done is a success mark.
+ */
 function stepView(step: Step, data: Data, i18n: I18n): StepView {
   const { t } = i18n;
   const languageName = namesOf(data, i18n);
@@ -138,12 +172,12 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
       return {
         title: t("overview.checklist.language.label"),
         detail: t("overview.checklist.language.detail"),
-        icon: <s-icon type="language" />,
-        action: { href: LANGUAGE_SETTINGS, label: t("overview.checklist.languageSettings"), external: true },
+        icon: <IconSquare icon="language" tint="blue" />,
+        action: languageSettings(i18n),
       };
     case "measure": {
       const m = data.measurement;
-      const icon = <s-icon type="chart-donut" />;
+      const icon = <IconSquare icon="chart-donut" tint="green" />;
       if (MEASURING.has(m.state)) return { title: t("overview.next.measuring.label"), icon };
       if (m.state === "stalled") {
         return {
@@ -163,62 +197,66 @@ function stepView(step: Step, data: Data, i18n: I18n): StepView {
           data.storeShare?.payoff != null
             ? t("language.next.review.detail", { percent: i18n.percent(data.storeShare.payoff) })
             : t("language.next.review.detailNoGain"),
-        icon: <StateIcon state="waiting" />,
+        icon: <IconSquare icon="eye-check-mark" tint="violet" />,
         action: { href: "/app/review", label: t("language.next.review.action") },
       };
     case "own-key":
       return {
         title: t("overview.checklist.ownKey.label"),
         detail: t("overview.checklist.ownKey.detail"),
-        icon: <s-icon type="connect" />,
-        action: { href: "/app/settings#settings-keys", label: t("overview.checklist.ownKey.action") },
+        icon: <IconSquare icon="key" tint="slate" />,
+        action: { href: "/app/settings?section=keys", label: t("overview.checklist.ownKey.action") },
       };
     case "consent":
       return {
         title: t("overview.checklist.consent.label"),
         detail: t("overview.checklist.consent.detail"),
-        icon: <s-icon type="settings" />,
-        action: { href: "/app/settings", label: t("overview.checklist.consent.action") },
+        icon: <IconSquare icon="shield-check-mark" tint="teal" />,
+        action: { href: "/app/settings?section=ai", label: t("overview.checklist.consent.action") },
       };
     case "first-translation":
       return {
         title: t("overview.checklist.firstTranslation.label"),
         detail: t(data.aiAvailable ? "overview.checklist.firstTranslation.detail" : "overview.checklist.firstTranslation.detailManual"),
-        icon: <s-icon type="product" />,
+        icon: <IconSquare icon="language-translate" tint="blue" />,
         action: { href: step.href, label: t("overview.checklist.firstTranslation.action") },
       };
     case "publish-language":
       return {
         title: t("overview.checklist.publishLanguage.label"),
         detail: t("overview.checklist.publishLanguage.detail"),
-        icon: <s-icon type="view" />,
-        action: { href: LANGUAGE_SETTINGS, label: t("overview.checklist.languageSettings"), external: true },
+        icon: <IconSquare icon="language" tint="blue" />,
+        action: languageSettings(i18n),
       };
     case "translate":
       return {
         title: t("overview.next.translate.label", { language: languageName(step.locale, step.name) }),
         detail: t("overview.next.translate.detail", { percent: percentLabel(i18n, step.complete, step.total), primary: primaryName(data, i18n) }),
-        icon: <StateIcon state="missing" />,
+        icon: <IconSquare icon="language-translate" tint="blue" />,
         action: { href: languagePath(step.locale), label: t("coverage.next.action.missing") },
       };
     case "countries":
-      return countriesView(step, data, i18n);
+      return countriesView(step, data, i18n, <IconSquare icon="globe" tint="teal" />);
     case "unread":
       return {
         title: t("overview.next.unread.label"),
         detail: t("overview.next.unread.detail"),
-        icon: <s-icon type="alert-triangle" tone="caution" />,
-        action: { measure: t("overview.header.recount") },
+        icon: <IconSquare icon="chart-donut" tint="green" />,
+        action: { measure: t("overview.store.recount") },
       };
     case "access":
       return {
         title: t("overview.next.access.label", { count: step.types }),
         detail: t("overview.next.access.detail"),
-        icon: <s-icon type="lock" />,
+        icon: <IconSquare icon="lock" />,
         action: step.href ? { href: step.href, label: t("coverage.types.allowAccess") } : { href: "/app/coverage", label: t("overview.next.access.coverage") },
       };
     case "done":
-      return { title: t("overview.next.done.label"), detail: t("overview.next.done.detail"), icon: <StateIcon state="complete" /> };
+      return {
+        title: t("overview.next.done.label"),
+        detail: t("overview.next.done.detail"),
+        icon: <TintMark icon="check-circle-filled" tone="success" colour={STATE_COLOURS.complete} size={40} />,
+      };
   }
 }
 
@@ -235,33 +273,32 @@ function ownKeyProblem(data: Data, i18n: I18n): string | null {
   return null;
 }
 
-/** Outdated or failed texts across the languages, or countries without their language: a quieter row each. */
+/**
+ * Outdated or failed texts across the languages, or countries without their
+ * language: a quieter row each, its title naming the languages and its
+ * button the one it opens (the language with the most of them).
+ */
 function attentionView(item: Attention, data: Data, i18n: I18n): StepView {
   const { t } = i18n;
-  if (item.id === "countries") return countriesView(item, data, i18n);
+  if (item.id === "countries") return countriesView(item, data, i18n, <s-icon type="globe" tone="caution" />);
   const languageName = namesOf(data, i18n);
-  // The language with the most of them opens; the line names every one.
   const first = item.locales[0]!;
-  const languages = t("overview.attention.in", { languages: languageList(i18n, item.locales.map((l) => languageName(l.locale, l.name))) });
-  const action = {
-    href: languagePath(first.locale),
-    label: t("overview.attention.view"),
-    accessibilityLabel: `${upperFirst(languageName(first.locale, first.name))}: ${t("overview.attention.view")}`,
-  };
+  const languages = languageList(i18n, item.locales.map((l) => languageName(l.locale, l.name)));
+  const action: LinkAction = { href: languagePath(first.locale), label: t("overview.attention.open", { language: languageName(first.locale, first.name) }) };
   return item.id === "outdated"
-    ? { title: t("overview.attention.outdated", { count: item.count }), detail: `${t("language.words.outdated")} ${languages}`, icon: <StateIcon state="outdated" />, action }
-    : { title: t("overview.attention.failed", { count: item.count }), detail: `${languages} ${t("overview.attention.failedDetail")}`, icon: <StateIcon state="failed" />, action };
+    ? { title: t("overview.attention.outdated", { count: item.count, languages }), detail: t("language.words.outdated"), icon: <StateIcon state="outdated" />, action }
+    : { title: t("overview.attention.failed", { count: item.count, languages }), detail: t("overview.attention.failedDetail"), icon: <StateIcon state="failed" />, action };
 }
 
-/** The form that counts the store (intent "run" of the Coverage page's action). */
+/** The form that counts the store (intent "run" of the Coverage page's action); secondary with the counting icon. */
 function CountForm({ fetcher, data, label, primary }: { fetcher: Counter; data: Data; label: string; primary: boolean }) {
   return (
     <fetcher.Form method="post" action="/app/coverage">
       <input type="hidden" name="intent" value="run" />
       <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-      <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(primary ? {} : { icon: "refresh" })} {...(fetcher.state !== "idle" ? { loading: true } : {})}>
+      <Button type="submit" variant={primary ? "primary" : "secondary"} {...(primary ? {} : { icon: "chart-donut" })} {...(fetcher.state !== "idle" ? { loading: true } : {})}>
         {label}
-      </s-button>
+      </Button>
     </fetcher.Form>
   );
 }
@@ -272,14 +309,14 @@ function StepAction({ view, primary, data, counter }: { view: StepView; primary:
   if (!action) return null;
   if ("measure" in action) return <CountForm fetcher={counter} data={data} label={action.measure} primary={primary} />;
   return (
-    <s-button
+    <Button
       variant={primary ? "primary" : "secondary"}
       href={action.href}
       {...(action.external ? { target: "_top" } : {})}
-      {...(action.accessibilityLabel ? { accessibilityLabel: action.accessibilityLabel } : {})}
+      {...(!primary && action.icon ? { icon: action.icon } : {})}
     >
       {action.label}
-    </s-button>
+    </Button>
   );
 }
 
@@ -314,70 +351,77 @@ function NextSteps({ data, i18n }: { data: Data; i18n: I18n }) {
   const endedQuietly = !measuring && step?.id === "measure" && (ended === "failed" || ended === "stalled") ? view?.title : null;
   const more = data.attention.map((item) => ({ key: item.id, view: attentionView(item, data, i18n) }));
   return (
-    <s-section heading={t("language.next.heading")}>
-      <s-stack direction="block" gap="base">
-        {counter.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
-        {view ? (
-          <s-box padding="base" background="subdued" borderRadius="large">
-            <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-              {view.icon}
-              <s-stack direction="block" gap="small-200">
-                <s-stack direction="block" gap="small-500">
-                  <s-text type="strong">{view.title}</s-text>
-                  {view.detail ? <s-text color="subdued">{view.detail}</s-text> : null}
+    <section id="overview-next" aria-labelledby="overview-next-heading">
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <h2 id="overview-next-heading" className="lv-h2">
+            {t("language.next.heading")}
+          </h2>
+          {counter.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
+          {view ? (
+            // The step in the card itself (no box inside the card): its icon square marks it.
+            <div>
+              <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="start">
+                {view.icon}
+                <s-stack direction="block" gap="small-200">
+                  <s-stack direction="block" gap="small-500">
+                    <h3 className="lv-h3">{view.title}</h3>
+                    {view.detail ? <s-text color="subdued">{view.detail}</s-text> : null}
+                  </s-stack>
+                  {measuring && m.state === "running" ? (
+                    <s-stack direction="block" gap="small-300">
+                      <ProgressBar value={(m.done / Math.max(1, m.total)) * 100} label={t("language.hero.progressLabel")} />
+                      <s-text color="subdued">{t("language.hero.progress", { done: m.done, total: m.total })}</s-text>
+                    </s-stack>
+                  ) : null}
+                  <div role="status" tabIndex={-1} ref={status} className="lv-ov-status">
+                    {live ? <s-text color="subdued">{live}</s-text> : endedQuietly ? <span className="lv-sr">{endedQuietly}</span> : null}
+                  </div>
+                  {view.action ? (
+                    <s-stack direction="inline">
+                      <StepAction view={view} primary data={data} counter={counter} />
+                    </s-stack>
+                  ) : null}
                 </s-stack>
-                {measuring && m.state === "running" ? (
-                  <s-stack direction="block" gap="small-300">
-                    <ProgressBar value={(m.done / Math.max(1, m.total)) * 100} label={t("language.hero.progressLabel")} />
-                    <s-text color="subdued">{t("language.hero.progress", { done: m.done, total: m.total })}</s-text>
-                  </s-stack>
-                ) : null}
-                <div role="status" tabIndex={-1} ref={status} style={{ outline: "none" }}>
-                  {live ? <s-text color="subdued">{live}</s-text> : endedQuietly ? <span style={VISUALLY_HIDDEN}>{endedQuietly}</span> : null}
-                </div>
-                {view.action ? (
-                  <s-stack direction="inline">
-                    <StepAction view={view} primary data={data} counter={counter} />
-                  </s-stack>
-                ) : null}
-              </s-stack>
-            </s-grid>
-          </s-box>
-        ) : null}
-        {more.length ? (
-          <s-query-container>
-            <ul style={{ ...PLAIN_LIST, display: "grid", gap: 12 }}>
-              {more.map(({ key, view: item }, i) => (
-                <li key={key}>
-                  <s-stack direction="block" gap="base">
-                    {i > 0 ? <s-divider /> : null}
-                    <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-                      {item.icon}
-                      <s-grid gridTemplateColumns="@container (inline-size > 480px) 1fr auto, 1fr" gap="small-200" alignItems="center" justifyItems="start">
-                        <s-stack direction="block" gap="small-500">
-                          <s-text type="strong">{item.title}</s-text>
-                          {item.detail ? <s-text color="subdued">{item.detail}</s-text> : null}
-                        </s-stack>
-                        <StepAction view={item} primary={false} data={data} counter={counter} />
+              </s-grid>
+            </div>
+          ) : null}
+          {more.length ? (
+            <s-query-container>
+              <ul style={{ ...PLAIN_LIST, display: "grid", gap: 12 }}>
+                {more.map(({ key, view: item }, i) => (
+                  <li key={key}>
+                    <s-stack direction="block" gap="base">
+                      {/* A line between the rows, and between the step and the first of them. */}
+                      {i > 0 || view ? <s-divider /> : null}
+                      <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
+                        {item.icon}
+                        <s-grid gridTemplateColumns="@container (inline-size > 480px) 1fr auto, 1fr" gap="small-200 base" alignItems="center" justifyItems="start">
+                          <s-stack direction="block" gap="small-500">
+                            <Strong>{item.title}</Strong>
+                            {item.detail ? <s-text color="subdued">{item.detail}</s-text> : null}
+                          </s-stack>
+                          <StepAction view={item} primary={false} data={data} counter={counter} />
+                        </s-grid>
                       </s-grid>
-                    </s-grid>
-                  </s-stack>
-                </li>
-              ))}
-            </ul>
-          </s-query-container>
-        ) : null}
-        {!view && !more.length ? (
-          <s-text color="subdued">{data.jobsAvailable || data.measuredAt ? t("language.next.empty") : t("overview.scan.unavailable")}</s-text>
-        ) : null}
-      </s-stack>
-    </s-section>
+                    </s-stack>
+                  </li>
+                ))}
+              </ul>
+            </s-query-container>
+          ) : null}
+          {!view && !more.length ? (
+            <s-text color="subdued">{data.jobsAvailable || data.measuredAt ? t("language.next.empty") : t("overview.scan.unavailable")}</s-text>
+          ) : null}
+        </s-stack>
+      </s-box>
+    </section>
   );
 }
 
 /**
  * Counting a store that was counted before: its figures stay while a newer
- * count runs, and this says how it goes (after the header's button).
+ * count runs, and this says how it goes (after the store card's button).
  */
 function RecountStatus({ data, i18n, statusRef }: { data: Data; i18n: I18n; statusRef: RefObject<HTMLDivElement> }) {
   const { t } = i18n;
@@ -408,14 +452,16 @@ function RecountStatus({ data, i18n, statusRef }: { data: Data; i18n: I18n; stat
   return (
     <div>
       {m.state === "running" ? (
-        <s-stack direction="block" gap="small-300">
-          <ProgressBar value={(m.done / Math.max(1, m.total)) * 100} label={t("language.hero.progressLabel")} />
-          <s-text color="subdued">{t("language.hero.progress", { done: m.done, total: m.total })}</s-text>
-        </s-stack>
+        <div className="lv-ov-follow">
+          <s-stack direction="block" gap="small-300">
+            <ProgressBar value={(m.done / Math.max(1, m.total)) * 100} label={t("language.hero.progressLabel")} />
+            <s-text color="subdued">{t("language.hero.progress", { done: m.done, total: m.total })}</s-text>
+          </s-stack>
+        </div>
       ) : null}
-      <div role="status" tabIndex={-1} ref={statusRef} style={{ outline: "none" }}>
+      <div role="status" tabIndex={-1} ref={statusRef} className="lv-ov-status">
         {live ? (
-          <div style={{ paddingTop: m.state === "running" ? 8 : 0 }}>
+          <div className="lv-ov-follow">
             <s-text color="subdued">{live}</s-text>
           </div>
         ) : null}
@@ -424,8 +470,44 @@ function RecountStatus({ data, i18n, statusRef }: { data: Data; i18n: I18n; stat
   );
 }
 
+/**
+ * The store card's foot: when the store was last counted, the button that
+ * counts it again (secondary: the next step keeps the page's primary button)
+ * and how a newer count goes.
+ */
+function Counting({ data, i18n, counted, canRecount, recounter, statusRef }: { data: Data; i18n: I18n; counted: boolean; canRecount: boolean; recounter: Counter; statusRef: RefObject<HTMLDivElement> }) {
+  const { t } = i18n;
+  if (!data.measuredAt) return null;
+  return (
+    <s-stack direction="block" gap="base">
+      <s-divider />
+      <s-query-container>
+        <s-grid gridTemplateColumns="@container (inline-size > 520px) 1fr auto, 1fr" gap="small-200 base" alignItems="center" justifyItems="start">
+          <div>
+            <s-text color="subdued">{t("overview.store.counted", { date: i18n.dateTime(data.measuredAt) })}</s-text>
+            {counted ? <RecountStatus data={data} i18n={i18n} statusRef={statusRef} /> : null}
+          </div>
+          {canRecount ? <CountForm fetcher={recounter} data={data} label={t("overview.store.recount")} primary={false} /> : null}
+        </s-grid>
+      </s-query-container>
+    </s-stack>
+  );
+}
+
+/** A quiet line with its icon: a note under the store's figures, the AI characters at the page's foot. */
+function Note({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="lv-ov-note">
+      <span className="lv-ov-note__icon" aria-hidden="true">
+        {icon}
+      </span>
+      <s-text color="subdued">{children}</s-text>
+    </div>
+  );
+}
+
 /** How far the store is in the languages customers can choose: the ring, the figure and each state. */
-function StoreFigure({ data, i18n, recount }: { data: Data; i18n: I18n; recount: ReactNode }) {
+function StoreFigure({ data, i18n, counting }: { data: Data; i18n: I18n; counting: ReactNode }) {
   const { t } = i18n;
   const share = data.storeShare;
   const primary = primaryName(data, i18n);
@@ -433,48 +515,51 @@ function StoreFigure({ data, i18n, recount }: { data: Data; i18n: I18n; recount:
   if (share && share.total > 0) {
     const percent = percentLabel(i18n, share.complete, share.total);
     return (
-      <s-section accessibilityLabel={t("overview.store.label")}>
-        <s-stack direction="block" gap="base">
-          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="large" alignItems="center">
-            <CoverageRing
-              counts={share.counts}
-              figure={percent}
-              caption={t("language.hero.translated")}
-              label={t("language.hero.ringLabel", { percent, complete: share.complete, total: share.total })}
-              size={112}
-            />
-            <s-stack direction="block" gap="small-300">
-              <s-heading>{t("overview.store.heading", { count: share.published })}</s-heading>
-              <s-text color="subdued">
-                {share.languages < share.published
-                  ? t("overview.store.figureSome", { complete: share.complete, total: share.total, count: share.languages, published: share.published })
-                  : t("overview.store.figure", { complete: share.complete, total: share.total })}
-              </s-text>
-            </s-stack>
-          </s-grid>
-          <StateLines counts={share.counts} i18n={i18n} />
-          <s-text color="subdued">{t("language.hero.fallback", { primary })}</s-text>
-          {share.payoff !== null ? (
-            <s-stack direction="inline">
-              <s-badge tone="info" icon="arrow-up-right">
-                {t("language.hero.payoff", { count: share.counts.draft + share.counts.review, percent: i18n.percent(share.payoff) })}
-              </s-badge>
-            </s-stack>
-          ) : null}
-          {data.unreadable ? (
-            <s-text color="subdued">
-              {t("overview.languages.unreadable", { count: data.unreadable.types })}{" "}
-              {data.unreadable.href ? <s-link href={data.unreadable.href}>{t("coverage.types.allowAccess")}</s-link> : null}
-            </s-text>
-          ) : null}
-          {partial.length ? (
-            <s-text color="subdued">
-              {t("overview.languages.partial", { languages: languageList(i18n, partial.map((l) => i18n.language(l.locale, l.name))), count: partial.length })}
-            </s-text>
-          ) : null}
-          {recount}
-        </s-stack>
-      </s-section>
+      <section aria-label={t("overview.store.label")}>
+        <s-box {...CARD} padding="base">
+          <s-stack direction="block" gap="base">
+            <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="large" alignItems="center">
+              <CoverageRing
+                counts={share.counts}
+                figure={percent}
+                caption={t("language.hero.translated")}
+                label={t("language.hero.ringLabel", { percent, complete: share.complete, total: share.total, count: share.total })}
+                size={112}
+              />
+              <s-stack direction="block" gap="small-300">
+                <h2 className="lv-h2">{t("overview.store.heading", { count: share.published })}</h2>
+                <s-text color="subdued">
+                  {share.languages < share.published
+                    ? t("overview.store.figureSome", { complete: share.complete, total: share.total, count: share.languages, published: share.published })
+                    : t("overview.store.figure", { complete: share.complete, total: share.total })}
+                </s-text>
+              </s-stack>
+            </s-grid>
+            <StateLines counts={share.counts} i18n={i18n} strong />
+            <s-text color="subdued">{t("language.hero.fallback", { primary })}</s-text>
+            {/* While approving is the next step, that step says what it brings. */}
+            {share.payoff !== null && data.next?.id !== "review" ? (
+              <s-stack direction="inline">
+                <s-badge tone="info" icon="arrow-up-right">
+                  {t("language.hero.payoff", { count: share.counts.draft + share.counts.review, percent: i18n.percent(share.payoff) })}
+                </s-badge>
+              </s-stack>
+            ) : null}
+            {data.unreadable ? (
+              <Note icon={<s-icon type="lock" color="subdued" size="small" />}>
+                {t("overview.languages.unreadable", { count: data.unreadable.types })}{" "}
+                {data.unreadable.href ? <s-link href={data.unreadable.href}>{t("coverage.types.allowAccess")}</s-link> : null}
+              </Note>
+            ) : null}
+            {partial.length ? (
+              <Note icon={<s-icon type="alert-triangle" tone="caution" size="small" />}>
+                {t("overview.languages.partial", { languages: languageList(i18n, partial.map((l) => i18n.language(l.locale, l.name))), count: partial.length })}
+              </Note>
+            ) : null}
+            {counting}
+          </s-stack>
+        </s-box>
+      </section>
     );
   }
   const published = data.progress.filter((l) => l.published);
@@ -488,26 +573,28 @@ function StoreFigure({ data, i18n, recount }: { data: Data; i18n: I18n; recount:
           ? [t("language.hero.counting"), t("language.hero.countingHelp")]
           : [t("language.hero.notCounted"), data.jobsAvailable ? t("overview.store.notCountedHelp") : t("overview.scan.unavailable")];
   return (
-    <s-section accessibilityLabel={t("overview.store.label")}>
-      <s-stack direction="block" gap="base">
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="large" alignItems="center">
-          <CoverageRing counts={emptyCounts()} figure="—" caption={t("language.hero.translated")} label={title} size={112} />
-          <s-stack direction="block" gap="small-300">
-            <s-heading>{title}</s-heading>
-            <s-text color="subdued">{help}</s-text>
-          </s-stack>
-        </s-grid>
-        {published.length ? (
-          <s-paragraph>
-            {t("overview.store.languages", {
-              count: published.length,
-              languages: published.map((l) => i18n.language(l.locale, l.name)).sort((a, b) => a.localeCompare(b, i18n.locale)).join(", "),
-            })}
-          </s-paragraph>
-        ) : null}
-        {recount}
-      </s-stack>
-    </s-section>
+    <section aria-label={t("overview.store.label")}>
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="large" alignItems="center">
+            <CoverageRing counts={emptyCounts()} figure="—" caption={t("language.hero.translated")} label={title} size={112} />
+            <s-stack direction="block" gap="small-300">
+              <h2 className="lv-h2">{title}</h2>
+              <s-text color="subdued">{help}</s-text>
+            </s-stack>
+          </s-grid>
+          {published.length ? (
+            <s-paragraph>
+              {t("overview.store.languages", {
+                count: published.length,
+                languages: published.map((l) => i18n.language(l.locale, l.name)).sort((a, b) => a.localeCompare(b, i18n.locale)).join(", "),
+              })}
+            </s-paragraph>
+          ) : null}
+          {counting}
+        </s-stack>
+      </s-box>
+    </section>
   );
 }
 
@@ -525,80 +612,51 @@ function RunningJobs({ data, i18n, marketCountries }: { data: Data; i18n: I18n; 
   const languageName = namesOf(data, i18n);
   const more = data.activeJobs - data.jobs.length;
   return (
-    <s-section accessibilityLabel={t("overview.jobs.heading")}>
-      <s-stack direction="block" gap="base">
-        <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
-          <s-heading>{t("overview.jobs.heading")}</s-heading>
-          <s-link href="/app/jobs">{t("overview.jobs.all")}</s-link>
-        </s-grid>
-        <s-query-container>
-          <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="large">
-            {data.jobs.map((job) => {
-              const title = `${upperFirst(languageName(job.locale))} · ${jobArea(i18n, job.resourceType)}`;
-              const after = [
-                job.remainingMs !== null ? t("overview.jobs.eta", { duration: durationText(i18n, job.remainingMs) }) : t("overview.jobs.noEta"),
-                job.publishMode === "DRAFT" ? t("overview.jobs.review", { review: t("common.nav.review") }) : null,
-              ]
-                .filter(Boolean)
-                .join(" ");
-              return (
-                <s-stack key={job.id} direction="block" gap="small-200">
-                  <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
-                    <Flag country={localeCountry(job.locale, marketCountries)} fallback={job.locale} size={20} />
-                    <s-link href={`/app/jobs/${job.id}`}>{title}</s-link>
-                    {/* Until every item is found the total still grows: no figure yet. */}
-                    {job.discoveryDone ? <s-text color="subdued">{t("overview.jobs.progress", { done: job.done, total: job.total })}</s-text> : <span />}
-                  </s-grid>
-                  {job.discoveryDone ? <ProgressBar value={job.percent} label={t("language.card.jobLabel", { category: title })} /> : null}
-                  <s-text color="subdued">{job.discoveryDone ? after : t("overview.jobs.finding")}</s-text>
-                </s-stack>
-              );
-            })}
+    <section aria-labelledby="overview-jobs-heading">
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
+            <h2 id="overview-jobs-heading" className="lv-h2 lv-ov-heading">
+              <span className="lv-ov-heading__icon" aria-hidden="true">
+                <s-icon type="in-progress" tone="info" />
+              </span>
+              {t("overview.jobs.heading")}
+            </h2>
+            <s-link href="/app/jobs">{t("overview.jobs.all")}</s-link>
           </s-grid>
-        </s-query-container>
-        {more > 0 ? <s-text color="subdued">{t("overview.jobs.more", { count: more })}</s-text> : null}
-      </s-stack>
-    </s-section>
+          <s-query-container>
+            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="large">
+              {data.jobs.map((job) => {
+                const title = `${upperFirst(languageName(job.locale))} · ${jobArea(i18n, job.resourceType)}`;
+                const after = [
+                  job.remainingMs !== null ? t("overview.jobs.eta", { duration: durationText(i18n, job.remainingMs) }) : t("overview.jobs.noEta"),
+                  job.publishMode === "DRAFT" ? t("overview.jobs.review", { review: t("common.nav.review") }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <s-stack key={job.id} direction="block" gap="small-200">
+                    <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
+                      <Flag country={localeCountry(job.locale, marketCountries)} fallback={job.locale} size={20} />
+                      <s-link href={`/app/jobs/${job.id}`}>{title}</s-link>
+                      {/* Until every item is found the total still grows: no figure yet. */}
+                      {job.discoveryDone ? <s-text color="subdued">{t("overview.jobs.progress", { done: job.done, total: job.total })}</s-text> : <span />}
+                    </s-grid>
+                    {job.discoveryDone ? <ProgressBar value={job.percent} label={t("language.card.jobLabel", { category: title })} /> : null}
+                    <s-text color="subdued">{job.discoveryDone ? after : t("overview.jobs.finding")}</s-text>
+                  </s-stack>
+                );
+              })}
+            </s-grid>
+          </s-query-container>
+          {more > 0 ? <s-text color="subdued">{t("overview.jobs.more", { count: more })}</s-text> : null}
+        </s-stack>
+      </s-box>
+    </section>
   );
 }
 
 type View = "countries" | "languages";
-
-/** Countries | Languages: two toggle buttons (Polaris has none), the choice kept in the address (`?view=`). */
-function ViewSwitch({ view, onChange, i18n }: { view: View; onChange: (view: View) => void; i18n: I18n }) {
-  const { t } = i18n;
-  const option = (value: View, label: string) => {
-    const pressed = view === value;
-    return (
-      <button
-        type="button"
-        aria-pressed={pressed}
-        onClick={() => onChange(value)}
-        style={{
-          minHeight: 32,
-          minWidth: 44,
-          padding: "4px 14px",
-          border: 0,
-          borderRadius: 8,
-          background: pressed ? SURFACE_COLOUR : "transparent",
-          boxShadow: pressed ? "0 0 0 1px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.1)" : "none",
-          color: "inherit",
-          font: "inherit",
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
-      >
-        {label}
-      </button>
-    );
-  };
-  return (
-    <div role="group" aria-label={t("overview.places.view.label")} style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: 10, background: TRACK_COLOUR }}>
-      {option("countries", t("overview.places.view.countries"))}
-      {option("languages", t("overview.places.view.languages"))}
-    </div>
-  );
-}
 
 /** The customers by country (needs the markets) or by language: every card opens that language's page. */
 function Places({ data, i18n, marketCountries }: { data: Data; i18n: I18n; marketCountries: readonly string[] }) {
@@ -631,48 +689,55 @@ function Places({ data, i18n, marketCountries }: { data: Data; i18n: I18n; marke
     const area = jobArea(i18n, job.resourceType);
     if (!areas.includes(area)) running.set(job.locale, [...areas, area]);
   }
+  // The next step (or a row under it) already offers adding the missing languages: the countries without one don't repeat it.
+  const addOffered = [data.next, ...data.attention].some((s) => s?.id === "countries" && s.reason === "not-added");
   const shared = { i18n, languages: data.progress, running, primary: primaryName(data, i18n) };
   return (
-    <s-query-container>
-      <s-stack direction="block" gap="base">
-        <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="base" alignItems="end" justifyItems="start">
-          <s-stack direction="block" gap="small-500">
-            <h2 style={{ ...BIG_HEADING, fontSize: 17, lineHeight: "24px", fontWeight: 650 }}>
-              {view === "countries" ? t("overview.places.countries.heading") : t("overview.places.languages.heading")}
-            </h2>
-            <s-text color="subdued">{view === "countries" ? t("overview.places.countries.intro") : t("overview.places.languages.intro")}</s-text>
-          </s-stack>
-          {hasCountries ? <ViewSwitch view={view} onChange={choose} i18n={i18n} /> : null}
-        </s-grid>
-        {countries && !countries.access ? (
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <s-icon type="globe" color="subdued" size="small" />
-            <s-text color="subdued">{t("overview.places.access")}</s-text>
-            <access.Form method="post" action="/app/markets">
-              <s-button type="submit" {...(access.state !== "idle" ? { loading: true } : {})}>
-                {t("overview.places.access.allow")}
-              </s-button>
-            </access.Form>
-          </s-stack>
-        ) : countries && "error" in countries ? (
-          <s-banner tone="warning">{t("overview.countries.error")}</s-banner>
-        ) : rows && !rows.length ? (
-          <s-text color="subdued">{t("overview.countries.none")}</s-text>
-        ) : null}
-        <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="small-200" alignItems="center">
-          <s-stack direction="inline" gap="small-300" alignItems="center">
-            <s-icon type="sort" color="subdued" size="small" />
-            <s-text color="subdued">{t("overview.places.sort")}</s-text>
-          </s-stack>
-          {view === "countries" ? <s-text color="subdued">{t("overview.places.countryNote")}</s-text> : null}
-        </s-grid>
-        {view === "countries" && rows ? (
-          <CountryCards {...shared} countries={rows} freeLanguages={data.remainingLocales} maxLanguages={data.maxLocales} />
-        ) : (
-          <LanguageCards {...shared} countriesOf={countriesOf} marketCountries={marketCountries} />
-        )}
-      </s-stack>
-    </s-query-container>
+    <section aria-labelledby="overview-places-heading">
+      <s-query-container>
+        <s-stack direction="block" gap="base">
+          <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="base" alignItems="end" justifyItems="start">
+            <s-stack direction="block" gap="small-500">
+              <h2 id="overview-places-heading" className="lv-h2">
+                {view === "countries" ? t("overview.places.countries.heading") : t("overview.places.languages.heading")}
+              </h2>
+              <s-text color="subdued">{view === "countries" ? t("overview.places.countries.intro") : t("overview.places.languages.intro")}</s-text>
+            </s-stack>
+            {hasCountries ? (
+              <SegmentedButtons
+                label={t("overview.places.view.label")}
+                value={view}
+                onChange={choose}
+                options={[
+                  { value: "countries", label: t("overview.places.view.countries"), icon: "globe" },
+                  { value: "languages", label: t("overview.places.view.languages"), icon: "language" },
+                ]}
+              />
+            ) : null}
+          </s-grid>
+          {countries && !countries.access ? (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-icon type="globe" color="subdued" size="small" />
+              <s-text color="subdued">{t("overview.places.access")}</s-text>
+              <access.Form method="post" action="/app/markets">
+                <Button type="submit" {...(access.state !== "idle" ? { loading: true } : {})}>
+                  {t("overview.places.access.allow")}
+                </Button>
+              </access.Form>
+            </s-stack>
+          ) : countries && "error" in countries ? (
+            <s-banner tone="warning">{t("overview.countries.error")}</s-banner>
+          ) : rows && !rows.length ? (
+            <s-text color="subdued">{t("overview.countries.none")}</s-text>
+          ) : null}
+          {view === "countries" && rows ? (
+            <CountryCards {...shared} countries={rows} freeLanguages={data.remainingLocales} maxLanguages={data.maxLocales} languageFixOffered={addOffered} />
+          ) : (
+            <LanguageCards {...shared} countriesOf={countriesOf} marketCountries={marketCountries} />
+          )}
+        </s-stack>
+      </s-query-container>
+    </section>
   );
 }
 
@@ -703,9 +768,11 @@ export default function Overview() {
     if (recounter.state === "idle" && recounter.data?.ok) recountStatus.current?.focus();
   }, [recounter.state, recounter.data]);
 
-  // A store counted before counts again from the header, unless the next step already offers it.
+  // A store counted before counts again from its card, unless the next step already offers it.
   const counted = data.measuredAt !== null && data.next?.id !== "measure";
   const canRecount = counted && data.jobsAvailable && data.next?.id !== "unread" && !MEASURING.has(m.state);
+  // Own key plan without a key that works: the welcome asks for it first, as on the Plan page.
+  const ownKeyMissing = data.ownKeys?.access === "plan" && !data.ownKeys.keys.some(usableOwnKey);
   const subtitle = [
     data.shopName,
     data.primaryLocale ? t("overview.header.primary", { language: upperFirst(primaryName(data, i18n)) }) : null,
@@ -715,23 +782,27 @@ export default function Overview() {
     .join(" · ");
 
   return (
-    <s-page heading={t("common.nav.overview")} inlineSize="large">
+    <s-page heading={t("common.nav.overview")}>
       <s-stack direction="block" gap="base">
-        <s-query-container>
-          <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="base" alignItems="center" justifyItems="start">
-            <s-stack direction="block" gap="small-500">
-              <h1 style={BIG_HEADING}>{t("common.nav.overview")}</h1>
-              {subtitle ? <s-text color="subdued">{subtitle}</s-text> : null}
-            </s-stack>
-            {canRecount ? <CountForm fetcher={recounter} data={data} label={t("overview.header.recount")} primary={false} /> : null}
-          </s-grid>
-        </s-query-container>
+        <PageHeader page="overview" title={t("common.nav.overview")} lead={subtitle || undefined} />
 
+        {/* Back from Shopify's plan page: the next step below is where translating goes on. */}
+        {data.welcome ? (
+          <s-banner tone="success" heading={t("plan.welcome.heading")}>
+            {ownKeyMissing ? (
+              <s-paragraph>
+                {t("plan.welcome.body.ownKey")} <s-link href="/app/settings?section=keys">{t("plan.welcome.action.ownKey")}</s-link>
+              </s-paragraph>
+            ) : (
+              <s-paragraph>{t("plan.welcome.body")}</s-paragraph>
+            )}
+          </s-banner>
+        ) : null}
         {recounter.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
         {ownKeyProblem(data, i18n) ? (
           <s-banner tone="warning" heading={t("overview.banner.ownKey.heading")}>
             <s-paragraph>
-              {ownKeyProblem(data, i18n)} <s-link href="/app/settings#settings-keys">{t("overview.banner.ownKey.action")}</s-link>
+              {ownKeyProblem(data, i18n)} <s-link href="/app/settings?section=keys">{t("overview.banner.ownKey.action")}</s-link>
             </s-paragraph>
           </s-banner>
         ) : null}
@@ -740,7 +811,7 @@ export default function Overview() {
           <s-banner tone="info">
             <s-paragraph>
               {t("overview.banner.ownKeyPending", { date: i18n.date(data.ownKeys.startsOn, "long") })}{" "}
-              <s-link href="/app/settings#settings-keys">{t("overview.checklist.ownKey.action")}</s-link>
+              <s-link href="/app/settings?section=keys">{t("overview.checklist.ownKey.action")}</s-link>
             </s-paragraph>
           </s-banner>
         ) : null}
@@ -759,10 +830,16 @@ export default function Overview() {
           </s-banner>
         ) : null}
 
+        {/* The next step first: on a phone its button is on the first screen; on a wide page it leads on the left,
+            beside the store's card, each card as tall as its content (no half-empty card stretched to the other). */}
         <s-query-container>
-          <s-grid gridTemplateColumns="@container (inline-size > 760px) 1fr 1fr, 1fr" gap="base">
-            <StoreFigure data={data} i18n={i18n} recount={counted ? <RecountStatus data={data} i18n={i18n} statusRef={recountStatus} /> : null} />
+          <s-grid gridTemplateColumns="@container (inline-size > 760px) 1fr 1fr, 1fr" gap="base" alignItems="start">
             <NextSteps data={data} i18n={i18n} />
+            <StoreFigure
+              data={data}
+              i18n={i18n}
+              counting={<Counting data={data} i18n={i18n} counted={counted} canRecount={canRecount} recounter={recounter} statusRef={recountStatus} />}
+            />
           </s-grid>
         </s-query-container>
 
@@ -772,21 +849,16 @@ export default function Overview() {
         <RunningJobs data={data} i18n={i18n} marketCountries={marketCountries} />
         <Places data={data} i18n={i18n} marketCountries={marketCountries} />
 
-        <s-query-container>
-          <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="small-200">
-            <s-text color="subdued">{data.measuredAt ? t("overview.footer.counted", { date: i18n.dateTime(data.measuredAt) }) : null}</s-text>
-            <s-text color="subdued">
-              {/* Own key plan: its keys' characters (or that a key is needed), never Linguva's allowance. */}
-              {data.ownKeys?.access === "plan"
-                ? data.ownKeys.keys.some(usableOwnKey)
-                  ? t("overview.usage.ownKey", { chars: data.usage.ownKey?.total ?? 0 })
-                  : t("overview.usage.ownKeyMissing")
-                : data.aiAvailable
-                  ? t("overview.usage.characters", { used: data.usage.used, limit: data.usage.limit })
-                  : t("overview.usage.notConfigured")}
-            </s-text>
-          </s-grid>
-        </s-query-container>
+        {/* The AI characters (gauge), or the key the Own key plan still needs; its keys' characters, never Linguva's allowance. */}
+        <Note icon={<s-icon type={ownKeyMissing ? "key" : "gauge"} color="subdued" size="small" />}>
+          {data.ownKeys?.access === "plan"
+            ? ownKeyMissing
+              ? t("overview.usage.ownKeyMissing")
+              : t("overview.usage.ownKey", { chars: data.usage.ownKey?.total ?? 0 })
+            : data.aiAvailable
+              ? t("overview.usage.characters", { used: data.usage.used, limit: data.usage.limit })
+              : t("overview.usage.notConfigured")}
+        </Note>
       </s-stack>
     </s-page>
   );

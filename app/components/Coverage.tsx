@@ -19,6 +19,13 @@ export const STATE_COLOURS: Record<FieldState, string> = {
 /** Empty part of every bar (Polaris' subdued surface). */
 export const TRACK_COLOUR = "#ebebeb";
 
+/**
+ * What a job found already up to date and left as it was (the Jobs pages' "kept"): it ended well without new
+ * work, so it is drawn in the green family, never in a grey that reads as the empty track. STATE_COLOURS.complete
+ * (#29845a) tinted 55 % toward white.
+ */
+export const KEPT_COLOUR = "#9fc8b5";
+
 /** A card's own surface (Polaris' base background), for marks drawn over pictures. */
 export const SURFACE_COLOUR = "#ffffff";
 

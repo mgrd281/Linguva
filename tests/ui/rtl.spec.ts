@@ -19,8 +19,10 @@ test("Arabic fields are right to left, the URL handle stays left to right @respo
   const handle = page.locator('s-text-field[name="value:handle"] input');
   expect(await handle.evaluate((el) => getComputedStyle(el).direction)).toBe("ltr");
 
-  // HTML follows its first letter: the leading tag keeps it left to right.
+  // HTML follows its first letter: the leading tag keeps it left to right (its code is one click away).
+  await page.locator('s-section[data-text="Description"]').getByRole("button", { name: "Edit HTML" }).click();
   const body = page.locator('s-text-area[name="value:body_html"]');
+  await expect(body).toHaveCount(1);
   expect(await body.evaluate((el) => el.closest("[dir]")?.getAttribute("dir"))).toBe("auto");
   await expectAccessible(page);
 });

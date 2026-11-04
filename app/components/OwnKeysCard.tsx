@@ -1,6 +1,7 @@
 /**
- * Settings › "Your translation keys" (the Own key plan): one row per
- * translation service (DeepL, Microsoft Azure, Google Cloud), each saved key
+ * Settings › "Your keys" (the Own key plan), a section of its own: one row per
+ * translation service (DeepL, Microsoft Azure, Google Cloud), rows of the
+ * section's card apart by a line, each saved key
  * with its state in words, its last four characters and where it processes;
  * a form to add or replace a key, "Check again", and "Remove" behind a
  * dialog. Off the plan, saved keys can only be removed.
@@ -21,7 +22,8 @@ import type { IconName } from "../lib/icons";
 import { engineList } from "../lib/name-lists";
 import { DEEPL_PLAN_NAMES, ownKeyToken, usableOwnKey, type OwnKeyStatus, type OwnKeySummary } from "../lib/own-keys";
 import { useResultToast } from "./app-bridge";
-import { Actions, FactList, focusById, InlineNotice, More, SETTING_NAME, SettingCard, StateLine, useFreshResult, type SettingState } from "./SettingsParts";
+import { Actions, FactList, focusById, InlineNotice, More, SETTING_NAME, SettingSection, StateLine, useFreshResult, type SettingState } from "./SettingsParts";
+import { Button } from "./Button";
 
 /** The Settings loader's `ownKeys` (OwnKeysView): summaries only, never a key. */
 export interface OwnKeysCardData {
@@ -43,7 +45,7 @@ export type KeyActionResult =
 /** One fetcher per engine row (its add/replace, check and remove forms). */
 export type KeyFetcher = FetcherWithComponents<unknown>;
 
-/** The card's id: the glance tile, the Overview, the Plan page and the editor link to it. */
+/** The section's id (its key is `keys`: /app/settings?section=keys, where the Overview, the Plan page and the editor link). */
 export const KEYS_CARD = "settings-keys";
 /** A row's name, focused after a key's result (and the remove dialog's id). */
 export const keyRowId = (engine: EngineId) => `${KEYS_CARD}-${engine}`;
@@ -126,9 +128,13 @@ function keyToast(i18n: I18n, result: KeyActionResult | null): string | null {
   return i18n.t("settings.keys.toast.removed", { engine });
 }
 
-/** The card's state badge: the keys work, one needs attention, or none yet. */
+/**
+ * The card's state badge: the keys work, one needs attention, or none yet. With several problems the worst
+ * one is named (a refused or unreadable key before one used up for now), so the badge, the page's status row
+ * and the Keys tile say the same.
+ */
 export function keysState(i18n: I18n, keys: readonly OwnKeySummary[]): SettingState {
-  const problem = keys.find((k) => k.status !== "OK");
+  const problem = keys.find((k) => k.status === "REFUSED" || k.status === "UNREADABLE") ?? keys.find((k) => k.status !== "OK");
   if (problem) return { label: keyStateText(i18n, problem), icon: STATE_LOOK[problem.status].icon, tone: problem.status === "QUOTA" || problem.status === "RECHECK" ? "warning" : "critical" };
   const usable = keys.filter(usableOwnKey);
   if (usable.length) return { label: engineList(i18n, usable.map((k) => ENGINE_NAMES[k.engine])), icon: "check-circle", tone: "success" };
@@ -141,9 +147,11 @@ export interface OwnKeysCardProps {
   fetchers: Record<EngineId, KeyFetcher>;
   /** DeepL's "Check and save" is the page's one primary button (on the plan, no usable key, languages added). */
   primary: boolean;
+  /** Above the card: the way back to a job stopped for a key, once a key works. */
+  top?: ReactNode;
 }
 
-export function OwnKeysCard({ data, i18n, fetchers, primary }: OwnKeysCardProps) {
+export function OwnKeysCard({ data, i18n, fetchers, primary, top }: OwnKeysCardProps) {
   const { t } = i18n;
   const manage = data.access !== "off";
   // Off the plan only the saved keys (to remove them); otherwise every service, saved or to add.
@@ -168,23 +176,28 @@ export function OwnKeysCard({ data, i18n, fetchers, primary }: OwnKeysCardProps)
     );
   }
   return (
-    <SettingCard
+    <SettingSection
       id={KEYS_CARD}
-      icon="connect"
-      heading={t("settings.keys.heading")}
+      // The keys' tile: its icon and colour (app.settings.tsx, SECTION_LOOK).
+      icon="key"
+      tint="slate"
+      heading={t("settings.section.keys")}
       state={manage ? keysState(i18n, data.keys) : null}
       lead={data.access === "plan" ? t("settings.keys.lead") : undefined}
+      top={top}
     >
       {notice}
       {/* The services bill every character: their own cost limit is the only one. */}
       {manage ? <StateLine icon="cash-dollar" tone="caution">{ownKeyCostNote(i18n, data.keys)}</StateLine> : null}
-      {data.access === "plan" && data.keys.length === 0 ? <StateLine icon="info">{t("settings.keys.none")}</StateLine> : null}
-      <ul aria-label={t("settings.keys.heading")} style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 12 }}>
-        {engines.map((engine) => (
+      {/* No key yet: the state badge says so, and DeepL's form is open. */}
+      <ul aria-label={t("settings.keys.heading")} style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {engines.map((engine, index) => (
           <KeyRow
             key={engine}
             i18n={i18n}
             engine={engine}
+            first={index === 0}
+            last={index === engines.length - 1}
             saved={data.keys.find((k) => k.engine === engine) ?? null}
             manage={manage}
             fetcher={fetchers[engine]}
@@ -213,21 +226,18 @@ export function OwnKeysCard({ data, i18n, fetchers, primary }: OwnKeysCardProps)
                 : t("settings.keys.deeplUsage.unlimited", { used: data.deepl.used })}
             </s-text>
           ) : null}
-          {/* On the plan this card replaces the AI characters tile, Settings' way to the Plan page. */}
-          {data.access === "plan" ? (
-            <s-text>
-              <s-link href="/app/plan">{t("common.action.changePlan")}</s-link>
-            </s-text>
-          ) : null}
         </s-stack>
       ) : null}
-    </SettingCard>
+    </SettingSection>
   );
 }
 
 interface KeyRowProps {
   i18n: I18n;
   engine: EngineId;
+  /** The rows are the card's, apart by a line: none above the first, no room below the last. */
+  first: boolean;
+  last: boolean;
   saved: OwnKeySummary | null;
   /** On the plan or with a pending change to it: add, replace and check (off the plan: remove only). */
   manage: boolean;
@@ -237,7 +247,7 @@ interface KeyRowProps {
   openAdd: boolean;
 }
 
-function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyRowProps) {
+function KeyRow({ i18n, engine, first, last, saved, manage, fetcher, primary, openAdd }: KeyRowProps) {
   const { t } = i18n;
   const name = ENGINE_NAMES[engine];
   // Rebuilt after every result: a typed key never stays on the page.
@@ -267,10 +277,14 @@ function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyR
       {name}
     </span>
   );
+  // A row of the card: a line above it (not the first), room above and below it, none at the card's edges.
+  const rowBox = { paddingBlockStart: first ? ("none" as const) : ("base" as const), paddingBlockEnd: last ? ("none" as const) : ("base" as const) };
+  const divider = first ? null : <s-divider />;
   if (!saved) {
     return (
       <li>
-        <s-box border="base" borderRadius="large-100" padding="base">
+        {divider}
+        <s-box {...rowBox}>
           <s-stack direction="block" gap="small-200">
             {heading}
             <More summary={t("settings.keys.add", { engine: name })} open={openAdd}>
@@ -301,7 +315,8 @@ function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyR
   const modal = keyRemoveModal(engine);
   return (
     <li>
-      <s-box border="base" borderRadius="large-100" padding="base">
+      {divider}
+      <s-box {...rowBox}>
         <s-stack direction="block" gap="small-200">
           {heading}
           <StateLine icon={look.icon} {...(look.tone ? { tone: look.tone } : {})}>
@@ -313,14 +328,14 @@ function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyR
               <fetcher.Form method="post">
                 <input type="hidden" name="intent" value="check-key" />
                 <input type="hidden" name="engine" value={engine} />
-                <s-button type="submit" {...(busy && intent === "check-key" ? { loading: true } : {})}>
+                <Button type="submit" {...(busy && intent === "check-key" ? { loading: true } : {})}>
                   {t("settings.keys.checkAgain")}
-                </s-button>
+                </Button>
               </fetcher.Form>
             ) : null}
-            <s-button tone="critical" commandFor={modal} command="--show" {...(busy && intent === "remove-key" ? { loading: true } : {})}>
+            <Button tone="critical" commandFor={modal} command="--show" {...(busy && intent === "remove-key" ? { loading: true } : {})}>
               {t("settings.keys.remove")}
-            </s-button>
+            </Button>
           </Actions>
           {manage ? <More summary={t("settings.keys.replace")}>{form}</More> : null}
           {error}
@@ -385,9 +400,9 @@ function KeyForm({
         {engine === "google" ? <StateLine icon="globe">{t("settings.keys.google.global")}</StateLine> : null}
         {elsewhere ? <s-text color="subdued">{t(elsewhere)}</s-text> : null}
         <s-stack direction="inline">
-          <s-button type="submit" variant={primary ? "primary" : "secondary"} {...(loading ? { loading: true } : {})}>
+          <Button type="submit" variant={primary ? "primary" : "secondary"} {...(loading ? { loading: true } : {})}>
             {t("settings.keys.save")}
-          </s-button>
+          </Button>
         </s-stack>
       </s-stack>
     </fetcher.Form>

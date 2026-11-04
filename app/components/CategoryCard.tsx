@@ -1,8 +1,9 @@
 /**
  * One area of a language (Products, Menus & filters, …) on the language
- * page: its figure, its states, a few real examples from the store, and
- * what to do there. The title is the link to the area's list; translating
- * is a separate button that opens the confirm dialog (no nested controls).
+ * page: its icon in its tinted square, its name, figure and states, a few
+ * real examples from the store, and where to go on. One link opens the
+ * area's list ("View all 8 ›"); translating is the page's next step, once
+ * per area (the card has no button of its own), and the area's list.
  *
  * Examples come later than the card (a separate request): pictures with
  * their names for products, collections, blog posts and images, a list of
@@ -13,11 +14,16 @@
 import type { CategoryPreview, LanguagePage, PreviewItem } from "../.server/languages/language-page";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { itemKindLabel } from "../i18n/labels";
+import { cardColumns } from "../lib/content-areas";
 import type { IconName } from "../lib/icons";
-import { CATEGORIES, type CategoryId } from "../lib/language-categories";
+import { CATEGORIES, withOrigin, type CategoryId, type Origin } from "../lib/language-categories";
+import { kindWord } from "./CategoryList";
 import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
+import { CARD } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
+import { IconSquare, type Tint } from "./IconSquare";
+import { Strong } from "./Type";
 
 export type LanguageCategory = LanguagePage["categories"][number];
 
@@ -56,6 +62,30 @@ export function categoryName(i18n: I18n, id: CategoryId): string {
   return i18n.t(`language.category.${id}.name`);
 }
 
+/** An area's icon in its own tinted square (CATEGORIES): the same picture on its tile, card, list and step. */
+export function AreaIcon({ id, size = 40 }: { id: CategoryId; size?: number }) {
+  return <IconSquare icon={CATEGORIES[id].icon} tint={CATEGORIES[id].tint} size={size} />;
+}
+
+/**
+ * Columns for a row of `count` cards (cardColumns), as Polaris' grid takes them: one card the full width,
+ * two side by side from 560 px, three from 860 px (narrower, one under the other), four as two by two.
+ */
+export function cardGrid(count: number): string {
+  const columns = cardColumns(count);
+  if (columns === 1) return "1fr";
+  return columns === 2 ? "@container (inline-size > 560px) 1fr 1fr, 1fr" : "@container (inline-size > 860px) 1fr 1fr 1fr, 1fr";
+}
+
+/** An area's name inside a sentence: English writes it in lower case there ("Translate image descriptions"). */
+export function categoryInSentence(i18n: I18n, id: CategoryId): string {
+  const name = categoryName(i18n, id);
+  return i18n.locale === "en" ? name.toLowerCase() : name;
+}
+
+/** An icon inside a line of text (a link's chevron). */
+const INLINE_ICON = { display: "inline-flex", verticalAlign: "middle", marginInlineStart: 2 } as const;
+
 /** "48 products · Name, description and texts for Google" (also the Content page's tiles). */
 export function detailLine(i18n: I18n, category: { id: CategoryId; items: number | null; textTypes: readonly string[] }): string {
   const items = ITEM_COUNT_KEYS[category.id];
@@ -67,15 +97,12 @@ export function detailLine(i18n: I18n, category: { id: CategoryId; items: number
 /**
  * An icon in a soft square: an area's, a content type's or a notice's
  * picture, and the Plan page's plan, meter and feature tiles
- * (`color="base"`). Squares under 32 px take the small icon unless
+ * (`color="base"`). The app's one icon square (IconSquare), grey unless a
+ * `tint` names the place. Squares under 32 px take the small icon unless
  * `iconSize` says otherwise.
  */
-export function IconTile({ icon, size = 36, color = "subdued", iconSize }: { icon: IconName; size?: number; color?: "base" | "subdued"; iconSize?: "small" | "base" }) {
-  return (
-    <s-stack background="subdued" borderRadius="base" inlineSize={`${size}px`} blockSize={`${size}px`} alignItems="center" justifyContent="center">
-      <s-icon type={icon} color={color} size={iconSize ?? (size < 32 ? "small" : "base")} />
-    </s-stack>
-  );
+export function IconTile({ icon, size = 36, color = "subdued", iconSize, tint = "grey" }: { icon: IconName; size?: number; color?: "base" | "subdued"; iconSize?: "small" | "base"; tint?: Tint }) {
+  return <IconSquare icon={icon} size={size} color={color} tint={tint} {...(iconSize ? { iconSize } : {})} />;
 }
 
 interface PreviewProps {
@@ -115,7 +142,7 @@ function Tile({ item, icon, i18n, locale, primaryName }: { item: PreviewItem; ic
       </div>
       {item.original ? (
         <span style={CLAMP(2)}>
-          <s-text type="strong">{item.original}</s-text>
+          <Strong>{item.original}</Strong>
         </span>
       ) : null}
       <span style={CLAMP(2)}>
@@ -168,13 +195,15 @@ function Outcome({ item, i18n, locale }: { item: PreviewItem; i18n: I18n; locale
   );
 }
 
-/** Originals beside their translations ("Menu · Hiking ✓ “Vandring”"), or page names with their states. */
+/**
+ * Originals beside their translations ("Menu item · Hiking ✓ “Vandring”"), or page names with their
+ * states. Each kind in the lists' words (kindWord: "Menu item", "Legal text"), a custom field by its name.
+ */
 function Rows({ category, items, i18n, locale }: PreviewProps) {
   const label = (item: PreviewItem) => {
     if (category === "pages" || category === "metaobjects") return null;
     if (item.label) return item.label;
-    if (item.type === "SHOP") return i18n.t("language.preview.google");
-    return itemKindLabel(i18n, item.type);
+    return kindWord(i18n, item.type) ?? itemKindLabel(i18n, item.type);
   };
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0, border: `1px solid ${TRACK_COLOUR}`, borderRadius: 10, overflow: "hidden" }}>
@@ -183,7 +212,7 @@ function Rows({ category, items, i18n, locale }: PreviewProps) {
         return (
           <li key={item.id} style={i === 0 ? { ...ROW, borderBlockStart: 0 } : ROW}>
             {kind ? (
-              <span style={{ flex: "0 0 72px", minWidth: 0, ...CLAMP(1) }}>
+              <span style={{ flex: "0 0 96px", minWidth: 0, ...CLAMP(1) }}>
                 <s-text color="subdued">{kind}</s-text>
               </span>
             ) : null}
@@ -240,16 +269,21 @@ function Preview({ category, preview, featured, i18n, locale, primaryName }: { c
   );
 }
 
-/** A running translation in this area, in items, in place of the translate button. */
+/**
+ * A running translation in this area, in items: while it still finds its texts, the Jobs page's sign for
+ * that phase (search-list) and its word; then "Translating · 3 of 12" with its bar.
+ */
 function JobProgress({ job, name, i18n }: { job: NonNullable<LanguageCategory["job"]>; name: string; i18n: I18n }) {
   const { t } = i18n;
+  const counted = job.discoveryDone && job.total > 0;
   return (
-    <s-box padding="small-100 base" background="subdued" borderRadius="base">
-      <s-stack direction="block" gap="small-200">
-        <s-text type="strong">{job.discoveryDone && job.total > 0 ? t("language.card.job", { done: job.done, total: job.total }) : t("language.card.jobFinding")}</s-text>
-        {job.discoveryDone && job.total > 0 ? <ProgressBar value={(job.done / job.total) * 100} label={t("language.card.jobLabel", { category: name })} /> : null}
+    <s-stack direction="block" gap="small-200">
+      <s-stack direction="inline" gap="small-200" alignItems="center">
+        <s-icon type={counted ? "in-progress" : "search-list"} tone="info" size="small" />
+        <Strong>{counted ? t("language.card.job", { done: job.done, total: job.total }) : t("language.card.jobFinding")}</Strong>
       </s-stack>
-    </s-box>
+      {counted ? <ProgressBar value={(job.done / job.total) * 100} label={t("language.card.jobLabel", { category: name })} /> : null}
+    </s-stack>
   );
 }
 
@@ -263,11 +297,11 @@ export interface CategoryCardProps {
   preview: CategoryPreview | null;
   /** The first, wide card: more pictures, and examples on a phone too. */
   featured: boolean;
-  /** Translating can start here: the confirm dialog's id, what to do before it opens, and whether it is starting. */
-  translate: { modalId: string; onOpen: () => void; loading: boolean } | null;
+  /** Where the language page was opened from: its links keep it (the lists' trail). */
+  origin?: Origin;
 }
 
-export function CategoryCard({ category, i18n, locale, primaryName, preview, featured, translate }: CategoryCardProps) {
+export function CategoryCard({ category, i18n, locale, primaryName, preview, featured, origin = null }: CategoryCardProps) {
   const { t } = i18n;
   const name = categoryName(i18n, category.id);
   const { tally, state } = category;
@@ -276,58 +310,65 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
   const figure = state.kind === "no-access" ? "—" : percentLabel(i18n, tally.complete, tally.total);
   const open = tally.counts.missing + tally.counts.outdated + tally.counts.failed;
   const all = category.items ? t("language.card.allCount", { count: category.items }) : t("language.card.all");
+  const href = withOrigin(category.href, origin);
   const examples = <Preview category={category.id} preview={preview} featured={featured} i18n={i18n} locale={locale} primaryName={primaryName} />;
+  const headingId = `area-${category.id}`;
   return (
-    <s-section accessibilityLabel={name}>
-      <s-stack direction="block" gap="base">
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="start">
-          <IconTile icon={CATEGORIES[category.id].icon} />
-          <s-stack direction="block" gap="small-500">
-            <s-heading>
-              <s-link href={category.href}>{name}</s-link>
-            </s-heading>
-            {detail ? <s-text color="subdued">{detail}</s-text> : null}
-          </s-stack>
-          <s-stack direction="block" alignItems="end">
-            <span style={BIG_FIGURE}>{figure}</span>
-            {tally.total > 0 && state.kind !== "no-access" ? (
-              <s-text color="subdued">{t("language.card.figure", { complete: tally.complete, total: tally.total })}</s-text>
-            ) : null}
-          </s-stack>
-        </s-grid>
+    // A native section with the card's edge (Polaris draws its sections flat on a phone), named by its heading.
+    <section aria-labelledby={headingId}>
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="start">
+            <AreaIcon id={category.id} />
+            {/* The card's one heading, under its tier's; "View all" below is its one link. */}
+            <s-stack direction="block" gap="small-500">
+              <h4 id={headingId} className="lv-h3">
+                {name}
+              </h4>
+              {detail ? <s-text color="subdued">{detail}</s-text> : null}
+            </s-stack>
+            <s-stack direction="block" alignItems="end">
+              <span style={BIG_FIGURE}>{figure}</span>
+              {tally.total > 0 && state.kind !== "no-access" ? (
+                <s-text color="subdued">{t("language.card.figure", { complete: tally.complete, total: tally.total, count: tally.total })}</s-text>
+              ) : null}
+            </s-stack>
+          </s-grid>
 
-        {tally.total > 0 && state.kind !== "no-access" ? <TextStateBar counts={tally.counts} label={name} i18n={i18n} /> : null}
-        {state.kind === "no-access" ? (
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <s-icon type="lock" color="subdued" size="small" />
-            <s-text color="subdued">{t("language.card.noAccess")}</s-text>
-            {state.href ? <s-link href={state.href}>{t("coverage.types.allowAccess")}</s-link> : null}
-          </s-stack>
-        ) : state.kind === "counting" ? (
-          <s-text color="subdued">{t("language.card.counting")}</s-text>
-        ) : state.kind === "incomplete" ? (
-          <s-text color="subdued">{t("language.card.incomplete")}</s-text>
-        ) : null}
-        {state.kind !== "no-access" ? <StateCountList counts={tally.counts} i18n={i18n} /> : null}
+          {tally.total > 0 && state.kind !== "no-access" ? <TextStateBar counts={tally.counts} label={name} i18n={i18n} /> : null}
+          {state.kind === "no-access" ? (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-icon type="lock" color="subdued" size="small" />
+              <s-text color="subdued">{t("language.card.noAccess")}</s-text>
+              {state.href ? <s-link href={state.href}>{t("coverage.types.allowAccess")}</s-link> : null}
+            </s-stack>
+          ) : state.kind === "counting" ? (
+            <s-text color="subdued">{t("language.card.counting")}</s-text>
+          ) : state.kind === "incomplete" ? (
+            <s-text color="subdued">{t("language.card.incomplete")}</s-text>
+          ) : null}
+          {state.kind !== "no-access" ? <StateCountList counts={tally.counts} i18n={i18n} /> : null}
 
-        {tally.total > 0 ? featured ? examples : <s-box display={WIDE}>{examples}</s-box> : null}
+          {tally.total > 0 ? featured ? examples : <s-box display={WIDE}>{examples}</s-box> : null}
 
-        {category.id === "checkout" && category.textTypes.includes("SHOP_POLICY") ? <s-text color="subdued">{t("language.card.legal")}</s-text> : null}
-        {/* Image descriptions and custom fields are translated with their products (bulkTypesOf). */}
-        {(category.id === "images" || category.id === "customFields") && open > 0 ? <s-text color="subdued">{t("language.card.withOwners")}</s-text> : null}
-        {category.automatic ? (
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <s-icon type="calendar-time" color="subdued" size="small" />
-            <s-text color="subdued">{t("language.card.automatic")}</s-text>
-          </s-stack>
-        ) : null}
-        {category.job ? <JobProgress job={category.job} name={name} i18n={i18n} /> : null}
+          {category.id === "checkout" && category.textTypes.includes("SHOP_POLICY") ? <s-text color="subdued">{t("language.card.legal")}</s-text> : null}
+          {/* Image descriptions and custom fields are translated with their products (bulkTypesOf). */}
+          {(category.id === "images" || category.id === "customFields") && open > 0 ? <s-text color="subdued">{t("language.card.withOwners")}</s-text> : null}
+          {category.automatic ? (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-icon type="calendar-time" color="subdued" size="small" />
+              <s-text color="subdued">{t("language.card.automatic")}</s-text>
+            </s-stack>
+          ) : null}
+          {category.job ? <JobProgress job={category.job} name={name} i18n={i18n} /> : null}
 
-        <s-divider />
-        <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
+          <s-divider />
           <s-stack direction="inline" gap="small-100 base" alignItems="center">
-            <s-link href={category.href} accessibilityLabel={`${all}: ${name}`}>
-              {all} ›
+            <s-link href={href} accessibilityLabel={`${all}: ${name}`}>
+              {all}
+              <span style={INLINE_ICON}>
+                <s-icon type="chevron-right" size="small" />
+              </span>
             </s-link>
             {category.review ? (
               <s-link href={category.review.href} accessibilityLabel={`${t("language.card.review", { count: category.review.count })}: ${name}`}>
@@ -336,20 +377,8 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
             ) : null}
             {category.job ? <s-link href={category.job.href}>{t("language.card.jobOpen")}</s-link> : null}
           </s-stack>
-          {translate && !category.job ? (
-            <s-button
-              icon="wand"
-              commandFor={translate.modalId}
-              command="--show"
-              onClick={translate.onOpen}
-              accessibilityLabel={`${t("language.action.translate")}: ${name}`}
-              {...(translate.loading ? { loading: true } : {})}
-            >
-              {t("language.action.translate")}
-            </s-button>
-          ) : null}
-        </s-grid>
-      </s-stack>
-    </s-section>
+        </s-stack>
+      </s-box>
+    </section>
   );
 }

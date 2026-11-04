@@ -17,6 +17,7 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { attachedFieldName, attachedRef } from "../../app/.server/translation/attached-editor";
 import { loadEditorData, runEditorAction, type EditorContext } from "../../app/.server/translation/resource-editor";
+import { attachedForAi } from "../../app/components/ResourceTranslationEditor";
 import type { ResourceKind } from "../../app/lib/resource-kinds";
 import { PLANS } from "../../app/lib/plans";
 import { ownerDb, resetDatabase } from "../support/db";
@@ -108,6 +109,61 @@ describe("image alt text and metafields in the editor", () => {
     expect((await loadEditorData(ctx(store, shop.id, "PAGE", "gid://shopify/Page/1"))).attached.items.map((i) => i.id)).toEqual([m]);
   });
 
+  it("gives the editor the item's picture as its area list reads it, whether or not an image has a description", async () => {
+    const { shop, store } = await setup();
+    // The product's only image has no description yet: nothing to translate, its picture all the same.
+    store.addImage(P1, "", "jacket");
+    const product = await loadEditorData(ctx(store, shop.id));
+    expect(product.attached.items).toEqual([]);
+    expect(product.attached.imagesWithoutAlt).toBe(1);
+    expect(product.picture).toBe(store.imageUrl("jacket"));
+    // Collections and blog posts: their image (their image descriptions carry no picture).
+    store.addImage("gid://shopify/Collection/1", "Winter collection banner", "mountains");
+    store.addImage("gid://shopify/Article/1", "Washing wool in a basin", "tent");
+    expect((await loadEditorData(ctx(store, shop.id, "COLLECTION", "gid://shopify/Collection/1"))).picture).toBe(store.imageUrl("mountains"));
+    expect((await loadEditorData(ctx(store, shop.id, "ARTICLE", "gid://shopify/Article/1"))).picture).toBe(store.imageUrl("tent"));
+    // None: the area's icon. Pages and blogs have no picture, and nothing is asked for one.
+    expect((await loadEditorData(ctx(store, shop.id, "PRODUCT", P2))).picture).toBeNull();
+    const asked = store.calls.filter((c) => c === "LinguvaPreviewNodes").length;
+    expect((await loadEditorData(ctx(store, shop.id, "PAGE", "gid://shopify/Page/1"))).picture).toBeNull();
+    expect(store.calls.filter((c) => c === "LinguvaPreviewNodes")).toHaveLength(asked);
+  });
+
+  it("opens the editor without its picture when Shopify can't say", async () => {
+    const { shop, store } = await setup();
+    store.addImage(P1, "Red wool jacket", "jacket");
+    const admin = store.asAdmin();
+    const failing = {
+      graphql: (query: string, options?: Parameters<typeof admin.graphql>[1]) =>
+        query.includes("LinguvaPreviewNodes") ? Promise.reject(new Error("Shopify unavailable")) : admin.graphql(query, options),
+    };
+    const data = await loadEditorData({ ...ctx(store, shop.id), admin: failing as typeof admin });
+    expect(data.picture).toBeNull();
+    expect(data.attached.items).toHaveLength(1);
+  });
+
+  it("re-saves an outdated image description unchanged only when the merchant ticks “still correct”", async () => {
+    const { shop, store } = await setup();
+    const img = store.addImage(P1, "Red wool jacket");
+    store.translate(img, "de", "alt", "Rote Wolljacke");
+    store.updateSource(img, "alt", "Red wool jacket, front view");
+    const field = (await loadEditorData(ctx(store, shop.id))).attached.items.find((i) => i.id === img)!.fields[0]!;
+    expect(field).toMatchObject({ translation: "Rote Wolljacke", outdated: true });
+    // The page's form as it is posted: the text unchanged, with its digests.
+    const entries: Array<[string, string]> = [
+      ["intent", "save-attached"],
+      ...saveEntries(img, "alt", "Rote Wolljacke", field.digest),
+      [attachedFieldName("current", img, "alt"), field.currentDigest],
+    ];
+    const outcomes = async (extra: Array<[string, string]>) =>
+      ((await runEditorAction(ctx(store, shop.id), form([...entries, ...extra]))) as { data: { outcomes: unknown[] } }).data.outcomes;
+
+    expect(await outcomes([])).toEqual([]);
+    expect(await outcomes([[attachedFieldName("confirm", img, "alt"), "on"]])).toEqual([{ ref: attachedRef(img, "alt"), status: "saved" }]);
+    const reloaded = (await loadEditorData(ctx(store, shop.id))).attached.items.find((i) => i.id === img)!.fields[0]!;
+    expect(reloaded).toMatchObject({ translation: "Rote Wolljacke", outdated: false });
+  });
+
   it("creates AI drafts for missing alt text and metafields without publishing them", async () => {
     const { shop, store } = await setup();
     const img = store.addImage(P1, "Red wool jacket");
@@ -125,6 +181,17 @@ describe("image alt text and metafields in the editor", () => {
     // Already translated alt text is not sent again; nothing is published.
     expect(store.calls).not.toContain("LinguvaTranslationsRegister");
     expect(store.translationOf(img, "de", "alt")).toBeUndefined();
+  });
+
+  it("drafts the image descriptions of 25 items per AI request, as the editor counts them", async () => {
+    const { shop, store } = await setup();
+    const images = Array.from({ length: 27 }, (_, i) => store.addImage(P1, `Red wool jacket, view ${i + 1}`));
+    // The editor's count: 25 now, 2 for a request after these drafts are published.
+    expect(attachedForAi((await loadEditorData(ctx(store, shop.id))).attached.items)).toEqual({ now: 25, later: 2 });
+    const result = await runEditorAction(ctx(store, shop.id), form([["intent", "ai-translate-attached"]]));
+    if (!("kind" in result) || result.kind !== "attached-ai") throw new Error("unexpected result");
+    expect(Object.keys(result.drafts)).toEqual(images.slice(0, 25).map((id) => attachedRef(id, "alt")));
+    expect(result.stopped).toBeUndefined();
   });
 
   it("publishes reviewed alt text and metafields with revisions, and refuses stale digests", async () => {

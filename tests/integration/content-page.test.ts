@@ -117,7 +117,7 @@ describe("the Content page", () => {
       ["checkout", "beforeBuying"],
       ["pages", "content"],
     ]);
-    expect(area(page, "products")).toMatchObject({ href: "/app/languages/de/products", state: "figure", items: 6, translating: false, pictures: true, locked: [], unavailable: [] });
+    expect(area(page, "products")).toMatchObject({ href: "/app/languages/de/products", state: "figure", items: 6, translating: null, pictures: true, locked: [], unavailable: [] });
     expect(area(page, "products")!.tally).toMatchObject({ complete: 2, total: 12 });
     expect(area(page, "navigation")).toMatchObject({ items: null, pictures: false });
     // Every type is in exactly one place: the eight in the store in their tiles and groups, the rest listed once.
@@ -329,7 +329,7 @@ describe("the Content page", () => {
     expect((await load(store, billed, { lang: "fr" })).planIncludes).toBe(true);
   });
 
-  it("marks the area a translation into the language runs in, in that language only", async () => {
+  it("marks the area a translation into the language runs in, in that language only, with its phase", async () => {
     const store = outdoorStore();
     const shop = await shopFor(store);
     await withTenant(
@@ -337,10 +337,16 @@ describe("the Content page", () => {
       (tx) => tx.translationJob.create({ data: { shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", idempotencyKey: "running-de", status: "RUNNING", totalItems: 6, discoveryDone: true } }),
       app,
     );
+    // Still finding its texts: the Jobs page's first phase.
+    await withTenant(
+      shop.id,
+      (tx) => tx.translationJob.create({ data: { shopId: shop.id, resourceType: "COLLECTION", targetLocale: "de", idempotencyKey: "finding-de", status: "RUNNING", totalItems: 0, discoveryDone: false } }),
+      app,
+    );
     const german = await load(store, shop, { lang: "de" });
-    expect(area(german, "products")!.translating).toBe(true);
-    expect(area(german, "collections")!.translating).toBe(false);
-    expect(area(await load(store, shop, { lang: "fr" }), "products")!.translating).toBe(false);
+    expect(area(german, "products")!.translating).toBe("translating");
+    expect(area(german, "collections")!.translating).toBe("finding");
+    expect(area(await load(store, shop, { lang: "fr" }), "products")!.translating).toBeNull();
   });
 
   it("tells content added since the last count from nothing to translate", async () => {

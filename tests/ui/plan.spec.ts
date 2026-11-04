@@ -2,8 +2,10 @@
  * The Plan page (docs/PRICING_DECISION.md §10.3, SPEC-plan C.8): list prices
  * from PLAN_PRICES (never typed here), a yearly line only where a yearly
  * price exists, the trial line only for a store without a plan, "Fits your
- * store" computed from the store's own use and never a popularity claim,
- * every feature with its icon, and each billing state in words.
+ * store" computed from the store's own use and said for the store's own
+ * plan (its plan, a smaller one or a bigger one), never a popularity claim,
+ * every feature with its icon, the app's folds, the way back to Settings'
+ * plan section, and each billing state in words.
  *
  * The Partner API is simulated: no charge can be created, and the plan
  * buttons only link to Shopify's plan page. Billing off (a server without
@@ -57,22 +59,35 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
   await expect(page.locator("s-page")).not.toContainText(/(^|\s)0\s\$/);
   await expect(page.getByText(de.t("plan.price.footnote"))).toBeVisible();
 
-  // One plan fits the store, said with the reason, and marked on that card only.
-  const line = page.getByText(/^Passt zu deinem Shop: (Free|Starter|Pro|Business)\.$/);
+  // One plan fits the store, said in one line with the reason and for the store's own plan: Pro itself ("Dein Tarif
+  // passt zu deinem Shop."), a smaller one ("… reicht auch Starter.": never an order to downgrade) or a bigger one
+  // ("Passt zu deinem Shop: Business."). Another plan than Pro is marked on its card only; Pro's says "Dein Tarif".
+  const line = page.getByText(/^(Dein Tarif passt zu deinem Shop|Für das, was dein Shop gerade nutzt, reicht auch (Free|Starter)|Passt zu deinem Shop: (Free|Starter|Pro|Business))\.$/);
   await expect(line).toHaveCount(1);
-  const fits = (await line.textContent())!.replace(/^Passt zu deinem Shop: |\.$/g, "");
+  await expect(page.getByText(/^Passt zu deinem Shop: Pro\.$/)).toHaveCount(0);
+  const fits = /(Free|Starter|Pro|Business)\.$/.exec((await line.textContent())!)?.[1] ?? null;
   const badge = page.locator("s-badge", { hasText: de.t("plan.recommend.badge") });
-  await expect(badge).toHaveCount(1);
-  await expect(card(page, HANDLES.find((h) => NAMES[h] === fits)!).locator("s-badge", { hasText: de.t("plan.recommend.badge") })).toHaveCount(1);
+  if (fits === null) {
+    await expect(badge).toHaveCount(0);
+  } else {
+    await expect(badge).toHaveCount(1);
+    await expect(card(page, HANDLES.find((h) => NAMES[h] === fits)!).locator("s-badge", { hasText: de.t("plan.recommend.badge") })).toHaveCount(1);
+  }
   for (const text of await badges(page)) expect(text).not.toMatch(POPULAR);
+  // The recommendation has the whole row: no legend beside it (each row says it in words and marks). Only the
+  // table's spoken cells say the same word (Playwright counts a visually hidden text in a closed fold as visible).
+  const legend = await page.getByText(de.t("plan.compare.notIncluded"), { exact: true }).evaluateAll((els) => els.filter((el) => !el.closest("table")).length);
+  expect(legend).toBe(0);
+  // Today's figure says what it counts (no daily limit on this server); "KI‑Zeichen" with its non-breaking hyphen (U+2011).
+  await expect(page.getByText(/^Heute genutzt: [\d.]+ KI‑Zeichen$/)).toBeVisible();
 
   // The store has a plan: no trial offer.
   await expect(page.getByText(trialLine(de))).toHaveCount(0);
   // The current plan is marked, and it has no button of its own.
   await expect(card(page, "pro").locator("s-badge", { hasText: "Dein Tarif" })).toHaveCount(1);
-  await expect(card(page, "pro").locator("s-button")).toHaveCount(0);
+  await expect(card(page, "pro").locator("[data-button]")).toHaveCount(0);
   for (const handle of ["free", "starter", "business"] as const) {
-    const choose = card(page, handle).locator("s-button");
+    const choose = card(page, handle).locator("[data-button]");
     await expect(choose).toHaveText(de.t("plan.compare.choose", { plan: NAMES[handle] }));
     await expect(choose).toHaveAttribute("href", "https://admin.shopify.com/store/ui-full/charges/linguva-ui-test/pricing_plans");
     await expect(choose).toHaveAttribute("target", "_top");
@@ -90,8 +105,8 @@ test("German, on Pro: list prices, the yearly lines, the footnote and one fittin
     };
     return cards.map((c) => ({
       price: top(Array.from(c.querySelectorAll("span")).find((s) => getComputedStyle(s).fontSize === "32px") ?? null),
-      button: top(c.querySelector("s-button")),
-      sign: top(c.querySelector('s-stack[background="subdued"]')),
+      button: top(c.querySelector("[data-button]")),
+      sign: top(c.querySelector('.lv-icon-square')),
       current: top(c.querySelector('s-badge[color="strong"]')),
     }));
   });
@@ -122,7 +137,7 @@ test("a store without a plan: Free applies now, the trial on the three paid card
   await openApp(page, "empty", "/app/plan");
   await expect(page.getByRole("heading", { name: "Your plan: No plan chosen" })).toBeVisible();
   await expect(page.getByText(en.t("plan.hero.line.none"))).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Choose a plan" })).toHaveAttribute("href", /\/charges\/linguva-ui-test\/pricing_plans$/);
+  await expect(page.locator("[data-button]", { hasText: "Choose a plan" })).toHaveAttribute("href", /\/charges\/linguva-ui-test\/pricing_plans$/);
 
   await expect(card(page, "free").locator("s-badge", { hasText: en.t("plan.compare.appliesNow") })).toHaveCount(1);
   // The paid plans' trial, only while they have one (TRIAL_DAYS 0: no trial text anywhere).
@@ -135,7 +150,7 @@ test("a store without a plan: Free applies now, the trial on the three paid card
   await expect(page.getByText(en.t("plan.recommend.reasonFree"))).toBeVisible();
   await expect(card(page, "free").locator("s-badge", { hasText: en.t("plan.recommend.badge") })).toHaveCount(1);
   // Every plan can be chosen on Shopify's page.
-  for (const handle of HANDLES) await expect(card(page, handle).locator("s-button")).toHaveAttribute("target", "_top");
+  for (const handle of HANDLES) await expect(card(page, handle).locator("[data-button]")).toHaveAttribute("target", "_top");
 
   // On a phone the cards stand one below the other, in a desktop window side by side.
   const boxes = await Promise.all(HANDLES.map((h) => card(page, h).boundingBox()));
@@ -167,7 +182,7 @@ test("the owner's store: prices for reference, no plan buttons, no recommendatio
   await expect(page.getByText(en.t("plan.compare.introComplimentary"))).toBeVisible();
   for (const handle of HANDLES) await expect(card(page, handle)).toContainText(priceLabel(en, handle));
   await expect(page.getByText(en.t("plan.price.usd"), { exact: true })).toBeVisible();
-  await expect(page.locator("s-page s-button[href]")).toHaveCount(0);
+  await expect(page.locator("s-page [data-button][href]")).toHaveCount(0);
   await expect(page.getByText(/^Fits your store/)).toHaveCount(0);
   await expect(page.getByText(trialLine(en))).toHaveCount(0);
 });
@@ -179,18 +194,67 @@ test("every feature has its icon, on the cards and in the full comparison (close
   await expect(languages).toContainText("Französisch");
   await expect(languages.locator("s-badge", { hasText: "Versteckt" })).toHaveCount(1);
 
+  // The app's fold: a full-width row with the chevron at its end, no browser triangle.
   const details = page.locator("details", { hasText: de.t("plan.table.summary") });
   await expect(details).not.toHaveAttribute("open", "");
+  await expect(details.locator("summary .lv-more__chevron s-icon[type='chevron-down']")).toHaveCount(1);
+  expect(await details.locator("summary").evaluate((s) => getComputedStyle(s).listStyleType)).toBe("none");
   await details.locator("summary").click();
   await expect(details).toHaveAttribute("open", "");
 
   // 18 features and the price row, each with its icon; the same on the cards.
   const rows = details.locator('tbody th[scope="row"]');
   await expect(rows).toHaveCount(19);
+  // Alt text by the app's one word for it, as in the editor and the smart schedule (never "Bildtexte").
+  await expect(rows.filter({ hasText: "Bildbeschreibungen und Zusatzinfos" })).toHaveCount(1);
+  await expect(page.locator("s-page")).not.toContainText("Bildtext");
   for (const type of await rows.evaluateAll((ths) => ths.map((th) => th.querySelector("s-icon")?.getAttribute("type") ?? ""))) expect(FEATURE_ICONS.has(type), type).toBe(true);
   const features = page.locator('[role="group"] li');
   await expect(features).toHaveCount(20);
   for (const type of await features.evaluateAll((lis) => lis.map((li) => li.querySelector("s-icon")?.getAttribute("type") ?? ""))) expect(FEATURE_ICONS.has(type), type).toBe(true);
+
+  // The current plan's column in the cards' blue, its head saying "Dein Tarif"; the groups' rows stay grey.
+  await expect(details.locator("[data-current]")).toHaveCount(20);
+  await expect(details.locator("thead th[data-current]")).toContainText("Pro");
+  await expect(details.locator("thead th[data-current]")).toContainText("Dein Tarif");
+  const look = await details.evaluate((table) => {
+    const cell = table.querySelector("tbody td[data-current]")!;
+    const group = table.querySelector('th[scope="rowgroup"]')!;
+    return { current: getComputedStyle(cell).backgroundColor, group: getComputedStyle(group).backgroundColor };
+  });
+  expect(look.current, JSON.stringify(look)).toBe("rgb(245, 249, 255)");
+  expect(look.group, JSON.stringify(look)).not.toBe(look.current);
+});
+
+test("the way back leads to Settings' plan & usage; on a phone a 44 px back row @responsive", async ({ page }, info) => {
+  await openApp(page, "full", "/app/plan");
+  // On a wide page the trail ("Settings › Plan"), on a phone one back row ("‹ Settings"): only one of them is shown.
+  const back = page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Settings" });
+  await expect(back).toHaveCount(1);
+  await expect(back).toHaveAttribute("href", "/app/settings?section=plan");
+  if (info.project.name === "mobile") expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await back.click();
+  await expect(page).toHaveURL(/section=plan/);
+  await expect(page.getByRole("heading", { level: 2, name: "Plan & usage" })).toBeVisible();
+});
+
+test("the page opens as a tools page does, and the hero's main button ends at the card's edge on a wide page @responsive", async ({ page }, info) => {
+  // From the trail (or the phone's back row) to the heading: the same room as on a tools page.
+  const room = async (heading: string) => {
+    const trail = (await page.getByRole("navigation", { name: "Breadcrumb" }).boundingBox())!;
+    const title = (await page.getByRole("heading", { level: 1, name: heading, exact: true }).boundingBox())!;
+    return Math.round(title.y - (trail.y + trail.height));
+  };
+  await openApp(page, "full", "/app/glossary");
+  const tool = await room("Glossary");
+  await openApp(page, "full", "/app/plan");
+  expect(await room("Plan")).toBe(tool);
+
+  const change = (await page.locator("[data-button]", { hasText: "Change plan" }).boundingBox())!;
+  const refresh = (await page.locator("[data-button]", { hasText: "Refresh" }).boundingBox())!;
+  // Beside the plan, one above the other at the card's right edge; on a phone below it, at the left.
+  if (info.project.name === "mobile") expect(change.x).toBeLessThan(refresh.x);
+  else expect(Math.abs(change.x + change.width - (refresh.x + refresh.width))).toBeLessThanOrEqual(2);
 });
 
 test.describe("fits your store, from the store's own use", () => {
@@ -227,10 +291,11 @@ test.describe("billing states in words", () => {
   test("a change at the end of the cycle and a cancellation", async ({ page }) => {
     await openApp(page, "planPending", "/app/plan");
     await expect(page.getByText(/^Changes to Starter on [A-Z][a-z]+ \d{1,2}(, \d{4})?$/)).toBeVisible();
-    await expect(card(page, "starter").locator("s-badge", { hasText: /^from [A-Z][a-z]+ \d{1,2}(, \d{4})?$/ })).toHaveCount(1);
+    // Badges start with a capital letter, as Settings' states do.
+    await expect(card(page, "starter").locator("s-badge", { hasText: /^From [A-Z][a-z]+ \d{1,2}(, \d{4})?$/ })).toHaveCount(1);
 
     await openApp(page, "planEnding", "/app/plan");
-    await expect(page.locator("s-badge", { hasText: /^ends on [A-Z][a-z]+ \d{1,2}(, \d{4})?$/ })).toHaveCount(1);
+    await expect(page.locator("s-badge", { hasText: /^Ends on [A-Z][a-z]+ \d{1,2}(, \d{4})?$/ })).toHaveCount(1);
     await expect(page.getByText(en.t("plan.hero.line.ends"))).toBeVisible();
   });
 
@@ -244,13 +309,13 @@ test.describe("billing states in words", () => {
     await expect(page.getByRole("heading", { name: "Your plan: Plan unknown" })).toBeVisible();
     await expect(page.getByText(en.t("plan.hero.line.unknown"))).toBeVisible();
     await expect(page.getByText(trialLine(en))).toHaveCount(0);
-    await page.locator("s-button", { hasText: "Try again" }).click();
+    await page.locator("[data-button]", { hasText: "Try again" }).click();
     await expectToast(page, en.t("plan.toast.failed"));
   });
 
   test("Refresh asks Shopify and confirms the plan", async ({ page }) => {
     await openApp(page, "full", "/app/plan");
-    await page.locator("s-button", { hasText: "Refresh" }).click();
+    await page.locator("[data-button]", { hasText: "Refresh" }).click();
     await expectToast(page, "Confirmed with Shopify: Pro");
   });
 });

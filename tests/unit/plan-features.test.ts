@@ -6,8 +6,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { PAGE_LOOK } from "../../app/components/PageHeader";
 import { featureTableCounts } from "../../app/components/plan/PlanFeatureTable";
-import { everyPlanRows, FEATURE_ICON, PLAN_CARD_FEATURES, PLAN_FEATURE_ROWS, PLAN_ICON, PRICE_ROW, STATE_ICON, type FeatureKey } from "../../app/lib/plan-features";
+import { APP_LOCALES, translate } from "../../app/i18n/i18n";
+import { everyPlanRows, FEATURE_ICON, FEATURE_TINT, OWN_KEY_ICON, PLAN_CARD_FEATURES, PLAN_FEATURE_ROWS, PLAN_ICON, PLAN_TINT, PRICE_ROW, STATE_ICON, type FeatureKey } from "../../app/lib/plan-features";
 import { PLAN_PRICES, PLANS, type PlanHandle } from "../../app/lib/plans";
 
 const HANDLES = Object.keys(PLANS) as PlanHandle[];
@@ -54,6 +56,14 @@ describe("plan comparison", () => {
     for (const r of ROWS.filter((x) => !strip.includes(x))) expect(new Set(HANDLES.map((h) => r.value(PLANS[h]))).size, r.key).toBeGreaterThan(1);
   });
 
+  it("names alt text and custom fields by the app's words for them, the field groups' names (never “Bildtexte”)", () => {
+    for (const locale of APP_LOCALES) {
+      const label = translate(locale, row("images").label).toLocaleLowerCase();
+      for (const key of ["coverage.group.alt", "coverage.group.value"] as const) expect(label, `${locale} ${key}`).toContain(translate(locale, key).toLocaleLowerCase());
+    }
+    expect(translate("de", row("images").label)).toBe("Bildbeschreibungen und Zusatzinfos");
+  });
+
   it("has a price for exactly the plans compared", () => {
     expect(Object.keys(PLAN_PRICES).sort()).toEqual([...HANDLES].sort());
   });
@@ -74,5 +84,49 @@ describe("icons", () => {
     for (const icon of [...Object.values(PLAN_ICON), ...Object.values(STATE_ICON)]) expect(features.has(icon), icon).toBe(false);
     expect(new Set(Object.values(PLAN_ICON)).size).toBe(4);
     expect([...Object.values(PLAN_ICON), ...Object.values(STATE_ICON)].some((icon) => icon.startsWith("star"))).toBe(false);
+  });
+
+  it("keeps one icon per concept across the app: no plan sign that means something else in Settings", () => {
+    // play-circle is Settings' "Start it yourself"; key is the app's sign for translation keys (Own key's).
+    expect(PLAN_ICON.free).toBe("nature");
+    expect(Object.values(PLAN_ICON)).not.toContain("play-circle");
+    expect(OWN_KEY_ICON).toBe("key");
+    expect(STATE_ICON.complimentary).toBe("shield-person");
+    expect(Object.values(STATE_ICON)).not.toContain(OWN_KEY_ICON);
+  });
+});
+
+describe("tints", () => {
+  it("draws every plan's sign in the Plan page's colour, Settings' 'Plan & usage' tile", () => {
+    expect(PLAN_TINT).toBe("rose");
+    expect(PAGE_LOOK.plan.tint).toBe(PLAN_TINT);
+  });
+
+  it("keeps gauge for the AI characters only: the Plan page's own sign is another icon in its colour", () => {
+    expect(FEATURE_ICON.chars).toBe("gauge");
+    expect(PAGE_LOOK.plan.icon).not.toBe("gauge");
+    expect(PUBLIC_ICONS.has(PAGE_LOOK.plan.icon)).toBe(true);
+    expect(Object.values(FEATURE_ICON)).not.toContain(PAGE_LOOK.plan.icon);
+  });
+
+  it("gives every feature's square the colour Settings gives the same icon, grey where Settings has none", () => {
+    expect(Object.keys(FEATURE_TINT).sort()).toEqual(Object.keys(FEATURE_ICON).sort());
+    // Settings' sections, choices and tools (app.settings.tsx: SECTION_LOOK, the option tiles, the tools' links).
+    const SETTINGS: Record<string, string> = {
+      automation: "blue",
+      "calendar-time": "violet",
+      wand: "violet",
+      "book-open": "violet",
+      "eye-check-mark": "green",
+      "chart-donut": "green",
+      send: "amber",
+      database: "amber",
+      globe: "teal",
+      "data-table": "slate",
+      language: "blue",
+    };
+    // The AI characters (gauge) are the Plan page's own figure: its colour, Settings' "Plan & usage" tile's.
+    const expected = (key: FeatureKey, icon: string) => (key === "chars" ? PLAN_TINT : (SETTINGS[icon] ?? "grey"));
+    for (const [key, icon] of Object.entries(FEATURE_ICON) as Array<[FeatureKey, string]>) expect(FEATURE_TINT[key], key).toBe(expected(key, icon));
   });
 });

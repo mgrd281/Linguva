@@ -1,25 +1,24 @@
 /**
- * "Good to know": four questions in native <details>, closed by default.
- * The answers state what the code does (a smaller plan deletes nothing,
- * what counts as an AI character, the UTC month, how a plan is changed).
+ * "Good to know": four questions in the app's fold (Disclosure), closed by
+ * default, each a full-width row with the chevron at its end, between
+ * dividers. The answers state what the code does (a smaller plan deletes
+ * nothing, what counts as an AI character, the UTC month, how a plan is
+ * changed).
  */
 import type { ReactNode } from "react";
 import { INTL_LOCALE, type I18n } from "../../i18n/i18n";
 import { yearlyHandles } from "../../lib/plan-prices";
 import { planName } from "../../lib/plan-view";
-import { EMPHASIS } from "./styles";
+import { DEFAULT_PRICES, type PriceTable } from "../../lib/plans";
+import { Card } from "../Card";
+import { Disclosure } from "../Disclosure";
 
+/** One question: its row in semibold, 44 px high, the answer under it (app/styles/ui.css, .lv-plan-fold). */
 function Question({ question, children }: { question: string; children: ReactNode }) {
   return (
-    <details>
-      {/* Semibold like the language page's summaries (Polaris draws type="strong" at the body weight). */}
-      <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", ...EMPHASIS }}>{question}</summary>
-      <div style={{ padding: "0 0 16px 18px" }}>
-        <s-stack direction="block" gap="small-200">
-          {children}
-        </s-stack>
-      </div>
-    </details>
+    <div className="lv-plan-fold">
+      <Disclosure summary={question}>{children}</Disclosure>
+    </div>
   );
 }
 
@@ -27,12 +26,23 @@ function Question({ question, children }: { question: string; children: ReactNod
  * `canChange`: the page has a plan button (else the question how to change is left out).
  * `ownKeyPlan`: the Own key plan's question when it is shown; a subscriber's downgrade answer says
  * that characters through its own keys don't count toward the new plan.
+ * `prices`: the list prices (which plans have a yearly price; the defaults when absent).
  */
-export function PlanFaq({ i18n, canChange, ownKeyPlan }: { i18n: I18n; canChange: boolean; ownKeyPlan?: { visible: boolean; current: boolean } | null }) {
+export function PlanFaq({
+  i18n,
+  canChange,
+  ownKeyPlan,
+  prices = DEFAULT_PRICES,
+}: {
+  i18n: I18n;
+  canChange: boolean;
+  ownKeyPlan?: { visible: boolean; current: boolean } | null;
+  prices?: PriceTable;
+}) {
   const { t } = i18n;
-  const yearly = yearlyHandles();
+  const yearly = yearlyHandles(prices);
   return (
-    <s-section heading={t("plan.faq.heading")}>
+    <Card heading={t("plan.faq.heading")}>
       <s-stack direction="block" gap="none">
         <Question question={t("plan.faq.downgrade.q")}>
           <s-paragraph>{t("plan.faq.downgrade.a")}</s-paragraph>
@@ -83,6 +93,6 @@ export function PlanFaq({ i18n, canChange, ownKeyPlan }: { i18n: I18n; canChange
           </>
         ) : null}
       </s-stack>
-    </s-section>
+    </Card>
   );
 }

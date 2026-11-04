@@ -9,9 +9,10 @@ it reads and writes nothing, so it does not affect the privacy posture.
 ## What is here
 
 - `index.html` — the home page (hero variant **A**, light).
-- `preise.html` — the pricing page, with the decided prices from `app/lib/plans.ts` /
-  `docs/PRICING_DECISION.md` (Free; Starter $29 or $290/year; Pro $99 or $990/year; Business $299
-  a month only). Own key ($49 a month only, own engine key) appears only with `OWN_KEY_PLAN_VISIBLE=on`
+- `preise.html` — the pricing page. The app fills in the list prices: the ones saved in the admin
+  console, else the defaults `PLAN_PRICES` / `OWN_KEY_PRICE` in `app/lib/plans.ts` (decided in
+  `docs/PRICING_DECISION.md`: Free; Starter $29 or $290/year; Pro $99 or $990/year; Business $299
+  a month only). The HTML holds the defaults. Own key ($49 a month only, own engine key) appears only with `OWN_KEY_PLAN_VISIBLE=on`
   (served by the app; the Caddy image never shows it).
 - `assets/` — the shared stylesheet (`style.css`, built from the design's tokens), the Own key card's
   one rule (`own-key.css`, linked only inside preise.html's `<!--ownkey-->` block, so `style.css` stays
@@ -31,6 +32,15 @@ violations.
 - **The app's privacy policy and support page exist as drafts** (`privacy.html` at `/privacy`, `support.html` at `/support`, English and German), written from `docs/LEGAL_FACTS.md`; open points are marked `<mark class="open">`. The app serves them only with `PUBLIC_PAGES=on` (404 otherwise), and the footer links to them (`<!--public-->…<!--/public-->`) only then; the draft notice (`<!--draft-->`) stays until `LEGAL_TEXTS_REVIEWED=yes` and no open point is left. The separate Caddy image serves every file in this folder, without that gate.
 - **The Caddy image always shows the DeepL-only texts.** The pages carry engine blocks (`<!--engine:…-->`, `<!--engines:…-->`) that the app resolves for its configured translation engines (`app/.server/site/engine-blocks.ts`). The image can't see that configuration, so `site/Dockerfile` drops the multi-engine texts and every engine block but DeepL's when it is built. Once Microsoft Azure or Google Cloud is set up, `privacy.html`, `support.html`, `index.html` and `preise.html` must be served by the app, not by this image.
 - **The Own key plan's texts** (`<!--ownkey-->…<!--/ownkey-->`, and `<!--ownkey:off-->…` for the words they replace) are shown by the app only with `OWN_KEY_PLAN_VISIBLE=on` (`applyOwnKeyBlocks`); with it off every page is byte for byte what it was before. The Caddy image always drops them (`site/Dockerfile`'s second Perl program), so with the plan shown these pages, too, must come from the app.
+- **The Caddy image always shows the default prices.** Every list price sits in a marker,
+  `<!--price:KEY-->default text<!--/price-->` (`index.html`, `preise.html`). The app replaces it with
+  the current price table (`applyPrices`, `app/.server/site/pages.ts`): the prices saved in the admin
+  console (`docs/ADMIN_CONSOLE.md` §3), else the defaults. The text between the markers is only what
+  the static image shows: `site/Dockerfile` drops the markers and keeps it. Once a price is saved in
+  the console, `index.html` and `preise.html` must be served by the app. To change a default, change
+  `PLAN_PRICES` / `OWN_KEY_PRICE`, the text between the markers and `tests/unit/plan-prices.test.ts`
+  together. Editing only the text between the markers changes nothing on the app's pages and fails
+  `tests/unit/admin-data-prices.test.ts`.
 - **German only** (except the bilingual `privacy.html` and `support.html`). The design has an English/French/Spanish rollout planned
   (`docs/research/website.md` §2.2); only German is built.
 - **Inter is self-hosted** (`public/site-fonts/`, SIL OFL): the pages make no third-party requests. The separate Caddy image does not include these fonts.
@@ -45,7 +55,8 @@ The app serves this website on its own public address: `/` is the home page and 
 pricing page (`app/.server/site/pages.ts`, used by `app/routes/_index/route.tsx` and
 `app/routes/preise.tsx`). `/` with a `shop` parameter still opens the app, as Shopify expects.
 The images and the stylesheet are bundled by Vite, and the inline menu script's CSP hash is computed
-when the server starts, so editing these files needs no other change. The pages carry their own strict
+when the server starts, so editing these files needs no other change (except the list prices: see
+the price-marker point under "Known gaps"). The pages carry their own strict
 CSP, `frame-ancestors 'none'` and `X-Robots-Tag: noindex`.
 
 ## Deploy on Railway (separate service, optional, later)

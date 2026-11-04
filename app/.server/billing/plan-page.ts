@@ -1,7 +1,8 @@
 /**
  * The Plan page's data: the billing state, the enforced AI limits, the
  * store's languages with the ones its plan covers, and what the store
- * really uses (for "Fits your store"). Read-only: nothing here creates,
+ * really uses (for "Fits your store"), and the list prices (the admin
+ * console's, else the defaults). Read-only: nothing here creates,
  * changes or cancels a subscription or a charge; the plan buttons are links
  * to Shopify's plan page. Every read is the shop's own (tenant-scoped).
  */
@@ -14,12 +15,13 @@ import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { shopTranslationFacts } from "../providers/shop-translation";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage, getMonthlyUsageByProvider, getOwnKeyUsage, nextPeriodStart, periodKey } from "../usage/usage-ledger";
-import { effectiveRatePerMillion, isOwnKeyHandle, OWN_KEY_PRICE, planSelectionUrl } from "../../lib/plans";
+import { effectiveRatePerMillion, isOwnKeyHandle, OWN_KEY, planSelectionUrl } from "../../lib/plans";
 import type { OwnKeyPlanView, PlanOwnKeys, ShopUse } from "../../lib/plan-view";
 import { SMART_REQUESTED_BY } from "../../lib/smart-auto";
 import { aiLimitsFor } from "./billing";
 import { allowedTargetLocales, type BillingStatus } from "./subscription";
 import { settleAll } from "../lib/settle";
+import { getPriceTable } from "../admin/prices";
 
 /**
  * The month's provider rate for a complimentary store: exactly DeepL's rate while only DeepL
@@ -78,7 +80,7 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
   const now = input.now ?? new Date();
   // Every read settles before the page answers or fails: none keeps running
   // against the database after the request is gone.
-  const [billing, fetched, month, today, flags] = await settleAll([
+  const [billing, fetched, month, today, flags, prices] = await settleAll([
     input.billing,
     // The page renders without them: "couldn't load your languages", no recommendation.
     fetchAndSyncShopLocales(input.admin, input.shop.id, client).then(
@@ -88,6 +90,8 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
     getMonthlyUsage(input.shop.id, periodKey(now), client),
     getDailyUsage(input.shop.id, client),
     shopUseFlags(input.shop.id, now, client),
+    // Cached; never fails (the last good table or the defaults).
+    getPriceTable(client),
   ]);
   // Shopify's re-authentication answer is passed on, once the other reads have finished.
   if (fetched.reauth) throw fetched.reauth;
@@ -107,7 +111,7 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
     current: ownKeyCurrent,
     pending: ownKeyPending,
     choosePlanUrl,
-    price: OWN_KEY_PRICE,
+    price: prices[OWN_KEY],
   };
   // Its keys (summaries only) and what went through them this month, for the subscriber's hero.
   const ownKeys: PlanOwnKeys | null = ownKeyCurrent && facts.keys ? { keys: facts.keys, usage: await getOwnKeyUsage(input.shop.id, periodKey(now), client) } : null;
@@ -157,6 +161,7 @@ export async function loadPlanPage(input: PlanPageInput, client: PrismaClient = 
     use: targets && aiAvailable && !ownKeyCurrent ? ({ languages: targets.length, monthChars: month, ...flags } satisfies ShopUse) : null,
     ownKeyPlan,
     ownKeys,
+    prices,
   };
 }
 

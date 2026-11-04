@@ -1,7 +1,7 @@
 /**
- * Search engine listing for one language: live length checks for the SEO
- * title and description, and a preview of the search result. Values come
- * from the editor form as the merchant types.
+ * How an item looks on Google in one language: live length checks for its
+ * Google title and description, and a preview of the search result. Values
+ * come from the editor form as the merchant types.
  */
 import {
   checkSeoField,
@@ -24,8 +24,10 @@ export interface SeoPanelProps {
   hasField: (key: string) => boolean;
   shopDomain: string;
   locale: string;
-  /** "products" or "collections". */
+  /** The storefront path before the address: "products", "collections", "pages", "blogs", "blogs/…" (a post under its blog). */
   pathSegment: string;
+  /** Pages, blog posts and blogs: their first text is a title, and the hints say so (EditorParts' isTitled). */
+  titled: boolean;
 }
 
 /** `showIssues={false}`: the length only, where the page names the findings itself (Review's live hints). */
@@ -78,7 +80,7 @@ export function SeoPreview(props: SeoPanelProps) {
       </s-stack>
       <s-stack direction="block" gap="small-300">
         {title.fallback && props.hasField(SEO_TITLE_KEY) === false ? (
-          <s-text color="subdued">{t("editor.seo.noTitle")}</s-text>
+          <s-text color="subdued">{t(props.titled ? "editor.seo.noTitle.titled" : "editor.seo.noTitle")}</s-text>
         ) : null}
         {!descriptionValue ? (
           <s-text color="subdued">{t("editor.seo.noDescription")}</s-text>

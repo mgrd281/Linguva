@@ -15,7 +15,7 @@ import { loadCoverageSummary } from "../coverage/summary";
 import { COVERAGE_TYPES } from "../coverage/coverage";
 import { headlineByLocale, measuredLocales as wholeLocales, unreadableTypes } from "../../lib/coverage-view";
 import { addCounts, coveragePercent, emptyCounts, HEADLINE_EXCLUDED_TYPES, totalOf } from "../../lib/coverage-rules";
-import { reviewPayoff } from "../../lib/language-categories";
+import { categoryPath, reviewPayoff } from "../../lib/language-categories";
 import { CONTENT_TYPES, isContentType } from "../../lib/resource-kinds";
 import { withTenant } from "../tenancy/with-tenant";
 import { getDailyUsage, getMonthlyUsage, getOwnKeyUsage, nextPeriodStart } from "../usage/usage-ledger";
@@ -119,7 +119,6 @@ export async function loadOverview(
   ]);
   const targets = locales.locales.filter((l) => !l.primary);
   const consent = hasCurrentAiConsent(settings, options.consent?.configured, options.consent?.payer);
-  const firstTarget = targets[0]?.locale;
 
   // Percentages only from the newest completed measurement, for the languages it covered and
   // still has every type of: a first measurement under way has read only some types, and a
@@ -128,6 +127,13 @@ export async function loadOverview(
   const headline = headlineByLocale(coverage.counts);
   // A store with live translations (measured, made anywhere) is past its first translation.
   const liveTranslations = [...measuredLocales].some((locale) => (headline.get(locale)?.complete ?? 0) > 0);
+  // The first translation opens the products' list (the app's one list of them) of a counted language,
+  // a visible one first: its Translate asks first, as on every other way into Products. Before any
+  // language is counted, the first visible one's (its list offers counting first); without a language,
+  // Content, which says where to add one (the step is done only once there is one).
+  const countedTarget = targets.find((l) => l.published && measuredLocales.has(l.locale)) ?? targets.find((l) => measuredLocales.has(l.locale));
+  const firstTarget = countedTarget ?? targets.find((l) => l.published) ?? targets[0];
+  const firstTranslationHref = firstTarget ? categoryPath(firstTarget.locale, "products") : "/app/content";
 
   const allSteps: ChecklistStep[] = [
     {
@@ -144,7 +150,7 @@ export async function loadOverview(
       label: { key: "overview.checklist.consent.label" },
       detail: { key: "overview.checklist.consent.detail" },
       done: consent,
-      href: "/app/settings",
+      href: "/app/settings?section=ai",
       action: { key: "overview.checklist.consent.action" },
     },
     {
@@ -152,7 +158,7 @@ export async function loadOverview(
       label: { key: "overview.checklist.firstTranslation.label" },
       detail: { key: aiAvailable ? "overview.checklist.firstTranslation.detail" : "overview.checklist.firstTranslation.detailManual" },
       done: published > 0 || liveTranslations,
-      href: firstTarget ? `/app/products?lang=${encodeURIComponent(firstTarget)}` : "/app/products",
+      href: firstTranslationHref,
       action: { key: "overview.checklist.firstTranslation.action" },
     },
     {

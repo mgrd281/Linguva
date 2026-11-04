@@ -5,9 +5,9 @@ type Tone = "info" | "success" | "warning" | "critical" | "neutral";
 
 export const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   PENDING: { label: "Queued", tone: "info" },
-  DISCOVERING: { label: "Finding content", tone: "info" },
+  DISCOVERING: { label: "Finding texts", tone: "info" },
   RUNNING: { label: "Translating", tone: "info" },
-  COMPLETED: { label: "Completed", tone: "success" },
+  COMPLETED: { label: "Done", tone: "success" },
   CANCELLED: { label: "Cancelled", tone: "neutral" },
   FAILED: { label: "Stopped", tone: "critical" },
 };
@@ -26,21 +26,30 @@ export const JOB_ERROR_MESSAGES: Record<string, string> = {
   SHOP_INACTIVE: "The app is no longer installed on this store.",
   SHOP_UNINSTALLED: "The app was uninstalled.",
   DISCOVERY_FAILED: "Shopify didn't return the list of items. Please resume later.",
-  // The Own key plan: OWN_KEY_QUOTA_<ENGINE> and OWN_KEY_AUTH_<ENGINE> read these with the engine's name (ownKeyJobError).
+  // The Own key plan: OWN_KEY_QUOTA_<ENGINE> reads OWN_KEY_QUOTA with the engine's name (ownKeyJobError);
+  // OWN_KEY_AUTH_<ENGINE> has a text of its own per engine (its set-up only), OWN_KEY_AUTH is the fallback.
   OWN_KEY_MISSING: "No working translation key. Add one in Settings, then resume.",
   OWN_KEY_QUOTA: "Your {engine} key's quota is used up. Translation stopped; Linguva didn't switch to its own services. Check your {engine} account, then resume.",
   OWN_KEY_AUTH:
     "{engine} refused your key, or the service isn't set up for it (Google: Cloud Translation API enabled and billing on; Azure: the right region). Translation stopped. Fix it in your {engine} account and click Check again in Settings, or replace the key; then resume.",
+  OWN_KEY_AUTH_DEEPL:
+    "DeepL refused your key. Translation stopped; Linguva didn't switch to its own services. Check in your DeepL account under API Keys that the key is still valid, then click Check again in Settings or replace it; then resume.",
+  OWN_KEY_AUTH_AZURE:
+    "Microsoft Azure refused your key. Translation stopped; Linguva didn't switch to its own services. In the Azure portal under Keys and Endpoint, check Key 1 and the resource's region, then click Check again in Settings or replace the key; then resume.",
+  OWN_KEY_AUTH_GOOGLE:
+    "Google Cloud refused your key. Translation stopped; Linguva didn't switch to its own services. In the Google Cloud console, check that the Cloud Translation API is enabled and billing is on, then click Check again in Settings or replace the key; then resume.",
 };
 
 /**
- * The English text of an own-key stop (OWN_KEY_MISSING, OWN_KEY_QUOTA_DEEPL, OWN_KEY_AUTH_GOOGLE, …)
- * with the engine's name filled in; null for any other code. The fallback where no catalogue has it.
+ * The English text of an own-key stop (OWN_KEY_MISSING, OWN_KEY_QUOTA_DEEPL, OWN_KEY_AUTH_GOOGLE, …):
+ * a refused key's own engine text, else the kind's text with the engine's name filled in; null for
+ * any other code. The fallback where no catalogue has it.
  */
 export function ownKeyJobError(code: string): string | null {
   const own = parseOwnKeyCode(code);
   if (!own) return null;
   if (own.kind === "MISSING") return JOB_ERROR_MESSAGES.OWN_KEY_MISSING!;
+  if (own.kind === "AUTH" && JOB_ERROR_MESSAGES[code]) return JOB_ERROR_MESSAGES[code]!;
   return JOB_ERROR_MESSAGES[`OWN_KEY_${own.kind}`]!.replaceAll("{engine}", ENGINE_NAMES[own.engine]);
 }
 

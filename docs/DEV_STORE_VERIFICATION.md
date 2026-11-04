@@ -156,7 +156,7 @@ Each line: do it, then write Pass / Fail / Blocked with evidence in DEV_STORE_TE
 
 ### 3.3 Import and export (K2)
 
-- [ ] **K2.1** Import & export → French, Products, only missing → "Download CSV" → open in a spreadsheet: no formula warnings; columns as described on the page.
+- [ ] **K2.1** Import & export → French, Products, only missing → "Export CSV" → open in a spreadsheet: no formula warnings; columns as described on the page.
 - [ ] **K2.2** Fill 3 translations, save as CSV (UTF-8), import → "3 translations wait on Review"; nothing changed in the store yet (check the storefront or Translate & Adapt); approve on Review → live.
 - [ ] **K2.3** Export again, change one product's English title in Shopify, import a filled row for it → listed as "The original changed since the export".
 - [ ] **K2.4** Live check §4.1 includes an export of all products compared with the recount and a draft-only import.

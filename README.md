@@ -101,6 +101,7 @@ docs/               architecture, security, billing, roadmap
 | [docs/BETA_READINESS.md](docs/BETA_READINESS.md) | Beta readiness review: blockers, defects fixed, open items |
 | [docs/UI_TESTING.md](docs/UI_TESTING.md) | Playwright UI tests: what is real, what is simulated |
 | [docs/DEV_STORE_SETUP.md](docs/DEV_STORE_SETUP.md) | Dev store setup, live contract tests, manual checks, results log |
+| [docs/ADMIN_CONSOLE.md](docs/ADMIN_CONSOLE.md) | Admin console at `/admin` (off by default; implemented, tested in CI, not deployed): stores, subscriptions, list prices, accounts with `pnpm ops:admin`, setup as a second Railway service |
 | [docs/RAILWAY_STAGING.md](docs/RAILWAY_STAGING.md) | Hosting on Railway: staging (test stores only, mock AI), image, roles, variables, approvals; KARINEX production plan |
 | [docs/SEO_ARCHITECTURE.md](docs/SEO_ARCHITECTURE.md) | Multilingual SEO and Markets plan |
 | [docs/SECURITY_REVIEW_MEMORY_FUZZY.md](docs/SECURITY_REVIEW_MEMORY_FUZZY.md) | Security review of the fuzzy search function, roles and grants |

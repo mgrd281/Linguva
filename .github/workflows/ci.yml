@@ -3,6 +3,8 @@ name: CI
 on:
   push:
   pull_request:
+  # The visual baselines workflow starts it on its own commit (a push with GitHub's token starts no workflow).
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -31,9 +31,9 @@ Scope agreed with the owner: improve the existing interface with sound product-d
 | 11 | P2 | Import/export | Export language defaulted to the alphabetically first language (often an unpublished one) | **Fixed**: published languages first |
 | 12 | P2 | Import/export | Import result gave only the draft count | **Fixed**: "N rows read, M skipped (listed below with their line)" |
 | 13 | P2 | Editor | SEO length only as "35 / 60" | **Fixed**: small length bar (green within the limit, red over it) next to the numbers |
-| 14 | P2 | Products list | "Translated fields 3 / 5" as text only; the bulk card is heavier than the list | Planned: mini bars per row; bulk options folded behind one button |
+| 14 | P2 | Products list | "Translated fields 3 / 5" as text only; the bulk card is heavier than the list | Planned: mini bars per row; bulk options folded behind one button (now: this list is gone; `/app/products` opens the products' area list, each text with its state, Translate asking first, §3i) |
 | 15 | P2 | Import/export | "Columns: resource_id, …" is developer language; no numbered steps | Planned with the competitor-based specification |
-| 16 | P2 | Coverage | Language cards repeat what the table below shows for the selected language | Planned: make cards selectors (tabs) once the specification decides the layout |
+| 16 | P2 | Coverage | Language cards repeat what the table below shows for the selected language | Planned: make cards selectors (tabs) once the specification decides the layout (now: the languages are chips without a figure, the selected one's figure is shown once, §3i) |
 | 17 | P3 | All | Custom colours are light-theme values; Shopify renders embedded apps in the admin's light appearance today | Open: dark appearance follows only if the admin offers it to apps; colours are defined in one place (`STATE_COLOURS`, `TRACK_COLOUR`) for that |
 | 18 | P3 | Coverage | Long phone page (5,090 px, was 5,668 px) | Planned: type and field tables as collapsible groups on narrow screens |
 
@@ -188,7 +188,7 @@ On a card, the state badges ("Your plan", "Applies now", "from …") sit beside 
 
 ### Measured in Polaris (2026-10-30)
 
-- `s-text type="strong"` draws at body weight (450), the same as plain text. Where a page needs emphasis, it sets the weight inline, as the language page does for its summary: the Plan page at 600 (`EMPHASIS`, `METER_LABEL` in `app/components/plan/styles.ts`), Content through its `Strong` element (600), Review's text names at 650. Names that still rely on `type="strong"` show no emphasis: the Overview's card titles (`app._index.tsx`) and `CountryCards`, `CategoryList`, the Settings tool labels, `StepStrip`, the language page's next-step titles and extras rows, and `DialogPoint`'s titles. A shared semibold helper would fix them together.
+- `s-text type="strong"` draws at body weight (450), the same as plain text. Where a page needs emphasis, it sets the weight inline, as the language page does for its summary: the Plan page at 600 (`EMPHASIS`, `METER_LABEL` in `app/components/plan/styles.ts`), Content through its `Strong` element (600), Review's text names at 650. Names that still rely on `type="strong"` show no emphasis: the Overview's card titles (`app._index.tsx`) and `CountryCards`, `CategoryList`, the Settings tool labels, `StepStrip`, the language page's extras rows, and `DialogPoint`'s titles. A shared semibold helper would fix them together. The numbered "Next" steps already do (Redesign 3): `NumberedSteps` sets a title given as text in semibold (600), on the language and area pages as on the Jobs pages.
 - A neutral badge with `color="strong"` looks exactly like a plain neutral one ("Hidden"), so the current plan's "Your plan" badge is info with `color="strong"`.
 - `s-text` has no size, so the artboards' 12 px captions can't be built: two meter captions wrap at 1,280 px, and the trial line takes three lines in a four-column card.
 - A sandboxed frame can't report its own height. Review counts lines per block at the text-box size for each range of card widths, at the narrowest width of each range, and gives the frame a Polaris responsive height, so no box changes height after the page shows and no text is cut. The price: on a 390 px phone a long multi-paragraph box can keep 1–3 spare lines.
@@ -219,6 +219,235 @@ Plan:
 2. Deviations from the spec, kept for now: the meter names are h3 headings (spec: strong text); the hero section has no accessibility label (Polaris would add a second, hidden heading); a new key `plan.row.languages.detail`; at four columns "Fits your store" sits below the plan icon in German, French and Spanish (artboard: at the right).
 3. A plan change that keeps the plan handle (for example Pro monthly to Pro yearly at the cycle's end, if Shopify reports it so) would read "Changes to Pro on …" on a Pro store, because the app doesn't read the billing period. To check on the dev store (DEV_STORE_TEST_PLAN L14).
 
+## 3e. Redesign 3: the Jobs pages (owner request, 2026-11-02/03)
+
+The Jobs list and a job's page, rebuilt on the shared view logic (`app/lib/job-view.ts`, tested in `tests/unit/job-view.test.ts`) and the list's server queries (`app/.server/jobs/bulk-jobs.ts`, `tests/integration/jobs-page.test.ts`). The words, states and figures are the view logic's, so the list and the job's page always say the same.
+
+- **Jobs list** (`/app/jobs`): an attention card first (a stop that needs the merchant, with its fix and the way to the job; stops that go on by themselves; failed items; background jobs not running; translations to approve), only on the unfiltered first page of "All". Tabs with their figures (All, Running, Problems in the last 14 days, Completed, Cancelled; "Completed" is "Done" since §3i), the search (a product's name or a job's reference) and four filters (language, content, who started it, when; behind "Filters (n)" on a phone). On "All": the jobs running now, updating by themselves, then the history by day in the store's time zone ("Today · Tuesday, November 3"), the jobs of one click or one schedule check together. Each row: the language's flag, the job's one name ("French · Products"), its origin badges, what came out in words with its icon (never colour alone), and its meta. Pages go both ways by keyset.
+- **A job's page** (`/app/jobs/:id`): the header with the state badge and who started it when; the hero like the language page's: the ring of what ended well (dashed while the job still finds its items, a clock while queued), the title, its lines (time left, the stop's reason, "Updates by itself") and the legend; beside it the Next panel with at most three numbered steps and one primary button (approve, try again, finish in the editor, fix the cause, resume), or "Nothing to do." The stats (time, AI characters, saved), the items that need the merchant by their names and pictures (each opens the editor), and the results in detail with the CSV report and the support reference, folded. Cancel asks first and says what stays.
+
+Status: **Implemented; content checked locally** (every state of `tests/ui/fixtures/jobs-store.ts` rendered from the production build). This development container can't load Polaris from Shopify's CDN (network policy), so the layout itself is checked in CI: `tests/ui/jobs.spec.ts` and the `jobs-completed` and `job` screenshot comparisons, whose `*-ci.png` images come from the first CI run.
+
+## 3f. Redesign 3: Settings in sections (owner-approved design, 2026-11, Tested in tests only)
+
+Settings was one long stack of cards under six "At a glance" tiles. It is now sections, one shown at a time and addressed by `?section=<key>` (`changes`, `publish`, `style`, `memory`, `keys` on the Own key plan, `ai`, `plan`, `tools`):
+
+| Before | After | Why |
+|---|---|---|
+| Six glance tiles, then every card | Under the heading one status row: "Everything is set up" with a green check, or the one thing that needs the merchant (a language, a key, the AI permission, translating changes paused or waiting) in its tone with its fix | One answer to "is anything wrong?" |
+| Cards in a stack; the permission moved to the top while missing | A nav card (260 px) beside the section: each section's name and its state in one line ("Translating changes · Start it yourself"), the current one filled (`aria-current`), the two groups apart by a divider; without `?section` the first section that needs the merchant | Short page, every state still in view |
+| The same stack on a phone | The sections as two cards of rows (icon tile, name, a summary of up to two lines, chevron); a chosen section opens alone under a 44 px back row "‹ Settings" | Phone-sized decisions |
+| "AI characters" tile linking to the Plan page; tools without glossary and memory | "Plan & usage" (plan, this month's AI characters, the date new ones come, the way to the Plan page); "Tools" with six links including glossary and translation memory | Every page beside the settings in one place |
+
+Behaviour kept: every action, toast and focus move; giving the permission moves on to "Translating changes"; switching keeps a choice being made and unsaved text (every section stays mounted; only `?section` changes, so the data isn't loaded again); the cards' old `#settings-*` addresses open their section; links from the Overview, editor, language and content pages open `?section=keys` or `?section=ai`. A job stopped for the permission, a key, the plan, the month's AI characters or a smart budget links to its fix with `?job=<id>`; once the cause is fixed there (`app/.server/jobs/back-to-job.ts`), the section, the smart page's card or the Plan page shows "Back to the job" as the page's one primary button.
+
+Screenshots (German, 1,280 px at scale 1 and an iPhone 13): `UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign3 pnpm test:ui tests/ui/ui-review-screenshots.spec.ts -g "settings-sections"` writes `settings-desktop.png` and `settings-phone.png`. They couldn't be taken where this was built (Polaris' script from Shopify's CDN wasn't reachable there); the browser tests run in CI.
+
+## 3g. Buttons without the dark edge, the form of address as one row (owner request, 2026-11-03)
+
+The owner, looking at Settings in the admin: the English flag was missing, and the buttons and the dark edges of the controls didn't look modern; every button of the app should be 10/10. Polaris' buttons (`s-button`) can't be styled (only variant, tone, icon and width), so the app's buttons are its own now:
+
+- **`app/components/Button.tsx`** with **`app/styles/ui.css`**: a native `<button>`, or a link (React Router's Link inside the app, `window.open` for the admin's `shopify://` pages, a plain link otherwise), with s-button's props. Flat, a light 1 px edge instead of the dark bevel, a soft shadow, 10 px corners (12 px on touch screens), Inter 13 px semibold, 32 px high (44 px on touch screens), a 2 px blue focus ring, a spinner in the words' place while loading. Primary dark, secondary white, tertiary words only, critical red. 140 buttons on every page use it; the 19 that Polaris places itself (a dialog's actions, a banner's, the page's) stay the admin's.
+- **The form of address** ("So schreibt die KI"): instead of a select per language, one row per language that has a choice, with a segmented choice ("Automatisch · Sie · Du", `app/components/Segmented.tsx`, native radio buttons; the first option was "DeepL entscheidet" until §3i); the languages without a choice in one line with their flags. All rows line up.
+- **English's flag**: the United Kingdom's when the store's markets name no English-speaking country (`localeCountry`); Arabic and Chinese still show their code.
+- **The chosen card** of a set (Settings' current setting, the Plan page's current plan): a 2 px blue ring with a light blue tint, the colour of its "Current" badge (`.lv-selected-frame`), instead of the dark ring.
+- **When Linguva was last updated**: Settings' last line, quiet, under the sections (on a phone under the list): "Linguva zuletzt aktualisiert heute um 12:41 · Version 183028e", in the store's time zone (owner request, 2026-11-03).
+- **Form fields keep Polaris' darker edge** (text fields, selects, the search): a field's edge is how it is recognised, so it needs a contrast of 3:1 (WCAG 1.4.11, non-text contrast); a button is recognised by its words and needs none.
+
+Status: **Implemented; buttons and the segmented choice checked in a browser** (their CSS doesn't need Polaris). The pages around them are checked in CI (`visual.spec.ts`, new `settings-style`).
+
+## 3h. Redesign 4: square buttons, one design system, every page (owner request, 2026-11-03)
+
+The owner: "Raise everything to 10/10 in modernity, user experience, ease of understanding, icons and order, above all in Settings: square buttons." Asked what "square buttons" meant, the owner chose **square tiles above the content**: on a desktop every section of Settings a square button with a big icon, its name and its state in one row, the chosen one framed in blue and its section right under the row; on a phone a grid of squares that opens each section; inside a section the choices as equal tiles with icons. Before building, eight readers audited every page (modernity, UX, clarity, icons, order, buttons) against the CI screenshots; their findings are the work list of this redesign.
+
+### Settings
+
+| Before | After | Why |
+|---|---|---|
+| A 260 px nav card of text (name and a grey line) beside the section; no icons on a desktop, a list of rows on a phone | **Square tiles** (`SectionTiles`, `.lv-tile`): the section's icon in a tinted square, its name, its state in a few words, a dot in the state's tone where it needs the merchant. One row above the section on a wide page (the groups apart by a fine line, the current one framed in blue, `aria-current`), four in a row on a tablet, three in a row on a phone, where a tile opens its section alone under the 44 px back row | The owner's square buttons; every section recognisable by its picture, its state in view on every width |
+| States cut at the end of a line ("Kurz nach dem Speichern · Braucht deinen Schl…"); everything grey | A tile says one state in up to two lines; one that needs the merchant ("Pausiert", "Nicht erlaubt", "Bitte prüfen") in its tone with a dot; long German words break at a soft hyphen ("Übersetzungs-/speicher"), "KI-" never ends a line | What is wrong is the part that was cut |
+| Option cards that looked like information; three cards in 2 + 1 rows of different heights | Equally high **option tiles** with the feature's icon (the Plan page's: play-circle, automation, calendar-time, eye-check-mark, send, wand), an empty radio mark where one can be chosen, a chevron where choosing opens a page; the chosen way's details (shortly after saving's languages, the schedule's summary with Check now) in a panel under the choices | One look for "this is a choice", one place for its details |
+| A gear for "Translating changes", a speech bubble for "How AI writes", a lock for "allow AI first", `connect` for a missing key | `automation`, `text-quote`, `shield-check-mark` (the lock means "not in your plan"), `key`; each section's heading carries its tile's icon | One icon per concept app-wide |
+| Badges repeating the current option ("Mit Prüfung" beside "Erst prüfen"), "Aus" plus a line plus the option | No badge or line repeats the current option; the heading's badge only where it adds (On, Paused, Waiting, Stopped) | Calmer, nothing said twice |
+| Status row "Änderungen übersetzen [Pausiert]" | A sentence in a tinted row: "Die automatische Übersetzung ist pausiert", the fix "Einstellung öffnen" | Says what is wrong |
+| The browser's triangle on folds | A chevron that turns (`Disclosure`) | The one control that wasn't drawn like the rest |
+
+Texts: publishing's scope in plain words ("wenn Linguva viele Texte auf einmal übersetzt"), "neue KI‑Zeichen am …", "Feste Begriffe im Glossar: 0 · Glossar bearbeiten", "Noch keine Sprache"; withdrawing the AI permission is a critical button; the permission section names what can't work first. The smart schedule's field groups showed their codes ("seo_title"); they use the Coverage page's names.
+
+### One design system
+
+`app/styles/ui.css` starts with the app's tokens (`--lv-font`, text and border colours, `--lv-radius-card` 12 px, shadows, `--lv-focus`, the chosen look `--lv-selected-*`) and a type scale (`.lv-h1` 22/28/700, `.lv-h2` 17/24/650, `.lv-h3` 14/20/650, `.lv-strong` 600, `.lv-figure`, `.lv-figure-row`, `.lv-caption`), because Polaris' `s-text` has no size and draws `type="strong"` at the body weight. Shared components: `IconSquare` (the one icon square, tinted by place; `IconTile` draws it), `Strong`, `Disclosure`. Each area keeps its own rules in its section of `ui.css`.
+
+### Overview
+
+| Before | After | Why |
+|---|---|---|
+| The store card first, the next step under it (on a phone about 670 px down) | **Next first**: on the left on a desktop, on top on a phone; every card a native section with its edge (`CARD`) | The page's one primary button on the first screen |
+| Five heading styles, the most important section the smallest | One scale: `.lv-h1` for the page, `.lv-h2` for Next, Running now, the customers and the store card, `.lv-h3` for a step's title | Size follows importance |
+| Bare 20 px step icons, three of them pointing elsewhere (a gear for the AI permission, `connect` for a key, a dashed circle for translating) | Each step's icon in a tinted square, the icon of the place it opens: `shield-check-mark`, `key`, `language-translate`, `chart-donut` (count), `eye-check-mark` (approve), `globe` (countries), `lock` (access) | Recognition by picture; nothing looks disabled |
+| "Your store in 1 language" for English plus German | "Your store in 1 other language" / "Dein Shop in 1 weiteren Sprache" | The original isn't counted as a translation |
+| "Shop neu zählen" with the outdated state's `refresh` icon, top right, far from its date | "Übersetzungen neu zählen" with `chart-donut`, beside "Zuletzt gezählt" in the store card | Says what is counted, next to when |
+| "Ansehen", "… Auf Deutsch." | The language in the title ("1 Text auf Deutsch ist veraltet") and the button ("Deutsch öffnen") | Says where it leads |
+| Two looks for the Countries · Languages switch | `SegmentedButtons` (Segmented's pressed-button mode, `.lv-seg`) with `globe` and `language` | One segmented control app-wide |
+| After approving a plan: the Plan page, a dead end | `/app/welcome` lands on the Overview with the plan's success banner above Next (the Plan page only while Shopify doesn't report the plan active) | The first moment after paying leads on |
+| A country's language states as badges, badges without icons or grey words | One badge with its icon per state: Hidden (`hide`), Not offered (`disabled`), Not set up (`minus-circle`), Original (`check-circle`) | One look per state |
+
+### Content, a language's page, an area's list, Languages
+
+| Before | After | Why |
+|---|---|---|
+| Grey squares and grey icons for every area | Each area has its tint (`CATEGORIES`; image descriptions and extra details take their products' blue) in the shared icon square, on Content, the language page, the list's header and the steps | The same place has the same picture and colour everywhere |
+| The chosen language chip and filter a grey fill | The app's chip and pill with the chosen ring and tint (`.lv-lang`, `.lv-filter`); `aria-current` stays | One "chosen" look app-wide |
+| A lone tile beside empty space | Rows always full: one card full width, two or three side by side, four as two by two | No half-empty rows |
+| Image descriptions and extra details as their own step with "Ansehen" to a list without "Übersetzen" | Their open texts join their owner's step ("Produkte übersetzen – … dazu 3 Bildbeschreibungen"), whose Translate opens the dialog with "Auch Bildbeschreibungen und Zusatzinfos übersetzen" ticked | No dead end |
+| A gate (no permission, plan, key) turned every step into "Ansehen" with a grey line | The gate is a step with its own button: "KI-Übersetzung erlauben" (`?section=ai`), "Schlüssel hinzufügen" (`?section=keys`), "Tarife ansehen" | The fix is the next step |
+| Tier headings with filled 1/2/3 circles like the steps | Plain tier headings; steps carry an icon square instead of a number where the kind is clear | Numbers only where order matters |
+| "34 % übersetzt" beside drafts "von der KI übersetzt" | "34 % fertig" (the state word); the steps-to-live strip only while texts wait, with state icons and semibold titles, "2 · Du gibst frei" | One word, one meaning |
+| A small "Öffnen ›" on each list row; the name repeated in "Noch nicht auf Deutsch – Kunden sehen …" | The whole row opens the editor (a chevron at its end); the repeated line is gone | A bigger target, less text |
+| The trail always "Übersicht › …" | "Inhalte › Deutsch › Produkte" when opened from Content (`?from=content`) | Back leads where the merchant came from |
+| Languages as a technical table (code, role, "(RTL)") | One row per language like Content's chips: flag, visibility badge, bar and figure, the AI line, chevron; the main language first; a trail to Settings › Tools (now without bar and figure, §3i) | Readable, one look with Content |
+
+Words: "Bildbeschreibung" everywhere for alt text, the list's kind words in the previews (no "Tarifgruppe", "Richtlinie"), "Theme" for the theme, plural forms ("1 von 1 Text ist fertig").
+
+### Review
+
+| Before | After | Why |
+|---|---|---|
+| A bare ✕ for rejecting (read as "close") | "✕ Ablehnen" in words on every width; on a phone "Bearbeiten" at the start, "Ablehnen" and "Freigeben" together at the end | Says what it does |
+| Questions answered with Polaris' dark-edged buttons | The in-card questions (reject, a new web address) answer with the app's buttons, with a spinner while the request runs | One button look |
+| "Diese Übersetzung ablehnen? Das lässt sich nicht rückgängig machen." | Says what rejecting does: nothing changes in the store, Linguva won't translate the text again by itself while the original stays the same | No fear of the unknown |
+| Approving a page with notes: one answer | A second answer: "Nur die 3 ohne Hinweis freigeben" | The safe, fast path |
+| Deciding a long page meant scrolling back up | A decision bar at the bottom while the strip is out of view (count and both buttons) | The decision where the merchant is |
+| "4 Übersetzungen auf dieser Seite" after deciding 2 of 6 | "Noch 4 von 6 offen" with a bar | Progress, not a stale count |
+| Tabs by name only, the chosen one a grey fill | Visible languages first, the chosen tab semibold, "versteckt" in words, 44 px, a swipe row on a phone, a select above six languages (now Content's `.lv-lang` chips, `LanguagePicker`, §3i) | As Content's chips |
+| A drawn tick for "Alles geprüft" | The green status row with one next step ("Deutsch weiter übersetzen") and the languages as tiles | As Settings' status row |
+
+Hints in plain words: "Zu kurz für Google (…)", "Wie im Original – nicht übersetzt", "Falsche Schrift für diese Sprache", "Gib eine Webadresse ein.".
+
+### Jobs
+
+| Before | After | Why |
+|---|---|---|
+| The four filters applied only after "Suchen" (React 18 never sends `onChange` for a web component) | Filters apply at once (`onInput`, deduped with `onChange`) | **Bug fixed** |
+| Tabs as words with a grey pill, cut on a phone ("Comple…") | Tabs as tiles: icon, figure, name; the chosen one framed in blue; five in a row, two rows on a phone; a dot on Problems only when one needs the merchant | The app's square buttons; nothing cut |
+| Search and four selects always open on a phone (the first job far down) | The selects fold behind "Filter (n)" on a narrow card | The list first |
+| A stopped job's page never refreshed; "Ansehen" as a finished job's one button | It checks again after the stop's time and when the tab returns; "Im Editor öffnen" goes straight to the editor when one item is left | Promises kept, one step |
+| Stats between the problems and the hero; CSV and reference inside a closed fold | Hero → what needs you → stats (each with its icon) → details; the CSV button and an 8-character support reference with "Copy" outside the fold | The page in the order it speaks |
+| A silent CSV download | A spinner, an error toast on failure | Feedback |
+| "Hintergrundaufträge", "Wer gestartet hat", "mit Lücken" / "unvollständig" | "Linguvas Hintergrunddienst" (app-wide), "Gestartet von", "Zeitraum", "Abgeschlossen, teils unvollständig" (now: no background service in any text, and "Fertig, teils unvollständig", §3i) | One word per thing |
+| A green check for a store without jobs | "Noch keine Aufträge" with what to do and "Sprache auswählen" | Never "all done" for nothing done |
+
+The attention card and the way back to a job are drawn as Settings' tinted status row.
+
+### The smart schedule's page
+
+| Before | After | Why |
+|---|---|---|
+| "How often" as a list of radio buttons; the days as seven checkboxes in a column | Five square choice tiles (native radios in a fieldset, icon, name, one line; the chosen one framed in blue), the chosen way's time, days, zone and next checks in a panel under them; the days as one row of seven square toggles (now Settings' option cards, §3i) | The owner's square buttons, the same as Settings' choices |
+| A schedule the server refuses said so only after saving | It says why live where the next checks would be ("Checks need to be at least an hour apart."); after a refused save the field itself says so | The problem where it is made |
+| "Retry" for every failed check | Only for what a new try can fix, with the count ("Try 3 items again"), otherwise "See in the job"; the last 3 checks show, the others fold | No button that can't help |
+| Exclusions by kind and Shopify number ("Product 8123456") | By their title and picture (else the area's icon), the kind under the name | Says what is left out |
+| "Only manually", "measure", budgets as bare numbers | "Only on demand" / "Nur auf Knopfdruck", "count", "At most per day / month" with "No limit" and a meter each; the next check as "today, 11:00 PM" | The app's words; the numbers as pictures |
+| "Every day at 23:00" beside "Next check: today, 11:00 PM", the time choices as "23:00" in every language; Spanish "a las 1:00" | The schedule's times in the interface language's clock everywhere ("Every day at 11:00 PM", "Jeden Tag um 23:00"), the form's values unchanged; Spanish with its article ("Cada día a la 1:00", `clockRef`) | One clock per language |
+| A bare h1; the schedule's sign only inside the card on a wide page | `PageHeader` with the schedule's sign (`calendar-time` violet, its choice in Settings), the card without a second one | Opens like every page |
+
+### Plan & usage
+
+| Before | After | Why |
+|---|---|---|
+| Grey signs; Free with `play-circle` (Settings' "Start it yourself"), Own key with `connect` | The page's rose (Settings' tile) on the hero, the four cards and Own key; Free `nature`, Own key `key`, a language outside the plan the lock, used up `alert-circle`; "In every plan" in the tints Settings gives the same icons | One icon and colour per concept |
+| "Passt zu deinem Shop" as a badge plus a legend | Said in words for the store's own plan ("Your plan fits your store."), a smaller plan "For what your store uses right now, Starter is enough too." | One sentence instead of a code to learn |
+| The questions and the comparison as browser folds, the current plan's column barely marked | The app's `Disclosure` rows; the current column in the chosen blue with "Your plan" in the ring's blue | One fold, one "chosen" look |
+| A renewal at "1. Dezember" that comes on the evening before in the store's zone | "30. November um 19:00" where it differs; "Used today", "Today: N of M AI characters (daily limit)" | The date the merchant will see it |
+| The trail to the Overview | Back to Settings' "Plan & usage" (`?section=plan`), a 44 px back row on a phone | Back leads where the merchant came from |
+
+### The editor
+
+| Before | After | Why |
+|---|---|---|
+| The name and a grey line; back always to the old Products list | The area's list it came from ("‹ Products", "Products in German"; now always the area list, the old list is gone, §3i), the item's picture or the area's icon, the name as h1 and what is open ("In German · 3 of 5 texts to translate") | Where am I, what is left |
+| A list of fields | One square tile per text (Settings' `.lv-tile`) with its state's icon and word, moving the focus to the text; three in a row on a phone | The owner's square buttons as the editor's map |
+| "Translate with AI" and "Fill from memory" over every text, also the merchant's own | They work on the open texts only (missing or outdated), their count in the button; with nothing open "Translate everything again" asks first | A click never overwrites the merchant's work |
+| A red "Remove" under every text; HTML as code | A quiet delete icon; HTML drawn like Review, "Edit HTML" opens the code beside the original's with a live preview; history in the app's fold with "Restore this version" | Calmer, one look with Review |
+| Image descriptions and extra details saved apart | Filled by the one AI button, counted in the save bar and published by the one "Publish translations" | One publish |
+
+### Tools (glossary, memory, coverage, countries & markets, import & export)
+
+| Before | After | Why |
+|---|---|---|
+| Each page its own top | `ToolHeader`: the trail Settings › Tools (a 44 px "‹ Tools" row on a phone), the tool's icon in its Settings tile's tint, the h1 and one line on what the page is for | Every tool opens the same way |
+| Free and Starter filled the glossary's form and learned at "Add" that it is Pro's | The lock first (Pro and Business, "See plans"), every control disabled; the three rules as tiles with their icons (now option cards, §3i); the form starts over after adding, with a toast; a search from 8 terms; one "As a CSV file" card, replacing every term only after a critical question with the count | No work that can't be saved |
+| German "prüfen" for counting and for approving | Counting is "zählen" everywhere ("Übersetzungen zählen", "Zuletzt gezählt"), "prüfen" only for approving | One word, one meaning |
+| Coverage's "Translate" started a job at once | It asks first (what gets translated by state, approval or live, own translations stay, the AI characters left; `CoverageConfirm`), as the language page does | No surprise jobs |
+| Markets: the markets first, the checks at the end, emoji flags; the export's language select ignored (always the first language) | The checks first with their fix, flags, the markets folded; the select reacts (**bug fixed**, React 18 sends no `onChange` for a web component); import & export as three numbered steps | What needs the merchant first |
+
+### Every page opens the same way
+
+`PageHeader` gives the five menu pages, the Plan page and the smart schedule's page the header a tool, an area's list and the editor have: the page's icon in its tinted square (Overview `home` blue, Content `content` teal, Review `eye-check-mark` violet, Jobs `clipboard-checklist` slate, Settings the gear, Plan `gauge` rose as its Settings tile (now `credit-card`: `gauge` means AI characters only, §3i), the smart schedule `calendar-time` violet as its choice), the h1 and one line under it; Languages takes the tools' header (`language` blue, back to Settings › Tools with the phone's 44 px row). The editor is one stack like every page: s-page spaces only its own sections, so on a desktop its header, its tiles and the texts' cards touched. The AI permission is "KI-Übersetzung" / "AI translation" everywhere (the editor, the lists, Coverage, the job stops), and a job stop names the real place of its fix ("Einstellungen" → "Tarif & Nutzung", "KI-Erlaubnis").
+
+### Reviewed before it ships
+
+The whole diff (`2408af1..HEAD`) was reviewed in six slices (Settings and the smart schedule; Overview, Content and languages; Review and Jobs; the editor; the tools and the Plan page; the stylesheet and the texts), each finding checked by a second reviewer who tried to refute it against the code. 39 findings held and are fixed, each fix reviewed again; among them a merchant on a schedule paused for a new main language had no Save to lift it, a ticked "still correct" box in the editor wasn't published when nothing else changed, typed texts were forgotten after a memory fill, and the export's next part could start in another language. CI's browser found what the readers couldn't: duplicate headings (a Polaris section's hidden label beside the visible one), button names that didn't contain their visible words, and two timing problems in specs.
+
+Then all 40 screens were taken again and looked at as a whole: a critic per area at both widths against the owner's goals, a skeptic checking each issue against the code (67 held, 6 didn't). The fixes, each group's diff reviewed again: Settings' square buttons start at the top, so icons, names and states lie on shared lines whatever wraps, and on a phone the last tile takes its row; the Overview's first step opens the language's area list instead of the old Products list (now also before a count, and the old list's address leads there too, §3i); Coverage's type table leaves web addresses out of its totals (Products "0 of 12", as the next step and Content say); cards keep their edge on a phone, headings follow one scale, every page has the phone's 44 px back row; the smart schedule's waiting or paused state is the app's tinted status row; "Count translations" everywhere; Markets asks for its permission as Content does; Import & export's icons match their words. New: `Card` (a native section with the card's edge at every width) and `PermissionCard`.
+
+Status: **Implemented; checked in CI's browser** (screenshots `overview`, `products` (dropped in §3i with its page), `editor`, `review-empty`, `glossary`, `settings`, `settings-style`, `plan`, `plan-none`, `language`, `category`, `content`, `jobs-completed`, `job`, `smart`, `smart-schedule`, `memory`, `coverage`, `markets` and `transfer`, desktop and phone, regenerated by `visual-baselines.yml` and looked at). Open: "Fits your store" as a band on the plan card's edge (owner decision 6.15); the French and Spanish texts for a native speaker (docs/I18N_REVIEW.md).
+
+## 3i. One list, one word, one pattern (UI items 2–4, 2026-11-04)
+
+An honest rating of the app (about 7–7.5 of 10) named what still made it read like several apps: two lists of products, a language's percentage on six pages, too much helper text and several words for one thing, three ways of building a page header, four language pickers, three looks for "chosen", icons with two meanings, boxes inside boxes, Translate twice for the same area, two primary buttons on Import & export, and Search buttons where Review searches as you type. The owner: "yes, do items 2–4". What the app does stays the same, apart from the old lists' addresses and the Overview's link.
+
+### Item 2: one list of products, fewer repeated figures
+
+| Item | Before | After |
+|---|---|---|
+| 2a One list | `/app/products` (read live from Shopify, with its own "Translate all" that didn't ask first) beside the area's list `/app/languages/<locale>/products` | `/app/products`, `/app/collections` and `/app/pages` lead to their area's list, `/app/articles` and `/app/blogs` to the blog area's (loader-only redirects, `redirectToAreaList` in `app/.server/translation/resource-list.ts`). The language is `?lang` when it is one of the store's languages, else the first visible one (`listLanguage`); without a language the redirect goes to Content. The editors (`/app/products/<id>`) and the other content types' lists (`/app/content/<type>`) stay. The Overview's first step always opens the products' area list, also before a count (the list then offers counting first). The editor's way back is always the area list (`from=list` is gone) |
+| 2b Its languages | The area list had no language switch | Content's chips (`LanguagePicker`): each chip opens the same area in that language and keeps `?from=content`. The row is left out when the store has one language to translate into |
+| 2c Figures | A language's % on the Overview, Content's chips, the Languages tool, its own page, Coverage's chips and selected language, and Review's all-checked tiles | Three places show it: the Overview (the store's dashboard), the language's own page, and Coverage's selected language (one figure in its part of the Languages card). Removed: the % on Content's and Coverage's chips; the bar and % on the Languages tool, which now shows name, flag, Visible or Hidden and the way in, and whose loader no longer reads coverage; Review's % and bars when everything is checked (its links stay). The area page's hero keeps the ring, "X of Y texts" and the state lines, without "Fully done: N of M products" |
+
+### Item 3: shorter texts, one word per concept
+
+The same words in English, German, French and Spanish:
+
+- **3a, the words:**
+  - A text that is translated and live is "Done" / "Fertig" / "Terminé" / "Listo". It was "Complete", "Translated", "done and live" or "translated and live". The other states are "Missing" ("Fehlt noch"), "Outdated", "Waiting for approval" and "Failed". "Waiting for approval" is the language page's word; Coverage's "Draft" and "Needs review" became "Waiting for approval" and "Waiting, with notes".
+  - Merchant-facing texts say "texts", never "fields": the job report's CSV headers ("Texts translated", "Texts held back"), the Smart page ("3 changes in 12 texts", "Kinds of text"), the editor's "Unknown text", and Import & export's errors, which now name the CSV columns. Metafields are "extra details" ("Zusatzinfos"), as Jobs already called them.
+  - A job's states are Queued, "Finding texts" (for the discovery phase everywhere, never "Translating now"), Translating, Done (also "Done with errors" and "Done, some incomplete"), Cancelled and Stopped. Jobs' tabs are All, Running, Problems, Done and Cancelled: all five stay, and "Completed" became "Done". Coverage's jobs card is "Running jobs"; it said "Translating now" even while texts were still being found.
+  - A language is "Visible" or "Hidden" everywhere, with one badge (`VisibilityBadge`) on its page, the Languages tool, Coverage and Markets. Coverage's "Published" is gone.
+  - The form of address's first option is "Automatic" ("Automatisch", "Automatique", "Automático"; `settings.style.automatic`), with the hint "Automatic: each language's usual form."
+  - "Background service", "in the background" and "worker" are gone. The texts say what happens instead: "Translating paused" and "Linguva continues by itself as soon as it can."; for a queued job, "Linguva starts it by itself as soon as it can."; on the Overview, "Counting paused. …".
+- **3b, the text cut:**
+  - A page has at most one lead under its h1, and a card at most one short line.
+  - Sentences that repeated a heading, a label or another text on the page are deleted rather than reworded. Examples: the language page's "Where nothing is translated…" and its areas intro, the job page's "Nothing is lost" and "Everything is live", the leads of Settings' How AI writes, Plan & usage and Tools, the Smart page's activity, scope and publishing leads, and Markets' countries intro.
+  - 50 keys are deleted in all four languages and 3 are new: `settings.style.automatic` (it replaces `settings.style.deeplDecides`), `language.card.translating` and `glossary.ruleChosen`. About 130 texts per language changed (`git diff 64959f6 4d39112 -- app/i18n/messages`).
+  - Consent texts, the AI disclosure, warnings, errors, prices and plan limits keep their meaning.
+
+### Item 4: one pattern per job
+
+| Item | Before | After |
+|---|---|---|
+| 4a Headers | `PageHeader` and `ToolHeader`, plus their own header code on the language page, the area list, the job page, the editor and the type lists | `PageHeader` takes a `sign` (a flag, an area icon or a picture in place of the page's icon square), `badges` beside the h1, and `trail.current`. The language page (flag, `VisibilityBadge`), the area page (area icon), the job page (the flag in its grey square, the state badges), the editor (the item's picture or the area's icon) and `ResourceList` use it. Every h1 comes from `PageHeader` or `ToolHeader` |
+| 4b Language pickers | Content's chips with a "Show" button, the type lists' chips, Coverage's chips with %, Review's grey-filled tabs | One `LanguagePicker` (`app/components/LanguagePicker.tsx`) on Content, the area list, Review, Coverage and the type lists: `.lv-lang` chips with flag and name, the current one `aria-current="page"`. Above six languages it is an `s-select` that opens a language as soon as it is picked; the "Show" button is only inside `<noscript>` |
+| 4c Choose one | `ChoiceTiles` on the Smart page, a radio list for its texts, `RuleTiles` in the Glossary, Polaris chips in Review | `OptionCard` for the Smart page's "How often", "Texts: all / chosen" and outdated translations, and for the Glossary's three rules (`RuleChoice`, with "Chosen" on the chosen card). Review's area and "With notes" filters are `.lv-filter` pills, as on the area list. `ChoiceTiles` and their CSS are gone |
+| 4d Icons | `gauge` for the plan and for AI characters; `alert-circle` also when DeepL doesn't answer; `in-progress` subdued on Coverage, and also shown while texts were still being found | `gauge` means AI characters only; the Plan page and Settings' "Plan & usage" use `credit-card` (rose). `alert-circle` is for critical states only; a service that doesn't answer gets a neutral badge with `connect`. `in-progress` is always tone info. Finding texts is `search-list` everywhere: the language page's area cards, Content's tiles and Coverage's jobs card, as on Jobs |
+| 4e Boxes | Overview's Next and store card stretched to one height, with a grey box inside Next; bordered boxes inside cards on Coverage, Markets, Settings and the Smart page | Cards keep their own height (Overview; Coverage's Next step and Whole store; `Card`'s `fill` prop is gone). The boxes' contents are now part of the card, with dividers between rows: Markets' markets, Settings' "More translation services" under its own heading, the Smart page's language and content lists, Your keys' rows, and the area card's job line. `InlineNotice` stays |
+| 4f Translate once | Both a language page's step and the area's card had a Translate button | The area cards lead to their list ("View all N"); the step keeps the one Translate, with a spinner while it starts. The area page already had one Translate per task (its own, plus one per owner of image descriptions and extra details) |
+| 4g Import & export | "Export CSV" always primary, and "Import as drafts" primary once a file was chosen: two primary buttons | "Import as drafts" is the page's one primary button, disabled until a file is chosen; "Export CSV" is secondary |
+| 4h Search | "Search" buttons on the area list, Jobs, Memory, Coverage by item and the editor's "Find a text" | All of them search as you type, as Review does (`SearchForm` / `SearchField`, `app/components/SearchField.tsx`): after 350 ms, from 2 characters, at once on Enter, keeping the focus and caret. Without scripts, Enter submits the GET form |
+
+**Kept on purpose:**
+- The export CSV's column name `field` and its status value `complete`: a machine format, and `tests/unit/transfer-help.test.ts` requires the literal codes.
+- "metafields" / "Metafelder" in the editor's attached-texts intro: Shopify's own term.
+- The editor's "Published" state for a text just published: "Published" is retired only for languages.
+- Review's payoff sentence "Once you approve everything, French is 12 % translated": a future figure, not a repeated one. It is the owner's call whether 2c should remove it too.
+- Rich-text editing in the editor: not part of this work; noted as a follow-up.
+
+**Trade-offs:**
+- Before a count, the products' list says "Not counted yet" and offers the count; the old list read Shopify live.
+- On a phone the Glossary's three option cards stack, so "Add term" is no longer on the first screen.
+
+Status: **Implemented; unit tests green locally (144 files, 1,979 tests), as are the affected integration tests.** The UI specs were updated by reading and are checked in CI (this container can't load Polaris from Shopify's CDN). CI regenerates the visual baselines (`[visual-baselines]`). The `products` comparison is gone along with its page; `category` shows the list.
+
 ## 4. Tests for the changes
 
 | Change | Test |
@@ -234,6 +463,7 @@ Plan:
 | Content page (Redesign 2) | `tests/ui/content.spec.ts`, `pages.spec.ts`, `i18n.spec.ts`, `touch.spec.ts`, `csp.spec.ts`, `visual.spec.ts` (content); `tests/integration/content-page.test.ts`, `content-hub.test.ts`, `resource-list.test.ts`; `tests/unit/content-areas.test.ts`, `content-language.test.ts` |
 | Review (Redesign 2) | `tests/ui/review.spec.ts` (26 tests, desktop and phone), `confirm.spec.ts`, `keyboard.spec.ts`, `preview.spec.ts`, `states.spec.ts`, `visual.spec.ts` (review-empty); `tests/integration/review-cards.test.ts`, `review-previews.test.ts`, `review-protection.test.ts`; `tests/unit/review-areas.test.ts`, `review-cards.test.ts`, `review-hints.test.ts`, `text-box-height.test.ts` |
 | Plan page with prices | `tests/ui/plan.spec.ts`, `tests/unit/plan-components.test.ts`, `plan-view`, `plan-features`, `plan-prices`; `keyboard.spec.ts`, `pages.spec.ts`, `flows.spec.ts`, `visual.spec.ts` (plan, plan-none) |
+| One list, one word, one pattern (§3i) | New unit tests `tests/unit/language-picker.test.ts`, `language-pages-render`, `review-controls`, `job-header`, `smart-page-render`, `tools-pages-render`; `tool-header`, `plan-features`, `content-areas`, `language-list`, `i18n`; integration `resource-list` (the redirect's target), `overview` (the first step's link), `language-page`, `content-page`; `category-list.spec.ts` (the old addresses, the language chips, search as you type), `language-page`, `content`, `review`, `coverage`, `tools`, `transfer`, `jobs`, `smart-auto`, `settings`, `states`, `pages`, `visual.spec.ts` (`products` removed) |
 
 ## 5. Design system rules kept
 

@@ -37,6 +37,11 @@ const SECRET_KEYS = [
   // A merchant's engine key before encryption, and a list of keys (Own key plan).
   "plaintext",
   "apiKeys",
+  // Admin console accounts and forms (an account row or a form logged by mistake).
+  "passwordHash",
+  "totpSecret",
+  "csrfToken",
+  "_csrf",
 ];
 
 /**

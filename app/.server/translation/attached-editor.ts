@@ -36,7 +36,7 @@ const EDITABLE_TYPES = new Set([
   ...STRUCTURED_TEXT_TYPES,
 ]);
 
-/** At most this many attached resources per AI request (cost and time). */
+/** At most this many attached resources per AI request (cost and time). The editor's AI count is typed by its value. */
 export const MAX_ATTACHED_AI_RESOURCES = 25;
 
 /** Form field name of an attached resource's field, e.g. value:gid://shopify/MediaImage/1:alt. */

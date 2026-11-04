@@ -1,0 +1,2198 @@
+/*
+ * Linguva's own controls (app/components/Button.tsx, Segmented.tsx): flat,
+ * light edges, a soft shadow, 10 px corners and a clear focus ring, in the
+ * admin's type (Inter, 13 px) and on its surfaces. The owner asked for
+ * buttons without Polaris' dark bevelled edge (2026-11-03). Buttons in
+ * Shopify's own dialogs, banners and the save bar stay the admin's.
+ *
+ * Sizes: 32 px high with a fine pointer, 44 px on touch screens (WCAG 2.5.8
+ * needs 24 px; 44 px is the platforms' own size). Every state has more than
+ * colour: the focus ring, the disabled opacity with its cursor, the spinner.
+ */
+
+/*
+ * The app's design tokens: one source for its own type, edges, corners, shadows, the focus ring and the
+ * chosen look, matching the admin's (Polaris') light surfaces. Coverage and state colours stay in
+ * app/components/Coverage.tsx (STATE_COLOURS, TRACK_COLOUR).
+ */
+:root {
+  --lv-font: Inter, -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --lv-text: #303030;
+  --lv-text-subdued: #616161;
+  --lv-surface: #ffffff;
+  --lv-surface-subdued: #f7f7f7;
+  --lv-border: #e3e3e3;
+  --lv-border-hover: #cccccc;
+  --lv-radius-control: 10px;
+  --lv-radius-card: 12px;
+  --lv-shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --lv-shadow-hover: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --lv-focus: #005bd3;
+  --lv-selected-ring: #005bd3;
+  --lv-selected-bg: #f5f9ff;
+  --lv-selected-shadow: inset 0 0 0 2px var(--lv-selected-ring), 0 1px 3px rgba(0, 91, 211, 0.12);
+}
+
+/*
+ * The type scale (Polaris' s-text has no size and draws type="strong" at the body weight): the page's
+ * heading, a section's, a card's, emphasis, a big figure, a figure in a row, a caption.
+ */
+.lv-h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 28px;
+  /* An item's name without spaces (the editor's heading) breaks at the edge instead of widening the page. */
+  overflow-wrap: break-word;
+}
+.lv-h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 24px;
+}
+.lv-h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+.lv-strong {
+  font-weight: 600;
+}
+.lv-figure {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.lv-figure-row {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lv-caption {
+  color: var(--lv-text-subdued);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+
+.lv-btn {
+  --lv-btn-height: 32px;
+  --lv-btn-radius: 10px;
+  --lv-btn-pad: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: var(--lv-btn-height);
+  max-width: 100%;
+  padding: 0 var(--lv-btn-pad);
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: var(--lv-btn-radius);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.003em;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  /* Its own width in a stack of blocks; `fill` stretches it. */
+  align-self: flex-start;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.lv-btn:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+
+.lv-btn__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lv-btn__icon {
+  display: inline-flex;
+  flex: none;
+  margin-inline-start: -2px;
+}
+
+/* Primary: the page's one main action. */
+.lv-btn--primary {
+  background: #1f1f1f;
+  color: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #383838;
+}
+.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):active {
+  background: #000000;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+/* Icons are Polaris' (drawn in the text colour of their tone): white on the dark fill. */
+.lv-btn--primary .lv-btn__icon {
+  filter: brightness(0) invert(1);
+}
+
+/* Secondary: white with a light edge, no dark bottom line. */
+.lv-btn--secondary {
+  background: #ffffff;
+  color: #1f1f1f;
+  border-color: #dedede;
+  box-shadow: var(--lv-shadow-1);
+}
+.lv-btn--secondary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #f7f7f7;
+  border-color: #cfcfcf;
+}
+.lv-btn--secondary:not(:disabled):not([aria-disabled="true"]):active {
+  background: #f0f0f0;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.06);
+}
+
+/* Tertiary: words only, a soft background under the pointer. */
+.lv-btn--tertiary {
+  --lv-btn-pad: 10px;
+  background: transparent;
+  color: #1f1f1f;
+}
+.lv-btn--tertiary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.lv-btn--tertiary:not(:disabled):not([aria-disabled="true"]):active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Critical: what can't be undone. */
+.lv-btn--critical.lv-btn--primary {
+  background: #c70a24;
+}
+.lv-btn--critical.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #a30a1e;
+}
+.lv-btn--critical.lv-btn--primary:not(:disabled):not([aria-disabled="true"]):active {
+  background: #8a0818;
+}
+.lv-btn--critical.lv-btn--secondary,
+.lv-btn--critical.lv-btn--tertiary {
+  color: #b5141f;
+}
+.lv-btn--critical.lv-btn--secondary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #fff6f6;
+  border-color: #f2c4c8;
+}
+.lv-btn--critical.lv-btn--tertiary:not(:disabled):not([aria-disabled="true"]):hover {
+  background: #fff1f1;
+}
+
+/*
+ * Flush: a tertiary button's words at the edge of the text around it (the zone's "Change" when it wraps
+ * under its line on a phone). Two classes beat the touch screens' padding; under the pointer an
+ * underline, as a soft background with no room around the words would look cut off. After the critical
+ * rules: the same weight, so the later rule wins.
+ */
+.lv-btn--tertiary.lv-btn--flush {
+  --lv-btn-pad: 0;
+}
+.lv-btn--tertiary.lv-btn--flush:not(:disabled):not([aria-disabled="true"]):hover,
+.lv-btn--tertiary.lv-btn--flush:not(:disabled):not([aria-disabled="true"]):active {
+  background: transparent;
+  text-decoration: underline;
+}
+
+/* An icon alone: a square, its name for assistive technology in aria-label. */
+.lv-btn--icon {
+  width: var(--lv-btn-height);
+  padding: 0;
+}
+.lv-btn--icon .lv-btn__icon {
+  margin: 0;
+}
+
+.lv-btn--fill {
+  width: 100%;
+  align-self: stretch;
+}
+
+.lv-btn:disabled,
+.lv-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Loading: the words keep their room, a spinner in their place. */
+.lv-btn[aria-busy="true"] {
+  cursor: progress;
+  pointer-events: none;
+}
+.lv-btn[aria-busy="true"] > :not(.lv-btn__spinner) {
+  visibility: hidden;
+}
+.lv-btn__spinner {
+  --lv-spin-track: rgba(0, 0, 0, 0.18);
+  --lv-spin-head: #1f1f1f;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--lv-spin-track);
+  border-top-color: var(--lv-spin-head);
+  animation: lv-spin 0.7s linear infinite;
+}
+.lv-btn--primary .lv-btn__spinner {
+  --lv-spin-track: rgba(255, 255, 255, 0.35);
+  --lv-spin-head: #ffffff;
+}
+@keyframes lv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A choice of a few options in one row (the form of address): a soft track, the chosen option raised. */
+.lv-seg {
+  display: inline-flex;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 3px;
+  gap: 2px;
+  margin: 0;
+  border: 1px solid #ebebeb;
+  border-radius: 10px;
+  background: #f3f3f3;
+}
+.lv-seg--fill {
+  display: flex;
+  width: 100%;
+}
+/* One width for every row of a list, so the choices line up (full width on a narrow list); the first option (the default) gets the most room. */
+.lv-seg--even {
+  display: flex;
+  width: 100%;
+}
+.lv-seg__option {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lv-seg--even .lv-seg__option,
+.lv-seg--fill .lv-seg__option {
+  flex: 1 1 0;
+}
+.lv-seg--even .lv-seg__option:first-of-type,
+.lv-seg--fill .lv-seg__option:first-of-type {
+  flex-grow: 1.8;
+}
+.lv-seg__option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.lv-seg__text {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 26px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-family: var(--lv-font);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 20px;
+  color: #4a4a4a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-seg__option:hover input:not(:checked):not(:disabled) + .lv-seg__text {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1f1f1f;
+}
+.lv-seg__option input:checked + .lv-seg__text {
+  background: #ffffff;
+  color: #1f1f1f;
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+.lv-seg__option input:focus-visible + .lv-seg__text {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 1px;
+}
+.lv-seg__option input:disabled {
+  cursor: not-allowed;
+}
+.lv-seg__option input:disabled + .lv-seg__text {
+  opacity: 0.45;
+}
+
+/*
+ * The chosen card of a set (the current setting, the current plan): a blue ring with a light blue tint,
+ * the colour of its "Current" badge, instead of a dark edge. Drawn behind the card's content.
+ */
+.lv-selected-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+}
+
+/* A list of choices, one row each: the name, then its choice beside it once the list is wide enough. */
+.lv-choices {
+  container-type: inline-size;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lv-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid #ebebeb;
+}
+.lv-choice:first-child {
+  border-top: 0;
+}
+.lv-choice__name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+@container (min-width: 520px) {
+  .lv-choice {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .lv-choice .lv-seg--even {
+    width: 320px;
+  }
+}
+
+/* A sentence that names languages with their flags. */
+.lv-language-line {
+  margin: 0;
+  color: #616161;
+  line-height: 24px;
+}
+.lv-language-line__item {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  margin-inline-start: 2px;
+  white-space: nowrap;
+}
+
+/* Read by assistive technology only (a tile's full name, where the visible one breaks a long word). */
+.lv-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * Soft tints behind an icon (a section's tile, an option's icon): one per section, light enough for the
+ * admin's dark icon colour on top (contrast above 10:1). They name a place, never a state: states are
+ * words, badges and the tile's dot.
+ */
+[data-tint] {
+  --lv-tint: #f1f1f1;
+}
+[data-tint="blue"] {
+  --lv-tint: #e6f0ff;
+}
+[data-tint="green"] {
+  --lv-tint: #e1f5ea;
+}
+[data-tint="violet"] {
+  --lv-tint: #efe9ff;
+}
+[data-tint="amber"] {
+  --lv-tint: #fdf0d9;
+}
+[data-tint="slate"] {
+  --lv-tint: #e9edf2;
+}
+[data-tint="teal"] {
+  --lv-tint: #daf3f1;
+}
+[data-tint="rose"] {
+  --lv-tint: #fde8ed;
+}
+.lv-icon-square {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--lv-tint, #f1f1f1);
+}
+
+/*
+ * A page's header (PageHeader's HeaderRow, also ToolHeader's and a job's): the sign centred on the heading
+ * and its lead on a wide page; on a narrow one, where the lead wraps to several lines, level with the
+ * heading instead of beside the lead. Polaris' s-grid takes no container query in alignItems, so it is
+ * set here. 640 px is where the trail becomes the phone's back row. The sign is the row's first child:
+ * a page's icon square, or PageHeader's `sign` (a flag, a picture).
+ */
+.lv-page-head {
+  container-type: inline-size;
+}
+@container (max-width: 640px) {
+  .lv-page-head > s-grid > :first-child {
+    align-self: start;
+  }
+}
+
+/*
+ * Settings' sections as square buttons: the icon in its tinted square, the name, the state in a few
+ * words, a dot where the section needs the merchant. On a wide page one row in two groups (how Linguva
+ * translates · what it may use), the current one framed in blue; narrower, four in a row; on a phone
+ * three in a row (a last tile alone takes the whole row), every tile opening its section.
+ */
+.lv-tilenav {
+  container-type: inline-size;
+}
+.lv-tilenav__list {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-tilenav__item {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* The second group: a little more room and a fine line before it. */
+.lv-tilenav__item[data-group-start] {
+  margin-inline-start: 10px;
+}
+.lv-tilenav__item[data-group-start]::before {
+  content: "";
+  position: absolute;
+  inset-block: 16px;
+  inset-inline-start: -11px;
+  width: 1px;
+  background: #e3e3e3;
+}
+/*
+ * The content starts at the top, so the icons, names and states of a row sit on the same lines when one
+ * name wraps (centred, each extra line lifted its icon by 8 px). 15 + 40 + 6 + 32 (a name on two lines) +
+ * 6 + 16 + 8, with the border 125 px: such a tile stays square on a 412 px phone and on a wide page.
+ */
+.lv-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  padding: 15px 6px 8px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: #ffffff;
+  color: #303030;
+  font-family: var(--lv-font);
+  text-align: center;
+  text-decoration: none;
+  box-shadow: var(--lv-shadow-1);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+.lv-tile:hover {
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
+  transform: translateY(-1px);
+}
+.lv-tile:active {
+  transform: none;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+.lv-tile:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-tile[aria-current="page"] {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+  cursor: default;
+  transform: none;
+}
+.lv-tile__name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 16px;
+  letter-spacing: -0.006em;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.lv-tile__state {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: #616161;
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 16px;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.lv-tile[data-tone="warning"] .lv-tile__state {
+  color: #8a4b00;
+  font-weight: 550;
+}
+.lv-tile[data-tone="critical"] .lv-tile__state {
+  color: #b5141f;
+  font-weight: 550;
+}
+/* Where the section needs the merchant: a dot in the state's colour (the state says it in words). */
+.lv-tile__dot {
+  position: absolute;
+  top: 9px;
+  inset-inline-end: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e9a23b;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+.lv-tile[data-tone="critical"] .lv-tile__dot {
+  background: #e22c38;
+}
+/* Narrower than one row of squares: four in a row (the groups line up), as wide tiles. */
+@container (max-width: 880px) {
+  .lv-tilenav__list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .lv-tilenav__item[data-group-start] {
+    margin-inline-start: 0;
+  }
+  .lv-tilenav__item[data-group-start]::before {
+    display: none;
+  }
+  .lv-tile {
+    aspect-ratio: auto;
+    min-height: 116px;
+  }
+}
+/*
+ * A phone: squares, three in a row (a row grows a little where a name and its state both take two
+ * lines). Six columns, two per square, so a last row is never one tile beside two empty cells: one alone
+ * takes the whole row, two share it (8 tiles on the Own key plan), each as high as a square.
+ */
+@container (max-width: 560px) {
+  .lv-tilenav__list {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .lv-tilenav__item {
+    grid-column: span 2;
+  }
+  .lv-tilenav__item:last-child:nth-child(3n + 1) {
+    grid-column: 1 / -1;
+  }
+  .lv-tilenav__item:nth-last-child(2):nth-child(3n + 1),
+  .lv-tilenav__item:nth-last-child(2):nth-child(3n + 1) + .lv-tilenav__item {
+    grid-column: span 3;
+  }
+  .lv-tile {
+    aspect-ratio: 1 / 1;
+    min-height: auto;
+  }
+  /* A wide tile: a square's height (a third of the row less its two 10 px gaps), its words where a square has them. */
+  .lv-tilenav__item:last-child:nth-child(3n + 1) .lv-tile,
+  .lv-tilenav__item:nth-last-child(2):nth-child(3n + 1) .lv-tile,
+  .lv-tilenav__item:nth-last-child(2):nth-child(3n + 1) + .lv-tilenav__item .lv-tile {
+    aspect-ratio: auto;
+    min-height: calc((100cqi - 20px) / 3);
+  }
+}
+
+/* The status row under the page's heading: all set up (green), or what needs the merchant in its tone. */
+.lv-status {
+  container-type: inline-size;
+  box-sizing: border-box;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: #ffffff;
+  padding: 14px 16px;
+}
+.lv-status[data-tone="success"] {
+  border-color: #c9ebd9;
+  background: #f2fbf6;
+}
+.lv-status[data-tone="warning"] {
+  border-color: #f6dfb2;
+  background: #fff9ee;
+}
+.lv-status[data-tone="critical"] {
+  border-color: #f6c9cd;
+  background: #fff5f5;
+}
+.lv-status__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.lv-status__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+.lv-status__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px 16px;
+  align-items: center;
+  justify-items: start;
+}
+.lv-status__title {
+  font-weight: 650;
+  line-height: 20px;
+}
+@container (min-width: 560px) {
+  .lv-status__body {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+/*
+ * A Settings section's heading row (SettingSection): its tile's icon, its heading in the Content page's
+ * areas size, and on a phone, where the section is shown alone under the back row, the page's heading
+ * size (.lv-h1), as every other screen opened from Settings starts. The width is the page's, so 640 px is
+ * where the page shows its sections alone (SettingsNav's NARROW_ONLY).
+ */
+.lv-section-head {
+  container-type: inline-size;
+}
+.lv-section-heading {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 24px;
+}
+@container (max-width: 640px) {
+  .lv-section-heading {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 28px;
+  }
+}
+
+/*
+ * One choice of a setting, as a tile: its icon in a tinted square, its badges, name and what it means;
+ * the current one framed in blue like the current section's tile. A choice that can be chosen is one
+ * button as a whole. Tiles in a row are equally high; what belongs to one (a lock) sits at its foot.
+ */
+.lv-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--lv-min, 220px)), 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.lv-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 0;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: #ffffff;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-option--current {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+}
+.lv-option--choosable:hover {
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
+}
+.lv-option__choose,
+.lv-option__head {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  border-radius: var(--lv-radius-card);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+}
+.lv-option__choose {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lv-option__choose:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-option__top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.lv-option__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.lv-option__title {
+  display: block;
+  color: #303030;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+  outline: none;
+}
+.lv-option__body {
+  display: block;
+  color: #616161;
+  font-size: 13px;
+  line-height: 20px;
+}
+.lv-option__foot {
+  padding: 0 16px 16px;
+}
+/* A choice that can be chosen: an empty radio ring (filled blue under the pointer). */
+.lv-option__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+.lv-option__radio {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #8a8a8a;
+  border-radius: 50%;
+  background: #ffffff;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-option--choosable:hover .lv-option__radio {
+  border-color: var(--lv-selected-ring);
+  box-shadow: inset 0 0 0 3px #ffffff, inset 0 0 0 9px #cfe3ff;
+}
+
+/* More words on demand: the summary in semibold with a chevron at its end that turns when open. */
+.lv-more__summary {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 12px 0;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.lv-more__summary::-webkit-details-marker {
+  display: none;
+}
+.lv-more__summary:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.lv-more__chevron {
+  display: inline-flex;
+  transition: transform 0.15s ease;
+}
+.lv-more[open] > .lv-more__summary .lv-more__chevron {
+  transform: rotate(180deg);
+}
+.lv-more__body {
+  padding: 0 0 8px 18px;
+}
+/* What the current (or the chosen) way needs next: its languages, its summary, under the choices. */
+.lv-option-panel {
+  box-sizing: border-box;
+  border-radius: var(--lv-radius-card);
+  background: #f7f7f7;
+  padding: 16px;
+  scroll-margin-top: 16px;
+}
+/* Focused by the choice that opened it (not by the keyboard's Tab): no ring of its own. */
+.lv-option-panel:focus {
+  outline: none;
+}
+
+/* Tiles of links (Settings › Tools): the icon in its square, the name, what it is for, the chevron. */
+.lv-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-links__item {
+  display: flex;
+  min-width: 0;
+}
+.lv-link-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: #ffffff;
+  color: #303030;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-link-tile:hover {
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
+}
+.lv-link-tile:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-link-tile__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.lv-link-tile__name {
+  font-weight: 650;
+  line-height: 20px;
+}
+.lv-link-tile__detail {
+  color: #616161;
+  line-height: 20px;
+}
+
+/* ── Overview (app/routes/app._index.tsx, CountryCards, the welcome page): its own rules here, media queries included. ── */
+
+/*
+ * Segmented's pressed-button mode (SegmentedButtons, the Overview's "Countries | Languages"): the
+ * radio choice's track and its chosen look, as buttons that change a view on the page.
+ */
+.lv-seg--buttons .lv-seg__text {
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lv-seg--buttons .lv-seg__text:not([aria-pressed="true"]):hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1f1f1f;
+}
+.lv-seg--buttons .lv-seg__text[aria-pressed="true"] {
+  background: #ffffff;
+  color: #1f1f1f;
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+.lv-seg--buttons .lv-seg__text:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 1px;
+}
+.lv-seg__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+/* A section's heading with its state's icon before the words ("Läuft gerade"). */
+.lv-ov-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.lv-ov-heading__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+/*
+ * A quiet line with its icon: a note under the store's figures (no access: a lock; not counted completely:
+ * a warning), the AI characters at the page's foot (gauge).
+ */
+.lv-ov-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.lv-ov-note__icon {
+  display: inline-flex;
+  padding-block-start: 2px;
+}
+
+/* What a count says while it runs, under the line with its date: apart from it, never a gap while it is empty. */
+.lv-ov-follow {
+  padding-block-start: 8px;
+}
+/* Live regions that take the focus once their button is gone: no ring around a sentence. */
+.lv-ov-status {
+  outline: none;
+}
+
+/* A card's percentage beside its name on a phone: between a row's figure and the big one. */
+.lv-ov-compact-figure {
+  font-size: 17px;
+  line-height: 24px;
+}
+/* The DeepL keys' rings: the figure fits a 96 px ring up to "100%". */
+.lv-ov-ring-figure {
+  font-size: 21px;
+  line-height: 1.15;
+}
+
+/* ── Content and language pages (app.content.*, app.languages*, ContentTiles, CategoryCard, CategoryList, LanguageLayout, StepStrip): its own rules here, media queries included. ── */
+
+/*
+ * The language picker's chips (LanguagePicker: Content, an area's list, Review, Coverage): flag and name
+ * (a figure only where the page gives one), as wide as their words (at least 168 px, so two share a
+ * phone's row), the chips of a row equally tall (a hidden language's chip has two lines). The current
+ * language isn't a link and wears the app's chosen look (the blue ring and tint of the current Settings
+ * section and plan).
+ */
+.lv-langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-langs__item {
+  display: grid;
+  flex: 0 0 auto;
+  min-width: min(168px, 100%);
+  max-width: 100%;
+}
+/* A phone's one row that swipes sideways instead of wrapping (2 px of room, so a chip's focus ring isn't cut). */
+.lv-langs--swipe {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px;
+}
+.lv-langs--swipe > .lv-langs__item {
+  max-width: none;
+}
+.lv-lang {
+  /* The chip is the containing block of its screen-reader name (.lv-sr is absolute): in a swipe row, the names of
+     the chips scrolled out of view would otherwise sit beyond the window's edge and widen the page (a phone then
+     zooms out, and every tap lands beside its target). */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-surface);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  text-decoration: none;
+  box-shadow: var(--lv-shadow-1);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lv-lang > [aria-hidden="true"] {
+  display: grid;
+}
+a.lv-lang:hover {
+  border-color: var(--lv-border-hover);
+  box-shadow: var(--lv-shadow-hover);
+}
+a.lv-lang:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-lang[aria-current="page"] {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+}
+
+/*
+ * An area list's filters ("All 55 · Outdated 1 · Missing 47"): pills of links with each state's icon; the
+ * shown one in the chosen look, so it is clear which group the list shows.
+ */
+.lv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-filter {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--lv-border);
+  border-radius: 999px;
+  background: var(--lv-surface);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+a.lv-filter:hover {
+  border-color: var(--lv-border-hover);
+  background: var(--lv-surface-subdued);
+}
+a.lv-filter:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-filter[aria-current] {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+  font-weight: 650;
+}
+/* A chosen pill that is a link (Review's "With notes") keeps its chosen look under the pointer. */
+a.lv-filter[aria-current]:hover {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+}
+/* A phone's one row of pills that swipes sideways instead of wrapping (2 px of room for a pill's focus ring). */
+.lv-filters--swipe {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px;
+}
+.lv-filters--swipe > li {
+  flex: none;
+}
+
+/*
+ * A row of an area's list: the item's name is its link, stretched over the whole row (the row opens the
+ * editor), so the rest of the row stays text that is read in its order; a soft background under the
+ * pointer, the focus ring around the row.
+ */
+.lv-row {
+  position: relative;
+  padding: 16px;
+  transition: background-color 0.15s ease;
+}
+.lv-row[data-linked]:hover {
+  background: var(--lv-surface-subdued);
+}
+.lv-row__link {
+  display: block;
+  padding-block: 2px;
+  color: var(--lv-text);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.lv-row__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Above the row's chips and badges, which Polaris may position. */
+  z-index: 1;
+}
+.lv-row__link:focus-visible {
+  outline: none;
+}
+.lv-row__link:focus-visible::after {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: -2px;
+}
+
+@media (pointer: coarse) {
+  .lv-lang {
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+  .lv-filter {
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-lang,
+  .lv-filter,
+  .lv-row {
+    transition: none;
+  }
+}
+
+/* ── Review (app.review*, Review* components): its own rules here, media queries included. ── */
+
+/* A text's actions on a phone: "Bearbeiten" at the start, "Ablehnen" and "Freigeben" together at the end,
+   "Freigeben" last (the thumb's side); a narrow phone wraps the row instead of squeezing it, the two then on a line
+   of their own. */
+.lv-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* (A tertiary button's own padding keeps its words apart from the next button: 4 px between them is enough.) */
+.lv-review-actions__decide {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
+/* The share of the page already decided, under the strip's count. */
+.lv-review-progress {
+  max-width: 240px;
+}
+
+/* "Diese Seite ist erledigt" and "Alles geprüft": Settings' green status row with a heading of their own, and the
+   way on beside the words, or under them at the end on a phone. */
+.lv-review-done__title {
+  margin: 0;
+  font-size: inherit;
+}
+.lv-review-done__action {
+  justify-self: end;
+}
+/* The round mark centred on the title's 20 px line ((20 - 36) / 2 = -8 px), not on the four lines a phone wraps
+   the words into. Settings' one-line row keeps its centre. */
+.lv-review-done .lv-status__row {
+  align-items: start;
+}
+.lv-review-done .lv-status__mark {
+  margin-block-start: -8px;
+}
+
+/* "Deine Sprachen" as link tiles: the name with its hidden marker (a language's figure is on its own page). */
+.lv-review-tile__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.lv-review-hidden {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--lv-text-subdued);
+}
+/*
+ * Rows always full, as cardGrid fills the area cards: the page gives data-columns from cardColumns. One tile
+ * takes the row; two share it from 560 px, three from 860 px; narrower they stack. The container rules come
+ * after the base rule, so they win at the same weight. Settings' tools list has no data-columns and keeps its
+ * auto-fill.
+ */
+.lv-review-languages {
+  container-type: inline-size;
+}
+.lv-review-languages .lv-links[data-columns] {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 560px) {
+  .lv-review-languages .lv-links[data-columns="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (min-width: 860px) {
+  .lv-review-languages .lv-links[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* The page's decision at the window's foot while the strip with "Alle N freigeben" is scrolled out of view. */
+.lv-review-bar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+.lv-review-bar__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 760px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--lv-border);
+  border-radius: 14px;
+  background: var(--lv-surface);
+  box-shadow:
+    0 12px 32px rgba(16, 24, 40, 0.14),
+    0 2px 6px rgba(16, 24, 40, 0.06);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  line-height: 20px;
+  pointer-events: auto;
+  animation: lv-review-bar-in 0.18s ease-out;
+}
+.lv-review-bar__text {
+  display: grid;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.lv-review-bar__summary {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.lv-review-bar__note {
+  color: var(--lv-text-subdued);
+}
+.lv-review-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+/* Room for the bar under the page's last line, and a focused control is scrolled above it, never under it
+   (WCAG 2.4.11): both from the bar's height as drawn (--lv-review-bar-h, set by FloatingBar). */
+.lv-review-bar-space {
+  height: calc(var(--lv-review-bar-h, 64px) + 24px + env(safe-area-inset-bottom, 0px));
+}
+:root.lv-review-bar-on {
+  scroll-padding-bottom: calc(var(--lv-review-bar-h, 64px) + 32px + env(safe-area-inset-bottom, 0px));
+}
+@keyframes lv-review-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv-review-bar__inner {
+    animation: none;
+  }
+}
+
+/* ── Jobs (app.jobs*, components/jobs): its own rules here, media queries included. ── */
+
+/* What a status panel holds under its row (the attention card's featured stop and rows). */
+.lv-jobs-status__more {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+/* The list's rows, a cluster's rail, a day's date beside its name. */
+.lv-jobs-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-jobs-cluster {
+  margin-inline-start: 16px;
+  border-inline-start: 3px solid var(--lv-border);
+}
+.lv-jobs-day__date {
+  color: var(--lv-text-subdued);
+  font-weight: 450;
+}
+.lv-jobs-name {
+  overflow-wrap: anywhere;
+}
+/* A heading the page jumps to: focusable by script, no ring of its own. */
+.lv-jobs-anchor {
+  outline: none;
+}
+
+/*
+ * The list's tabs as compact tiles (Settings' .lv-tile): the icon in its grey square with the figure
+ * beside it (under it where a long figure doesn't fit), the name below; the chosen one framed in blue, a
+ * dot on Problems while one of its jobs needs the merchant. Five in a row; on a phone two rows with no
+ * sideways scroll, the longer names below.
+ * `.lv-jobtabs .lv-jobtab` is specific enough to win over Settings' container rules for .lv-tile, which
+ * would match inside this container too.
+ */
+.lv-jobtabs {
+  container-type: inline-size;
+}
+.lv-jobtabs__list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-jobtabs__item {
+  display: flex;
+  min-width: 0;
+}
+.lv-jobtabs .lv-jobtab {
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  aspect-ratio: auto;
+  min-height: 0;
+  padding: 12px;
+  text-align: start;
+}
+.lv-jobtab__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  max-width: 100%;
+}
+.lv-jobtab__figure {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+@container (max-width: 640px) {
+  .lv-jobtabs__list {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .lv-jobtabs__item {
+    grid-column: span 2;
+  }
+  .lv-jobtabs__item:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+  .lv-jobtab__figure {
+    font-size: 18px;
+  }
+}
+
+/*
+ * The search and the four filters: the filters in a row on a wide card, two by two narrower; on a phone
+ * folded behind "Filter (n)" under the search, so the first job is in view.
+ */
+.lv-jobs-filters {
+  container-type: inline-size;
+  display: grid;
+  gap: 8px;
+}
+/* The search alone takes the row (it has no button); on a phone the filters' toggle goes under it. */
+.lv-jobs-filters__search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.lv-jobs-filters__toggle {
+  display: none;
+  grid-column: 1 / -1;
+}
+.lv-jobs-filters__fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+@container (max-width: 760px) {
+  .lv-jobs-filters__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 560px) {
+  .lv-jobs-filters__toggle {
+    display: block;
+  }
+  .lv-jobs-filters__fields:not([data-open]) {
+    display: none;
+  }
+}
+@container (max-width: 300px) {
+  .lv-jobs-filters__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* No job yet, no match, an empty tab: the mark, the words and the way on, centred. */
+.lv-jobs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+/* A button's own align-self (its width in a block stack) would put it at the start. */
+.lv-jobs-empty > .lv-btn {
+  align-self: center;
+}
+
+/* A job's stats: each with its icon in a grey square; the ones there are share the row, two to a row on a phone. */
+.lv-jobstats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 16px;
+}
+.lv-jobstats__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.lv-jobstats__value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Under the results' fold: the CSV report and the support reference with its copy button. */
+.lv-jobreport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.lv-jobreport__reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* ── Plan (app.plan.tsx, components/plan): its own rules here, media queries included. ── */
+
+/* The plan's name in the hero ("Pro", "Kein Tarif gewählt"): as big as a figure on the scale, wrapping where a state's name is long. */
+.lv-plan-name {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+/* A card's list price: the page's largest figure, level across the cards (plan.spec.ts finds it by its 32 px). */
+.lv-plan-price {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 36px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A card's allowance ("1.200.000") above its caption, with .lv-figure-row. */
+.lv-plan-stat {
+  display: block;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+/*
+ * A plan's card: its rows are the grid row's own (CSS subgrid), so prices, figures, features and buttons
+ * line up across the cards. The frame lies behind the rows: a white card, or the current plan's blue
+ * ring and tint (.lv-selected-frame), which lies inside the card so the cards' edges line up.
+ */
+.lv-plan-card {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: subgrid;
+  row-gap: 16px;
+  min-width: 0;
+  padding: 16px;
+}
+/* The Own key plan's card under the four: one wide card, not part of the subgrid. */
+.lv-plan-card--wide {
+  display: block;
+}
+.lv-plan-card__back {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+.lv-plan-frame {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--lv-border);
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-surface);
+}
+/* Its button at the card's foot, as on the four cards. */
+.lv-plan-card__foot {
+  margin-top: 16px;
+}
+
+/* The Plan page's folds (the questions, the full comparison): a full-width row, the chevron at its end. */
+.lv-plan-fold > .lv-more > .lv-more__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lv-plan-fold > .lv-more > .lv-more__summary > .lv-more__chevron {
+  flex: none;
+}
+.lv-plan-fold > .lv-more > .lv-more__body {
+  padding: 0 0 16px;
+}
+/* The full comparison fills its section: the row inside the section's edge, the table from edge to edge. */
+.lv-plan-fold--table > .lv-more > .lv-more__summary {
+  padding: 12px 16px;
+}
+.lv-plan-fold--table > .lv-more > .lv-more__summary:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--lv-radius-card);
+}
+.lv-plan-fold--table > .lv-more > .lv-more__body {
+  padding: 0;
+}
+/* "18 features in 5 groups": quiet, and one unit that moves to the next line whole on a phone. */
+.lv-plan-fold__detail {
+  display: inline-block;
+  font-weight: 450;
+}
+
+/*
+ * The full comparison: one fixed-layout table with short figures, so four plan columns fit 390 px. The
+ * current plan's column in the chosen look (the cards' blue), the groups' rows grey.
+ */
+.lv-plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  line-height: 18px;
+}
+.lv-plan-table th,
+.lv-plan-table td {
+  border-top: 1px solid #ebebeb;
+  vertical-align: middle;
+}
+.lv-plan-table__head {
+  padding: 12px 1px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.lv-plan-table th.lv-plan-table__head {
+  vertical-align: bottom;
+}
+.lv-plan-table__head--feature {
+  width: 40%;
+  padding-inline-start: 16px;
+  text-align: start;
+}
+.lv-plan-table__head--plan {
+  width: 15%;
+}
+.lv-plan-table__label {
+  padding: 10px 4px 10px 16px;
+  font-weight: 500;
+  text-align: start;
+  overflow-wrap: break-word;
+}
+.lv-plan-table__label--price {
+  font-weight: 650;
+}
+.lv-plan-table__value {
+  padding: 10px 1px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* The prices: the word "Free" may break only where its message allows (a soft hyphen in German). */
+.lv-plan-table__value--price {
+  font-weight: 700;
+  white-space: normal;
+}
+.lv-plan-table__group {
+  padding: 8px 16px;
+  background: #ebebeb80;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+  text-align: start;
+}
+.lv-plan-table [data-current] {
+  background: var(--lv-selected-bg);
+}
+.lv-plan-table th.lv-plan-table__head[data-current] {
+  box-shadow: inset 0 2px 0 var(--lv-selected-ring);
+}
+/* "Dein Tarif" under the current plan's name, in the ring's blue. */
+.lv-plan-table__mine {
+  display: block;
+  color: var(--lv-selected-ring);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+}
+.lv-plan-table__feature {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+}
+.lv-plan-table__feature > span {
+  min-width: 0;
+}
+/* Only long words break, at a hyphen ("Übersetzungs-speicher"); short ones never. */
+.lv-plan-table__name {
+  -webkit-hyphens: auto;
+  hyphens: auto;
+  hyphenate-limit-chars: 10 4 4;
+}
+.lv-plan-table__detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+.lv-plan-table__note {
+  padding: 12px 16px 16px;
+}
+
+/* ── Editor, lists and tools (the editor, the content lists, glossary, memory, coverage, markets, import & export): its own rules here, media queries included. ── */
+
+/*
+ * The translation editor (ResourceTranslationEditor, EditorParts, AttachedResourcesPanel): the item's
+ * picture in its header (PageHeader's sign), one square tile per text with its state, the heading row of
+ * every text (name, state, its one action), the count in a button, an original's HTML as code.
+ */
+.lv-ed-picture {
+  display: block;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: var(--lv-radius-card);
+  background: var(--lv-surface-subdued);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.lv-ed-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The tiles: squares of about 120 px side by side, three in a row on a phone; a tile grows where its words take two lines each. */
+.lv-ed-tiles {
+  container-type: inline-size;
+}
+.lv-ed-tiles__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 136px));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-ed-tiles__item {
+  display: flex;
+  min-width: 0;
+}
+/*
+ * Settings' tile, square at every width here (its own container rules size Settings' row). Its 78 px of
+ * words start lower than a Settings tile's, so they sit about in the middle of a 125-136 px square, and
+ * the marks of a row still line up where a name wraps.
+ */
+.lv-ed-tiles .lv-tile {
+  aspect-ratio: 1 / 1;
+  min-height: auto;
+  gap: 4px;
+  padding-top: 24px;
+}
+.lv-ed-tile[data-state="outdated"] .lv-tile__state {
+  color: #8a6116;
+  font-weight: 550;
+}
+.lv-ed-tile__mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: var(--lv-surface-subdued);
+}
+@container (max-width: 560px) {
+  .lv-ed-tiles__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* A text's heading row: its name with the state beside it, its one action at the end (wrapping under the name on a phone). */
+.lv-ed-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  scroll-margin-top: 16px;
+}
+.lv-ed-head-row__title {
+  display: flex;
+  flex: 1 1 240px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+}
+.lv-ed-head-row__name {
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.lv-ed-head-row__end {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+/* How many texts a button works on: a pill after its words, light on the dark primary. */
+.lv-ed-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.07);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.lv-btn--primary .lv-ed-count {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* An original's HTML while its translation's HTML is edited: the tags readable, long lines wrapped. */
+.lv-ed-code {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * An HTML text with no translation yet: a button that says how to fill it and opens its code. An empty white
+ * field (the grey box is the original's), its words at the text box's 13/20 and 12 × 16 px inside, as the
+ * preview it stands for; the dashed edge says empty, not a value (#e3e3e3 is too faint dashed on white). A
+ * grid, as a button centres its words in its height otherwise.
+ */
+.lv-ed-empty {
+  display: grid;
+  align-content: start;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px dashed var(--lv-border-hover);
+  border-radius: 8px;
+  background: var(--lv-surface);
+  color: var(--lv-text-subdued);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: start;
+  cursor: text;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s ease;
+}
+.lv-ed-empty:hover {
+  border-color: #8a8a8a;
+}
+.lv-ed-empty:focus-visible {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-ed-tiles .lv-tile {
+    transition: none;
+  }
+  .lv-ed-tiles .lv-tile:hover {
+    transform: none;
+  }
+  .lv-ed-empty {
+    transition: none;
+  }
+}
+
+/* Tools pages (glossary, translation memory, coverage, Countries & markets, import & export): .lv-tools-*. */
+
+/* A tools page's figures under its heading (the memory's entries and reuses): each figure with its caption. */
+.lv-tools-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-tools-figures__item {
+  display: grid;
+  gap: 2px;
+}
+
+/* An empty tool (the memory before anything is published): its sign, what fills it and the way there, centred. */
+.lv-tools-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+/* A button's own align-self (its width in a block stack) would put it at the start. */
+.lv-tools-empty > .lv-btn {
+  align-self: center;
+}
+
+/* A sentence with a language's flag before its name, or a pair of them ("🇬🇧 English → 🇩🇪 German"). */
+.lv-tools-language {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+}
+
+/* The import and export page's steps: the number in its circle beside the step's heading. */
+.lv-tools-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+/* ── Smart schedule (app.settings_.automatic.tsx, SmartAutoCard): its own rules here, media queries included. ── */
+
+/* The summary card decides by its own width where its actions go: beside the summary, or under it on a phone. */
+.lv-smart-hero {
+  container-type: inline-size;
+}
+/* Its actions: on a phone the main one at full width, the others side by side under it. */
+.lv-smart-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.lv-smart-actions > :first-child,
+.lv-smart-actions > :nth-child(2):last-child {
+  grid-column: 1 / -1;
+}
+.lv-smart-actions .lv-btn {
+  width: 100%;
+}
+/* A quiet action alone first (Turn off while it waits): its own width at the start, not the main action's place. */
+.lv-smart-actions > .lv-btn--tertiary:first-child {
+  width: auto;
+  justify-self: start;
+}
+.lv-smart-actions__note {
+  display: block;
+  margin-top: 8px;
+}
+@container (min-width: 681px) {
+  .lv-smart-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .lv-smart-actions .lv-btn {
+    width: auto;
+  }
+  .lv-smart-actions__note {
+    max-width: 300px;
+    margin-inline-start: auto;
+    text-align: end;
+  }
+}
+
+/* The weekdays as one row of square toggles (native checkboxes, the full day as each one's name). */
+.lv-smart-days {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.lv-smart-days__legend {
+  margin: 0 0 6px;
+  padding: 0;
+  color: var(--lv-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+.lv-smart-days__row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 380px;
+}
+.lv-smart-day {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.lv-smart-day__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.lv-smart-day__face {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 40px;
+  border: 1px solid var(--lv-border-hover);
+  border-radius: var(--lv-radius-control);
+  background: var(--lv-surface);
+  color: var(--lv-text);
+  font-family: var(--lv-font);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+.lv-smart-day:hover .lv-smart-day__input:not(:checked):not(:disabled) + .lv-smart-day__face {
+  border-color: #b5b5b5;
+  background: var(--lv-surface-subdued);
+}
+.lv-smart-day__input:checked + .lv-smart-day__face {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+  box-shadow: var(--lv-selected-shadow);
+  font-weight: 650;
+}
+.lv-smart-day__input:focus-visible + .lv-smart-day__face {
+  outline: 2px solid var(--lv-focus);
+  outline-offset: 2px;
+}
+.lv-smart-day__input:disabled {
+  cursor: not-allowed;
+}
+.lv-smart-day__input:disabled:not(:checked) + .lv-smart-day__face {
+  background: var(--lv-surface-subdued);
+}
+
+/* An excluded item's picture, as the language pages show it. */
+.lv-smart-thumb {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--lv-radius-control);
+  background: var(--lv-surface-subdued);
+  object-fit: cover;
+}
+
+@media (pointer: coarse) {
+  .lv-smart-day__face {
+    height: 44px;
+    font-size: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv-smart-day__face {
+    transition: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .lv-btn {
+    --lv-btn-height: 44px;
+    --lv-btn-radius: 12px;
+    --lv-btn-pad: 18px;
+    font-size: 14px;
+  }
+  .lv-btn--tertiary {
+    --lv-btn-pad: 12px;
+  }
+  .lv-seg__text {
+    min-height: 38px;
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-btn,
+  .lv-seg__text,
+  .lv-tile,
+  .lv-option,
+  .lv-option__radio,
+  .lv-link-tile,
+  .lv-more__chevron {
+    transition: none;
+  }
+  .lv-tile:hover {
+    transform: none;
+  }
+  .lv-btn__spinner {
+    animation-duration: 1.6s;
+  }
+}
+
+/*
+ * Forced colours (Windows contrast themes) draw no shadows and no tints, so the chosen look would vanish:
+ * there the chosen item gets a 2 px edge in the system's highlight colour: a border where the item has
+ * one, an inner outline on the plan card's frame and on segments (a focused segment shows its focus ring
+ * instead).
+ */
+@media (forced-colors: active) {
+  .lv-tile[aria-current="page"],
+  .lv-option--current,
+  .lv-lang[aria-current="page"],
+  .lv-filter[aria-current],
+  .lv-smart-day__input:checked + .lv-smart-day__face {
+    border: 2px solid Highlight;
+  }
+  .lv-selected-frame,
+  .lv-seg__option input:checked:not(:focus-visible) + .lv-seg__text,
+  .lv-seg--buttons .lv-seg__text[aria-pressed="true"]:not(:focus-visible) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

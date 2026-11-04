@@ -4,7 +4,7 @@
  * that is the same on server and browser.
  */
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, formatDayMonth, formatMonth, formatNumber, languageName, resolveLocale, translate, translator } from "../../app/i18n/i18n";
+import { formatDate, formatDateTime, formatDateTimeIn, formatDayMonth, formatMonth, formatNumber, languageName, resolveLocale, translate, translator } from "../../app/i18n/i18n";
 import { MESSAGES, NAMESPACES, type Message } from "../../app/i18n/messages";
 import { fieldName, issueName, jobStatus, kindLabel } from "../../app/i18n/labels";
 
@@ -12,15 +12,24 @@ const placeholders = (m: Message) =>
   [...new Set((typeof m === "string" ? [m] : [m.one, m.other]).flatMap((s) => [...s.matchAll(/\{(\w+)\}/g)].map((x) => x[1])))].sort();
 
 // Words that are the same in English and German, French or Spanish.
-const SAME_IN_BOTH = new Set(["Original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—", "Region {region}"]);
+const SAME_IN_BOTH = new Set([
+  ...["Original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Status", "Name", "Blogs", "Blog", "Theme", "Themes", "Navigation", "Checkout", "Filter", "Linguva", "SEO", "Shopify", "DeepL", "OK", "Business", "Budgets", "{time} ({zone})", "—", "Region {region}"],
+  ...["{language} · {kind}", "{name}: {reason}", "{figure} {caption}. {title}. {states}.", "Version {commit}"],
+]);
 const SAME_IN_FRENCH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Collections", "collection", "collections", "Pages", "page", "pages", "Menus", "menu", "menus"],
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
-  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—"],
+  ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—", "Page {page}", "Version {commit}"],
+  ...["{language} · {kind}", "{figure} {caption}. {title}. {states}."],
+  // A language customers can choose: the same word in French.
+  ...["Visible"],
 ]);
 const SAME_IN_SPANISH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Plan", "Manual", "Original", "Formal", "Informal", "Formal ({pronoun})", "Informal ({pronoun})", "No", "no", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
   ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Business", "{time} ({zone})", "—"],
+  ...["{language} · {kind}", "{name}: {reason}", "{figure} {caption}. {title}. {states}."],
+  // A language customers can choose: the same word in Spanish.
+  ...["Visible"],
 ]);
 
 describe("interface language", () => {
@@ -38,19 +47,35 @@ describe("interface language", () => {
   });
 
   it("fills placeholders, formats numbers for the language and picks plural forms", () => {
-    expect(translate("en", "jobs.detail.timing.minutes", { count: 1 })).toBe("1 minute");
-    expect(translate("en", "jobs.detail.timing.minutes", { count: 1200 })).toBe("1,200 minutes");
-    expect(translate("de", "jobs.detail.timing.minutes", { count: 1 })).toBe("1 Minute");
-    expect(translate("de", "jobs.detail.timing.minutes", { count: 1200 })).toBe("1.200 Minuten");
+    expect(translate("en", "jobs.problems.attempts", { count: 1 })).toBe("1 attempt");
+    expect(translate("en", "jobs.problems.attempts", { count: 1200 })).toBe("1,200 attempts");
+    expect(translate("de", "jobs.problems.attempts", { count: 1 })).toBe("1 Versuch");
+    expect(translate("de", "jobs.problems.attempts", { count: 1200 })).toBe("1.200 Versuche");
     expect(formatNumber("de", 1234567)).toBe("1.234.567");
   });
 
-  it("formats dates in UTC, so server and browser render the same text", () => {
+  it("formats dates in UTC without the store's zone, so server and browser render the same text", () => {
     expect(formatDate("de", "2026-10-27T23:30:00Z")).toBe("27. Oktober 2026");
     expect(formatDate("en", "2026-10-27T23:30:00Z")).toBe("October 27, 2026");
     expect(formatDateTime("de", "2026-10-27T23:30:00Z")).toBe("27.10.2026, 23:30 UTC");
     expect(formatMonth("de", "2026-10")).toBe("Oktober 2026");
     expect(formatDate("en", "not a date")).toBe("");
+  });
+
+  it("formats instants in the store's zone when it is known, naming UTC only for UTC (D1)", () => {
+    expect(formatDateTime("de", "2026-10-27T23:30:00Z", "Europe/Berlin")).toBe("28.10.2026, 00:30");
+    expect(formatDateTime("de", "2026-10-27T23:30:00Z", "America/New_York")).toBe("27.10.2026, 19:30");
+    expect(formatDateTime("en", "2026-10-27T23:30:00Z", "America/New_York")).toBe("Oct 27, 2026, 7:30 PM");
+    expect(formatDateTime("de", "2026-10-27T23:30:00Z", "UTC")).toBe("27.10.2026, 23:30 UTC");
+    expect(translator("de", { timeZone: "Europe/Berlin" }).dateTime("2026-10-27T23:30:00Z")).toBe("28.10.2026, 00:30");
+    expect(translator("de").dateTime("2026-10-27T23:30:00Z")).toBe("27.10.2026, 23:30 UTC");
+  });
+
+  it("writes times on the interface language's clock: 12-hour in English, 24-hour otherwise (D1b)", () => {
+    expect(formatDateTimeIn("en", "2026-10-29T22:00:00Z", "Europe/Berlin")).toBe("Thu, Oct 29, 11:00 PM");
+    expect(formatDateTimeIn("de", "2026-10-29T22:00:00Z", "Europe/Berlin")).toBe("Do., 29. Okt., 23:00");
+    expect(translator("en").clock(1380)).toBe("11:00 PM");
+    expect(translator("de").clock(1380)).toBe("23:00");
   });
 
   it("names a day and month, with the year only when it isn't this year's (in UTC)", () => {
@@ -136,6 +161,7 @@ describe("interface language", () => {
     expect(fieldName(de, "meta_title")).toBe("SEO-Titel");
     expect(fieldName(de, "custom_key")).toBe("Custom key");
     expect(issueName(de, "NUMBERS_CHANGED")).toBe("Zahlen verändert");
-    expect(jobStatus(de, "COMPLETED")).toEqual({ label: "Abgeschlossen", tone: "success" });
+    expect(jobStatus(de, "COMPLETED")).toEqual({ label: "Fertig", tone: "success" });
+    expect(jobStatus(de, "DISCOVERING").label).toBe("Texte werden gesucht");
   });
 });

@@ -181,9 +181,12 @@ describe("Settings › Your translation keys", () => {
     const page = await load();
     expect(page.ownKeys).toBeNull();
     expect(Object.keys(page).sort()).toEqual(
-      ["aiAvailable", "auto", "autoPublishInPlan", "consent", "consentAt", "engines", "glossaryTerms", "limit", "now", "ownKeys", "publishMode", "resetsOn", "reuseMachineMemory", "smart", "smartCheckKey", "style", "used"].sort(),
+      ["aiAvailable", "auto", "autoPublishInPlan", "backToJob", "consent", "consentAt", "engines", "glossaryTerms", "limit", "now", "ownKeys", "plan", "publishMode", "resetsOn", "reuseMachineMemory", "smart", "smartCheckKey", "style", "used", "version"].sort(),
     );
     expect(page.limit).toBe(PLANS.pro.monthlyChars);
+    // The plan section's name; no stopped job asked about.
+    expect(page.plan).toEqual({ state: "ACTIVE", configured: true, handle: "pro" });
+    expect(page.backToJob).toBeNull();
 
     await seedOwnKey(shop.id, { engine: "deepl", apiKey: DEEPL_KEY }, { client: app, mode: "mock" });
     const off = await load();

@@ -7,6 +7,7 @@
 import { isRouteErrorResponse, useRevalidator, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useI18n } from "../i18n/react";
+import { Button } from "./Button";
 
 type ErrorCase = "notFound" | "forbidden" | "timeout" | "unavailable" | "generic";
 
@@ -40,15 +41,15 @@ export function RouteErrorContent({ error }: { error: unknown }) {
           </s-banner>
           <s-stack direction="inline" gap="base">
             {retry ? (
-              <s-button
+              <Button
                 variant="primary"
                 onClick={() => revalidator.revalidate()}
                 {...(revalidator.state !== "idle" ? { loading: true } : {})}
               >
                 {t("common.error.tryAgain")}
-              </s-button>
+              </Button>
             ) : null}
-            <s-button href="/app">{t("common.error.toOverview")}</s-button>
+            <Button href="/app">{t("common.error.toOverview")}</Button>
           </s-stack>
         </s-stack>
       </s-section>

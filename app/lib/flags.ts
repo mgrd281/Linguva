@@ -5,8 +5,10 @@
  * and emoji where pages still use them. A language's flag is its locale's
  * region when it has one ("pt-BR" → BR), otherwise the country most
  * associated with the language; languages spoken across many countries
- * get a flag only where the store's markets name a country, never a guess
- * that could offend.
+ * get the flag of a country the store's markets name. English without such
+ * a market shows the United Kingdom's flag (the owner's decision,
+ * 2026-11-03: a flag reads better than "EN"); Arabic and Chinese show their
+ * code, never a guess that could offend.
  */
 import { countryLanguageGroups, localeKey } from "./country-languages";
 
@@ -49,6 +51,9 @@ const LANGUAGE_REGION: Record<string, string> = {
  * a country the store sells to that reads them, these first (English: the
  * United Kingdom before the United States).
  */
+/** A language of many countries whose flag stands when the markets name none of them (Arabic and Chinese have none). */
+const MANY_DEFAULT: Record<string, string> = { en: "GB", es: "ES" };
+
 const MANY_COUNTRIES: Record<string, readonly string[]> = {
   en: ["GB", "US"],
   ar: [],
@@ -96,7 +101,8 @@ export function localeCountry(locale: string, markets?: readonly string[] | null
   const seller = sold.find((country) => countryLanguageGroups(country).some((group) => group.some((l) => localeKey(l) === key)));
   if (seller) return seller;
   // Plain "es" is Spain's Spanish ("es-419" is Latin America's): Spain's flag when the markets don't say otherwise.
-  return locale.toLowerCase() === "es" ? "ES" : null;
+  // Plain "en" without an English-speaking market: the United Kingdom's.
+  return Object.hasOwn(MANY_DEFAULT, locale.toLowerCase()) ? MANY_DEFAULT[locale.toLowerCase()]! : null;
 }
 
 function regionFlag(region: string): string {
@@ -109,7 +115,7 @@ export function countryFlag(country: string): string {
   return regionFlag(country.toUpperCase());
 }
 
-/** A language's flag emoji: its region's, or its language's country (none for English, Arabic or Chinese without a region). */
+/** A language's flag emoji: its region's, or its language's country (none for English, Arabic or Chinese without a region; the pictures use localeCountry). */
 export function localeFlag(locale: string): string {
   const [language, region] = locale.split("-");
   if (region && /^[A-Za-z]{2}$/.test(region)) return regionFlag(region.toUpperCase());

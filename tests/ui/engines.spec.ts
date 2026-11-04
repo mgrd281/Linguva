@@ -4,12 +4,14 @@
  * (playwright.config.ts, project "engines"; preload.ts answers only their
  * free checks and language lists). Nothing is translated here.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
 
 test("the operator's store sees the translation services: order, DeepL keys, an Azure and a Google tile", async ({ page }) => {
   await openApp(page, "owner", "/app");
-  const card = page.locator("s-section").filter({ has: page.getByRole("heading", { name: "Translation services" }) });
+  // A card named by its heading, like the Overview's others; translating is its icon (globe stands for countries).
+  const card = page.getByRole("region", { name: "Translation services", exact: true });
+  await expect(card.locator('.lv-icon-square s-icon[type="language-translate"]')).toHaveCount(1);
   await expect(card.getByText("Only you see this")).toBeVisible();
   await expect(card.getByText("Order: DeepL → Microsoft Azure → Google Cloud")).toBeVisible();
   await expect(card.getByRole("heading", { name: "DeepL keys" })).toBeVisible();
@@ -37,13 +39,16 @@ test("a merchant's store sees no translation services card", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "DeepL quota" })).toHaveCount(0);
 });
 
+/** A language's row on the Languages page (one row per language). */
+const languageRow = (page: Page, name: string) => page.getByRole("list", { name: "Languages" }).getByRole("listitem").filter({ hasText: name });
+
 test("the Languages page names the engine of each language", async ({ page }) => {
   await openApp(page, "engines", "/app/languages");
-  const german = page.locator("s-table-row").filter({ hasText: "de" }).filter({ hasText: "German" });
+  const german = languageRow(page, "German");
   await expect(german.getByText("Available")).toBeVisible();
   await expect(german.getByText("with DeepL")).toBeVisible();
   // DeepL's (fictional) list has no Thai: Microsoft Azure translates it.
-  const thai = page.locator("s-table-row").filter({ hasText: "Thai" });
+  const thai = languageRow(page, "Thai");
   await expect(thai.getByText("with Microsoft Azure")).toBeVisible();
   await expectAccessible(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -52,16 +57,18 @@ test("the Languages page names the engine of each language", async ({ page }) =>
 
 test("a DeepL-only consent: the language only Azure serves waits for consent, Settings ask to allow the others", async ({ page }) => {
   await openApp(page, "enginesLegacy", "/app/languages");
-  const thai = page.locator("s-table-row").filter({ hasText: "Thai" });
+  const thai = languageRow(page, "Thai");
   await expect(thai.getByText("Available with Microsoft Azure once you allow it in Settings")).toBeVisible();
-  await expect(thai.getByRole("link", { name: "Open Settings" })).toBeVisible();
-  const german = page.locator("s-table-row").filter({ hasText: "German" });
+  // The row opens the language; the way to allow the service is the notice above the list (no link inside a link).
+  await expect(page.locator('s-banner[heading="Some languages wait for your permission"]').getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/app/settings?section=ai");
+  const german = languageRow(page, "German");
   await expect(german.getByText("with DeepL")).toBeVisible();
 
-  await openApp(page, "enginesLegacy", "/app/settings");
+  await openApp(page, "enginesLegacy", "/app/settings?section=ai");
   // The permission the shop gave: today's DeepL text, word for word.
   await expect(page.getByText("Linguva sends only your store's texts (such as products, pages and menus) to DeepL SE in Germany, no customer or order data.")).toBeVisible();
-  const extra = page.locator("s-box").filter({ has: page.getByRole("heading", { name: "More translation services" }) });
+  // A part of the permission's card under its own heading (no box inside the card).
+  const extra = page.getByRole("group", { name: "More translation services" });
   await expect(extra.getByText(/Linguva is also set up to use Microsoft Ireland Operations Ltd\. .* and Google Cloud EMEA Ltd\. .*Until you allow it, Linguva uses only DeepL\./)).toBeVisible();
   // Before the click: every service, their order and the failover (the notice the stored version stands for).
   await expect(extra.getByText(/Texts go to DeepL first; only if it can't translate them are they sent to Microsoft Azure, then Google Cloud\./)).toBeVisible();
@@ -89,8 +96,9 @@ test("the smart schedule names the services next to its Allow button, and says w
 });
 
 test("allowing the other services too keeps focus on the permission card", async ({ page }) => {
-  await openApp(page, "enginesExtend", "/app/settings");
-  const extra = page.locator("s-box").filter({ has: page.getByRole("heading", { name: "More translation services" }) });
+  await openApp(page, "enginesExtend", "/app/settings?section=ai");
+  // A part of the permission's card under its own heading (no box inside the card).
+  const extra = page.getByRole("group", { name: "More translation services" });
   await extra.getByRole("button", { name: "Allow these too" }).click();
   await expectToast(page, "AI translation is allowed.");
   await expect(page.getByRole("heading", { name: "More translation services" })).toHaveCount(0);
@@ -99,7 +107,7 @@ test("allowing the other services too keeps focus on the permission card", async
 
 test("the editor's permission names the services and their order", async ({ page }) => {
   await openApp(page, "enginesNoConsent", "/app/products/1?lang=de");
-  const banner = page.locator("s-banner").filter({ has: page.getByRole("button", { name: "Allow AI processing" }) });
+  const banner = page.locator("s-banner").filter({ has: page.getByRole("button", { name: "Allow AI translation" }) });
   await expect(banner.getByText(/our translation providers \(DeepL SE .*Google Cloud EMEA Ltd\. .*\)/)).toBeVisible();
   await expect(banner.getByText(/Texts go to DeepL first; only if it can't translate them are they sent to Microsoft Azure, then Google Cloud\./)).toBeVisible();
 });

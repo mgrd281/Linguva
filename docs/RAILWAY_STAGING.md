@@ -246,6 +246,7 @@ Plan as prepared:
 Not there yet, each one needs the owner's approval:
 
 - **Background jobs** run inside the `web` service since the commit after `a53c718` (§8b); no `worker` service is needed in production. Until that deploy, "Messen" (coverage), bulk jobs and automatic translation waited in the queue (KARINEX's first measurement waited from 2026-10-28; it continues by itself after the deploy).
+- **Which version runs**: the last line of Settings in the app says when the running version went live (its build's time, in the store's time zone) and its commit ("Linguva zuletzt aktualisiert … · Version 183028e"), from Railway's `RAILWAY_GIT_COMMIT_SHA`.
 - **New code**: production runs `969ad79` until the next deploy. Railway deploys the connected branch `claude/gallant-pasteur-8opy75` itself once GitHub CI is green (auto deploy plus "Wait for CI"; found on 2026-10-28, switched off while the owner decided, switched on again by the owner the same night). Every commit of this branch that passes CI therefore reaches KARINEX; the owner can stop it with "Disable" under web, Settings, Source.
 - **Countries on the Overview** need the optional permission `read_markets`: the button "Show countries" asks for it in KARINEX (read-only, Linguva never changes markets).
 - **KARINEX's languages are already published.** Anything published from Linguva is visible to customers immediately; drafts stay invisible until published.
@@ -293,7 +294,7 @@ What I changed in the repository (this branch, nothing deployed): the Dockerfile
 | `NODE_ENV` | `production` (set by the image) | Dockerfile |
 | `LOG_LEVEL` | default `info` | — |
 | `DATABASE_URL` | the `linguva_app` role over Railway's private network; **no public TCP proxy** on Postgres | Owner (§5.2) |
-| `MIGRATION_DATABASE_URL` | the `linguva_migrator` role, private network, used only by the pre-deploy step | Owner (§5.2) |
+| `MIGRATION_DATABASE_URL` | the `linguva_owner` role (§5.2), private network, used only by the pre-deploy step; not on the console's service (`ADMIN_CONSOLE` below) | Owner (§5.2) |
 | `REDIS_URL` | Railway Redis, private network | Railway |
 | `TOKEN_ENCRYPTION_KEYS` | **new** keys, never KARINEX's (`openssl rand -base64 32`, as §5.3) | Owner |
 | `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` | the **new** public app's client ID and secret | Owner (Partner Dashboard) |
@@ -327,6 +328,8 @@ What I changed in the repository (this branch, nothing deployed): the Dockerfile
 | `LINGUVA_EMBEDDED_WORKER` | not set (on in production, §8b) | — |
 | `PUBLIC_PAGES` | `on`, so `/privacy` and `/support` exist for the listing (production refuses it without `LEGAL_TEXTS_REVIEWED=yes`) | Owner, after the lawyer |
 | `LEGAL_TEXTS_REVIEWED` | `yes` once the lawyer has resolved every open point (docs/LEGAL_FACTS.md) | Owner, after the lawyer |
+| `ADMIN_CONSOLE` | not set (`off`: every `/admin` address answers 404) on this merchant-facing `web` service. The console runs as a **second service from the same image** in the same project and environment (for example `admin`), with its own domain and no pre-deploy command (`web` runs the migrations), set up as docs/ADMIN_CONSOLE.md §6 says. Its variables: every variable of `web` with the same values **except** `MIGRATION_DATABASE_URL` (no migrations run there; `node scripts/migrate.mjs` would stop without it) and the translation engine keys (`DEEPL_API_KEY`, `DEEPL_API_KEY_2` … if set, `DEEPL_API_KEYS`, `AZURE_TRANSLATOR_KEY`, `GOOGLE_TRANSLATE_API_KEY`, `GOOGLE_TRANSLATE_CREDENTIALS`), plus `ADMIN_CONSOLE=on`, `ADMIN_HOST` and `LINGUVA_EMBEDDED_WORKER=off`. Accounts are created with `pnpm ops:admin add` (owner role, your terminal) | Owner |
+| `ADMIN_HOST` | not set here; on the console's service its domain, without `https://` (for example `admin.PUBLIC-APP-DOMAIN`): `/admin` answers 404 on every other host. Production refuses `ADMIN_CONSOLE=on` without it | Owner (domain) |
 | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `60` (§8b) | Owner |
 
 `tests/unit/deploy-config.test.ts` checks that this table names every setting in `app/.server/lib/config.ts`.

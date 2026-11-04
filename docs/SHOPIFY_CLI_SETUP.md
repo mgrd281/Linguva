@@ -96,7 +96,7 @@ What happens on the first run:
 3. Press `p` (or open the preview URL) to install. Shopify shows the requested scopes; approve them. Installation uses Shopify-managed installation and **token exchange**; there is no OAuth redirect to the app.
 4. Linguva opens inside the admin. `afterAuth` stores the shop and its Shopify GID; the offline token is stored encrypted (AES-256-GCM).
 
-Check: Overview loads, Languages lists German and Arabic, Products lists the test catalog. Then follow DEV_STORE_TEST_PLAN.md.
+Check: Overview loads, Languages (Settings › Tools) lists German and Arabic, and once the store is counted the products' list in German (Content → Products, `/app/languages/de/products`) lists the test catalog. Then follow DEV_STORE_TEST_PLAN.md.
 
 ## 6. Permissions (scopes)
 

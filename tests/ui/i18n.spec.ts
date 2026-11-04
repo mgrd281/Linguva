@@ -11,8 +11,15 @@ import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 const ENGLISH = /\b(the|your|and|Translate|Translated|Settings|Review|Save|Search|Language|Products|Overview|Status|Show|Jobs|allowance)\b/;
 
 async function interfaceText(page: Page) {
-  // Text of the page itself; product data and previews are the merchant's.
-  return page.locator("s-page").evaluate((el) => (el as HTMLElement).innerText);
+  // Text of the page itself; product data and previews are the merchant's, and the store's own texts
+  // marked translate="no" (the memory's originals and translations) are left out.
+  return page.locator("s-page").evaluate((el) => {
+    const own = Array.from(el.querySelectorAll<HTMLElement>('[translate="no"]'));
+    for (const node of own) node.style.setProperty("display", "none");
+    const text = (el as HTMLElement).innerText;
+    for (const node of own) node.style.removeProperty("display");
+    return text;
+  });
 }
 
 const GERMAN_PAGES = [
@@ -21,9 +28,12 @@ const GERMAN_PAGES = [
   { path: "/app/jobs", heading: "Übersetzungsaufträge" },
   // Review lists the store's own (English) texts, so only the interface parts are checked there.
   { path: "/app/review", heading: "Übersetzungen prüfen", merchantText: true },
-  { path: "/app/coverage", heading: "Übersetzungsabdeckung" },
+  // The tools pages carry their tile's name from Settings › Tools.
+  { path: "/app/coverage", heading: "Abdeckung im Detail" },
   { path: "/app/glossary", heading: "Glossar" },
   { path: "/app/memory", heading: "Übersetzungsspeicher" },
+  { path: "/app/markets", heading: "Länder & Märkte" },
+  { path: "/app/translations", heading: "Import & Export" },
   { path: "/app/plan", heading: "Tarif" },
   { path: "/app/languages", heading: null },
   { path: "/app/content", heading: "Inhalte" },
@@ -38,7 +48,7 @@ for (const { path, heading, merchantText } of GERMAN_PAGES as Array<{ path: stri
     await expect(page.locator("html")).toHaveAttribute("lang", "de");
     if (heading) await expect(page.locator("s-page")).toHaveAttribute("heading", heading);
     const text = merchantText
-      ? await page.locator("s-page s-button, s-page s-badge, s-page s-section").evaluateAll((els) =>
+      ? await page.locator("s-page s-button, s-page [data-button], s-page s-badge, s-page s-section").evaluateAll((els) =>
           els.map((el) => (el.tagName === "S-SECTION" ? (el.getAttribute("heading") ?? "") : (el as HTMLElement).innerText)).join("\n"),
         )
       : await interfaceText(page);
@@ -60,7 +70,7 @@ for (const { locale, nav } of [
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
       await expect(page.locator("s-app-nav s-link", { hasText: nav })).toHaveCount(1);
       const text = merchantText
-        ? await page.locator("s-page s-button, s-page s-badge, s-page s-section").evaluateAll((els) =>
+        ? await page.locator("s-page s-button, s-page [data-button], s-page s-badge, s-page s-section").evaluateAll((els) =>
             els.map((el) => (el.tagName === "S-SECTION" ? (el.getAttribute("heading") ?? "") : (el as HTMLElement).innerText)).join("\n"),
           )
         : await interfaceText(page);
@@ -71,14 +81,16 @@ for (const { locale, nav } of [
 }
 
 test("navigation, product list and editor are German; merchant content stays as it is", async ({ page }) => {
-  await openApp(page, "full", "/app/products?lang=fr", { locale: "de" });
+  await openApp(page, "full", "/app/languages/fr/products", { locale: "de" });
   // Five entries; every list opens from Inhalte, the tools from Einstellungen.
   await expect(page.locator("s-app-nav s-link")).toHaveText(["Übersicht", "Inhalte", "Prüfen", "Aufträge", "Einstellungen"]);
-  await expect(page.getByText("Product 1 jacket").first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Produkte auf Französisch" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Öffnen: Product 1 jacket" })).toBeVisible();
   // Language names in German, not Shopify's English names.
-  await expect(page.locator("s-badge", { hasText: "Französisch" })).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Alle in Französisch übersetzen" })).toBeVisible();
-  await page.getByText("Product 1 jacket").first().click();
+  await expect(page.locator('.lv-lang[aria-current="page"]', { hasText: "Französisch" })).toBeVisible();
+  // The area's next step has one button, in German whichever step comes first (translate, count, approve).
+  await expect(page.locator("[data-button]", { hasText: /^(Übersetzen|Jetzt zählen|Jetzt freigeben)$/ }).first()).toBeVisible();
+  await page.getByRole("link", { name: "Öffnen: Product 1 jacket" }).click();
   await expect(page).toHaveURL(/\/app\/products\/1\?lang=fr/);
   // The interface stays German after moving inside the app (no `locale` on in-app links).
   await expect(page.locator("s-app-nav s-link", { hasText: "Übersicht" })).toHaveCount(1);
@@ -87,7 +99,7 @@ test("navigation, product list and editor are German; merchant content stays as 
 
 test("the app's target language never changes the interface language", async ({ page }) => {
   // ?lang=de is the language to translate into; the admin user is English.
-  await openApp(page, "full", "/app/products?lang=de");
+  await openApp(page, "full", "/app/content?lang=de");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator("s-app-nav s-link", { hasText: "Content" })).toHaveCount(1);
 });
@@ -95,7 +107,7 @@ test("the app's target language never changes the interface language", async ({ 
 test("an error page is German for a German admin user", async ({ page }) => {
   await openApp(page, "full", "/app/products/999999?lang=de", { locale: "de" });
   await expect(page.locator('s-banner[heading="Diese Seite wurde nicht gefunden"]')).toBeVisible();
-  await expect(page.locator("s-button", { hasText: "Zur Übersicht" })).toBeVisible();
+  await expect(page.locator("[data-button]", { hasText: "Zur Übersicht" })).toBeVisible();
 });
 
 test.describe("without Shopify's locale parameter", () => {

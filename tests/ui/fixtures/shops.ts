@@ -557,6 +557,16 @@ export const UI_SHOPS = {
     plan: "own-key",
     build: () => new FakeShopifyStore(2),
   },
+  jobs: {
+    // The Jobs pages (jobs.spec.ts): a job in each state, seeded by fixtures/jobs-store.ts. No AI permission:
+    // its stopped job waits for it.
+    domain: "ui-jobs.myshopify.com",
+    gid: "gid://shopify/Shop/91070",
+    name: "Jobs Test Store",
+    locales: [en, de, { locale: "fr", name: "French", primary: false, published: true }, { locale: "it", name: "Italian", primary: false, published: true }, { locale: "es", name: "Spanish", primary: false, published: true }],
+    plan: "pro",
+    build: () => buildDemoStore().addContent(3),
+  },
 } satisfies Record<string, UiShop>;
 
 export type UiShopKey = keyof typeof UI_SHOPS;

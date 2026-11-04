@@ -67,10 +67,10 @@ describe("TranslationEngines", () => {
     expect(unreachable).toContain("Microsoft Azure not reachable");
   });
 
-  it("says which engines this store hasn't allowed yet, with a link to Settings instead of their counts", () => {
+  it("says which engines this store hasn't allowed yet, with a link to Settings' AI permission instead of their counts", () => {
     const html = render({ ...CARD, tiles: [{ ...CARD.tiles[0]!, firstChoice: 0, canStepIn: 0, allowed: false }, CARD.tiles[1]!] });
     expect(text(html)).toContain("Not allowed in this store yet: Settings");
-    expect(html).toContain('href="/app/settings"');
+    expect(html).toContain('href="/app/settings?section=ai"');
     expect(text(html)).toContain("Can step in for 4 languages");
     // DeepL's and Google's counts; none for Azure.
     expect(text(html).match(/First choice for/g)).toHaveLength(2);

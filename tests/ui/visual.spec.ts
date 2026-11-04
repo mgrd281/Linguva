@@ -13,23 +13,46 @@ import { openApp } from "./helpers";
 // Every page of the "visual" store, unless another store is named.
 const PAGES: Array<[string, string, UiShopKey?]> = [
   ["overview", "/app"],
-  ["products", "/app/products?lang=de"],
+  // The products' one list is the area's ("category"; the old /app/products leads there).
   ["editor", "/app/products/2?lang=de"],
   ["review-empty", "/app/review"],
   ["glossary", "/app/glossary"],
   ["settings", "/app/settings"],
+  // The form of address, language by language (the segmented choices).
+  ["settings-style", "/app/settings?section=style"],
   ["plan", "/app/plan"],
   // No plan chosen: the trial offer on the paid cards (the empty store's data is fixed too).
   ["plan-none", "/app/plan", "empty"],
   ["language", "/app/languages/de"],
   ["category", "/app/languages/de/products"],
   ["content", "/app/content"],
+  // The Jobs list's Done tab (its jobs started on fixed hours of earlier store days).
+  ["jobs-completed", "/app/jobs?status=completed", "jobs"],
+  // The smart schedule on Business: how often as option cards, its past checks (the store is read only).
+  ["smart", "/app/settings/automatic", "business"],
+  // Its schedule card, opened at its address (the page scrolls there): the mode cards and the next checks.
+  ["smart-schedule", "/app/settings/automatic#smart-schedule", "business"],
+  // The tools of Settings › Tools, each with its header (the glossary is above).
+  ["memory", "/app/memory"],
+  ["coverage", "/app/coverage"],
+  ["markets", "/app/markets"],
+  ["transfer", "/app/translations"],
 ];
 
-// With the time and zone where a page shows them ("Oct 30, 2026, 9:15 AM UTC"),
-// and a day of this year without the year (the Plan page: "on November 1").
-const DATE =
-  /(\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b|\b[A-Z][a-z]{2} \d{1,2}, \d{4})(, \d{1,2}:\d{2}\s?[AP]M UTC)?|\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}\b/;
+// With the time where a page shows it, in the store's zone or with "UTC" ("Oct 30, 2026,
+// 9:15 AM"), a weekday with its day ("Monday, November 2": a day's heading), a day of this
+// year without the year (the Plan page: "on November 1"), a time alone ("2:02 PM") and the
+// day words that depend on the hour the test runs ("today, 11:00 PM", "Yesterday").
+const MONTH = "(January|February|March|April|May|June|July|August|September|October|November|December)";
+const DATE = new RegExp(
+  [
+    `(\\b${MONTH} \\d{1,2}, \\d{4}\\b|\\b[A-Z][a-z]{2} \\d{1,2}, \\d{4})(, \\d{1,2}:\\d{2}\\s?[AP]M( UTC)?)?`,
+    `\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(, ${MONTH} \\d{1,2})?\\b`,
+    `\\b${MONTH} \\d{1,2}\\b`,
+    `\\b\\d{1,2}:\\d{2}\\s?[AP]M\\b`,
+    `\\b(Today|Tomorrow|Yesterday|today|tomorrow|yesterday)\\b`,
+  ].join("|"),
+);
 
 async function settle(page: Page) {
   // Polaris uses the Inter web font. `document.fonts.ready` doesn't wait for
@@ -48,8 +71,8 @@ async function settle(page: Page) {
     const pattern = new RegExp(source, "g");
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      // A date with a year (and time) becomes "January 1, 2026", a day without one "January 1".
-      if (pattern.test(node.nodeValue ?? "")) node.nodeValue = node.nodeValue!.replace(pattern, (date) => (/\d{4}/.test(date) ? "January 1, 2026" : "January 1"));
+      // A date with a year (and time) becomes "January 1, 2026", a day without one "January 1", a time alone "9:00 AM".
+      if (pattern.test(node.nodeValue ?? "")) node.nodeValue = node.nodeValue!.replace(pattern, (date) => (/\d{4}/.test(date) ? "January 1, 2026" : /^\d/.test(date) ? "9:00 AM" : "January 1"));
       pattern.lastIndex = 0;
     }
   }, DATE.source);
@@ -57,6 +80,15 @@ async function settle(page: Page) {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(300);
 }
+
+// A finished job's page: yesterday's pages, one failed for good (opened from its row, its id is the seed's).
+test("job looks as reviewed @responsive", async ({ page }) => {
+  await openApp(page, "jobs", "/app/jobs?status=completed&lang=fr&area=pages");
+  const href = await page.locator('section[aria-labelledby^="day-"] s-clickable[href^="/app/jobs/"]').first().getAttribute("href");
+  await openApp(page, "jobs", href!);
+  await settle(page);
+  await expect(page).toHaveScreenshot("job.png", { animations: "disabled", caret: "hide", maxDiffPixelRatio: 0.01 });
+});
 
 for (const [name, path, shop] of PAGES) {
   test(`${name} looks as reviewed @responsive`, async ({ page }) => {

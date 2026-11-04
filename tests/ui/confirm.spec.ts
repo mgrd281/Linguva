@@ -11,29 +11,34 @@ const modal = (page: Page, id: string) => page.locator(`s-modal#${id}`);
 const dialogOpen = (page: Page, heading: string) => page.getByRole("dialog", { name: heading });
 // The modal's buttons are its slotted children, not part of the dialog's shadow tree.
 const modalButton = (page: Page, id: string, name: string) => modal(page, id).getByRole("button", { name, exact: true });
+// Review's strip with the page's count and actions (a copy floats at the window's foot while it is out of view).
+const reviewStrip = (page: Page) => page.locator("[data-review-strip]");
 
 test("rejecting asks first: Cancel keeps every text, one text is rejected after its own question", async ({ page }) => {
   await openApp(page, "full", "/app/review");
-  const summary = page.getByText(/^\d+ translations? on this page/);
+  // "12 translations on this page", after the first decision "11 of 12 still open".
+  const summary = reviewStrip(page).getByText(/^\d+ (translations? on this page|of \d+ still open)/);
   const before = Number((await summary.innerText()).match(/\d+/)![0]);
-  const allTab = page.getByRole("navigation", { name: "Languages" }).locator('[aria-current="true"]');
+  const allTab = page.getByRole("navigation", { name: "Languages" }).locator('[aria-current="page"]');
   await expect(allTab).toContainText(String(before));
 
-  await page.locator("s-button", { hasText: "Reject all" }).click();
+  await reviewStrip(page).locator("[data-button]", { hasText: "Reject all" }).click();
   const dialog = page.getByRole("dialog", { name: /^Reject \d+ translations\?$/ });
   await expect(dialog).toBeVisible();
+  // It says what rejecting does before it says it can't be undone.
+  await expect(modal(page, "review-reject").getByText(/^Nothing changes in your store, and Linguva won't translate these texts again by itself/)).toBeVisible();
   await expectAccessible(page);
   await modalButton(page, "review-reject", "Cancel").click();
   await expect(dialog).toBeHidden();
   await expect(summary).toHaveText(new RegExp(`^${before} `));
 
-  // One text: its ✕ asks in place, says it can't be undone, and only then rejects.
+  // One text: its "✕ Reject" asks in place, says it can't be undone, and only then rejects.
   await page.getByRole("button", { name: "Reject: Name – Product 2 jacket" }).filter({ visible: true }).click();
   const question = page.locator("s-banner", { hasText: "This can't be undone." });
   await expect(question).toBeVisible();
   await question.getByRole("button", { name: "Reject: Name – Product 2 jacket" }).click();
   await expect(page.getByText("Rejected – won't be published.", { exact: true })).toBeVisible();
-  await expect(summary).toHaveText(new RegExp(`^${before - 1} `));
+  await expect(summary).toHaveText(new RegExp(`^${before - 1} of ${before} still open`));
   await expect(allTab).toContainText(String(before - 1));
   await expect(modal(page, "review-reject")).toHaveCount(1);
 });
@@ -41,8 +46,8 @@ test("rejecting asks first: Cancel keeps every text, one text is rejected after 
 test("confirming Reject all rejects the page's texts and a toast says so", async ({ page }) => {
   // One product's French texts (a search narrows the page), so the shared store keeps the rest.
   await openApp(page, "full", "/app/review?lang=fr&q=Product%208%20jacket");
-  await expect(page.getByText(/^2 translations on this page/)).toBeVisible();
-  await page.locator("s-button", { hasText: "Reject all" }).click();
+  await expect(reviewStrip(page).getByText(/^2 translations on this page/)).toBeVisible();
+  await reviewStrip(page).locator("[data-button]", { hasText: "Reject all" }).click();
   await expect(page.getByRole("dialog", { name: "Reject 2 translations?" })).toBeVisible();
   await modalButton(page, "review-reject", "Reject 2").click();
   await expectToast(page, /^\d+ translations rejected\. They won't be published\.$/);
@@ -51,20 +56,20 @@ test("confirming Reject all rejects the page's texts and a toast says so", async
 
 test("deleting a glossary term asks first", async ({ page }) => {
   await openApp(page, "full", "/app/glossary");
-  const section = page.locator("s-section").filter({ has: page.locator("s-text-field[name='term']") }).first();
+  const section = page.getByRole("region", { name: "Add a term", exact: true });
   await section.locator("s-text-field[name='term'] input").fill("Linguva-Testbegriff");
   await section.getByRole("button", { name: /Add term/ }).click();
   const row = page.locator("s-table-row", { hasText: "Linguva-Testbegriff" });
   await expect(row).toBeVisible();
 
-  await row.locator("s-button", { hasText: "Delete" }).click();
+  await row.locator("[data-button]", { hasText: "Delete" }).click();
   const dialog = dialogOpen(page, "Delete this term?");
   await expect(dialog).toBeVisible();
   await modalButton(page, "glossary-delete", "Cancel").click();
   await expect(dialog).toBeHidden();
   await expect(row).toBeVisible();
 
-  await row.locator("s-button", { hasText: "Delete" }).click();
+  await row.locator("[data-button]", { hasText: "Delete" }).click();
   await modalButton(page, "glossary-delete", "Delete").click();
   await expect(row).toHaveCount(0);
 });
@@ -78,12 +83,12 @@ test("choosing a language tab and then All again shows every language", async ({
   await expect(tabs.getByRole("link", { name: /^Arabic hidden \d+$/ })).toBeVisible();
   await tabs.getByRole("link", { name: /^French \d+$/ }).click();
   await expect(page).toHaveURL(/lang=fr/);
-  await expect(tabs.locator('[aria-current="true"]')).toContainText("French");
+  await expect(tabs.locator('[aria-current="page"]')).toContainText("French");
   await tabs.getByRole("link", { name: /^All \d+$/ }).click();
   await expect(page).not.toHaveURL(/lang=/);
-  await expect(tabs.locator('[aria-current="true"]')).toContainText("All");
-  const all = Number(((await tabs.locator('[aria-current="true"]').textContent()) ?? "").match(/\d+/)![0]);
-  await expect(page.getByText(new RegExp(`^${all} translations on this page`))).toBeVisible();
+  await expect(tabs.locator('[aria-current="page"]')).toContainText("All");
+  const all = Number(((await tabs.locator('[aria-current="page"]').textContent()) ?? "").match(/\d+/)![0]);
+  await expect(reviewStrip(page).getByText(new RegExp(`^${all} translations on this page`))).toBeVisible();
 });
 
 test("a glossary CSV is imported from the drop zone and confirmed with a toast", async ({ page }) => {
@@ -97,7 +102,7 @@ test("a glossary CSV is imported from the drop zone and confirmed with a toast",
   await expectToast(page, "1 term imported.");
   await expect(page.locator("s-table-row", { hasText: "Linguva-CSV" })).toHaveCount(1);
   // Clean up for other tests.
-  await page.locator("s-table-row", { hasText: "Linguva-CSV" }).locator("s-button", { hasText: "Delete" }).click();
+  await page.locator("s-table-row", { hasText: "Linguva-CSV" }).locator("[data-button]", { hasText: "Delete" }).click();
   await modalButton(page, "glossary-delete", "Delete").click();
   await expect(page.locator("s-table-row", { hasText: "Linguva-CSV" })).toHaveCount(0);
 });

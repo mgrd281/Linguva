@@ -9,26 +9,31 @@ test.describe("empty states", () => {
   test("a store with only its primary language is guided to add one", async ({ page }) => {
     await openApp(page, "empty", "/app");
     // The next step is adding a language, as the primary action.
-    await expect(page.locator('s-section[heading="Next"]').getByText("Add a language")).toBeVisible();
-    await expect(page.locator('s-button[variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
+    await expect(page.getByRole("region", { name: "Next", exact: true }).getByText("Add a language")).toBeVisible();
+    await expect(page.locator('[data-button][data-variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
     await expect(page.getByText("Your store only has its original language (English).")).toBeVisible();
+    // The old list of products leads to Content, which says where to add a language.
     await openApp(page, "empty", "/app/products");
-    await expect(page.getByText("No languages to translate into")).toBeVisible();
-    await expect(page.locator("s-button", { hasText: "Open language settings" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/content(\?|$)/);
+    await expect(page.getByRole("heading", { name: "No language to translate into yet" })).toBeVisible();
+    await expect(page.locator("[data-button]", { hasText: "Open language settings" })).toBeVisible();
     await expectAccessible(page);
   });
 
   test("an empty catalog, no jobs and nothing to review @responsive", async ({ page }) => {
+    // The products' one list (the area's), not counted yet: it says so instead of an empty table.
     await openApp(page, "emptyCatalog", "/app/products?lang=de");
-    await expect(page.getByText("No products yet")).toBeVisible();
-    await expect(page.getByText(/appear here, ready to translate into German/)).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/languages\/de\/products(\?|$)/);
+    await expect(page.getByRole("region", { name: "Progress: Products", exact: true }).getByRole("heading", { level: 2, name: "Not counted yet" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Item by item" })).toHaveCount(0);
     await expectNoHorizontalScroll(page);
 
     await openApp(page, "emptyCatalog", "/app/jobs");
     await expect(page.getByText(/No jobs yet/)).toBeVisible();
     await openApp(page, "emptyCatalog", "/app/review");
     await expect(page.getByRole("heading", { name: "All reviewed" })).toBeVisible();
-    // What to look at instead: the store's languages.
+    // What to look at instead: the store's languages, each a tile that opens its page.
+    await expect(page.getByRole("heading", { name: "Your languages" })).toBeVisible();
     await expect(page.getByRole("link", { name: /^German/ })).toHaveAttribute("href", "/app/languages/de");
     await expectAccessible(page);
   });
@@ -36,13 +41,14 @@ test.describe("empty states", () => {
 
 test.describe("error states", () => {
   test("a Shopify outage shows a clear message, keeps the app usable and leaks nothing @responsive", async ({ page }) => {
-    const response = await openApp(page, "failing", "/app/products?lang=de");
+    // A page that reads Shopify's translations (here a product's editor).
+    const response = await openApp(page, "failing", "/app/products/1?lang=de");
     expect(response?.status()).toBe(503);
     const banner = page.locator(`s-banner[heading="Shopify didn't respond"]`);
     await expect(banner).toBeVisible();
     await expect(page.getByText(/Nothing was changed/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
-    await expect(page.locator("s-button", { hasText: "Go to Overview" })).toHaveAttribute("href", "/app");
+    await expect(page.locator("[data-button]", { hasText: "Go to Overview" })).toHaveAttribute("href", "/app");
     const html = await page.content();
     // Neither Shopify's raw answer nor internals (error classes, paths, stack frames).
     expect(html).not.toMatch(/Service unavailable|HttpResponseError|GraphqlQueryError|node_modules|\.server\/|\n\s+at \S+ \(/);
@@ -78,9 +84,9 @@ test.describe("loading states", () => {
     });
     const button = page.getByRole("button", { name: "Translate with AI" });
     await button.click();
-    await expect(page.locator("s-button[loading]").filter({ hasText: "Translate with AI" })).toHaveCount(1);
+    await expect(page.locator('[data-button][aria-busy="true"]').filter({ hasText: "Translate with AI" })).toHaveCount(1);
     release();
-    await expect(page.locator("s-button[loading]").filter({ hasText: "Translate with AI" })).toHaveCount(0);
+    await expect(page.locator('[data-button][aria-busy="true"]').filter({ hasText: "Translate with AI" })).toHaveCount(0);
     await expect(page.getByText(/AI drafts are filled in below/)).toBeVisible();
     await expect(page.getByText("AI draft").first()).toBeVisible();
     // Nothing is published until the merchant clicks Publish: reload shows Shopify's value.
@@ -97,8 +103,8 @@ test.describe("loading states", () => {
     });
     await openApp(page, "demo", "/app/languages/de");
     // The page is there before its examples: grey shapes where the pictures will be.
-    const products = page.locator('s-section[accessibilitylabel="Products"]');
-    await expect(products.getByRole("link", { name: "Products", exact: true })).toBeVisible();
+    const products = page.getByRole("region", { name: "Products", exact: true });
+    await expect(products.getByRole("heading", { name: "Products", exact: true })).toBeVisible();
     await expect(products.locator("img")).toHaveCount(0);
     release();
     await expect.poll(() => products.locator("img").count()).toBeGreaterThan(0);

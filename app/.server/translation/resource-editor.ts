@@ -5,6 +5,7 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { data } from "react-router";
 import { aiUsageLimits, getConfig } from "../lib/config";
+import { logger } from "../lib/logger";
 import { sanitizeHtml } from "../lib/sanitize-html";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
 import { openShopTranslation, shopTranslationFacts, type OwnKeyOptions, type ShopTranslation, type ShopTranslationFacts } from "../providers/shop-translation";
@@ -12,6 +13,7 @@ import { TranslationProviderError } from "../providers/types";
 import { OwnKeyUnavailableError } from "../credentials/errors";
 import { getShopSettings, hasCurrentAiConsent, setAiConsent } from "../settings/shop-settings";
 import { requireShop } from "../shopify/require-shop";
+import { readPreviewNodes } from "../shopify/preview-nodes";
 import { getTranslatableResource } from "../shopify/translations-api";
 import { fuzzyMatches } from "../memory/translation-memory";
 import { resolveGlossary } from "../glossary/glossary";
@@ -173,6 +175,24 @@ function editorLimits(ctx: EditorContext) {
   return ctx.billing ? aiLimitsFor(config, ctx.billing) : aiUsageLimits(config);
 }
 
+/** The kinds whose area lists show a picture (preview-nodes.ts); pages and blogs have none. */
+const PICTURED_KINDS: ReadonlySet<TranslatableKind> = new Set(["PRODUCT", "COLLECTION", "ARTICLE"]);
+
+/**
+ * The item's picture beside its name, read as its area list reads it: a product's featured media, a
+ * collection's or blog post's image, whether or not it has a description. Null without one, or when
+ * Shopify doesn't answer (the header shows the area's icon; the page works without it).
+ */
+async function editorPicture(admin: Admin, kind: TranslatableKind, resourceId: string, locale: string): Promise<string | null> {
+  if (!PICTURED_KINDS.has(kind)) return null;
+  try {
+    return (await readPreviewNodes(admin, [resourceId], locale)).get(resourceId)?.image?.url ?? null;
+  } catch (error) {
+    logger.warn({ err: error instanceof Error ? error.message : String(error) }, "editor picture unavailable");
+    return null;
+  }
+}
+
 export async function loadEditorData(ctx: EditorContext) {
   const { admin, shopId, resourceId, target } = ctx;
   const resource = await getTranslatableResource(admin, resourceId, target.locale);
@@ -205,7 +225,10 @@ export async function loadEditorData(ctx: EditorContext) {
   }
 
   const meta = kindMeta(ctx.kind);
-  const attached = await loadAttachedData(admin, ctx.kind, resourceId, target.locale);
+  const [attached, picture] = await Promise.all([
+    loadAttachedData(admin, ctx.kind, resourceId, target.locale),
+    editorPicture(admin, ctx.kind, resourceId, target.locale),
+  ]);
   const allFields = resource.content
     .filter((c) => c.value && c.value.trim() && c.digest)
     .map((c) => ({
@@ -236,6 +259,7 @@ export async function loadEditorData(ctx: EditorContext) {
   const caution = isContentType(ctx.kind) ? ((CONTENT_TYPES[ctx.kind] as { caution?: "legal" | "liquid" }).caution ?? null) : null;
   return {
     attached,
+    picture,
     // English names stay for the URL path; the page names the type by `type` in its language.
     kind: { type: ctx.kind, label: meta.label, singular: meta.singular, path: meta.path, plural: meta.plural },
     shopDomain: ctx.shopDomain ?? "",

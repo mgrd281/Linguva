@@ -6,6 +6,7 @@
  * the Plan page spec's Appendix A), so the page can't promise more than
  * enforcement gives. Labels are literal message keys.
  */
+import type { Tint } from "../components/IconSquare";
 import type { MessageKey } from "../i18n/i18n";
 import type { IconType } from "./icons";
 import type { Entitlements, PlanHandle } from "./plans";
@@ -54,28 +55,62 @@ export const FEATURE_ICON: Record<FeatureKey, IconType> = {
   autoPublish: "send",
   restore: "clock-revert",
   memory: "database",
-  csv: "transfer",
+  // Import & export's sign: a spreadsheet (ToolHeader's TOOL_LOOK, Settings' tools).
+  csv: "data-table",
   coverage: "chart-donut",
   markets: "globe",
 };
 
-/** Each plan's own sign (never a feature's icon, never a star: that would read as "popular"). */
+/**
+ * The square behind a feature's icon in "In every plan": the colour Settings gives the same icon
+ * (its sections, choices and tools), so a feature looks the same on both pages; grey where Settings
+ * has no place for it. A tint names a place, never a state (app/components/IconSquare.tsx).
+ */
+export const FEATURE_TINT: Record<FeatureKey, Tint> = {
+  price: "grey",
+  chars: "rose",
+  languages: "blue",
+  manual: "grey",
+  aiOne: "violet",
+  bulk: "grey",
+  seo: "grey",
+  images: "grey",
+  glossary: "violet",
+  hints: "grey",
+  auto: "blue",
+  smart: "violet",
+  approve: "green",
+  autoPublish: "amber",
+  restore: "grey",
+  memory: "amber",
+  csv: "slate",
+  coverage: "green",
+  markets: "teal",
+};
+
+/**
+ * Each plan's own sign (never a feature's icon, never a star: that would read as "popular"). Free's is
+ * a sprout ("nature"), the smallest start: play-circle is Settings' "Start it yourself".
+ */
 export const PLAN_ICON: Record<PlanHandle, IconType> = {
-  free: "play-circle",
+  free: "nature",
   starter: "rocket",
   pro: "bolt",
   business: "organization",
 };
 
-/**
- * The Own key plan's sign (outside PLAN_ICON, which is the ladder of four): "connect", the merchant's
- * own service plugged in. No feature's icon, and not "key", which is the complimentary state's.
- */
-export const OWN_KEY_ICON: IconType = "connect";
+/** The Plan page's colour behind every plan's sign and the AI characters: Settings' "Plan & usage" tile. */
+export const PLAN_TINT: Tint = "rose";
 
-/** The hero's sign when the store has no plan of its own to show. */
+/**
+ * The Own key plan's sign (outside PLAN_ICON, which is the ladder of four): "key", the app's one sign
+ * for translation keys (Settings' keys section, its lines and the hero's). No feature's icon.
+ */
+export const OWN_KEY_ICON: IconType = "key";
+
+/** The hero's sign when the store has no plan of its own to show (owner access: a person's shield, not a key). */
 export const STATE_ICON = {
-  complimentary: "key",
+  complimentary: "shield-person",
   unconfigured: "unlock",
   none: "plan",
   unknown: "plan",

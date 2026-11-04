@@ -34,7 +34,7 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **B2** Arabic → RTL notice in the editor.
 
 ### C. Translation editor
-- **C1** Products list, German → coverage per product; pagination over 30+ products.
+- **C1** The products' list in German, after the store is counted (Content or the language's page → Products, `/app/languages/de/products`; the old address `/app/products?lang=de` leads there) → each product with its picture, its state and each text's state; the language chips open the same list in Arabic; 50 products a page (paging needs more than 50; with P2's 30 they fit on one page).
 - **C2** Open a product → "Translate with AI" fills drafts; **nothing is published** (check in Shopify's Translate & Adapt).
 - **C3** Edit a draft and publish → "saved and verified"; reload shows Shopify's value; the storefront `/de/products/…` shows it.
 - **C4** Change the product title in Shopify → editor shows "Outdated"; publishing the unchanged value requires the "still correct" box.
@@ -88,7 +88,7 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **I6** An image without alt text → "has no alt text" notice.
 
 ### J. Markets
-- **J1** Open Markets → permission screen; "Allow reading markets" → Shopify's grant screen → back in the app with the overview.
+- **J1** Open Markets → permission screen; "Allow access to markets" → Shopify's grant screen → back in the app with the overview.
 - **J2** Each market shows its languages, addresses and published state, matching Settings → Markets.
 - **J3** Arabic offered in a market while unpublished → warning "isn't published".
 - **J4** Revoke the optional scope (uninstall-free: via `scopes.revoke` or the app's settings in Shopify) → page returns to the permission screen, rest of the app works.

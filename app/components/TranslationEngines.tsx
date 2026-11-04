@@ -3,23 +3,17 @@
  * engine beside DeepL is set up (DeepL alone keeps DeepLQuota): the order,
  * the DeepL keys' rings, and one tile per Microsoft Azure / Google Cloud
  * engine with its state, access, data location and how many of the store's
- * languages it serves. Never a key beyond its last four characters.
+ * languages it serves. Never a key beyond its last four characters. A card
+ * like the DeepL quota's (CARD), with the translating icon (globe is for
+ * countries on the Overview); the DeepL group's and each engine's heading
+ * (h3) are the card title's size.
  */
 import type { EnginesCard, EngineTile } from "../.server/providers/engine-status";
 import type { I18n } from "../i18n/i18n";
 import { ENGINE_NAMES } from "../lib/engines";
-import { IconTile } from "./CategoryCard";
-import { DeepLKeyTile } from "./DeepLQuota";
-
-/** The DeepL group's and each engine tile's heading (one level below the card's h2). */
-const GROUP_HEADING = { margin: 0, fontSize: 14, lineHeight: "20px", fontWeight: 650 } as const;
-
-const TILE_BADGE = {
-  ok: { tone: "success", icon: "check-circle" },
-  resting: { tone: "warning", icon: "clock" },
-  refused: { tone: "critical", icon: "alert-circle" },
-  unreachable: { tone: "neutral", icon: "alert-circle" },
-} as const;
+import { CARD } from "./ContentTiles";
+import { DeepLKeyTile, STATE_BADGE } from "./DeepLQuota";
+import { IconSquare } from "./IconSquare";
 
 /** The state in words: accepted, resting until a time (used up or not answering), refused, not reachable. */
 function stateText(i18n: I18n, tile: EngineTile): string {
@@ -43,7 +37,7 @@ function Counts({ i18n, firstChoice, canStepIn, total, allowed }: { i18n: I18n; 
   if (!allowed) {
     return (
       <s-text>
-        {i18n.t("overview.engines.notAllowed")} <s-link href="/app/settings">{i18n.t("common.nav.settings")}</s-link>
+        {i18n.t("overview.engines.notAllowed")} <s-link href="/app/settings?section=ai">{i18n.t("common.nav.settings")}</s-link>
       </s-text>
     );
   }
@@ -59,67 +53,71 @@ export function TranslationEngines({ card, i18n }: { card: EnginesCard; i18n: I1
   const { t } = i18n;
   const order = card.order.map((id) => ENGINE_NAMES[id]).join(" → ");
   return (
-    <s-section accessibilityLabel={t("overview.engines.heading")}>
-      <s-stack direction="block" gap="base">
-        <s-stack direction="inline" gap="small-200" alignItems="center">
-          <IconTile icon="globe" size={40} />
-          <s-stack direction="block" gap="small-500">
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <h2 style={{ margin: 0, fontSize: 16, lineHeight: "24px", fontWeight: 650 }}>{t("overview.engines.heading")}</h2>
-              <s-badge icon="lock">{t("overview.deepl.onlyYou")}</s-badge>
+    <section aria-labelledby="overview-engines-heading">
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-stack direction="inline" gap="small-200" alignItems="center">
+            <IconSquare icon="language-translate" tint="slate" />
+            <s-stack direction="block" gap="small-500">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <h2 id="overview-engines-heading" className="lv-h3">
+                  {t("overview.engines.heading")}
+                </h2>
+                <s-badge icon="lock">{t("overview.deepl.onlyYou")}</s-badge>
+              </s-stack>
+              <s-text color="subdued">{t("overview.engines.order", { order })}</s-text>
             </s-stack>
-            <s-text color="subdued">{t("overview.engines.order", { order })}</s-text>
           </s-stack>
+          {card.deepl ? (
+            <s-stack direction="block" gap="small-200">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <s-badge>{String(card.deepl.position)}</s-badge>
+                <h3 className="lv-h3">{t("overview.engines.deepl")}</h3>
+              </s-stack>
+              {card.deepl.keys.length === 0 ? (
+                <s-text color="subdued">{t("overview.deepl.none")}</s-text>
+              ) : (
+                <s-query-container>
+                  <s-grid gridTemplateColumns="@container (inline-size > 460px) 1fr 1fr, (inline-size > 720px) 1fr 1fr 1fr, 1fr" gap="base">
+                    {card.deepl.keys.map((key) => (
+                      <DeepLKeyTile key={key.position} keyUsage={key} i18n={i18n} />
+                    ))}
+                  </s-grid>
+                </s-query-container>
+              )}
+              <Counts i18n={i18n} firstChoice={card.deepl.firstChoice} canStepIn={card.deepl.canStepIn} total={card.totalLanguages} allowed={card.deepl.allowed} />
+            </s-stack>
+          ) : null}
+          {card.tiles.length ? (
+            <s-query-container>
+              <s-grid gridTemplateColumns="@container (inline-size > 460px) 1fr 1fr, 1fr" gap="base">
+                {card.tiles.map((tile) => {
+                  const badge = STATE_BADGE[tile.state];
+                  return (
+                    <s-box key={tile.id} padding="base" border="base" borderRadius="large-100">
+                      <s-stack direction="block" gap="small-300">
+                        <s-stack direction="inline" gap="small-200" alignItems="center">
+                          <s-badge>{String(tile.position)}</s-badge>
+                          {/* A heading like the DeepL group's: heading navigation reaches the engines whose state matters most. */}
+                          <h3 className="lv-h3">{ENGINE_NAMES[tile.id]}</h3>
+                        </s-stack>
+                        <s-text color="subdued">{accessText(i18n, tile)}</s-text>
+                        <s-text color="subdued">{t(`overview.engines.dataLocation.${tile.dataLocation}`)}</s-text>
+                        <Counts i18n={i18n} firstChoice={tile.firstChoice} canStepIn={tile.canStepIn} total={card.totalLanguages} allowed={tile.allowed} />
+                        <s-stack direction="inline">
+                          <s-badge tone={badge.tone} icon={badge.icon}>
+                            {stateText(i18n, tile)}
+                          </s-badge>
+                        </s-stack>
+                      </s-stack>
+                    </s-box>
+                  );
+                })}
+              </s-grid>
+            </s-query-container>
+          ) : null}
         </s-stack>
-        {card.deepl ? (
-          <s-stack direction="block" gap="small-200">
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <s-badge>{String(card.deepl.position)}</s-badge>
-              <h3 style={GROUP_HEADING}>{t("overview.engines.deepl")}</h3>
-            </s-stack>
-            {card.deepl.keys.length === 0 ? (
-              <s-text color="subdued">{t("overview.deepl.none")}</s-text>
-            ) : (
-              <s-query-container>
-                <s-grid gridTemplateColumns="@container (inline-size > 460px) 1fr 1fr, (inline-size > 720px) 1fr 1fr 1fr, 1fr" gap="base">
-                  {card.deepl.keys.map((key) => (
-                    <DeepLKeyTile key={key.position} keyUsage={key} i18n={i18n} />
-                  ))}
-                </s-grid>
-              </s-query-container>
-            )}
-            <Counts i18n={i18n} firstChoice={card.deepl.firstChoice} canStepIn={card.deepl.canStepIn} total={card.totalLanguages} allowed={card.deepl.allowed} />
-          </s-stack>
-        ) : null}
-        {card.tiles.length ? (
-          <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 460px) 1fr 1fr, 1fr" gap="base">
-              {card.tiles.map((tile) => {
-                const badge = TILE_BADGE[tile.state];
-                return (
-                  <s-box key={tile.id} padding="base" border="base" borderRadius="large-100">
-                    <s-stack direction="block" gap="small-300">
-                      <s-stack direction="inline" gap="small-200" alignItems="center">
-                        <s-badge>{String(tile.position)}</s-badge>
-                        {/* A heading like the DeepL group's: heading navigation reaches the engines whose state matters most. */}
-                        <h3 style={GROUP_HEADING}>{ENGINE_NAMES[tile.id]}</h3>
-                      </s-stack>
-                      <s-text color="subdued">{accessText(i18n, tile)}</s-text>
-                      <s-text color="subdued">{t(`overview.engines.dataLocation.${tile.dataLocation}`)}</s-text>
-                      <Counts i18n={i18n} firstChoice={tile.firstChoice} canStepIn={tile.canStepIn} total={card.totalLanguages} allowed={tile.allowed} />
-                      <s-stack direction="inline">
-                        <s-badge tone={badge.tone} icon={badge.icon}>
-                          {stateText(i18n, tile)}
-                        </s-badge>
-                      </s-stack>
-                    </s-stack>
-                  </s-box>
-                );
-              })}
-            </s-grid>
-          </s-query-container>
-        ) : null}
-      </s-stack>
-    </s-section>
+      </s-box>
+    </section>
   );
 }

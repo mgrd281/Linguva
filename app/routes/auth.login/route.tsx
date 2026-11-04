@@ -5,6 +5,7 @@ import { Form, redirect, useActionData, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 import { refuseShop, refuseShopInput } from "../../.server/shopify/require-shop";
 import { loginErrorMessage } from "./error.server";
+import { Button } from "../../components/Button";
 
 // Merchants install and open Linguva from Shopify (App Store requirement
 // 2.3.1): typing a shop domain is only offered in development. Elsewhere a
@@ -53,7 +54,7 @@ export default function Auth() {
             autocomplete="on"
             error={errors.shop}
           ></s-text-field>
-          <s-button type="submit">Log in</s-button>
+          <Button type="submit">Log in</Button>
         </s-section>
         </Form>
       </s-page>

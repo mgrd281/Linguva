@@ -11,16 +11,49 @@ import { INTL_LOCALE } from "../../i18n/i18n";
 import { ENGINE_IDS, ENGINE_NAMES } from "../../lib/engines";
 import { localeCountry } from "../../lib/flags";
 import { engineList, languageList } from "../../lib/name-lists";
+import { FEATURE_TINT, PLAN_TINT } from "../../lib/plan-features";
 import { formatCostUsd } from "../../lib/plan-prices";
-import { languageRoom, nextCharsOn, planName, smallestPlanForLanguages, splitLanguages, usagePercent, type HeroView, type PlanOwnKeys, type Words } from "../../lib/plan-view";
+import {
+  languageRoom,
+  nextCharsOn,
+  planName,
+  renewalNeedsTime,
+  smallestPlanForLanguages,
+  splitLanguages,
+  usagePercent,
+  type HeroView,
+  type PlanOwnKeys,
+  type Words,
+} from "../../lib/plan-view";
 import { estimatedCostUsd, isOwnKeyHandle, type Entitlements } from "../../lib/plans";
+import { wallClock } from "../../lib/schedule";
 import { usageLevel } from "../../lib/usage";
-import { IconTile } from "../CategoryCard";
+import { Card } from "../Card";
 import { STATE_COLOURS, TRACK_COLOUR } from "../Coverage";
 import { Flag } from "../Flag";
+import { IconSquare } from "../IconSquare";
 import { PLAIN_LIST } from "../LanguageLayout";
 import { ProgressBar } from "../ProgressBar";
-import { FIGURE, METER_LABEL, PLAN_NAME } from "./styles";
+
+/**
+ * When new AI characters arrive, as the meter writes it: the day ("1. Dezember"), or a running trial's
+ * end when it comes first. Where the month's renewal (00:00 UTC on the 1st) falls on the evening before
+ * in the store's zone, with its time ("30. November um 19:00"), so it matches "on the 1st of every month".
+ */
+export function renewalText(i18n: Pick<I18n, "locale" | "timeZone" | "dayMonth">, resetsOn: string, risesAt: string | null, now: string): string {
+  const next = nextCharsOn({ allowanceRisesAt: risesAt }, resetsOn);
+  if (next !== resetsOn || !renewalNeedsTime(resetsOn, i18n.timeZone)) return i18n.dayMonth(next, now);
+  const at = Date.parse(resetsOn);
+  const sameYear = wallClock(at, i18n.timeZone).year === wallClock(Date.parse(now), i18n.timeZone).year;
+  return new Intl.DateTimeFormat(INTL_LOCALE[i18n.locale], {
+    day: "numeric",
+    month: "long",
+    ...(sameYear ? {} : { year: "numeric" }),
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: i18n.timeZone,
+  }).format(at);
+}
 
 /** A message with its dates and plan names filled in. */
 export function wordsText(i18n: I18n, words: Words, now: string): string {
@@ -31,6 +64,9 @@ export function wordsText(i18n: I18n, words: Words, now: string): string {
   for (const [name, engines] of Object.entries(words.engines ?? {})) vars[name] = engineList(i18n, engines.map((e) => ENGINE_NAMES[e]));
   return i18n.t(words.key, vars);
 }
+
+/** The hero's heading, which names its card. */
+const HERO_HEADING = "plan-hero-heading";
 
 export interface PlanLanguagesData {
   primary: string | null;
@@ -59,22 +95,23 @@ export interface PlanHeroProps {
 export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limits, aiAvailable, languages, costPerMillion, actions, ownKeys }: PlanHeroProps) {
   const { t } = i18n;
   const name = "handle" in hero.name ? planName(hero.name.handle) : t(hero.name.key);
-  // The section has no accessibilityLabel: Polaris would add a hidden "Your plan" heading right before the
-  // visible "Your plan: Pro", and screen readers would hear the plan's heading twice.
+  // Named by its one heading ("Your plan: Pro"), never by a second, hidden one (a Polaris section's label
+  // would be read right before it); framed on a phone too, as the plan cards below it.
   return (
-    <s-section>
+    <Card labelledBy={HERO_HEADING}>
       <s-stack direction="block" gap="large">
         <s-query-container>
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="base" alignItems="start">
             <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="start">
-              <IconTile icon={hero.icon} size={48} color="base" />
+              {/* The Plan page's colour, as Settings' "Plan & usage" tile that leads here. */}
+              <IconSquare icon={hero.icon} size={48} tint={PLAN_TINT} />
               <s-stack direction="block" gap="small-400">
                 {/* The visual label; screen readers hear it inside the heading. */}
                 <span aria-hidden="true">
                   <s-text color="subdued">{t("plan.hero.label")}</s-text>
                 </span>
                 <s-stack direction="inline" gap="small-200" alignItems="center">
-                  <h2 style={PLAN_NAME}>
+                  <h2 id={HERO_HEADING} className="lv-plan-name">
                     <s-text accessibilityVisibility="exclusive">{`${t("plan.hero.label")}: `}</s-text>
                     {name}
                   </h2>
@@ -102,7 +139,7 @@ export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limit
             {isOwnKeyHandle(hero.current) && ownKeys ? (
               <OwnKeyUsage i18n={i18n} usage={ownKeys.usage} />
             ) : (
-              <PlanUsage i18n={i18n} now={now} resetsOn={nextCharsOn(hero, resetsOn)} usage={usage} limits={limits} aiAvailable={aiAvailable} />
+              <PlanUsage i18n={i18n} now={now} resetsOn={resetsOn} risesAt={hero.allowanceRisesAt} usage={usage} limits={limits} aiAvailable={aiAvailable} />
             )}
             <PlanLanguages i18n={i18n} entitlements={entitlements} languages={languages} aiAvailable={aiAvailable} />
           </s-grid>
@@ -121,24 +158,35 @@ export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limit
           </s-box>
         ) : null}
       </s-stack>
-    </s-section>
+    </Card>
   );
 }
 
-/** A meter's head: its icon in a tile, its name (a heading under "Your plan: …"), and a short figure on the right. */
+/**
+ * A meter's head: its icon in a tile (the colour the cards and Settings give it: AI characters rose,
+ * languages blue), its name (a heading under "Your plan: …"), and a short figure on the right.
+ */
 function MeterHead({ icon, label, aside }: { icon: "gauge" | "language"; label: string; aside: string | null }) {
   return (
     <s-stack direction="inline" justifyContent="space-between" alignItems="center" gap="small-200">
       <s-stack direction="inline" gap="small-200" alignItems="center">
-        <IconTile icon={icon} size={28} color="base" iconSize="base" />
-        <h3 style={METER_LABEL}>{label}</h3>
+        <IconSquare icon={icon} tint={FEATURE_TINT[icon === "gauge" ? "chars" : "languages"]} size={28} iconSize="base" />
+        <h3 className="lv-h3">{label}</h3>
       </s-stack>
       {aside ? <s-text color="subdued">{aside}</s-text> : null}
     </s-stack>
   );
 }
 
-function PlanUsage({ i18n, now, resetsOn, usage, limits, aiAvailable }: Pick<PlanHeroProps, "i18n" | "now" | "resetsOn" | "usage" | "limits" | "aiAvailable">) {
+function PlanUsage({
+  i18n,
+  now,
+  resetsOn,
+  risesAt,
+  usage,
+  limits,
+  aiAvailable,
+}: Pick<PlanHeroProps, "i18n" | "now" | "resetsOn" | "usage" | "limits" | "aiAvailable"> & { risesAt: string | null }) {
   const { t } = i18n;
   if (!aiAvailable) {
     return (
@@ -158,24 +206,25 @@ function PlanUsage({ i18n, now, resetsOn, usage, limits, aiAvailable }: Pick<Pla
   }
   const { percent, tiny } = usagePercent(usage.month, limits.limit);
   const level = usageLevel(usage.month, limits.limit);
-  const date = i18n.dayMonth(resetsOn, now);
+  const date = renewalText(i18n, resetsOn, risesAt, now);
+  // Used up: the app's sign for what has stopped (Settings' "Used up"); almost used up: the warning's.
   const note =
     level === "exhausted"
-      ? { tone: "critical" as const, text: t("plan.usage.exhausted", { date }) }
+      ? { tone: "critical" as const, icon: "alert-circle" as const, text: t("plan.usage.exhausted", { date }) }
       : level === "high"
-        ? { tone: "caution" as const, text: t("plan.usage.high", { left: Math.max(0, limits.limit - usage.month), date }) }
+        ? { tone: "caution" as const, icon: "alert-triangle" as const, text: t("plan.usage.high", { left: Math.max(0, limits.limit - usage.month), date }) }
         : null;
   return (
     <s-stack direction="block" gap="small-200">
       <MeterHead icon="gauge" label={t("plan.usage.label")} aside={tiny ? t("plan.usage.percentTiny") : t("plan.usage.percent", { percent })} />
       <s-stack direction="inline" gap="small-200" alignItems="baseline">
-        <span style={FIGURE}>{i18n.number(usage.month)}</span>
+        <span className="lv-figure">{i18n.number(usage.month)}</span>
         <s-text color="subdued">{t("plan.usage.ofLimit", { limit: limits.limit })}</s-text>
       </s-stack>
       <ProgressBar value={percent} label={t("plan.usage.label")} tone={level === "exhausted" ? "critical" : level === "high" ? "warning" : "success"} />
       {note ? (
         <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-          <s-icon type="alert-triangle" tone={note.tone} />
+          <s-icon type={note.icon} tone={note.tone} />
           <s-text tone={note.tone}>{note.text}</s-text>
         </s-grid>
       ) : null}
@@ -224,7 +273,8 @@ function LanguagePill({ i18n, locale, label, published, outside }: { i18n: I18n;
           {published ? null : <s-badge icon="hide">{i18n.t("language.hidden")}</s-badge>}
           {outside ? (
             <s-stack direction="inline" gap="small-400" alignItems="center">
-              <s-icon type="minus-circle" size="small" color="subdued" />
+              {/* The app's one sign for "not in your plan" (Settings' lock lines). */}
+              <s-icon type="lock" size="small" color="subdued" />
               <s-text color="subdued">{i18n.t("plan.languages.outside")}</s-text>
             </s-stack>
           ) : null}
@@ -242,7 +292,7 @@ function PlanLanguages({ i18n, entitlements, languages, aiAvailable }: Pick<Plan
       <s-stack direction="block" gap="small-200">
         <MeterHead icon="language" label={t("plan.languages.label")} aside={null} />
         <s-stack direction="inline" gap="small-200" alignItems="baseline">
-          <span style={FIGURE}>{i18n.number(max)}</span>
+          <span className="lv-figure">{i18n.number(max)}</span>
           <s-text color="subdued">{t("plan.languages.label")}</s-text>
         </s-stack>
         <s-text color="subdued">{t("plan.languages.unavailable")}</s-text>
@@ -287,7 +337,7 @@ function PlanLanguages({ i18n, entitlements, languages, aiAvailable }: Pick<Plan
         aside={room ? (room.kind === "full" ? t("plan.languages.full") : t("plan.languages.room", { count: room.count })) : null}
       />
       <s-stack direction="inline" gap="small-200" alignItems="baseline">
-        <span style={FIGURE}>{i18n.number(inside.length)}</span>
+        <span className="lv-figure">{i18n.number(inside.length)}</span>
         <s-text color="subdued">{t("plan.languages.ofMax", { max })}</s-text>
       </s-stack>
       {/* The slots say what the figure says. */}

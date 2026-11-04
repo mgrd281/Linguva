@@ -38,6 +38,8 @@ export function PublishingChoice({
       <OptionGrid label={t("settings.publish.heading")}>
         <OptionCard
           id={`${id}-review`}
+          icon="eye-check-mark"
+          tint="green"
           title={t("settings.publish.review.title")}
           body={t("settings.publish.review.body")}
           current={mode === "DRAFT" && !stored}
@@ -47,6 +49,8 @@ export function PublishingChoice({
         />
         <OptionCard
           id={`${id}-auto`}
+          icon="send"
+          tint="amber"
           title={t("settings.publish.auto.title")}
           body={t("settings.publish.auto.body")}
           current={mode === "AUTO_PUBLISH" || stored}

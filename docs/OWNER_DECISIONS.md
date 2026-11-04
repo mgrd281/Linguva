@@ -25,7 +25,7 @@ Everything that can be built without accounts, money or legal decisions is done 
 
 ## 3. Prices and plans: decided 2026-10-30 (delegated by the owner)
 
-Decided in [PRICING_DECISION.md](PRICING_DECISION.md) and verified the same day. The app shows these prices from `PLAN_PRICES` (`app/lib/plans.ts`); merchants are charged only once you enter exactly these plans in the Partner Dashboard.
+Decided in [PRICING_DECISION.md](PRICING_DECISION.md) and verified the same day. The app shows these prices from `PLAN_PRICES` (`app/lib/plans.ts`), the defaults; a price saved in the admin console (`PlanPrice`, docs/ADMIN_CONSOLE.md §3) is shown instead. Merchants are charged only once you enter exactly these plans in the Partner Dashboard.
 
 | Handle | Monthly | Yearly | AI characters per month | Languages with AI | What the plan adds |
 |---|---|---|---|---|---|
@@ -39,7 +39,7 @@ Decided in [PRICING_DECISION.md](PRICING_DECISION.md) and verified the same day.
 - Free stays. The allowances are unchanged. No overage charges at launch.
 - Shopify's rule: a plan's price and its trial length change only in the Partner Dashboard; one store's trial extension or discount in the Dev Dashboard. The app never creates or changes a charge.
 
-**Your steps:** create exactly these plans in the Partner Dashboard (PRICING_DECISION.md §9), check them on the dev store (DEV_STORE_TEST_PLAN.md L11–L14), then set the production values of §9 step 6, `BILLING_REQUIRED=true` last. Later price changes: Partner Dashboard, `PLAN_PRICES` and both listing languages on the same day.
+**Your steps:** create exactly these plans in the Partner Dashboard (PRICING_DECISION.md §9), check them on the dev store (DEV_STORE_TEST_PLAN.md L11–L14), then set the production values of §9 step 6, `BILLING_REQUIRED=true` last. Later price changes, the same day and in this order (PRICING_DECISION.md §9 step 8, docs/ADMIN_CONSOLE.md §3): the Partner Dashboard first, then the admin console's Prices page, then both listing languages. Without the console, a code change to `PLAN_PRICES` or `OWN_KEY_PRICE` (with the site's price markers and the plan-prices test) works only for a plan that was never saved in the console.
 
 **Own key plan (decided 2026-11; implemented, hidden):** `own-key`, $49 a month, monthly only, no trial, for large stores with their own DeepL, Microsoft Azure or Google Cloud key: Pro's features, 0 included characters, no Linguva character limit, and never Linguva's keys (`OWN_KEY_PLAN`, `OWN_KEY_PRICE` in `app/lib/plans.ts`). The app maps the handle regardless of the flag; `OWN_KEY_PLAN_VISIBLE=on` only shows its card on the Plan page and its texts on the website.
 

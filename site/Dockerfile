@@ -7,11 +7,14 @@
 # The Own key plan's texts are always hidden here (as OWN_KEY_PLAN_VISIBLE=off): the second Perl
 # program drops every <!--ownkey-->…<!--/ownkey--> block and keeps the <!--ownkey:off--> texts without
 # their markers, the same as applyOwnKeyBlocks(html, false). With the plan shown, the app serves the pages.
+# The list prices stay the defaults written between their markers (<!--price:KEY-->29&nbsp;$<!--/price-->):
+# the same program drops the markers, the same as applyPrices(html, DEFAULT_PRICES). Prices set in the
+# admin console show only on the pages the app serves.
 FROM alpine:3.20 AS pages
 RUN apk add --no-cache perl
 COPY *.html /pages/
 RUN perl -0pi -e 's/<!--engines:several-->.*?<!--\/engines:several-->//gs; s/<!--engines:multi-->.*?<!--\/engines:multi-->//gs; 1 while s/<!--engine:(?!deepl-->)([a-z-]+)-->.*?<!--\/engine:\1-->//gs' /pages/*.html \
- && perl -0pi -e 's/<!--ownkey-->.*?<!--\/ownkey-->//gs; s/<!--\/?ownkey:off-->//g' /pages/*.html
+ && perl -0pi -e 's/<!--ownkey-->.*?<!--\/ownkey-->//gs; s/<!--\/?ownkey:off-->//g; s/<!--price:[a-z:-]+-->(.*?)<!--\/price-->/$1/gs' /pages/*.html
 
 FROM caddy:2.10.2-alpine
 COPY Caddyfile /etc/caddy/Caddyfile

@@ -274,6 +274,27 @@ describe("cancel, uninstall and retry", () => {
     expect(await jobRow(shop.id, job.id)).toMatchObject({ status: "COMPLETED", succeededItems: 2 });
   });
 
+  it("waits while another job of the same type and language is active, and names it", async () => {
+    const { shop, deps, job } = await setup(2);
+    const ids = await discoverAll(deps, shop.id, job.id);
+    await withTenant(
+      shop.id,
+      async (tx) => {
+        await tx.translationJobItem.update({ where: { id: ids[0]! }, data: { status: "DEAD", errorCode: "SHOPIFY_UNAVAILABLE" } });
+        await tx.translationJobItem.update({ where: { id: ids[1]! }, data: { status: "SUCCEEDED" } });
+        await tx.translationJob.update({ where: { id: job.id }, data: { status: "COMPLETED", succeededItems: 1, failedItems: 1, finishedAt: new Date() } });
+      },
+      app,
+    );
+    const { job: next } = await createBulkJob(
+      { shopId: shop.id, resourceType: "PRODUCT", targetLocale: "de", requestedBy: "7", idempotencyKey: "key-2" },
+      app,
+    );
+    expect(await retryJobItems(shop.id, job.id, app)).toEqual({ itemIds: [], rediscover: false, busy: true, busyJobId: next.id });
+    // Nothing was reopened or put back.
+    expect(await jobRow(shop.id, job.id)).toMatchObject({ status: "COMPLETED", failedItems: 1 });
+  });
+
   it("does not reopen a job the merchant cancelled", async () => {
     const { shop, deps, job } = await setup(1);
     await discoverAll(deps, shop.id, job.id);

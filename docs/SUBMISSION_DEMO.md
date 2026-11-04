@@ -22,7 +22,7 @@ Recorded on the review store with the fictional demo catalog (`docs/dev-store/de
 | 3 | 0:35 | Welcome → Overview | The next step on the Overview: count the store ("Count now"), then the share translated per language. |
 | 4 | 0:55 | Settings → AI permission | Allow AI translation: nothing is sent to DeepL before this, and it can be withdrawn here. Form of address per language. |
 | 5 | 1:15 | Content → a language | Area by area: products, collections, pages and more, each done, waiting, outdated or missing. |
-| 6 | 1:35 | Content → Products → "Translate all into German" | The confirm dialog: what is translated, that results wait in Review. Confirm. |
+| 6 | 1:35 | Content → Products (German) → "Translate" | The confirm dialog: what is translated, that results wait in Review. Confirm. |
 | 7 | 1:55 | Jobs | The job's progress; the report when it ends. |
 | 8 | 2:10 | Review | One card per product; a text flagged because a number changed; edit one text, approve a card, reject a text. "Customers see these translations only after you approve them." |
 | 9 | 2:45 | A product in the editor | Original and translation side by side, AI translate one field, the formatted preview and the search result preview for SEO fields; history with restore. |
@@ -42,7 +42,7 @@ The Plan page shows prices: it may appear in the screencast (Shopify's rules on 
 >    To test Own key, choose it on Shopify's plan page and add the DeepL API Free test key given in the testing-instructions field (owner provides one with a low cost limit, removed after review).
 > 3. **Allow AI translation first:** in Linguva, Settings → AI permission → "Allow AI translation". Until then no text is sent to the translation service (DeepL).
 > 4. **Overview:** "Count now" counts what is translated. **Content** shows each language area by area.
-> 5. **Translate in bulk:** Content → Products → "Translate all into German" → confirm. **Jobs** shows the progress. The results wait as drafts.
+> 5. **Translate in bulk:** Content → Products (German) → "Translate" → confirm. **Jobs** shows the progress. The results wait as drafts.
 > 6. **Review:** approve a card (published to Shopify at once), reject a text, edit a text. Texts with a note (for example a changed number) are marked.
 > 7. **Editor:** Content → Products → a product: original and translation side by side, "Translate with AI" on one field, SEO fields with a search result preview, history with restore.
 > 8. **Glossary and translation memory:** Settings → Glossary; Settings → Translation memory.

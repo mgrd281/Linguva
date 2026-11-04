@@ -202,9 +202,9 @@ export interface Reservation {
   payer?: UsagePayer;
 }
 
-/** Shop daily usage of Linguva's characters (UTC day), for display. */
-export async function getDailyUsage(shopId: string, client: PrismaClient = defaultClient): Promise<number> {
-  const since = new Date(`${dayKey()}T00:00:00.000Z`);
+/** Shop daily usage of Linguva's characters (the UTC day of `now`), for display and a stopped job's check. */
+export async function getDailyUsage(shopId: string, client: PrismaClient = defaultClient, now: Date = new Date()): Promise<number> {
+  const since = new Date(`${dayKey(now)}T00:00:00.000Z`);
   return withTenant(shopId, (tx) => sumCharsSince(tx, shopId, since), client);
 }
 

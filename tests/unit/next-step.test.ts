@@ -16,7 +16,7 @@ function input(overrides: Partial<NextStepInput> = {}): NextStepInput {
   return {
     targets: [fr],
     consent: true,
-    firstTranslation: { done: true, href: "/app/products?lang=fr" },
+    firstTranslation: { done: true, href: "/app/languages/fr/products" },
     pendingDrafts: 0,
     aiAvailable: true,
     jobsAvailable: true,

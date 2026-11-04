@@ -8,6 +8,7 @@ import {
   countsInHeadline,
   coveragePercent,
   emptyCounts,
+  HEADLINE_EXCLUDED_GROUPS,
   HEADLINE_EXCLUDED_TYPES,
   totalOf,
   type FieldState,
@@ -54,6 +55,22 @@ export function headlineByLocale(rows: readonly CountInput[]): Map<string, Tally
 /** Per language and content type (all fields of the type, also those left out of the headline). */
 export function byType(rows: readonly CountInput[], locale: string): Map<string, Tally> {
   return group(rows, (r) => (r.locale === locale ? r.resourceType : null));
+}
+
+const isExcludedGroup = (group: string) => (HEADLINE_EXCLUDED_GROUPS as readonly string[]).includes(group);
+
+/**
+ * Per language and content type as the figures count a type's texts: without its web addresses (optional,
+ * on their own row), so a type's row says what its next step, its Translate and the Content page say.
+ * Theme and notification types keep their rows, marked "not in the totals".
+ */
+export function byTypeCounted(rows: readonly CountInput[], locale: string): Map<string, Tally> {
+  return group(rows, (r) => (r.locale === locale && !isExcludedGroup(r.fieldGroup) ? r.resourceType : null));
+}
+
+/** The web addresses a type has in a language, which byTypeCounted leaves out. */
+export function urlsByType(rows: readonly CountInput[], locale: string): Map<string, Tally> {
+  return group(rows, (r) => (r.locale === locale && isExcludedGroup(r.fieldGroup) ? r.resourceType : null));
 }
 
 /** Per language and field group across content types that count in the headline. */

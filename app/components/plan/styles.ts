@@ -1,22 +1,16 @@
 /**
- * Type sizes the Plan page needs where Polaris text has none (s-text has no
- * size): plan names, headings, big figures and prices. Inline styles, no
- * colours: text keeps Polaris' colours.
+ * Inline type that Settings and the smart schedule's page still take from
+ * here (SettingsParts' SETTING_NAME, Settings' plan figures and headings,
+ * the smart page's headings). The Plan page itself uses the app's type
+ * scale (app/styles/ui.css: .lv-h1, .lv-h2, .lv-h3, .lv-strong,
+ * .lv-figure, .lv-figure-row) and its own section there (.lv-plan-name,
+ * .lv-plan-price, .lv-plan-stat). Values unchanged, so those pages look as
+ * before; they can move to the scale and these go.
  */
-import { BIG_HEADING } from "../LanguageLayout";
 
-export const PLAN_NAME = { margin: 0, fontSize: 28, lineHeight: "34px", fontWeight: 700, letterSpacing: "-0.02em" } as const;
-export const FIGURE = { fontSize: 28, lineHeight: "32px", fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" } as const;
-export const SECTION_HEADING = { ...BIG_HEADING, fontSize: 17, lineHeight: "24px", fontWeight: 650 } as const;
+/** A heading inside a card (as .lv-h3). */
 export const SUB_HEADING = { margin: 0, fontSize: 14, lineHeight: "20px", fontWeight: 650 } as const;
-export const CARD_NAME = { margin: 0, fontSize: 18, lineHeight: "24px", fontWeight: 700 } as const;
-export const PRICE = { fontSize: 32, lineHeight: "36px", fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" } as const;
-/**
- * Semibold for a label or a lead phrase. Polaris draws <s-text type="strong"> at the
- * body weight (450, measured), so text that must stand out is set like the
- * language page's summaries (600).
- */
-export const EMPHASIS = { fontWeight: 600 } as const;
-/** A meter's name in the hero (Polaris' body size, semibold). */
+/** A setting's or a meter's name in the body size, semibold. */
 export const METER_LABEL = { margin: 0, fontSize: 13, lineHeight: "20px", fontWeight: 600 } as const;
+/** A figure in a row of figures. */
 export const STAT = { display: "block", fontSize: 16, lineHeight: "20px", fontWeight: 650, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" } as const;

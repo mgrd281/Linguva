@@ -1,6 +1,6 @@
 /**
  * "Compare plans": the four plans side by side, each with its sign, its
- * list price (display only, from PLAN_PRICES), its allowances and the five
+ * list price (display only, from the price table), its allowances and the five
  * features plans differ in; "Fits your store", computed only from the
  * store's own use; the footnote on prices; and "In every plan". Every plan
  * button is a link to Shopify's plan page (target _top): the app never
@@ -9,18 +9,21 @@
  * The cards share their rows (CSS subgrid), so prices, figures, features
  * and buttons line up across the cards in four and in two columns, in any
  * language. Polaris has no subgrid: the cards are native groups, their
- * frame a Polaris box behind the content.
+ * frame drawn behind the content (app/styles/ui.css, the Plan section).
  */
 import type { ReactNode } from "react";
 import { INTL_LOCALE, type I18n, type MessageKey } from "../../i18n/i18n";
-import { everyPlanRows, FEATURE_ICON, PLAN_CARD_FEATURES, PLAN_ICON } from "../../lib/plan-features";
+import { everyPlanRows, FEATURE_ICON, FEATURE_TINT, PLAN_CARD_FEATURES, PLAN_ICON, PLAN_TINT } from "../../lib/plan-features";
 import { formatUsd, monthsFree, priceLabel } from "../../lib/plan-prices";
-import { PLAN_ORDER, planName, type FitReason, type HeroView, type OwnKeyPlanView, type ShopUse } from "../../lib/plan-view";
-import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type PlanHandle } from "../../lib/plans";
-import { IconTile } from "../CategoryCard";
+import { PLAN_ORDER, planName, recommendationKind, type FitReason, type HeroView, type OwnKeyPlanView, type ShopUse } from "../../lib/plan-view";
+import { DEFAULT_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type KnownPlanHandle, type PlanHandle, type PriceTable } from "../../lib/plans";
+import { Button } from "../Button";
+import { Card } from "../Card";
+import { IconSquare } from "../IconSquare";
 import { PLAIN_LIST } from "../LanguageLayout";
+import { Strong } from "../Type";
+import { CardBack } from "./CardBack";
 import { OwnKeyPlanCard } from "./OwnKeyPlanCard";
-import { CARD_NAME, EMPHASIS, PRICE, SECTION_HEADING, STAT, SUB_HEADING } from "./styles";
 
 const AUDIENCE: Record<PlanHandle, MessageKey> = {
   free: "plan.audience.free",
@@ -49,6 +52,25 @@ export function recommendationReason(i18n: I18n, reasons: readonly FitReason[], 
   return i18n.t("plan.recommend.reason", { reasons: new Intl.ListFormat(INTL_LOCALE[i18n.locale], { type: "conjunction" }).format(parts) });
 }
 
+/**
+ * "Fits your store", said for the store's own plan: its plan ("Your plan fits your store."), a smaller
+ * one ("For what your store uses right now, Starter is enough too.": a fact, not an order to
+ * downgrade), or a bigger one ("Fits your store: Pro."), each with its reason. A smaller plan with
+ * nothing the next smaller one misses (Free) needs no reason: its lead says it.
+ */
+export function recommendationText(
+  i18n: I18n,
+  recommendation: { plan: PlanHandle; reasons: readonly FitReason[] },
+  use: ShopUse,
+  current: KnownPlanHandle | null,
+): { lead: string; reason: string | null } {
+  const kind = recommendationKind(recommendation.plan, current);
+  const plan = planName(recommendation.plan);
+  const lead = kind === "same" ? i18n.t("plan.recommend.lineSame") : kind === "smaller" ? i18n.t("plan.recommend.lineSmaller", { plan }) : i18n.t("plan.recommend.line", { plan });
+  const reason = kind === "smaller" && recommendation.reasons.length === 0 ? null : recommendationReason(i18n, recommendation.reasons, use);
+  return { lead, reason };
+}
+
 export interface PlanCardsProps {
   i18n: I18n;
   hero: HeroView;
@@ -63,46 +85,34 @@ export interface PlanCardsProps {
   use: ShopUse | null;
   /** The Own key plan: its card under the four, when it is shown (OwnKeyPlanView.visible). */
   ownKeyPlan?: OwnKeyPlanView | null;
+  /** The list prices (the loader's getPriceTable; the defaults when absent). */
+  prices?: PriceTable;
 }
 
-export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recommendation, use, ownKeyPlan }: PlanCardsProps) {
+export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recommendation, use, ownKeyPlan, prices = DEFAULT_PRICES }: PlanCardsProps) {
   const { t } = i18n;
   const buttonFor = (handle: PlanHandle) => choosePlanUrl !== null && hero.current !== handle;
-  const hasFoot = PLAN_ORDER.some((handle) => buttonFor(handle) || (trial && PLAN_PRICES[handle].monthlyUsd > 0));
+  const hasFoot = PLAN_ORDER.some((handle) => buttonFor(handle) || (trial && prices[handle].monthlyUsd > 0));
   const strip = everyPlanRows(Object.values(PLANS));
+  const fit = recommendation && use ? recommendationText(i18n, recommendation, use, hero.current) : null;
   return (
     <s-stack direction="block" gap="base">
       <s-stack direction="block" gap="small-200">
-        <h2 id="tarife" style={SECTION_HEADING}>
+        <h2 id="tarife" className="lv-h2">
           {t("plan.compare.heading")}
         </h2>
         <s-paragraph color="subdued">{t(intro)}</s-paragraph>
-        <s-stack direction="inline" justifyContent="space-between" alignItems="center" gap="small-200">
-          {recommendation && use ? (
-            <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-              <s-icon type="target" tone="info" />
-              <s-text>
-                {/* Polaris draws type="strong" at the body weight: the plan is set in semibold here. */}
-                <strong style={EMPHASIS}>{t("plan.recommend.line", { plan: planName(recommendation.plan) })}</strong> {recommendationReason(i18n, recommendation.reasons, use)}
-              </s-text>
-            </s-grid>
-          ) : (
-            <span />
-          )}
-          {/* The rows say it in words too. */}
-          <span aria-hidden="true">
-            <s-stack direction="inline" gap="base" alignItems="center">
-              <s-stack direction="inline" gap="small-500" alignItems="center">
-                <s-icon type="check" tone="success" size="small" />
-                <s-text color="subdued">{t("plan.compare.included")}</s-text>
-              </s-stack>
-              <s-stack direction="inline" gap="small-500" alignItems="center">
-                <s-icon type="minus" color="subdued" size="small" />
-                <s-text color="subdued">{t("plan.compare.notIncluded")}</s-text>
-              </s-stack>
-            </s-stack>
-          </span>
-        </s-stack>
+        {/* The whole row: each card's rows say what is included in words, marks and a spoken prefix. */}
+        {fit ? (
+          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
+            <s-icon type="target" tone="info" />
+            <s-text>
+              {/* Polaris draws type="strong" at the body weight: the lead is set in semibold. */}
+              <Strong>{fit.lead}</Strong>
+              {fit.reason ? ` ${fit.reason}` : null}
+            </s-text>
+          </s-grid>
+        ) : null}
       </s-stack>
       <s-query-container>
         <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, (inline-size > 900px) 1fr 1fr 1fr 1fr, 1fr" gap="base">
@@ -115,8 +125,10 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
               now={now}
               rows={hasFoot ? 8 : 7}
               button={buttonFor(handle) ? choosePlanUrl : null}
-              trial={trial && PLAN_PRICES[handle].monthlyUsd > 0}
-              fits={recommendation?.plan === handle}
+              trial={trial && prices[handle].monthlyUsd > 0}
+              prices={prices}
+              // The store's own plan already says "Your plan": no second badge on its card.
+              fits={recommendation?.plan === handle && hero.current !== handle}
             />
           ))}
         </s-grid>
@@ -124,12 +136,14 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
       {/* Not one of the ladder's columns: a card of its own under the four. */}
       {ownKeyPlan?.visible ? <OwnKeyPlanCard i18n={i18n} plan={{ ...ownKeyPlan, choosePlanUrl }} hero={hero} now={now} /> : null}
       <s-paragraph color="subdued">{t(choosePlanUrl ? "plan.price.footnote" : "plan.price.usd")}</s-paragraph>
-      <s-section>
+      <Card labelledBy="plan-every">
         <s-stack direction="block" gap="base">
           <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
             <s-icon type="check-circle" tone="success" />
             <s-stack direction="block" gap="small-500">
-              <h3 style={SUB_HEADING}>{t("plan.everyPlan.heading")}</h3>
+              <h3 id="plan-every" className="lv-h3">
+                {t("plan.everyPlan.heading")}
+              </h3>
               <s-text color="subdued">{t("plan.everyPlan.lead")}</s-text>
             </s-stack>
           </s-grid>
@@ -137,14 +151,15 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
             {strip.map((row) => (
               <li key={row.key}>
                 <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="center">
-                  <IconTile icon={FEATURE_ICON[row.key]} size={32} color="base" />
+                  {/* Each feature's square in the colour Settings gives the same icon. */}
+                  <IconSquare icon={FEATURE_ICON[row.key]} tint={FEATURE_TINT[row.key]} size={32} />
                   <s-text>{t(row.everyPlanLabel ?? row.label)}</s-text>
                 </s-grid>
               </li>
             ))}
           </ul>
         </s-stack>
-      </s-section>
+      </Card>
     </s-stack>
   );
 }
@@ -160,12 +175,13 @@ interface PlanCardProps {
   button: string | null;
   trial: boolean;
   fits: boolean;
+  prices: PriceTable;
 }
 
-function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCardProps) {
+function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits, prices }: PlanCardProps) {
   const { t } = i18n;
   const plan = PLANS[handle];
-  const price = PLAN_PRICES[handle];
+  const price = prices[handle];
   const paid = price.monthlyUsd > 0;
   const current = hero.current === handle;
   const nameId = `plan-${handle}`;
@@ -196,36 +212,27 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
         {t("plan.recommend.badge")}
       </s-badge>,
     );
-  const months = monthsFree(handle);
+  const months = monthsFree(handle, prices);
   return (
-    <div
-      role="group"
-      aria-labelledby={nameId}
-      style={{ position: "relative", isolation: "isolate", display: "grid", gridTemplateRows: "subgrid", gridRow: `span ${rows}`, rowGap: 16, padding: 16, minWidth: 0 }}
-    >
-      {/* The card's frame, behind its rows. The current plan's ring lies inside the frame, so its edges line up with
-          the other cards', and is drawn in the text's own colour (Polaris' dark ink, no colour of its own). */}
-      <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: -1 }}>
-        <s-box background="base" border={current ? "none" : "base"} borderRadius="large-100" blockSize="100%" />
-        {current ? <div style={{ position: "absolute", inset: 0, borderRadius: 12, boxShadow: "inset 0 0 0 2px currentColor" }} /> : null}
-      </div>
+    <div role="group" aria-labelledby={nameId} className="lv-plan-card" style={{ gridRow: `span ${rows}` }}>
+      <CardBack current={current} />
       {/* The sign, then each badge on its own: beside the sign at the right while it fits, else on the next line at
-          the left. So a state badge ("Your plan", "Applies now", "from …") keeps its place and only a badge too wide
+          the left. So a state badge ("Your plan", "Applies now", "From …") keeps its place and only a badge too wide
           for a narrow card moves below the sign. */}
       <s-stack direction="inline" alignItems="start" gap="small-200">
-        <IconTile icon={PLAN_ICON[handle]} size={40} color="base" />
+        <IconSquare icon={PLAN_ICON[handle]} tint={PLAN_TINT} />
         {badges.length ? <span aria-hidden="true" style={{ flex: "1 0 0" }} /> : null}
         {badges}
       </s-stack>
       <s-stack direction="block" gap="small-500">
-        <h3 id={nameId} style={CARD_NAME}>
+        <h3 id={nameId} className="lv-h2">
           {planName(handle)}
         </h3>
         <s-text color="subdued">{t(AUDIENCE[handle])}</s-text>
       </s-stack>
       <s-stack direction="block" gap="small-300">
         <s-stack direction="inline" gap="small-200" alignItems="baseline">
-          <span style={PRICE}>{priceLabel(i18n, handle)}</span>
+          <span className="lv-plan-price">{priceLabel(i18n, handle, prices)}</span>
           {paid ? (
             <>
               <s-text color="subdued" accessibilityVisibility="hidden">
@@ -283,9 +290,9 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
                 </s-grid>
               ) : null}
               {button ? (
-                <s-button href={button} target="_top">
+                <Button href={button} target="_top">
                   {t("plan.compare.choose", { plan: planName(handle) })}
-                </s-button>
+                </Button>
               ) : null}
             </s-stack>
           ) : null}
@@ -300,7 +307,7 @@ function Stat({ icon, value, caption }: { icon: "gauge" | "language"; value: str
     <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-300" alignItems="start">
       <s-icon type={icon} />
       <s-stack direction="block" gap="small-500">
-        <span style={STAT}>{value}</span>
+        <span className="lv-figure-row lv-plan-stat">{value}</span>
         <s-text color="subdued">{caption}</s-text>
       </s-stack>
     </s-grid>

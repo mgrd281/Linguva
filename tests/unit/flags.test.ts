@@ -29,9 +29,13 @@ describe("the country of a language's flag", () => {
   });
 
   it("is a country the store sells to for a language of many countries, the preferred ones first", () => {
-    expect(localeCountry("en")).toBeNull();
-    expect(localeCountry("en", null)).toBeNull();
-    expect(localeCountry("en", ["DE", "AT"])).toBeNull();
+    // English without an English-speaking market: the United Kingdom's flag, never the "EN" box (owner, 2026-11-03).
+    expect(localeCountry("en")).toBe("GB");
+    expect(localeCountry("en", null)).toBe("GB");
+    expect(localeCountry("en", ["DE", "AT"])).toBe("GB");
+    // Arabic and Chinese without a market that reads them: their code, no guess.
+    expect(localeCountry("ar")).toBeNull();
+    expect(localeCountry("zh", ["DE"])).toBeNull();
     expect(localeCountry("en", ["US", "GB"])).toBe("GB");
     expect(localeCountry("en", ["DE", "US"])).toBe("US");
     expect(localeCountry("en", ["DE", "IE", "CA"])).toBe("IE");

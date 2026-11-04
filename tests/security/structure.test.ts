@@ -70,6 +70,8 @@ const DELEGATES: Record<string, string> = {
   webhookAction: "app/.server/webhooks/handle.ts",
   loadResourceList: "app/.server/translation/resource-list.ts",
   runResourceListAction: "app/.server/translation/resource-list.ts",
+  // The old area lists (/app/products and the others) only redirect to the area's list in a language.
+  redirectToAreaList: "app/.server/translation/resource-list.ts",
   resolveEditorContext: "app/.server/translation/resource-editor.ts",
   loadCoverageDashboard: "app/.server/coverage/dashboard.ts",
   loadCoverageItemsPage: "app/.server/coverage/dashboard.ts",
@@ -77,6 +79,14 @@ const DELEGATES: Record<string, string> = {
 };
 // The Shopify library's checks (authenticate.admin, authenticate.webhook, …).
 const LIBRARY = { name: "authenticate", file: "app/shopify.server.ts" };
+// The admin console's own check (session, role, CSRF), reviewed like the library: the only one its routes may use,
+// and one no other route may use. Its sign-in page can't have a session yet and checks only that the console is on.
+const ADMIN_AUTH = "app/.server/admin/auth.ts";
+const ADMIN: Record<string, string> = { requireAdmin: ADMIN_AUTH };
+const ADMIN_SIGN_IN = "app/routes/admin_.login.tsx";
+const ADMIN_SIGN_IN_CHECKS: Record<string, string> = { ...ADMIN, requireAdminConsole: ADMIN_AUTH };
+/** The console's routes: /admin and below (admin.tsx, admin.*.tsx, admin_.*.tsx and such folders). */
+const isAdminRoute = (path: string) => /^app\/routes\/admin[._/]/.test(path);
 
 /** Route modules as flatRoutes finds them: the files in app/routes, and a folder's route or index file. */
 function routeModules(): Source[] {
@@ -155,31 +165,41 @@ function ownCalls(root: ts.Node): ts.CallExpression[] {
 const awaited = (call: ts.CallExpression, root: ts.Node) =>
   call === root || ts.isAwaitExpression(call.parent) || ts.isReturnStatement(call.parent) || (ts.isArrowFunction(call.parent) && call.parent.body === call);
 
-/** Whether `node` itself calls one of `allowed` (by the name it has in its file) or authenticate.*, imported from where they are defined. */
-function callsAuthentication(node: ts.Node | null, imports: Map<string, { file: string; name: string }>, allowed: Record<string, string>) {
+/**
+ * Whether `node` itself calls one of `allowed` (by the name it has in its file) or, unless `library` is false,
+ * authenticate.*, imported from where they are defined.
+ */
+function callsAuthentication(node: ts.Node | null, imports: Map<string, { file: string; name: string }>, allowed: Record<string, string>, library = true) {
   return Boolean(node) && ownCalls(node!).some((call) => {
     if (!awaited(call, node!)) return false;
     const callee = call.expression;
     if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)) {
       const imported = imports.get(callee.expression.text);
-      return imported?.name === LIBRARY.name && imported.file === LIBRARY.file;
+      return library && imported?.name === LIBRARY.name && imported.file === LIBRARY.file;
     }
     const imported = ts.isIdentifier(callee) ? imports.get(callee.text) : undefined;
     return Boolean(imported && allowed[imported.name] === imported.file);
   });
 }
 
-/** Each exported loader and action of a route module, and whether that function authenticates the request. */
+/**
+ * Each exported loader and action of a route module, and whether that function authenticates the request: an
+ * admin console route with requireAdmin only (its sign-in page with requireAdminConsole), any other route with
+ * the Shopify library or a delegate.
+ */
 function routeHandlers(file: Source) {
   const source = parse(file);
   const imports = importsOf(source, file.path);
-  return exportsOf(source, ["loader", "action"]).map(({ name, node }) => ({ name, authenticates: callsAuthentication(node, imports, DELEGATES) }));
+  const admin = isAdminRoute(file.path);
+  const allowed = file.path === ADMIN_SIGN_IN ? ADMIN_SIGN_IN_CHECKS : admin ? ADMIN : DELEGATES;
+  return exportsOf(source, ["loader", "action"]).map(({ name, node }) => ({ name, authenticates: callsAuthentication(node, imports, allowed, !admin) }));
 }
 
 describe("every page and webhook authenticates", () => {
-  // Routes anyone may call, reviewed: the website (home, pricing, imprint and privacy pages), the app's privacy
-  // policy and support page (static site pages: no database, Redis or Shopify, no cookies, 404 unless
-  // PUBLIC_PAGES=on), Shopify's login and the health checks.
+  // Routes anyone may call, reviewed: the website (home, pricing, imprint and privacy pages: static site pages,
+  // no Redis, Shopify or cookies; home and pricing read only the list prices from the PlanPrice table, cached,
+  // falling back to the defaults), the app's privacy policy and support page (static, no database either, 404
+  // unless PUBLIC_PAGES=on), Shopify's login and the health checks.
   const PUBLIC = [
     "app/routes/_index/route.tsx",
     "app/routes/preise.tsx",
@@ -242,6 +262,99 @@ describe("every page and webhook authenticates", () => {
     expect(check(`export { loader } from "./other";`)).toEqual(["loader: false"]);
     expect(check(`export const { action } = routes;`)).toEqual(["action: false"]);
     expect(check(`export * from "./other";`)).toEqual(["*: false"]);
+  });
+
+  describe("the admin console", () => {
+    const check = (path: string, text: string) => routeHandlers({ path, text }).map((h) => `${h.name}: ${h.authenticates}`);
+    const admin = `import { requireAdmin, requireAdminConsole } from "../.server/admin/auth";\n`;
+    const shopify = `import { requireShop } from "../.server/shopify/require-shop";\nimport { authenticate } from "../shopify.server";\n`;
+
+    it("its routes authenticate with requireAdmin, and only with it (the check isn't vacuous)", () => {
+      expect(check("app/routes/admin.probe.tsx", `${admin}export const loader = async ({ request }) => { await requireAdmin(request); return null; };`)).toEqual([
+        "loader: true",
+      ]);
+      expect(check("app/routes/admin.tsx", `${admin}export async function action({ request }) { return requireAdmin(request, "prices"); }`)).toEqual(["action: true"]);
+      // A merchant's Shopify session is no admin session.
+      expect(check("app/routes/admin.probe.tsx", `${shopify}export const loader = ({ request }) => requireShop(request);`)).toEqual(["loader: false"]);
+      expect(check("app/routes/admin_.probe.tsx", `${shopify}export const loader = ({ request }) => authenticate.admin(request);`)).toEqual(["loader: false"]);
+      // Only the sign-in page may do with the console check alone.
+      expect(check("app/routes/admin.probe.tsx", `${admin}export const loader = ({ request }) => requireAdminConsole(request);`)).toEqual(["loader: false"]);
+      expect(check(ADMIN_SIGN_IN, `${admin}export const loader = ({ request }) => requireAdminConsole(request);`)).toEqual(["loader: true"]);
+      // The same rules as elsewhere: not floating, not nested, not a look-alike, not re-exported.
+      expect(check("app/routes/admin.probe.tsx", `${admin}export const loader = async ({ request }) => { requireAdmin(request); return null; };`)).toEqual(["loader: false"]);
+      expect(check("app/routes/admin.probe.tsx", `${admin}export const action = async ({ request }) => { const later = () => requireAdmin(request); return null; };`)).toEqual([
+        "action: false",
+      ]);
+      expect(check("app/routes/admin.probe.tsx", `const requireAdmin = (r) => r;\nexport const loader = ({ request }) => requireAdmin(request);`)).toEqual(["loader: false"]);
+      expect(check("app/routes/admin.probe.tsx", `export { loader } from "./other";`)).toEqual(["loader: false"]);
+    });
+
+    it("no other route authenticates with it", () => {
+      expect(check("app/routes/app.probe.tsx", `${admin}export const loader = ({ request }) => requireAdmin(request);`)).toEqual(["loader: false"]);
+      expect(check("app/routes/adminx.tsx", `${admin}export const loader = ({ request }) => requireAdmin(request);`)).toEqual(["loader: false"]);
+      // Sessions and sign-in belong to the console's routes (the website may read list prices from app/.server/admin).
+      const AUTH_FILES = [ADMIN_AUTH, "app/.server/admin/session.ts", "app/.server/admin/login.ts"];
+      const outside = modules
+        .filter((m) => !isAdminRoute(m.path))
+        .flatMap((m) => [...importsOf(parse(m), m.path).entries()].filter(([, i]) => AUTH_FILES.includes(i.file)).map(([name]) => `${m.path}: ${name}`));
+      expect(outside).toEqual([]);
+    });
+
+    it("its routes' own Responses carry the console's headers: adminRedirect and adminResponse, never react-router's redirects or a bare Response", () => {
+      // React Router answers with a loader's or action's Response as it is, past entry.server's headers: a redirect
+      // thrown on a page request, and everything a route without a page (a resource route) returns or throws.
+      const unheaded = (file: Source) => {
+        const source = parse(file);
+        const page =
+          source.statements.some((s) => ts.isExportAssignment(s) || (exported(s) && (ts.getModifiers(s as ts.HasModifiers) ?? []).some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))) ||
+          exportsOf(source, ["ErrorBoundary"]).length > 0;
+        const found: string[] = [];
+        for (const s of source.statements) {
+          if (!ts.isImportDeclaration(s) || !ts.isStringLiteral(s.moduleSpecifier) || s.moduleSpecifier.text !== "react-router" || s.importClause?.isTypeOnly) continue;
+          const bindings = s.importClause?.namedBindings;
+          if (bindings && ts.isNamespaceImport(bindings)) found.push("* as react-router");
+          if (!bindings || !ts.isNamedImports(bindings)) continue;
+          for (const e of bindings.elements) {
+            const name = (e.propertyName ?? e.name).text;
+            // data() is rendered into a page (entry.server's headers); a resource route answers with it as it is.
+            if (!e.isTypeOnly && (["redirect", "redirectDocument", "replace"].includes(name) || (!page && name === "data"))) found.push(name);
+          }
+        }
+        ts.forEachChild(source, function visit(node) {
+          if (ts.isNewExpression(node) && node.expression.getText() === "Response") found.push("new Response");
+          if (ts.isPropertyAccessExpression(node) && node.expression.getText() === "Response") found.push(node.getText());
+          ts.forEachChild(node, visit);
+        });
+        return found.map((f) => `${file.path}: ${f}`);
+      };
+      // The check isn't vacuous.
+      const probe = (text: string, path = "app/routes/admin.probe.tsx") => unheaded({ path, text }).map((f) => f.slice(path.length + 2));
+      expect(probe(`import { redirect as go, data } from "react-router";\nexport const loader = () => { throw go("/admin"); };\nexport default function P() { return null; }`)).toEqual(["redirect"]);
+      expect(probe(`import { data } from "react-router";\nexport const action = () => data({}, { status: 400 });`)).toEqual(["data"]);
+      expect(probe(`export const loader = () => new Response(null, { status: 302 });\nexport const action = () => Response.json({});`)).toEqual(["new Response", "Response.json"]);
+      expect(probe(`import { adminRedirect } from "../.server/lib/security-headers";\nexport const loader = ({ request }) => { throw adminRedirect(request, "/admin"); };`)).toEqual([]);
+      expect(modules.filter((m) => isAdminRoute(m.path)).flatMap(unheaded)).toEqual([]);
+    });
+
+    it("its authentication root checks the console, the session and every write", () => {
+      const text = readFileSync(join(ROOT, ADMIN_AUTH), "utf8");
+      const source = parse({ path: ADMIN_AUTH, text });
+      const imports = importsOf(source, ADMIN_AUTH);
+      const fn = (name: string) => exportsOf(source, [name]).find((e) => e.name === name)?.node ?? null;
+      const local = (name: string) => {
+        const node = source.statements.find((s) => ts.isFunctionDeclaration(s) && s.name?.text === name);
+        return node && ts.isFunctionDeclaration(node) ? node : null;
+      };
+      const awaitedCalls = (node: ts.Node | null) =>
+        node ? ownCalls(node).filter((c) => awaited(c, node) && ts.isIdentifier(c.expression)).map((c) => (c.expression as ts.Identifier).text) : [];
+      expect(awaitedCalls(fn("requireAdmin"))).toEqual(expect.arrayContaining(["requireAdminConsole", "readSession", "submittedCsrfToken"]));
+      expect(imports.get("readSession")).toEqual({ file: "app/.server/admin/session.ts", name: "readSession" });
+      // The console check is synchronous and comes first: off means 404 before any database access.
+      const consoleCheck = fn("requireAdminConsole");
+      expect(consoleCheck && ownCalls(consoleCheck).map((c) => c.expression.getText())).toEqual(["adminConsoleAvailable", "notFound"]);
+      expect(local("adminConsoleAvailable")?.getText()).toMatch(/config\.ADMIN_CONSOLE !== "on"\) return false/);
+      expect(text.indexOf("await requireAdminConsole(request);")).toBeLessThan(text.indexOf("await readSession(request)"));
+    });
   });
 });
 

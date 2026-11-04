@@ -31,7 +31,7 @@ Own key plan: see "Merchant's own keys (Own key plan)" below; none of this secti
 | Context (title, store description) | yes, not billed | no (never prepended to the text: it would be translated and billed) | no |
 | Markup | XML (`<g id>`, `<x id/>`) | HTML transport | HTML transport |
 
-A result from an engine that couldn't apply a chosen form of address carries `FORMALITY_NOT_APPLIED` (a warning): it is never published automatically and waits in Review. Settings shows "Translated with {engine}: no choice" for a formality language another engine serves (with Azure or Google as the only engine: every language), and "If DeepL can't translate, another service steps in…" when DeepL and another engine are in use and a form (formal or informal) is chosen for a language DeepL serves ("DeepL decides" sends none, so nothing waits). Without DeepL, the store description's hint says the services in use don't read it.
+A result from an engine that couldn't apply a chosen form of address carries `FORMALITY_NOT_APPLIED` (a warning): it is never published automatically and waits in Review. Settings shows "Translated with {engine}: no choice" for a formality language another engine serves (with Azure or Google as the only engine: every language), and "If DeepL can't translate, another service steps in…" when DeepL and another engine are in use and a form (formal or informal) is chosen for a language DeepL serves ("Automatic" sends none, so nothing waits). Without DeepL, the store description's hint says the services in use don't read it.
 
 ## Markup on the HTML engines (`html-transport.ts`)
 

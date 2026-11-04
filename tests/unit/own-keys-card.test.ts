@@ -105,18 +105,22 @@ describe("Your translation keys", () => {
     ];
     for (const [status, words] of states) expect(text(render(view({ keys: [key("deepl", { status })] }))), status).toContain(words);
     const refused = text(render(view({ keys: [key("azure", { status: "REFUSED", lastErrorCode: "OWN_KEY_AUTH_AZURE", lastErrorAt: VERIFIED })] })));
-    expect(refused).toContain("Microsoft Azure refused your key, or the service isn't set up for it");
+    // The refused key's own engine text (common.jobError.OWN_KEY_AUTH_AZURE): Azure's set-up only.
+    expect(refused).toContain("Microsoft Azure refused your key. Translation stopped; Linguva didn't switch to its own services. In the Azure portal under Keys and Endpoint");
     expect(refused).toContain("Microsoft Azure reported this on October 30, 2026.");
   });
 
   it("on the plan: the lead, the cost note (all three services before any key), DeepL's form open and the page's primary button", () => {
     const html = render(view(), "en", { primary: true });
     const words = text(html);
-    expect(words).toContain("On the Own key plan, Linguva translates only with your own keys.");
-    expect(words).toContain("No key yet. Add at least one to translate with AI.");
+    expect(words).toContain("Linguva translates only with your keys: you pay the service directly, and Linguva counts no AI characters.");
+    // No key yet: the badge says it (and DeepL's form is open), no line saying it again.
+    expect(words).toContain("Needs your key");
+    expect(words).not.toContain("No key yet");
     expect(words).toContain("DeepL, Microsoft Azure, and Google Cloud bill you for every character");
-    expect(html).toMatch(/<details open="">/);
-    expect(html.match(/<details open/g)).toHaveLength(1);
+    // Open at first (the disclosure carries its class before the attribute).
+    expect(html).toMatch(/<details[^>]*\sopen=""/);
+    expect(html.match(/<details[^>]*\sopen=""/g)).toHaveLength(1);
     expect(html.match(/variant="primary"/g)).toHaveLength(1);
     expect(words).toContain("Nothing translated through your keys this calendar month (UTC) yet.");
     // A saved key: the cost note names its service; usage and DeepL's own figure.
@@ -127,10 +131,19 @@ describe("Your translation keys", () => {
     expect(saved).toContain("Through your keys this calendar month (UTC), as counted by Linguva: 4,200 characters.");
     expect(saved).toContain("DeepL: 4,200 characters");
     expect(saved).toContain("DeepL: 1,234 of 500,000 characters used in this billing period");
-    // The card takes the AI characters tile's place, so it leads to the Plan page.
-    expect(html).toContain('href="/app/plan"');
-    expect(words).toContain("Change plan");
+    // A section of its own, named as in Settings' nav; the plan and its usage are the Plan section's (no second plan link here).
+    expect(html).toContain('<h2 id="settings-keys-heading" tabindex="-1"');
+    expect(words).toContain("Your keys");
+    expect(html).not.toContain('href="/app/plan"');
+    expect(words).not.toContain("Change plan");
     expect(text(render(view({ keys: [key("deepl"), key("google")] })))).toContain("DeepL and Google Cloud bill you for every character");
+  });
+
+  it("draws the services as rows of the section's card, apart by a line, not as boxes inside it", () => {
+    const html = render(view({ keys: [key("deepl"), key("azure")] }));
+    // The section's card is the only frame; a line above every row but the first.
+    expect(html.match(/border="base"/g)).toHaveLength(1);
+    expect(html.match(/<li><s-divider><\/s-divider>/g)).toHaveLength(2);
   });
 
   it("with a pending change: the date, the cost note and working add and check forms", () => {
@@ -178,7 +191,7 @@ describe("Your translation keys", () => {
       const i18n = translator(locale);
       const html = text(render(view({ keys: [key("azure", { status: "REFUSED" })] }), locale));
       for (const message of [
-        i18n.t("settings.keys.heading"),
+        i18n.t("settings.section.keys"),
         i18n.t("settings.keys.lead"),
         i18n.t("settings.keys.hint", { hint: "3c4d" }),
         i18n.t("settings.keys.state.REFUSED", { engine: "Microsoft Azure" }),
@@ -191,5 +204,13 @@ describe("Your translation keys", () => {
       }
       expect(keysState(i18n, []).label).toBe(i18n.t("settings.changes.badge.noKey"));
     }
+  });
+
+  it("names the worst problem first: a refused key before one used up for now, whatever their order", () => {
+    const i18n = translator("en");
+    const state = keysState(i18n, [key("deepl", { status: "QUOTA" }), key("azure", { status: "REFUSED" })]);
+    expect(state).toMatchObject({ tone: "critical", label: i18n.t("settings.keys.state.REFUSED", { engine: "Microsoft Azure" }) });
+    // Only problems that a moment fixes: the milder tone.
+    expect(keysState(i18n, [key("deepl", { status: "QUOTA" }), key("azure", { status: "RECHECK" })]).tone).toBe("warning");
   });
 });

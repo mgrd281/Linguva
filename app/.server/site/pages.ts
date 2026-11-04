@@ -7,6 +7,9 @@ import pricingHtml from "../../../site/preise.html?raw";
 import appPrivacyHtml from "../../../site/privacy.html?raw";
 import supportHtml from "../../../site/support.html?raw";
 import { engineConsentTokens, getConfig, type AppConfig } from "../lib/config";
+import { formatUsd, monthsFree, sharedMonthsFree, yearlyHandles } from "../../lib/plan-prices";
+import { DEFAULT_PRICES, OWN_KEY, type KnownPriceHandle, type PriceTable } from "../../lib/plans";
+import { planName } from "../../lib/plan-view";
 import { applyEngineBlocks, applyOwnKeyBlocks, DEEPL_ONLY, engineSectionsWithOpenMarks, ownKeyBlocksHaveOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
 
 export { applyOwnKeyBlocks, engineBlocksWithOpenMarks, pageEngineTags, type PageEngines } from "./engine-blocks";
@@ -46,6 +49,52 @@ const SCRIPTS = [...new Set(Object.values(PAGES).flatMap(scriptHashes))].join(" 
 // PUBLIC_PAGES=on; until then they answer 404 and no page links to them.
 export const PUBLIC_ONLY: ReadonlySet<SitePage> = new Set(["appPrivacy", "support"]);
 
+/** A price as the website writes it: "29&nbsp;$", "9,99&nbsp;$", "1.290&nbsp;$" (German, as formatUsd("de")). */
+function siteUsd(amount: number): string {
+  return formatUsd("de", amount).replace(/\u00A0/g, "&nbsp;");
+}
+
+const months = (count: number) => `${count} ${count === 1 ? "Monat" : "Monate"} gratis`;
+const PRICE_HANDLE = /^(starter|pro|business|own-key)$/;
+
+/** One marker's text for the price table (`ownKeyPlan`: the Own key plan is on the page, so "ab" counts its price too). */
+function priceText(key: string, prices: PriceTable, ownKeyPlan: boolean): string {
+  const [kind, handle = ""] = key.split(":");
+  if (kind === "from") {
+    const paid = (["starter", "pro", "business", ...(ownKeyPlan ? [OWN_KEY] : [])] as const).map((h) => prices[h].monthlyUsd);
+    return siteUsd(Math.min(...paid));
+  }
+  if (kind === "yearly-row") {
+    const yearly = yearlyHandles(prices);
+    if (yearly.length === 0) return "";
+    const plans = new Intl.ListFormat("de-DE", { type: "conjunction" }).format(yearly.map(planName));
+    const shared = sharedMonthsFree(prices);
+    return `<span class="rd">${plans} auch jährlich${shared ? `: ${months(shared)}` : ""}</span>`;
+  }
+  if (!PRICE_HANDLE.test(handle)) throw new Error(`site price marker unknown: ${key}`);
+  const { monthlyUsd, yearlyUsd } = prices[handle as Exclude<KnownPriceHandle, "free">];
+  if (kind === "month") return siteUsd(monthlyUsd);
+  if (kind === "year") {
+    if (yearlyUsd === null) return "Nur monatlich";
+    const free = monthsFree(handle === OWN_KEY ? OWN_KEY : (handle as "starter" | "pro" | "business"), prices);
+    return `oder ${siteUsd(yearlyUsd)} / Jahr${free ? ` <span class="tag">${months(free)}</span>` : ""}`;
+  }
+  if (kind === "term") return yearlyUsd === null ? `${siteUsd(monthlyUsd)} im Monat, nur monatlich` : `${siteUsd(monthlyUsd)} im Monat oder ${siteUsd(yearlyUsd)} im Jahr`;
+  throw new Error(`site price marker unknown: ${key}`);
+}
+
+/**
+ * The list prices in the website's markers: `<!--price:KEY-->today's text<!--/price-->` becomes
+ * the table's text without the marker. Keys: `month:<plan>` (the monthly price), `year:<plan>` (the
+ * card's yearly line: "oder 290 $ / Jahr" with the months free, or "Nur monatlich"), `yearly-row`
+ * (the table's "Starter und Pro auch jährlich: 2 Monate gratis", gone without a yearly price),
+ * `term:own-key` (Own key's note) and `from` (the home page's "ab 29 $"). With the defaults, the
+ * page is exactly the text between the markers (the static image, site/Dockerfile, keeps that).
+ */
+export function applyPrices(html: string, prices: PriceTable = DEFAULT_PRICES, ownKeyPlan = false): string {
+  return html.replace(/<!--price:([a-z:-]+)-->[\s\S]*?<!--\/price-->/g, (_match, key: string) => priceText(key, prices, ownKeyPlan));
+}
+
 /**
  * A page as served. Engine blocks first: `<!--engine:TAG-->…` stays only for
  * an engine (or engine and data location) in use, `<!--engines:single-->…`
@@ -59,13 +108,20 @@ export const PUBLIC_ONLY: ReadonlySet<SitePage> = new Set(["appPrivacy", "suppor
  * notice either. `<!--public-->…<!--/public-->` (links to the gated pages) stays
  * only with PUBLIC_PAGES=on. `<!--draft-->…<!--/draft-->` (the draft notice)
  * stays until LEGAL_TEXTS_REVIEWED=yes and no open point
- * (`<mark class="open">`) is left in the page.
+ * (`<mark class="open">`) is left in the page. The list prices go into
+ * their markers last (applyPrices; the defaults unless `prices` is given).
  */
 export function pageHtml(
   html: string,
-  { publicPages, reviewed, engines = DEEPL_ONLY, ownKeyPlan = false }: { publicPages: boolean; reviewed: boolean; engines?: PageEngines; ownKeyPlan?: boolean },
+  {
+    publicPages,
+    reviewed,
+    engines = DEEPL_ONLY,
+    ownKeyPlan = false,
+    prices = DEFAULT_PRICES,
+  }: { publicPages: boolean; reviewed: boolean; engines?: PageEngines; ownKeyPlan?: boolean; prices?: PriceTable },
 ): string {
-  const withEngines = applyOwnKeyBlocks(applyEngineBlocks(html, engines), ownKeyPlan);
+  const withEngines = applyPrices(applyOwnKeyBlocks(applyEngineBlocks(html, engines), ownKeyPlan), prices, ownKeyPlan);
   const draft = !reviewed || withEngines.includes('<mark class="open">');
   return withEngines
     .replace(/<!--public-->([\s\S]*?)<!--\/public-->/g, (_match, inner: string) => (publicPages ? inner : ""))
@@ -124,10 +180,15 @@ export function siteConfigWarnings(config: AppConfig): string[] {
   return warnings;
 }
 
+/**
+ * `prices`: the list prices for the home and pricing pages (their routes read getPriceTable, cached;
+ * the defaults when absent). The page itself reads no database, Redis or Shopify and sets no cookie.
+ */
 export function sitePage(
   request: Request,
   page: SitePage,
   config: SiteConfig = getConfig(),
+  prices: PriceTable = DEFAULT_PRICES,
 ): Response {
   const publicPages = config.PUBLIC_PAGES === "on";
   if (PUBLIC_ONLY.has(page) && !publicPages) {
@@ -138,6 +199,7 @@ export function sitePage(
     reviewed: config.LEGAL_TEXTS_REVIEWED === "yes",
     engines: pageEngines(config),
     ownKeyPlan: config.OWN_KEY_PLAN_VISIBLE === "on",
+    prices,
   });
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8",

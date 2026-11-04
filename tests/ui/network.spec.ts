@@ -8,7 +8,8 @@ import { openApp } from "./helpers";
 
 test("a Shopify that doesn't answer ends in a clear page within the time limit @responsive", async ({ page }) => {
   const started = Date.now();
-  const response = await openApp(page, "slow", "/app/products?lang=de");
+  // A page that waits for Shopify's translations (here a product's editor).
+  const response = await openApp(page, "slow", "/app/products/1?lang=de");
   // The app's limit in the UI tests is 3 s; Shopify would take 20 s.
   expect(Date.now() - started).toBeLessThan(10_000);
   expect(response?.status()).toBe(504);
@@ -43,12 +44,12 @@ test("on a slow connection, AI translation shows its progress and can't be sent 
     }
     await route.continue();
   });
-  const button = page.locator("s-button", { hasText: "Translate with AI" });
+  const button = page.locator("[data-button]", { hasText: "Translate with AI" });
   await button.click();
-  await expect(button).toHaveAttribute("loading", "");
+  await expect(button).toHaveAttribute("aria-busy", "true");
   // A second click while it runs doesn't send another request.
   await button.click({ force: true });
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("[fr] Product 8 jacket", { timeout: 10_000 });
-  await expect(button).not.toHaveAttribute("loading", "");
+  await expect(button).not.toHaveAttribute("aria-busy");
   expect(posts).toBe(1);
 });

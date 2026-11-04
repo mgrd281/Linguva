@@ -49,6 +49,9 @@ export function previewHeight(html: string): number {
   return Math.min(420, Math.max(96, 32 + lines * 21 + blocks * 6));
 }
 
+/** Nothing a reader would see: no words and no picture (the editor draws its own empty box for a text). */
+export const isEmptyHtml = (html: string) => !html.replace(/<[^>]*>/g, "").trim() && !/<img\b/i.test(html);
+
 export function HtmlPreview({
   html,
   title,
@@ -58,6 +61,7 @@ export function HtmlPreview({
   blockSize,
   textBox = false,
   label,
+  height,
 }: {
   html: string;
   /** Accessible name, e.g. "Preview of the German description". */
@@ -72,9 +76,11 @@ export function HtmlPreview({
   textBox?: boolean;
   /** Shown inside the box above the preview (Review on a phone: the box's language). */
   label?: ReactNode;
+  /** The frame's height in px instead of its own text's (the editor: one height for an original and its translation side by side). */
+  height?: number;
 }) {
   const { t } = useI18n();
-  if (!html.replace(/<[^>]*>/g, "").trim() && !/<img\b/i.test(html)) {
+  if (isEmptyHtml(html)) {
     return (
       <s-box padding="base" border="base" borderRadius="base">
         {label}
@@ -88,7 +94,7 @@ export function HtmlPreview({
       sandbox=""
       referrerPolicy="no-referrer"
       srcDoc={previewDocument(html, lang, dir, tone, textBox)}
-      style={{ display: "block", width: "100%", height: blockSize ? "100%" : previewHeight(html), border: 0, background: tone === "subdued" ? "transparent" : "#fff" }}
+      style={{ display: "block", width: "100%", height: blockSize ? "100%" : (height ?? previewHeight(html)), border: 0, background: tone === "subdued" ? "transparent" : "#fff" }}
     />
   );
   // A responsive height: the frame fills a one-row grid whose row Polaris sizes by the container (a box's block size isn't responsive).

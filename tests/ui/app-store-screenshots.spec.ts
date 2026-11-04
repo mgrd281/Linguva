@@ -27,7 +27,8 @@ async function settle(page: Page) {
 }
 
 const DESKTOP = [
-  { file: "1-products.png", path: "/app/products?lang=de" },
+  // The products as every way into them shows them: the area's list, the app's one list of them.
+  { file: "1-products.png", path: "/app/languages/de/products" },
   { file: "2-editor.png", path: "/app/products/1?lang=de" },
   { file: "3-outdated.png", path: "/app/products/2?lang=de" },
   { file: "4-review.png", path: "/app/review" },

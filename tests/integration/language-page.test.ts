@@ -3,10 +3,14 @@
  * store: the categories add up to the language's percentage (the Overview's
  * figure), previews and lists show open work first with names and pictures
  * read live, survive Shopify failing, and translating a category starts one
- * job per type behind the plan, consent, provider and queue gates.
+ * job per type behind the plan, consent, provider and queue gates. The
+ * languages list (its loader called as a function, the session stood in)
+ * lists the languages without figures (their pages have them); an area's
+ * list offers the store's other languages.
  */
 import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import type { LoaderFunctionArgs } from "react-router";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCoverageReport, runCoveragePage, type CoverageDeps, type CoveragePagePayload } from "../../app/.server/coverage/coverage";
 import { loadCoverageSummary } from "../../app/.server/coverage/summary";
@@ -30,9 +34,14 @@ import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
 import { headlineByLocale } from "../../app/lib/coverage-view";
 import { CATEGORY_IDS, ITEM_STATES, type CategoryId } from "../../app/lib/language-categories";
+import { loader as languagesLoader } from "../../app/routes/app.languages";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FAKE_AZURE_KEY } from "../support/engine-fixtures";
 import { FakeShopifyStore } from "../support/fake-store";
+
+// The languages list's session: its loader reads the store and shop from it (the pages' functions take them directly).
+const session = vi.hoisted(() => ({ admin: null as unknown, shop: null as unknown }));
+vi.mock("../../app/.server/shopify/require-shop", () => ({ requireShop: async () => session }));
 
 const app = new PrismaClient();
 const P = (n: number) => `gid://shopify/Product/${n}`;
@@ -221,17 +230,23 @@ describe("the language page", () => {
     // Shop & checkout: the store's listing, never the legal texts (one by one).
     expect(category(page, "checkout").bulk).toMatchObject({ types: ["SHOP"], texts: { missing: 2, outdated: 0, failed: 0 }, items: null, attached: false });
     expect(category(page, "checkout").tally.counts.missing).toBe(3);
-    // Image descriptions and custom fields are never translated in bulk.
+    // Image descriptions and custom fields are never translated in bulk: they go with their products' step.
     expect(category(page, "images").bulk).toBeNull();
     expect(category(page, "customFields").bulk).toBeNull();
-    expect(page.next.find((s) => s.kind === "category" && s.category === "images")).toBeUndefined();
+    expect(page.next.find((s) => s.kind === "category" && (s.category === "images" || s.category === "customFields"))).toBeUndefined();
+    // Product 1's image description and the products' extra details (no collection, page or blog post has any).
+    expect(page.next[1]).toMatchObject({ attached: { images: 1, customFields: category(page, "customFields").tally.counts.missing } });
 
-    // Without the AI consent nothing starts in bulk: the steps open the lists instead.
+    // Without the AI consent nothing starts in bulk: allowing it comes first, the steps open the lists.
     await setAiConsent({ shopId: shop.id, granted: false, actorId: "1" }, app);
     const gated = await loadLanguagePage(store.asAdmin(), shop, "de", app, available);
     expect(gated.bulk.gate).toBe("CONSENT_REQUIRED");
-    expect(gated.next[1]).toMatchObject({ kind: "category", category: "products", action: "view" });
-    expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, { ...available, aiAvailable: false })).bulk.gate).toBe("AI_NOT_CONFIGURED");
+    expect(gated.next[1]).toEqual({ kind: "unlock", gate: "CONSENT_REQUIRED", href: "/app/settings?section=ai" });
+    expect(gated.next[2]).toMatchObject({ kind: "category", category: "products", action: "view" });
+    // The app's own setup is no step of the merchant's.
+    const unconfigured = await loadLanguagePage(store.asAdmin(), shop, "de", app, { ...available, aiAvailable: false });
+    expect(unconfigured.bulk.gate).toBe("AI_NOT_CONFIGURED");
+    expect(unconfigured.next.some((s) => s.kind === "unlock")).toBe(false);
     expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, { jobsAvailable: false, aiAvailable: true })).bulk.gate).toBe("JOBS_UNAVAILABLE");
   });
 
@@ -262,8 +277,9 @@ describe("the language page", () => {
   it("names the categories Linguva may not read, with where to allow it", async () => {
     const { shop, store } = await outdoorShop({ denied: ["MENU", "LINK", "SHOP_POLICY"] });
     const page = await loadLanguagePage(store.asAdmin(), shop, "de", app, available);
-    expect(category(page, "navigation").state).toEqual({ kind: "no-access", types: ["MENU", "LINK"], href: "/app/content/menus" });
-    expect(category(page, "checkout").state).toEqual({ kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content/policies" });
+    // "Allow access" leads to the Content page's card, which asks for every missing permission at once.
+    expect(category(page, "navigation").state).toEqual({ kind: "no-access", types: ["MENU", "LINK"], href: "/app/content?lang=de#content-access" });
+    expect(category(page, "checkout").state).toEqual({ kind: "no-access", types: ["SHOP_POLICY"], href: "/app/content?lang=de#content-access" });
     expect(category(page, "products").state).toEqual({ kind: "ok" });
     // What it could read still adds up.
     expect(page.categories.reduce((total, c) => total + c.tally.total, 0)).toBe(page.headline!.total);
@@ -299,6 +315,21 @@ describe("the language page", () => {
     const german = await loadLanguagePage(store.asAdmin(), shop, "de", app, available);
     expect(german).toMatchObject({ measured: true, scanning: true, canCount: false });
     expect(german.headline).not.toBeNull();
+  });
+});
+
+describe("the languages list", () => {
+  const list = () => languagesLoader({ request: new Request("https://linguva.test/app/languages"), params: {}, context: {} } as LoaderFunctionArgs);
+
+  it("lists the store's languages without figures: a language's figure is on the Overview, its page and Coverage", async () => {
+    const { shop, store } = await outdoorShop();
+    Object.assign(session, { admin: store.asAdmin(), shop });
+    const data = await list();
+    expect(data.locales.map((l) => l.locale).sort()).toEqual(LOCALES.map((l) => l.locale).sort());
+    expect(data).not.toHaveProperty("figures");
+    // Its page still has the Overview's figure.
+    const german = headlineByLocale((await loadCoverageSummary(shop.id, app)).counts).get("de")!;
+    expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, available)).headline).toMatchObject({ complete: german.complete, total: german.total });
   });
 });
 
@@ -392,6 +423,9 @@ describe("a category's list", () => {
   it("counts its items per state so they add up, and pages through them in state order", async () => {
     const { shop, store } = await outdoorShop({ products: 60 });
     const first = await loadCategoryItems(store.asAdmin(), shop, "de", "products", {}, app, available);
+    // The store's other languages for its language switch (the hidden one too), never the original.
+    const byLocale = (a: { locale: string }, b: { locale: string }) => a.locale.localeCompare(b.locale);
+    expect([...first.languages].sort(byLocale)).toEqual(LOCALES.filter((l) => !l.primary).map(({ locale, name, published }) => ({ locale, name, published })).sort(byLocale));
     expect(first.counts).toEqual({ all: 60, failed: 1, outdated: 1, missing: 54, waiting: 0, complete: 4 });
     expect(first.rows).toHaveLength(CATEGORY_PAGE_SIZE);
     expect(first.page).toMatchObject({ from: 1, to: 50, total: 60, number: 1 });
@@ -492,6 +526,22 @@ describe("a category's list", () => {
     });
   });
 
+  it("offers image descriptions and extra details with their owners: each owner's open texts of the list and what translating it would do", async () => {
+    const { shop, store } = await outdoorShop();
+    await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
+    const images = await loadCategoryItems(store.asAdmin(), shop, "de", "images", {}, app, available);
+    // Never a bulk job of their own.
+    expect(images.bulk.estimate).toBeNull();
+    expect(images.bulk.owners).toEqual([
+      { id: "products", open: 1, estimate: expect.objectContaining({ types: ["PRODUCT"], attached: true }), job: null },
+      { id: "collections", open: 1, estimate: expect.objectContaining({ types: ["COLLECTION"], attached: true }), job: null },
+    ]);
+    const fields = await loadCategoryItems(store.asAdmin(), shop, "de", "customFields", {}, app, available);
+    expect(fields.bulk.owners.map((o) => [o.id, o.open])).toEqual([["products", fields.category.tally!.counts.missing]]);
+    // Other areas have no owners.
+    expect((await loadCategoryItems(store.asAdmin(), shop, "de", "products", {}, app, available)).bulk.owners).toEqual([]);
+  });
+
   it("finds items by title where Shopify can search them", async () => {
     const { shop, store } = await outdoorShop({ products: 60 });
     const found = await loadCategoryItems(store.asAdmin(), shop, "de", "products", { q: "  product 7 " }, app, available);
@@ -588,7 +638,8 @@ describe("translating a category", () => {
     const { shop, store } = await ready();
     const navigation = (await translateCategoryAction(store.asAdmin(), shop, { locale: "de", form: form({ category: "navigation" }), requestedBy: "7" }, app)) as Response;
     expect(navigation.status).toBe(302);
-    expect(navigation.headers.get("Location")).toBe("/app/jobs");
+    // Several jobs: the running ones, which say once how many started.
+    expect(navigation.headers.get("Location")).toBe("/app/jobs?status=active&started=2");
     // The link is translated already: menus and filters only.
     expect((await jobs(shop.id)).map((j) => [j.resourceType, j.targetLocale, j.requestedBy, j.idempotencyKey])).toEqual([
       ["FILTER", "de", "7", "0b8a3c2e-5d41-4c1e-9a7f-2f6d8e1b3c4a:FILTER"],

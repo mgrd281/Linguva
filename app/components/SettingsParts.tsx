@@ -1,22 +1,24 @@
 /**
  * The Settings area's pieces (Settings and the smart schedule's page): a
- * card with its icon, heading and state; the "At a glance" tiles that move
- * to the cards; option cards whose whole header chooses them and that mark
- * the current choice like the Plan page marks the current plan; the one
- * lock pattern for what a plan doesn't include; short facts; and tiles of
- * links.
+ * section of the Settings page (its heading, state and lead above one
+ * card); a card with its icon, heading and state (the smart schedule's
+ * page); option cards whose whole header chooses them and that mark the
+ * current choice like the Plan page marks the current plan; the one lock
+ * pattern for what a plan doesn't include; short facts; and tiles of links.
  *
  * Polaris web components with the Content and Plan pages' card, tile and
  * badge rules; inline styles only for type sizes, list resets and the
  * current option's ring. Every state is an icon and words.
  */
-import { Children, Fragment, isValidElement, useEffect, useRef, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { Link } from "react-router";
+import { Disclosure } from "./Disclosure";
+import { IconSquare, type Tint } from "./IconSquare";
 import type { IconName } from "../lib/icons";
 import { IconTile } from "./CategoryCard";
 import { CARD, H2 } from "./ContentTiles";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { METER_LABEL } from "./plan/styles";
-import { ProgressBar } from "./ProgressBar";
 
 export type StateTone = "success" | "warning" | "critical" | "info" | "neutral";
 
@@ -26,6 +28,8 @@ export interface SettingState {
   icon: IconName;
   tone: StateTone;
 }
+
+export { IconSquare, type Tint } from "./IconSquare";
 
 export function StateBadge({ state }: { state: SettingState }) {
   return (
@@ -37,23 +41,31 @@ export function StateBadge({ state }: { state: SettingState }) {
 
 /** An option's or a tile's name: the meters' label size (13/20, semibold). */
 export const SETTING_NAME = { ...METER_LABEL, display: "block" } as const;
-/** A name that stays on one line ("Änderungen übersetzen"), cut with "…" where it can't. */
-const ONE_LINE = { ...SETTING_NAME, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
-/** The figure on a glance tile. */
-const TILE_FIGURE = { display: "block", fontSize: 20, lineHeight: "24px", fontWeight: 700, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" } as const;
 /** A heading moved to by script: no ring for a mouse click (the browser still shows it for the keyboard). */
 const FOCUS_TARGET = { outline: "none" } as const;
 
 /**
- * Moves to a card: scrolls it into view and focuses its heading, so the
- * keyboard and screen readers continue there. No navigation, so the page's
- * data isn't loaded again.
+ * Moves to a section that is shown now: focuses its heading, so the keyboard
+ * and screen readers continue there, and scrolls only when the heading isn't
+ * in view (a new address already starts at the top of the page).
  */
-export function focusCard(id: string) {
+export function focusSection(id: string) {
   if (typeof document === "undefined") return;
-  const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  document.getElementById(`${id}-heading`)?.focus({ preventScroll: true });
+  let frames = 0;
+  const attempt = () => {
+    const heading = document.getElementById(`${id}-heading`);
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    // A section shown a moment ago (a Polaris box takes its new display a frame later, as on a phone
+    // where the list gives way to the section) can't take the focus yet: try again for a few frames.
+    if (document.activeElement !== heading && frames++ < 10) {
+      requestAnimationFrame(attempt);
+      return;
+    }
+    const top = heading.getBoundingClientRect().top;
+    if (top < 0 || top > window.innerHeight - 48) document.getElementById(id)?.scrollIntoView({ block: "start" });
+  };
+  attempt();
 }
 
 /** Focuses an element by id once it is on the page (after a switch, the newly current option). */
@@ -73,8 +85,75 @@ export function useFreshResult<T>(fetcher: { state: string; data?: T }, onResult
 }
 
 /**
+ * A section of the Settings page, shown one at a time: its tile's icon and
+ * its heading (h2, focusable: switching sections moves there) with its
+ * state, one short lead, an optional card above the content (the way back
+ * to a stopped job), then its content in one card. On a phone, where the
+ * section is shown alone, the icon stays and the heading takes the page's
+ * size (ui.css, .lv-section-heading), as every screen opened from Settings
+ * starts.
+ */
+export function SettingSection({
+  id,
+  icon,
+  tint = "grey",
+  heading,
+  state,
+  extra,
+  lead,
+  top,
+  children,
+}: {
+  id: string;
+  /** Its tile's icon and colour, beside the heading. */
+  icon?: IconName;
+  tint?: Tint;
+  heading: string;
+  state?: SettingState | null;
+  /** Beside the state (the plan's badge). */
+  extra?: ReactNode;
+  lead?: ReactNode;
+  /** Between the lead and the content's card. */
+  top?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <section id={id} aria-labelledby={`${id}-heading`} style={{ scrollMarginTop: 16 }}>
+      <s-stack direction="block" gap="base">
+        {/* Its sign level with the heading on a phone, as a page's header (ui.css .lv-page-head). */}
+        <div className={icon && lead ? "lv-section-head lv-page-head" : "lv-section-head"}>
+          <s-grid gridTemplateColumns={icon ? "auto minmax(0, 1fr)" : "1fr"} gap="small-200 base" alignItems="center">
+            {icon ? <IconSquare icon={icon} tint={tint} /> : null}
+            <s-stack direction="block" gap="small-500">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <h2 id={`${id}-heading`} tabIndex={-1} className="lv-section-heading" style={FOCUS_TARGET}>
+                  {heading}
+                </h2>
+                {state ? <StateBadge state={state} /> : null}
+                {extra}
+              </s-stack>
+              {lead ? <s-text color="subdued">{lead}</s-text> : null}
+            </s-stack>
+          </s-grid>
+        </div>
+        {top}
+        {Children.toArray(children).length ? (
+          <s-box {...CARD} padding="base">
+            <s-query-container>
+              <s-stack direction="block" gap="base">
+                {children}
+              </s-stack>
+            </s-query-container>
+          </s-box>
+        ) : null}
+      </s-stack>
+    </section>
+  );
+}
+
+/**
  * A card of the page: its icon (hidden on a narrow screen), heading (h2,
- * focusable for the glance tiles), state, one short lead, then its content.
+ * focusable), state, one short lead, then its content.
  */
 export function SettingCard({
   id,
@@ -122,95 +201,6 @@ export function SettingCard({
   );
 }
 
-/** One "At a glance" tile: a button that moves to its card, or a link to another page. */
-export interface GlanceTile {
-  key: string;
-  /** The card it moves to (its id). */
-  target?: string;
-  /** Another page (the Plan page for the AI characters). */
-  href?: string;
-  icon: IconName;
-  label: string;
-  /** The name on a narrow tile (a phone), where the card's full name doesn't fit on one line. */
-  short?: string;
-  /** Its state; `short`: the words on a narrow tile. */
-  state?: SettingState & { short?: string };
-  /** A figure instead of a state (the AI characters). */
-  figure?: { value: string; percent: number; tone: "success" | "warning" | "critical"; label: string };
-  line: string;
-}
-
-/** A tile is wide enough for its icon and the card's full name (three across on a desktop page, not two on a phone). */
-const WIDE_TILE = "inline-size > 230px";
-
-/** Text for a wide and for a narrow tile; only one of them is shown (and read). */
-function ByWidth({ wide, narrow }: { wide: ReactNode; narrow?: ReactNode }) {
-  if (narrow === undefined) return <>{wide}</>;
-  return (
-    <>
-      <s-box display={`@container (${WIDE_TILE}) auto, none`}>{wide}</s-box>
-      <s-box display={`@container (${WIDE_TILE}) none, auto`}>{narrow}</s-box>
-    </>
-  );
-}
-
-export function Glance({ label, tiles }: { label: string; tiles: GlanceTile[] }) {
-  return (
-    <section aria-label={label}>
-      <s-query-container>
-        {/* Three across on a wide page, two on a phone (with a little less padding). */}
-        <ul style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(150px, 30%), 1fr))", gap: 12 }}>
-          {tiles.map((tile) => (
-            <li key={tile.key} style={{ display: "flex", minWidth: 0 }}>
-              <s-clickable
-                {...CARD}
-                padding="@container (inline-size > 500px) base, small"
-                inlineSize="100%"
-                {...(tile.href ? { href: tile.href } : { onClick: () => tile.target && focusCard(tile.target) })}
-              >
-                {/* As high as the row's highest tile, its content at the top (a button centres it otherwise). */}
-                <div style={{ height: "100%" }}>
-                  <s-query-container>
-                    <s-stack direction="block" gap="small-200">
-                      {/* The icon only where there is room; the name on one line, and the chevron. */}
-                      <s-grid gridTemplateColumns={`@container (${WIDE_TILE}) auto 1fr auto, 1fr auto`} gap="small-200" alignItems="center">
-                        <s-box display={`@container (${WIDE_TILE}) auto, none`}>
-                          <IconTile icon={tile.icon} size={28} color="base" iconSize="base" />
-                        </s-box>
-                        <div style={{ minWidth: 0, overflow: "hidden" }}>
-                          <ByWidth wide={<span style={ONE_LINE}>{tile.label}</span>} narrow={tile.short === undefined ? undefined : <span style={ONE_LINE}>{tile.short}</span>} />
-                        </div>
-                        <s-icon type="chevron-right" color="subdued" />
-                      </s-grid>
-                      {tile.figure ? (
-                        <s-stack direction="block" gap="small-300">
-                          <s-stack direction="inline" gap="small-200" alignItems="center">
-                            <span style={TILE_FIGURE}>{tile.figure.value}</span>
-                            {tile.state ? <StateBadge state={tile.state} /> : null}
-                          </s-stack>
-                          <ProgressBar value={tile.figure.percent} label={tile.figure.label} tone={tile.figure.tone} />
-                        </s-stack>
-                      ) : tile.state ? (
-                        <s-stack direction="inline">
-                          <ByWidth
-                            wide={<StateBadge state={tile.state} />}
-                            narrow={tile.state.short === undefined ? undefined : <StateBadge state={{ ...tile.state, label: tile.state.short }} />}
-                          />
-                        </s-stack>
-                      ) : null}
-                      <s-text color="subdued">{tile.line}</s-text>
-                    </s-stack>
-                  </s-query-container>
-                </div>
-              </s-clickable>
-            </li>
-          ))}
-        </ul>
-      </s-query-container>
-    </section>
-  );
-}
-
 /** What choosing an option does: a script, another page, or opening its confirmation (a modal's id). */
 export interface OptionSelect {
   onClick?: () => void;
@@ -220,14 +210,19 @@ export interface OptionSelect {
 }
 
 /**
- * One choice, drawn like the Plan page's plan cards: its name, badges and
- * what it means. The current one carries "Current setting" and the ring in
- * the text's colour. Any other one that can be chosen is one tap target as a
- * whole (its header); what belongs to it (languages, a lock, a summary)
- * follows below.
+ * One choice, as a tile (styles in ui.css, .lv-option): its icon in a tinted
+ * square, its badges, name and what it means (left out where the name says
+ * it all). The current one carries
+ * "Current setting" and the blue frame of the current section's tile. Any
+ * other one that can be chosen is one button as a whole (a link when
+ * choosing it opens a page, a dialog's opener when it asks first); what
+ * belongs to it (a lock, what it needs first) sits at its foot. Tiles in a
+ * row are equally high.
  */
 export function OptionCard({
   id,
+  icon,
+  tint = "grey",
   title,
   body,
   current,
@@ -237,84 +232,152 @@ export function OptionCard({
   children,
 }: {
   id: string;
+  icon?: IconName;
+  tint?: Tint;
   title: string;
-  body: ReactNode;
+  body?: ReactNode;
   current: boolean;
   currentLabel: string;
   badges?: ReactNode;
   select?: OptionSelect;
   children?: ReactNode;
 }) {
+  const choosable = Boolean(!current && select && !select.disabled && (select.onClick || select.href || select.commandFor));
+  const marks = (
+    <span className="lv-option__badges">
+      {current ? (
+        <s-badge tone="info" color="strong" icon="check-circle">
+          {currentLabel}
+        </s-badge>
+      ) : null}
+      {badges}
+      {/* Can be chosen: an empty radio mark (a chevron where choosing opens its own page). */}
+      {choosable ? (
+        <span className="lv-option__mark" aria-hidden="true">
+          {select?.href ? <s-icon type="chevron-right" color="subdued" /> : <span className="lv-option__radio" />}
+        </span>
+      ) : null}
+    </span>
+  );
   const head = (
-    <s-stack direction="block" gap="small-400">
-      <s-stack direction="inline" gap="small-200" alignItems="center" justifyContent="space-between">
-        <span id={id} tabIndex={-1} style={{ ...SETTING_NAME, ...FOCUS_TARGET, fontSize: 14 }}>
+    <>
+      {icon ? (
+        <span className="lv-option__top">
+          <IconSquare icon={icon} tint={tint} />
+          {marks}
+        </span>
+      ) : null}
+      <span className="lv-option__top" style={icon ? { marginBottom: 0 } : undefined}>
+        {/* The focus target after a switch is the current option's name, never one inside a button. */}
+        <span id={id} {...(choosable ? {} : { tabIndex: -1 })} className="lv-option__title">
           {title}
         </span>
-        <s-stack direction="inline" gap="small-200" alignItems="center">
-          {current ? (
-            <s-badge tone="info" color="strong" icon="check-circle">
-              {currentLabel}
-            </s-badge>
-          ) : null}
-          {badges}
-        </s-stack>
-      </s-stack>
-      <s-text color="subdued">{body}</s-text>
-    </s-stack>
+        {icon ? null : marks}
+      </span>
+      {body ? <span className="lv-option__body">{body}</span> : null}
+    </>
   );
-  const choosable = !current && select && !select.disabled && (select.onClick || select.href || select.commandFor);
+  let control: ReactNode;
+  if (choosable && select?.href) {
+    control = (
+      <Link to={select.href} className="lv-option__choose">
+        {head}
+      </Link>
+    );
+  } else if (choosable && select) {
+    control = (
+      <button
+        type="button"
+        className="lv-option__choose"
+        onClick={() => {
+          select.onClick?.();
+          if (select.commandFor) openDialog(select.commandFor);
+        }}
+      >
+        {head}
+      </button>
+    );
+  } else {
+    control = <div className="lv-option__head">{head}</div>;
+  }
+  const className = ["lv-option", current ? "lv-option--current" : null, choosable ? "lv-option--choosable" : null].filter(Boolean).join(" ");
   return (
-    <div role="group" aria-labelledby={id} style={{ position: "relative", isolation: "isolate", minWidth: 0 }}>
-      <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: -1 }}>
-        <s-box background="base" border={current ? "none" : "base"} borderRadius="large-100" blockSize="100%" />
-        {current ? <div style={{ position: "absolute", inset: 0, borderRadius: 12, boxShadow: "inset 0 0 0 2px currentColor" }} /> : null}
-      </div>
-      {choosable ? (
-        <s-clickable
-          padding="base"
-          borderRadius="large-100"
-          inlineSize="100%"
-          {...(select.href ? { href: select.href } : {})}
-          {...(select.onClick ? { onClick: select.onClick } : {})}
-          {...(select.commandFor ? { commandFor: select.commandFor, command: "--show" as const } : {})}
-        >
-          {head}
-        </s-clickable>
-      ) : (
-        <div style={{ padding: 16 }}>{head}</div>
-      )}
-      {Children.toArray(children).length ? <div style={{ padding: "0 16px 16px" }}>{children}</div> : null}
+    <div role="group" aria-labelledby={id} className={className} data-option={id}>
+      {control}
+      {Children.toArray(children).length ? <div className="lv-option__foot">{children}</div> : null}
     </div>
   );
 }
 
-/** Option cards side by side where there is room, each as high as its own content. */
+/** Opens a Polaris dialog (s-modal) by its own method, as s-button's invoker command does. */
+function openDialog(id: string) {
+  (document.getElementById(id) as (HTMLElement & { showOverlay?: () => void }) | null)?.showOverlay?.();
+}
+
+/** Option tiles side by side where there is room, equally high in a row. */
 export function OptionGrid({ label, children, min = 220 }: { label: string; children: ReactNode; min?: number }) {
   return (
-    <div role="group" aria-label={label} style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}px), 1fr))`, gap: 12, alignItems: "start" }}>
+    <div role="group" aria-label={label} className="lv-options" style={{ "--lv-min": `${min}px` } as CSSProperties}>
       {children}
     </div>
   );
 }
 
-/** The one lock: the plan's name with a lock, one line, and the way to the plans (left out where several would repeat it). */
-export function LockLine({ plan, text, link }: { plan: string; text: string; link?: { href: string; label: string } }) {
+/**
+ * What the current (or the chosen) way needs next, under the choices: its
+ * languages and their button, or its summary with its actions. A group named
+ * by `label`, its icon and title as its heading line.
+ */
+export function OptionPanel({ id, label, icon, tint = "grey", title, children }: { id?: string; label: string; icon: IconName; tint?: Tint; title: string; children: ReactNode }) {
+  // With an id it can take the focus (tabIndex -1): where a choice opens it, the focus follows.
+  return (
+    <div id={id} {...(id ? { tabIndex: -1 } : {})} role="group" aria-label={label} className="lv-option-panel">
+      <s-stack direction="block" gap="small-300">
+        <s-stack direction="inline" gap="small-200" alignItems="center">
+          <IconSquare icon={icon} tint={tint} size={28} />
+          <span style={SETTING_NAME}>{title}</span>
+        </s-stack>
+        {children}
+      </s-stack>
+    </div>
+  );
+}
+
+/**
+ * The one lock: the plan's name with a lock, one line, and the way to the plans (left out where several
+ * would repeat it). No line where it would only repeat the badge (the one plan that has it).
+ */
+export function LockLine({ plan, text, link }: { plan: string; text?: string; link?: { href: string; label: string } }) {
   return (
     <s-stack direction="inline" gap="small-200" alignItems="center">
       <s-badge icon="lock">{plan}</s-badge>
-      <s-text color="subdued">{text}</s-text>
+      {text ? <s-text color="subdued">{text}</s-text> : null}
       {link ? <s-link href={link.href}>{link.label}</s-link> : null}
     </s-stack>
   );
 }
 
-/** A state line: its icon and one sentence (with its reason and time). */
-export function StateLine({ icon, tone, children }: { icon: IconName; tone?: "critical" | "caution"; children: ReactNode }) {
+/**
+ * A state line: its icon and one sentence (with its reason and time), and its way on (`action`, a link).
+ * The link stays outside the sentence's s-text, which would draw it in the text's colour: links are blue
+ * everywhere. After a fact it follows a middle dot ("Fixed terms in the glossary: 0 · Edit glossary"),
+ * after a full sentence a space.
+ */
+export function StateLine({ icon, tone, children, action }: { icon: IconName; tone?: "critical" | "caution"; children?: ReactNode; action?: ReactNode }) {
+  const text = Children.toArray(children).length ? <s-text {...(tone ? { tone } : {})}>{children}</s-text> : null;
+  const join = typeof children === "string" && /[.!?]$/.test(children) ? " " : " · ";
   return (
     <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
       <s-icon type={icon} {...(tone ? { tone } : { color: "subdued" })} />
-      <s-text {...(tone ? { tone } : {})}>{children}</s-text>
+      {action ? (
+        <span>
+          {text}
+          {text ? join : null}
+          {action}
+        </span>
+      ) : (
+        text
+      )}
     </s-grid>
   );
 }
@@ -332,19 +395,8 @@ export function FactList({ label, facts }: { label: string; facts: Array<{ icon:
   );
 }
 
-/** More words on demand, closed at first (a native disclosure, 44 px high, like the Plan page's questions); `open`: open at first. */
-export function More({ summary, children, open }: { summary: string; children: ReactNode; open?: boolean }) {
-  return (
-    <details {...(open ? { open: true } : {})}>
-      <summary style={{ cursor: "pointer", minHeight: 44, padding: "12px 0", boxSizing: "border-box", fontWeight: 600 }}>{summary}</summary>
-      <div style={{ padding: "0 0 8px 18px" }}>
-        <s-stack direction="block" gap="small-200">
-          {children}
-        </s-stack>
-      </div>
-    </details>
-  );
-}
+/** More words on demand (the app's disclosure, app/components/Disclosure.tsx). */
+export const More = Disclosure;
 
 /**
  * A row of actions that never wraps into a ragged second line: side by side
@@ -373,18 +425,21 @@ function flatten(children: ReactNode): ReactNode[] {
 }
 
 /**
- * A notice inside a card: stopped by the plan, nothing yet, not set up. Its
- * icon, a short heading, one sentence, and its actions (`actionsWide`: the
- * width they need side by side).
+ * A notice inside a card: stopped by the plan, nothing yet, not set up, a
+ * job that is busy. Its icon (in `tone` when given), a short heading, one
+ * sentence, and its actions (`actionsWide`: the width they need side by
+ * side).
  */
 export function InlineNotice({
   icon,
+  tone,
   heading,
   children,
   actions,
   actionsWide = 360,
 }: {
   icon: IconName;
+  tone?: JSX.IntrinsicElements["s-icon"]["tone"];
   heading: string;
   children?: ReactNode;
   actions?: ReactNode;
@@ -393,7 +448,7 @@ export function InlineNotice({
   return (
     <s-box background="subdued" borderRadius="large-100" padding="base">
       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-        <s-icon type={icon} />
+        <s-icon type={icon} tone={tone} />
         <s-stack direction="block" gap="small-300">
           <s-stack direction="block" gap="small-500">
             <span style={SETTING_NAME}>{heading}</span>
@@ -406,22 +461,20 @@ export function InlineNotice({
   );
 }
 
-/** Tiles of links, two by two: icon, name, what it is for, and the chevron (the whole row is the link). */
-export function LinkTiles({ label, links }: { label: string; links: Array<{ href: string; icon: IconName; name: string; detail: string }> }) {
+/** Tiles of links, two or three in a row: the icon in its tinted square, the name, what it is for, and the chevron (the whole tile is the link). */
+export function LinkTiles({ label, links }: { label: string; links: Array<{ href: string; icon: IconName; tint?: Tint; name: string; detail: string }> }) {
   return (
-    <ul aria-label={label} style={{ ...PLAIN_LIST, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(240px, 40%), 1fr))", gap: 4 }}>
+    <ul aria-label={label} className="lv-links">
       {links.map((link) => (
-        <li key={link.href} style={{ display: "flex", minWidth: 0 }}>
-          <s-clickable href={link.href} padding="small-100" borderRadius="large-100" inlineSize="100%">
-            <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" columnGap="small-100" alignItems="center">
-              <IconTile icon={link.icon} size={32} color="base" iconSize="base" />
-              <s-stack direction="block">
-                <span style={SETTING_NAME}>{link.name}</span>
-                <s-text color="subdued">{link.detail}</s-text>
-              </s-stack>
-              <s-icon type="chevron-right" color="subdued" />
-            </s-grid>
-          </s-clickable>
+        <li key={link.href} className="lv-links__item">
+          <Link to={link.href} className="lv-link-tile">
+            <IconSquare icon={link.icon} tint={link.tint ?? "grey"} />
+            <span className="lv-link-tile__text">
+              <span className="lv-link-tile__name">{link.name}</span>
+              <span className="lv-link-tile__detail">{link.detail}</span>
+            </span>
+            <s-icon type="chevron-right" color="subdued" />
+          </Link>
         </li>
       ))}
     </ul>

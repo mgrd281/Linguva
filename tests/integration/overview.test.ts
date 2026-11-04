@@ -61,7 +61,8 @@ describe("getting started", () => {
     await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
     overview = await loadOverview(store.asAdmin(), shop, app);
     expect(steps(overview)).toMatchObject({ language: true, consent: true, "first-translation": false });
-    expect(overview.checklist.find((s) => s.id === "first-translation")?.href).toBe("/app/products?lang=de");
+    // Not counted yet: still the language's own list of products (it offers counting first), never an old per-type list.
+    expect(overview.checklist.find((s) => s.id === "first-translation")?.href).toBe("/app/languages/de/products");
 
     // A bulk job in review mode: drafts to review, nothing published yet.
     const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: new MockTranslationProvider(), monthlyLimit: 1_000_000, keyPrefix: "lv:test:overview" };
@@ -293,6 +294,18 @@ describe("percentages from completed measurements only", () => {
     expect(overview.progress[0]).toMatchObject({ locale: "de", measured: false, percent: null });
     expect(overview.storeShare).toBeNull();
     expect(overview.next).toEqual({ id: "measure" });
+  });
+
+  it("opens the first translation on the products' list of a counted language customers can choose", async () => {
+    const { store, shop, deps } = await measuredStore();
+    // A hidden language Shopify lists first: the visible one leads.
+    store.locales = [store.locales[0]!, { locale: "fr", name: "French", primary: false, published: false }, store.locales[1]!];
+    await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["fr", "de"], requestedBy: null, idempotencyKey: "first" }, app);
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    const overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.next).toEqual({ id: "first-translation", href: "/app/languages/de/products" });
   });
 
   it("counts translations already live in the store (made anywhere) as past the first translation", async () => {

@@ -23,6 +23,7 @@ import { testEnv } from "../support/env";
 import { seedOwnKey } from "../support/own-keys";
 import { setWorkerRunning } from "./helpers";
 import { DEMO_GLOSSARY, demoDrafts } from "./fixtures/demo-store";
+import { seedJobsStore } from "./fixtures/jobs-store";
 import { fullArabicDraft, REVIEW_LOCALES, reviewDrafts } from "./fixtures/review-store";
 import { UI_SHOPS } from "./fixtures/shops";
 
@@ -321,6 +322,9 @@ export default async function globalSetup() {
       let next: CoveragePagePayload | null = { shopId: ids[key]!, reportId: report.id, segmentIndex: 0, cursor: null };
       while (next) next = await runCoveragePage(coverageDeps, next);
     }
+
+    // The Jobs pages' store: a job in each state (fixtures/jobs-store.ts).
+    await seedJobsStore(owner, ids.jobs!);
 
     // No worker runs in these tests: a heartbeat left from an earlier run would say otherwise.
     await setWorkerRunning(false);

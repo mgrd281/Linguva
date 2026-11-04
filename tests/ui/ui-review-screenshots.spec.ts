@@ -7,7 +7,7 @@
  *
  * Fictional stores only; no merchant data.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "@playwright/test";
 import { openApp, setWorkerRunning } from "./helpers";
 import type { UiShopKey } from "./fixtures/shops";
 
@@ -23,7 +23,6 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "coverage", shop: "full", path: "/app/coverage", phone: true },
   { name: "coverage-language", shop: "full", path: "/app/coverage?lang=de" },
   { name: "coverage-items", shop: "full", path: "/app/coverage/items?lang=de&type=PRODUCT" },
-  { name: "products", shop: "demo", path: "/app/products?lang=de" },
   { name: "editor", shop: "demo", path: "/app/products/2?lang=de", phone: true },
   { name: "review", shop: "demo", path: "/app/review", phone: true },
   // Review, redesigned (UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign2): nothing waiting.
@@ -42,9 +41,9 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "content-pictures", shop: "demo", path: "/app/content" },
   { name: "content-not-counted", shop: "measure", path: "/app/content" },
   // Smart Auto-Translate (UI_REVIEW_SCREENSHOTS=docs/ui-review/smart-auto).
-  { name: "smart-settings", shop: "business", path: "/app/settings", phone: true },
+  { name: "smart-settings", shop: "business", path: "/app/settings?section=changes", phone: true },
   { name: "smart-page", shop: "business", path: "/app/settings/automatic", phone: true },
-  { name: "smart-upsell", shop: "full", path: "/app/settings", phone: true },
+  { name: "smart-upsell", shop: "full", path: "/app/settings?section=changes", phone: true },
   // The Plan page with prices (UI_REVIEW_SCREENSHOTS=docs/ui-review/plan): a plan, no plan (trial offer), a running trial.
   { name: "plan", shop: "full", path: "/app/plan", phone: true },
   { name: "plan-none", shop: "empty", path: "/app/plan", phone: true },
@@ -89,3 +88,27 @@ for (const device of DEVICES) {
     }
   });
 }
+
+// Redesign 3 (UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign3 … -g "settings-sections"): Settings in sections,
+// in German, 1,280 px wide at scale 1 and on an iPhone 13 (its own scale; Chromium with its viewport and touch).
+const IPHONE_13 = { viewport: devices["iPhone 13"].viewport, deviceScaleFactor: devices["iPhone 13"].deviceScaleFactor, isMobile: true, hasTouch: true, userAgent: devices["iPhone 13"].userAgent };
+test.describe("settings-sections", () => {
+  test("settings-sections desktop", async ({ page }, info) => {
+    test.skip(info.project.name === "mobile", "Taken once, in the desktop project");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openApp(page, "visual", "/app/settings", { locale: "de" });
+    await settle(page);
+    const image = await page.screenshot({ path: `${OUT}/settings-desktop.png`, fullPage: true, animations: "disabled", caret: "hide" });
+    expect(image.length).toBeGreaterThan(5_000);
+  });
+  test.describe("phone", () => {
+    test.use(IPHONE_13);
+    test("settings-sections phone", async ({ page }, info) => {
+      test.skip(info.project.name === "mobile", "Taken once, in the desktop project");
+      await openApp(page, "visual", "/app/settings", { locale: "de" });
+      await settle(page);
+      const image = await page.screenshot({ path: `${OUT}/settings-phone.png`, fullPage: true, animations: "disabled", caret: "hide" });
+      expect(image.length).toBeGreaterThan(5_000);
+    });
+  });
+});

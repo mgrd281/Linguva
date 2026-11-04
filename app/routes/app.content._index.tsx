@@ -6,10 +6,14 @@
  * at once; what isn't in the store or can't be read is folded away.
  *
  * The page's only buttons: "Allow access" (the primary one), counting when
- * the language needs it, "Load again" when Shopify didn't answer, and
- * "Show" beside the select of a store with many languages. It reloads every
+ * the language needs it, and "Load again" when Shopify didn't answer (a
+ * store with many languages picks one in a select that opens it at once:
+ * its "Show" is there only without scripts). It reloads every
  * few seconds only while a count reads the language; the areas' pictures
- * load after the page (the language page's previews).
+ * load after the page (the language page's previews). Its links into a
+ * language's page and lists say where they come from (`?from=content`), so
+ * their trail leads back here; the language pages' "Allow access" lands on
+ * the permission card (#content-access).
  */
 import { useEffect } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
@@ -21,9 +25,10 @@ import { clearContentHubCache, scopesToRequest } from "../.server/translation/co
 import { startMeasurement } from "../.server/coverage/dashboard";
 import type { clientLoader as previewsLoader } from "./app.languages_.$locale_.previews";
 import { AccessCard, Areas, CountCard, Folds, LanguageChips, LanguageMeta, MoreTexts, NoLanguagesCard, NothingCard, partName, countNotice, type TilePictures } from "../components/ContentTiles";
-import { BIG_HEADING, languageErrorText } from "../components/LanguageLayout";
+import { languageErrorText } from "../components/LanguageLayout";
 import { useI18n } from "../i18n/react";
 import { languageList } from "../lib/name-lists";
+import { PageHeader } from "../components/PageHeader";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -100,10 +105,7 @@ export default function ContentPage() {
     <s-page heading={t("common.nav.content")}>
       <s-query-container>
         <s-stack direction="block" gap="base">
-          <s-stack direction="block" gap="small-500">
-            <h1 style={BIG_HEADING}>{t("common.nav.content")}</h1>
-            <s-text color="subdued">{t("content.subtitle")}</s-text>
-          </s-stack>
+          <PageHeader page="content" title={t("common.nav.content")} lead={t("content.subtitle")} />
 
           {data.language ? (
             <s-stack direction="block" gap="small-200">
@@ -134,7 +136,7 @@ export default function ContentPage() {
           {data.nothing ? (
             <NothingCard i18n={i18n} />
           ) : (
-            <Areas areas={data.areas} i18n={i18n} picturesOf={picturesOf} withKey={data.language !== null} />
+            <Areas areas={data.areas} i18n={i18n} picturesOf={picturesOf} withKey={data.language !== null} extras={data.extras} />
           )}
           <MoreTexts key={`${locale}|${data.open}`} extras={data.extras} open={data.open} i18n={i18n} />
           <Folds empty={data.empty} unavailable={data.unavailable} i18n={i18n} />

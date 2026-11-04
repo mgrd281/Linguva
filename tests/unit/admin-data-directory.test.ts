@@ -3,8 +3,9 @@
  * facts (app/.server/admin/directory.ts, overview.ts) without a database:
  * which plan a store is on, when it is in a trial or complimentary, what it
  * pays a month at the current list prices (cents, ANNUAL = yearly ÷ 12,
- * nothing for trials, complimentary, unknown or uninstalled stores), and
- * the search, filters and order of the customer list.
+ * nothing for trials, complimentary, unknown or uninstalled stores; a
+ * cached cycle that is over counts as what followed it), and the search,
+ * filters and order of the customer list.
  */
 import { describe, expect, it } from "vitest";
 import { filterRows, revenueCents, shopRow, type RowContext, type ShopFacts, type ShopRow } from "../../app/.server/admin/directory";
@@ -79,6 +80,13 @@ describe("a store's plan", () => {
     expect(row(facts({ sub: null }), ctx({ billingConfigured: false })).plan).toBe("free");
   });
 
+  it("is unknown after an uninstall or reinstall reset (checked at the epoch: not checked since), and shows no check date", () => {
+    const reset = facts({ sub: { state: "NONE", planHandle: null, billingPeriod: null, checkedAt: null } });
+    expect(row(reset)).toMatchObject({ plan: "unknown", monthlyRevenueUsd: 0, subscription: { state: "NONE", checkedAt: null } });
+    expect(row(reset, ctx({ billingConfigured: false })).plan).toBe("free");
+    expect(row(facts({ sub: { state: "NONE", planHandle: null } })).subscription?.checkedAt).toBe(NOW.toISOString());
+  });
+
   it("is complimentary only with an active grant for a listed GID", () => {
     const owner = (grant: Partial<NonNullable<ShopFacts["grant"]>>, gids: string[] = [GID]) => row(facts({ shop: { shopifyShopGid: GID }, grant }), ctx({ complimentaryGids: gids }));
     expect(owner({})).toMatchObject({ plan: "complimentary", complimentary: true, monthlyRevenueUsd: 0, hasGid: true });
@@ -94,6 +102,30 @@ describe("a store's plan", () => {
     expect(ends(DAY)).toMatchObject({ inTrial: true, monthlyRevenueUsd: 0 });
     expect(ends(-1)).toMatchObject({ inTrial: false, monthlyRevenueUsd: 299 });
     expect(ends(DAY, { status: "UNINSTALLED" })).toMatchObject({ inTrial: false, monthlyRevenueUsd: 0 });
+  });
+
+  it("counts a cached cycle that is over as what followed it: a cancellation ended it, a pending change took effect", () => {
+    // Checked 40 days ago, during a cycle that ended 35 days ago (the store hasn't used the app since: no new answer).
+    const checkedAt = new Date(NOW.getTime() - 40 * DAY);
+    const over = new Date(NOW.getTime() - 35 * DAY);
+    const ahead = new Date(NOW.getTime() + 5 * DAY);
+    const sub = (extra: Partial<NonNullable<ShopFacts["subscription"]>>) => row(facts({ sub: { planHandle: "pro", checkedAt, ...extra } }));
+    // Cancelled at the end of a cycle that ended: Free (Shopify ended the subscription), paying nothing.
+    expect(sub({ cancelAtEndOfCycle: true, currentPeriodEnd: over })).toMatchObject({ plan: "free", monthlyRevenueUsd: 0 });
+    // The very end of the cycle counts as over.
+    expect(sub({ cancelAtEndOfCycle: true, currentPeriodEnd: NOW }).plan).toBe("free");
+    // Still within the cycle: it pays its plan until then.
+    expect(sub({ cancelAtEndOfCycle: true, currentPeriodEnd: ahead })).toMatchObject({ plan: "pro", monthlyRevenueUsd: 99 });
+    // A pending change after the cycle: the new plan and its price (Own key's aliases, unknown handles as on any row).
+    expect(sub({ pendingPlanHandle: "starter", currentPeriodEnd: over })).toMatchObject({ plan: "starter", monthlyRevenueUsd: 29 });
+    expect(sub({ pendingPlanHandle: "ownkey", currentPeriodEnd: over })).toMatchObject({ plan: "own-key", monthlyRevenueUsd: 49 });
+    expect(sub({ pendingPlanHandle: "free", currentPeriodEnd: over })).toMatchObject({ plan: "free", monthlyRevenueUsd: 0 });
+    expect(sub({ pendingPlanHandle: "enterprise", currentPeriodEnd: over })).toMatchObject({ plan: "unknown", monthlyRevenueUsd: 0 });
+    expect(sub({ pendingPlanHandle: "starter", currentPeriodEnd: ahead })).toMatchObject({ plan: "pro", monthlyRevenueUsd: 99 });
+    // Nothing due at the end of the cycle: a renewal the cache hasn't seen yet, still the plan.
+    expect(sub({ currentPeriodEnd: over })).toMatchObject({ plan: "pro", monthlyRevenueUsd: 99 });
+    // Shopify answered after that end (it said so itself): its answer stands.
+    expect(sub({ cancelAtEndOfCycle: true, currentPeriodEnd: over, checkedAt: NOW })).toMatchObject({ plan: "pro", monthlyRevenueUsd: 99 });
   });
 });
 
@@ -116,6 +148,25 @@ describe("estimated revenue", () => {
     expect(cents({ planHandle: "pro", cancelAtEndOfCycle: true, pendingPlanHandle: "starter" })).toBe(9_900);
     // The row shows whole cents: $290 / 12 = $24.17.
     expect(row(facts({ sub: { planHandle: "starter", billingPeriod: "ANNUAL" } })).monthlyRevenueUsd).toBe(24.17);
+  });
+
+  it("leaves cycles that are over out of the cancellations and pending changes", () => {
+    const checkedAt = new Date(NOW.getTime() - 40 * DAY);
+    const over = new Date(NOW.getTime() - 35 * DAY);
+    const ahead = new Date(NOW.getTime() + 5 * DAY);
+    const rows = [
+      row(facts({ sub: { planHandle: "pro", cancelAtEndOfCycle: true, currentPeriodEnd: over, checkedAt } })),
+      row(facts({ sub: { planHandle: "pro", pendingPlanHandle: "starter", currentPeriodEnd: over, checkedAt } })),
+      row(facts({ sub: { planHandle: "pro", cancelAtEndOfCycle: true, currentPeriodEnd: ahead } })),
+      row(facts({ sub: { planHandle: "business", pendingPlanHandle: "pro", currentPeriodEnd: ahead } })),
+      row(facts({ sub: { planHandle: "pro", cancelAtEndOfCycle: true, currentPeriodEnd: null } })),
+    ];
+    const s = summarize({ rows, builtAt: NOW.toISOString(), billingConfigured: true, prices: DEFAULT_PRICES }, NOW);
+    expect(s.cancelling).toBe(2);
+    expect(s.pendingChanges).toBe(1);
+    expect(s.plans).toMatchObject({ free: 1, starter: 1, pro: 2, business: 1 });
+    // 0 + 29 + 99 + 299 + 99.
+    expect(s.revenue).toMatchObject({ mrrUsd: 526, payingStores: 4 });
   });
 
   it("sums exactly and rounds once", () => {
@@ -181,7 +232,8 @@ describe("the customer list", () => {
     const order = (sort: "newest" | "oldest" | "usage" | "revenue" | "name") => filterRows(rows, { sort }).map((r) => r.shopDomain.split(".")[0]);
     expect(order("newest")).toEqual(["zebra", "alpha-store", "beta"]);
     expect(order("oldest")).toEqual(["beta", "alpha-store", "zebra"]);
-    expect(order("usage")).toEqual(["beta", "alpha-store", "zebra"]);
+    // Usage: Linguva's characters, as the column shows (own-key characters are a line of their own).
+    expect(order("usage")).toEqual(["alpha-store", "zebra", "beta"]);
     expect(order("revenue")).toEqual(["zebra", "alpha-store", "beta"]);
     expect(order("name")).toEqual(["alpha-store", "beta", "zebra"]);
     // The input stays as it was.

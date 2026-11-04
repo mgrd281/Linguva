@@ -61,7 +61,7 @@ Lengths are checked by `tests/unit/app-store-listing.test.ts`. **Nothing here is
 
 ## Pricing details
 
-Entered by the owner in the Partner Dashboard (Pricing content, per published language: PRICING_DECISION.md §9 step 3), from the decision of 2026-10-30. Display name = the plan name; Shopify shows the prices from the plans themselves ($0; $29 or $290 a year; $99 or $990 a year; $299 a month only). The app's Plan page shows the same prices from `PLAN_PRICES` (`app/lib/plans.ts`); change all three on the same day.
+Entered by the owner in the Partner Dashboard (Pricing content, per published language: PRICING_DECISION.md §9 step 3), from the decision of 2026-10-30. Display name = the plan name; Shopify shows the prices from the plans themselves ($0; $29 or $290 a year; $99 or $990 a year; $299 a month only). The app's Plan page and the website show the same prices: the ones saved in the admin console, else the defaults `PLAN_PRICES` and `OWN_KEY_PRICE` (`app/lib/plans.ts`). Change all three on the same day, in the order of PRICING_DECISION.md §9 step 8: the Partner Dashboard, the console's Prices page (docs/ADMIN_CONSOLE.md §3), then this text.
 
 | Plan | Top features (EN) | Top features (DE) |
 |---|---|---|

@@ -51,7 +51,7 @@ States: **Implemented** (code exists), **Tested** (automated tests pass), **Veri
 | M6 | Read-only Markets page (optional scope `read_markets`) | Implemented, Tested (unit). Not verified |
 | M8 | Review guard for SECURITY DEFINER changes; CI checks for hidden files and orphan test files | Implemented, Tested |
 | M7 | Owner complimentary access (allowlist + operator grant, metered, audited) | Implemented, Tested (unit, integration, security, UI) |
-| M7 | Admin center v1 (docs/ADMIN_CONSOLE.md): `/admin`, off by default, own host; password + mandatory TOTP, roles, CSRF, audit; accounts through `pnpm ops:admin`; every store read shop by shop under RLS; list prices for the website and the Plan page (Shopify still charges the Partner Dashboard's) | Implemented, Tested (locally: unit, integration, security; not yet in CI). Not deployed |
+| M7 | Admin center v1 (docs/ADMIN_CONSOLE.md): `/admin`, off by default, own host; password + mandatory TOTP, roles, CSRF, audit; accounts through `pnpm ops:admin`; every store read shop by shop under RLS; list prices for the website and the Plan page (Shopify still charges the Partner Dashboard's) | Implemented, Tested (CI: unit, integration, security, UI). Not deployed |
 | M3 | Shopify CLI readiness (app config, .env in development, preflight) | Implemented; dev server start checked. Blocked on `config:link` (owner) |
 | M8 | Playwright UI tests (production build, simulated Shopify, axe, phone layout); UX error/empty/loading states | Implemented, Tested (CI) |
 | — | Beta readiness review (BETA_READINESS.md) | Done: blockers need the owner |
@@ -121,7 +121,7 @@ Each milestone ends with tests passing in CI and a report to the owner. Estimate
 | Image alt text, text metafields | Yes (fake) | Yes | No (live test prepared) |
 | Markets page (read-only) | Yes (fake) | — | No (live read test prepared) |
 | Shopify App Pricing | Yes (simulated Partner API) | — | No |
-| Admin console | Yes, locally (real PostgreSQL and Redis, simulated Partner API); not yet in CI | Yes (route structure, database privileges) | — (not deployed) |
+| Admin console | Yes (real PostgreSQL and Redis, simulated Partner API; UI in a real browser, `tests/ui/admin.spec.ts`) | Yes (route structure, database privileges) | — (not deployed) |
 
 ## 6. Open issues
 

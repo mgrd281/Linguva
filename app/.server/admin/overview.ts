@@ -4,7 +4,7 @@
  * all from the directory (no database read of its own). Revenue is in
  * cents until the end and rounded once: a yearly price ÷ 12 is rarely whole.
  */
-import { ADMIN_PLAN_KEYS, revenueCents, type AdminPlanKey, type Directory, type ShopRow } from "./directory";
+import { ADMIN_PLAN_KEYS, cycleEnded, revenueCents, type AdminPlanKey, type Directory, type ShopRow } from "./directory";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** "New" and "lost" stores: the last 30 days. */
@@ -18,9 +18,9 @@ export interface OverviewSummary {
   plans: Record<AdminPlanKey, number>;
   /** Installed stores in a Shopify trial; the ones ending in the next 7 days, soonest first (at most 10). */
   trials: { count: number; endingSoon: ShopRow[] };
-  /** Installed stores whose subscription ends with the billing cycle. */
+  /** Installed stores whose subscription ends with the billing cycle (not one that is over: that subscription ended). */
   cancelling: number;
-  /** Installed stores with a plan change waiting for the end of the cycle. */
+  /** Installed stores with a plan change waiting for the end of the cycle (not one that is over: the change took effect). */
   pendingChanges: number;
   /** Estimated from the current list prices: MRR, ARR = MRR × 12, stores that pay, MRR ÷ paying stores. */
   revenue: { mrrUsd: number; arrUsd: number; payingStores: number; arpuUsd: number };
@@ -56,8 +56,8 @@ export function summarize(dir: Directory, now: Date = new Date()): OverviewSumma
     },
     plans,
     trials: { count: trialing.length, endingSoon },
-    cancelling: active.filter((row) => row.subscription?.state === "ACTIVE" && row.subscription.cancelAtEndOfCycle).length,
-    pendingChanges: active.filter((row) => row.subscription?.state === "ACTIVE" && row.subscription.pendingPlanHandle !== null).length,
+    cancelling: active.filter((row) => row.subscription?.state === "ACTIVE" && row.subscription.cancelAtEndOfCycle && !cycleEnded(row.subscription, now)).length,
+    pendingChanges: active.filter((row) => row.subscription?.state === "ACTIVE" && row.subscription.pendingPlanHandle !== null && !cycleEnded(row.subscription, now)).length,
     revenue: {
       mrrUsd: Math.round(mrrCents) / 100,
       arrUsd: Math.round(mrrCents * 12) / 100,

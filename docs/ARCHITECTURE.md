@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, Microsoft Azure, Google Cloud, mock; several engines behind a router) and the bulk worker (§2.1–2.3) are **implemented and tested**; the admin console (§2.4) is **implemented and tested locally, not deployed**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
+Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, Microsoft Azure, Google Cloud, mock; several engines behind a router) and the bulk worker (§2.1–2.3) are **implemented and tested**; the admin console (§2.4) is **implemented and tested (CI), not deployed**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
 
 ## 1. Principles
 

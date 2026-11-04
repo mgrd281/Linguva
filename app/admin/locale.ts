@@ -64,9 +64,14 @@ function viaHttps(request: Request): boolean {
   return request.headers.get("x-forwarded-proto")?.split(",").at(-1)?.trim().toLowerCase() === "https";
 }
 
-/** Set-Cookie for the chosen language: the console's paths only, a year, Lax (a link from elsewhere keeps the language), Secure over https. */
+/**
+ * Set-Cookie for the chosen language: a year, Lax (a link from elsewhere
+ * keeps the language), Secure over https. Path=/, not /admin: the pages'
+ * data requests go to /admin.data, which a cookie for /admin doesn't reach
+ * (only the console reads it; it holds "en" or "ar").
+ */
 export function adminLangCookie(locale: AdminLocale, request: Request): string {
-  return [`${ADMIN_LANG_COOKIE}=${locale}`, "Path=/admin", `Max-Age=${ONE_YEAR_SECONDS}`, "SameSite=Lax", ...(viaHttps(request) ? ["Secure"] : [])].join("; ");
+  return [`${ADMIN_LANG_COOKIE}=${locale}`, "Path=/", `Max-Age=${ONE_YEAR_SECONDS}`, "SameSite=Lax", ...(viaHttps(request) ? ["Secure"] : [])].join("; ");
 }
 
 /**

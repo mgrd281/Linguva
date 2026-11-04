@@ -2,14 +2,16 @@
  * The list prices set in the admin console (app/.server/admin/prices.ts)
  * against the real database as the runtime role: a save writes the changed
  * plans' PlanPrice rows, their history and the audit log in one
- * transaction, one writer at a time; the website and the app's Plan page
- * then show them (German formatting as before), and the defaults stay
- * exactly as they were while no price is set.
+ * transaction, one writer at a time; a save from a form read before
+ * another save is refused (nothing written); a value the database refuses
+ * is the form's error; the website and the app's Plan page then show them
+ * (German formatting as before), and the defaults stay exactly as they were
+ * while no price is set.
  */
 import { PrismaClient } from "@prisma/client";
 import type { LoaderFunctionArgs } from "react-router";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { getPriceTable, InvalidPriceTableError, invalidatePriceCache, loadPricesPage, parsePriceForm, savePrices } from "../../app/.server/admin/prices";
+import { getPriceTable, InvalidPriceTableError, invalidatePriceCache, loadPricesPage, parsePriceForm, pricesChangedSince, savePrices, type PriceVersions } from "../../app/.server/admin/prices";
 import { loadPlanPage } from "../../app/.server/billing/plan-page";
 import type { BillingStatus } from "../../app/.server/billing/subscription";
 import { getConfig, resetConfigCache } from "../../app/.server/lib/config";
@@ -26,6 +28,9 @@ const HASH = `scrypt$32768$8$3$${"A".repeat(22)}$${"B".repeat(43)}`;
 const args = (path: string) => ({ request: new Request(`https://linguva.example${path}`), params: {}, context: {} }) as unknown as LoaderFunctionArgs;
 const admin = (email: string) => ownerDb.adminUser.create({ data: { email, passwordHash: HASH, totpSecret: "v1.k1.aaaa.bbbb.cccc", role: "FINANCE" } });
 const table = (changes: Partial<PriceTable>): PriceTable => ({ ...DEFAULT_PRICES, ...changes });
+/** The versions the Prices page shows now (what its form sends back). */
+const versions = async (): Promise<PriceVersions> =>
+  Object.fromEntries((await loadPricesPage({ client: app, config: getConfig() })).plans.map((plan) => [plan.handle, plan.version])) as unknown as PriceVersions;
 
 beforeEach(async () => {
   await resetDatabase();
@@ -42,7 +47,7 @@ describe("saving prices", () => {
     expect(await getPriceTable(app)).toEqual(DEFAULT_PRICES);
 
     const first = table({ starter: { monthlyUsd: 34.99, yearlyUsd: 349.9 }, business: { monthlyUsd: 299, yearlyUsd: 2990 } });
-    expect(await savePrices(first, "Launch prices", { userId: finance.id }, { client: app })).toEqual({ changed: ["starter", "business"] });
+    expect(await savePrices(first, "Launch prices", { userId: finance.id }, { client: app, expected: await versions() })).toEqual({ ok: true, changed: ["starter", "business"] });
     expect(await ownerDb.planPrice.findMany({ orderBy: { handle: "asc" }, select: { handle: true, monthlyCents: true, yearlyCents: true } })).toEqual([
       { handle: "business", monthlyCents: 29_900, yearlyCents: 299_000 },
       { handle: "starter", monthlyCents: 3_499, yearlyCents: 34_990 },
@@ -61,12 +66,12 @@ describe("saving prices", () => {
     expect(await getPriceTable(app)).toEqual(first);
 
     // The same table again: nothing changes, nothing is written.
-    expect(await savePrices(first, "Again", { userId: finance.id }, { client: app })).toEqual({ changed: [] });
+    expect(await savePrices(first, "Again", { userId: finance.id }, { client: app })).toEqual({ ok: true, changed: [] });
     expect(await ownerDb.planPriceChange.count()).toBe(2);
     expect(await ownerDb.auditLog.count()).toBe(2);
 
     // Back to the default and yearly price removed: a row (never deleted) holding the default, history from the saved price.
-    expect(await savePrices(DEFAULT_PRICES, "Back to the defaults", { userId: finance.id }, { client: app })).toEqual({ changed: ["starter", "business"] });
+    expect(await savePrices(DEFAULT_PRICES, "Back to the defaults", { userId: finance.id }, { client: app })).toEqual({ ok: true, changed: ["starter", "business"] });
     expect(await ownerDb.planPrice.findUniqueOrThrow({ where: { handle: "business" } })).toMatchObject({ monthlyCents: 29_900, yearlyCents: null });
     expect(await getPriceTable(app)).toEqual(DEFAULT_PRICES);
     const page = await loadPricesPage({ client: app, config: getConfig() });
@@ -99,6 +104,49 @@ describe("saving prices", () => {
     expect((await getPriceTable(app)).pro.monthlyUsd).toBe(second.newMonthlyCents / 100);
   });
 
+  it("refuses a form read before another save: two admins, one stale page, nothing reverted", async () => {
+    const a = await admin("a@linguva.test");
+    const b = await admin("b@linguva.test");
+    // Both open the page while every price is the default.
+    const seenByA = await versions();
+    const seenByB = await versions();
+    expect(seenByA).toEqual({ free: "default", starter: "default", pro: "default", business: "default", "own-key": "default" });
+    expect(await savePrices(table({ starter: { monthlyUsd: 39, yearlyUsd: 390 } }), "Starter up", { userId: a.id }, { client: app, expected: seenByA })).toEqual({ ok: true, changed: ["starter"] });
+    // B's form still holds Starter at 29/290 and raises Pro: refused, nothing written.
+    expect(await pricesChangedSince(seenByB, app)).toEqual(["starter"]);
+    const stale = table({ pro: { monthlyUsd: 109, yearlyUsd: 1090 } });
+    expect(await savePrices(stale, "Pro up", { userId: b.id }, { client: app, expected: seenByB })).toEqual({ ok: false, conflict: ["starter"] });
+    expect(await ownerDb.planPrice.findMany({ select: { handle: true, monthlyCents: true, yearlyCents: true } })).toEqual([{ handle: "starter", monthlyCents: 3_900, yearlyCents: 39_000 }]);
+    expect((await ownerDb.planPriceChange.findMany()).map((c) => [c.handle, c.reason])).toEqual([["starter", "Starter up"]]);
+    expect(await ownerDb.auditLog.count()).toBe(1);
+    expect((await getPriceTable(app)).starter).toEqual({ monthlyUsd: 39, yearlyUsd: 390 });
+    // After reading the page again (Starter at 39/390), B's save goes through and changes Pro only.
+    const reread = await versions();
+    expect(reread.starter).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\/3900\/39000$/);
+    expect(await pricesChangedSince(reread, app)).toEqual([]);
+    const current = table({ starter: { monthlyUsd: 39, yearlyUsd: 390 }, pro: { monthlyUsd: 109, yearlyUsd: 1090 } });
+    expect(await savePrices(current, "Pro up", { userId: b.id }, { client: app, expected: reread })).toEqual({ ok: true, changed: ["pro"] });
+    // A version that is missing never matches.
+    expect(await savePrices(current, "No versions", { userId: b.id }, { client: app, expected: { ...reread, pro: "" } })).toEqual({ ok: false, conflict: ["pro"] });
+  });
+
+  it("refuses the second of two saves from the same page at the same moment (checked under the locks)", async () => {
+    const a = await admin("a@linguva.test");
+    const b = await admin("b@linguva.test");
+    const seen = await versions();
+    const results = await Promise.all([
+      savePrices(table({ pro: { monthlyUsd: 109, yearlyUsd: 1090 } }), "First", { userId: a.id }, { client: app, expected: seen }),
+      savePrices(table({ business: { monthlyUsd: 349, yearlyUsd: null } }), "Second", { userId: b.id }, { client: app, expected: seen }),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const refused = results.find((r) => !r.ok)!;
+    const saved = results.find((r) => r.ok)!;
+    // The refused one names the plan the other one saved; only that one is written.
+    expect(refused).toEqual({ ok: false, conflict: saved.ok ? saved.changed : [] });
+    expect(await ownerDb.planPriceChange.count()).toBe(1);
+    expect(await ownerDb.planPrice.count()).toBe(1);
+  });
+
   it("refuses a table the form wouldn't accept, and writes nothing", async () => {
     const a = await admin("a@linguva.test");
     const bad: PriceTable[] = [
@@ -107,11 +155,51 @@ describe("saving prices", () => {
       table({ pro: { monthlyUsd: 99, yearlyUsd: 50 } }),
       table({ business: { monthlyUsd: 100_000.01, yearlyUsd: null } }),
       table({ "own-key": { monthlyUsd: Number.NaN, yearlyUsd: null } }),
+      // Own key is monthly only (its plan in the Partner Dashboard).
+      table({ "own-key": { monthlyUsd: 49, yearlyUsd: 490 } }),
     ];
-    for (const t of bad) await expect(savePrices(t, "A reason", { userId: a.id }, { client: app })).rejects.toBeInstanceOf(InvalidPriceTableError);
-    await expect(savePrices(table({ pro: { monthlyUsd: 89, yearlyUsd: 890 } }), " x ", { userId: a.id }, { client: app })).rejects.toBeInstanceOf(InvalidPriceTableError);
+    for (const t of bad) await expect(savePrices(t, "A reason", { userId: a.id }, { client: app })).rejects.toMatchObject({ field: "prices", code: "SAVE_REFUSED" });
+    const pro = table({ pro: { monthlyUsd: 89, yearlyUsd: 890 } });
+    await expect(savePrices(pro, " x ", { userId: a.id }, { client: app })).rejects.toBeInstanceOf(InvalidPriceTableError);
+    // Counted as PostgreSQL counts (2 code points), and no NUL: refused before the database is asked.
+    await expect(savePrices(pro, "📈a", { userId: a.id }, { client: app })).rejects.toMatchObject({ field: "reason", code: "REASON_REQUIRED" });
+    await expect(savePrices(pro, "abc\u0000def", { userId: a.id }, { client: app })).rejects.toMatchObject({ field: "reason", code: "REASON_INVALID" });
     expect(await ownerDb.planPrice.count()).toBe(0);
     expect(await ownerDb.planPriceChange.count()).toBe(0);
+  });
+
+  it("turns a value the database refuses into the form's error, and writes nothing", async () => {
+    const a = await admin("a@linguva.test");
+    // A client that writes something else than it was given, past every check in the code: the database's CHECKs and encoding are the last line.
+    const tampered = (change: { reason?: string; monthlyCents?: number }) =>
+      new Proxy(app, {
+        get(target, key, receiver) {
+          if (key !== "$transaction") return Reflect.get(target, key, receiver);
+          return (fn: (tx: unknown) => Promise<unknown>) =>
+            app.$transaction((tx) =>
+              fn(
+                new Proxy(tx, {
+                  get(inner, name, r) {
+                    if (name === "planPriceChange" && change.reason !== undefined) {
+                      return { createMany: (args: { data: object[] }) => inner.planPriceChange.createMany({ data: args.data.map((d) => ({ ...d, reason: change.reason })) as never }) };
+                    }
+                    if (name === "planPrice" && change.monthlyCents !== undefined) {
+                      return { upsert: (args: { where: { handle: string } }) => inner.planPrice.upsert({ where: args.where, create: { handle: args.where.handle, monthlyCents: change.monthlyCents! }, update: { monthlyCents: change.monthlyCents! } }) };
+                    }
+                    return Reflect.get(inner, name, r);
+                  },
+                }),
+              ),
+            );
+        },
+      }) as PrismaClient;
+    const pro = table({ pro: { monthlyUsd: 89, yearlyUsd: 890 } });
+    await expect(savePrices(pro, "A reason", { userId: a.id }, { client: tampered({ reason: "📈a" }) })).rejects.toMatchObject({ field: "reason", code: "REASON_REQUIRED" });
+    await expect(savePrices(pro, "A reason", { userId: a.id }, { client: tampered({ reason: "abc\u0000def" }) })).rejects.toMatchObject({ field: "reason", code: "REASON_INVALID" });
+    await expect(savePrices(pro, "A reason", { userId: a.id }, { client: tampered({ monthlyCents: 50 }) })).rejects.toMatchObject({ field: "prices", code: "SAVE_REFUSED" });
+    expect(await ownerDb.planPrice.count()).toBe(0);
+    expect(await ownerDb.planPriceChange.count()).toBe(0);
+    expect(await ownerDb.auditLog.count()).toBe(0);
   });
 
   it("saves what the form parsed (cents exact)", async () => {
@@ -128,7 +216,11 @@ describe("saving prices", () => {
     const parsed = parsePriceForm(form);
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.errors));
     expect(parsed.code).toBe("123456");
-    expect(await savePrices(parsed.table, parsed.reason, { userId: a.id }, { client: app })).toEqual({ changed: ["starter"] });
+    expect(await savePrices(parsed.table, parsed.reason, { userId: a.id }, { client: app, expected: parsed.versions })).toEqual({ ok: false, conflict: ["free", "starter", "pro", "business", "own-key"] });
+    for (const [handle, version] of Object.entries(await versions())) form.set(`${handle}.version`, version);
+    const fresh = parsePriceForm(form);
+    if (!fresh.ok) throw new Error(JSON.stringify(fresh.errors));
+    expect(await savePrices(fresh.table, fresh.reason, { userId: a.id }, { client: app, expected: fresh.versions })).toEqual({ ok: true, changed: ["starter"] });
     expect(await ownerDb.planPrice.findUniqueOrThrow({ where: { handle: "starter" } })).toMatchObject({ monthlyCents: 1_999, yearlyCents: 19_990 });
   });
 });
@@ -167,7 +259,8 @@ describe("where the prices show", () => {
     vi.stubEnv("TRANSLATION_PROVIDER", "mock");
     resetConfigCache();
     const a = await admin("a@linguva.test");
-    const own = { monthlyUsd: 59, yearlyUsd: 590 };
+    // Own key is monthly only (the console takes no yearly price for it).
+    const own = { monthlyUsd: 59, yearlyUsd: null };
     const prices = table({ pro: { monthlyUsd: 89, yearlyUsd: 890 }, "own-key": own });
     await savePrices(prices, "Test", { userId: a.id }, { client: app });
     const { shop } = await upsertInstalledShop({ shopDomain: "plan-prices.myshopify.com" }, app);

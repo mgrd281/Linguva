@@ -1,15 +1,17 @@
 /**
  * Subscriptions: the estimated revenue, the plan mix per billing period, and
  * every installed store with an active Shopify subscription (filtered by
- * plan, trial or cancelling), as Shopify last reported them.
+ * plan, trial or cancelling), as Shopify last reported them; on a phone each
+ * store is a card.
  */
+import { useRef } from "react";
 import { Form, Link, useSubmit } from "react-router";
 import { CONSOLE_PLANS, PLAN_LABEL, periodLabel, planOfHandle } from "../../admin/labels";
 import type { MixRow, SubscriptionFilters } from "../../admin/subscriptions";
 import type { ShopRow } from "../../.server/admin/directory";
 import type { OverviewSummary } from "../../.server/admin/overview";
 import { useAdminI18n } from "./context";
-import { Card, EmptyState, Kpi, KpiGrid, Notice, PageHeader, PlanBadge, StoreCell, SubscriptionMarks, Table } from "./ui";
+import { Card, EmptyState, Kpi, KpiGrid, Notice, PageHeader, PlanBadge, StoreCell, SubscriptionMarks, Table, useFormValues } from "./ui";
 
 export interface SubscriptionsData {
   revenue: OverviewSummary["revenue"];
@@ -27,6 +29,9 @@ export function SubscriptionsView({ revenue, billingConfigured, mix, rows, total
   const i18n = useAdminI18n();
   const { t } = i18n;
   const submit = useSubmit();
+  const form = useRef<HTMLFormElement>(null);
+  // The fields follow the URL (Clear filters, Back, Forward), not only their first value.
+  useFormValues(form, { plan: filters.plan, trial: filters.trial, cancelling: filters.cancelling });
   const filtered = filters.plan !== "all" || filters.trial || filters.cancelling;
   const autoSubmit = (event: { currentTarget: HTMLInputElement | HTMLSelectElement }) => submit(event.currentTarget.form, { replace: true });
   const dateOr = (iso: string | null | undefined) => (iso ? i18n.date(iso) : "—");
@@ -51,7 +56,8 @@ export function SubscriptionsView({ revenue, billingConfigured, mix, rows, total
         {mix.rows.length === 0 ? (
           <EmptyState icon="card" title={t("subs.emptyTitle")} body={t("subs.emptyBody")} />
         ) : (
-          <Table caption={t("subs.mixCaption")}>
+          // Five short columns fit a phone: a table there too.
+          <Table caption={t("subs.mixCaption")} cards={false}>
             <thead>
               <tr>
                 <th scope="col">{t("customers.colPlan")}</th>
@@ -96,7 +102,7 @@ export function SubscriptionsView({ revenue, billingConfigured, mix, rows, total
       </Card>
 
       <Card id="subscribed" icon="card" title={t("subs.listTitle")} count={totalAll > 0 ? i18n.number(rows.length) : undefined} flush>
-        <Form method="get" action={PATH} className="adm-toolbar" aria-label={t("subs.filters")}>
+        <Form ref={form} method="get" action={PATH} className="adm-toolbar" aria-label={t("subs.filters")}>
           <div className="adm-toolbar__filters">
             <label className="adm-select-label">
               <span className="adm-sr">{t("customers.plan")}</span>
@@ -141,7 +147,7 @@ export function SubscriptionsView({ revenue, billingConfigured, mix, rows, total
             }
           />
         ) : (
-          <Table caption={t("subs.listTitle")}>
+          <Table caption={t("subs.listTitle")} cards={2}>
             <thead>
               <tr>
                 <th scope="col">{t("customers.colStore")}</th>
@@ -166,18 +172,19 @@ export function SubscriptionsView({ revenue, billingConfigured, mix, rows, total
                     <th scope="row">
                       <StoreCell id={row.id} name={row.name} domain={row.shopDomain} />
                     </th>
-                    <td>
+                    <td className="adm-cell--plain adm-cell--wide">
                       <span className="adm-badges">
                         <PlanBadge plan={row.plan} />
-                        <SubscriptionMarks inTrial={row.inTrial} cancelling={sub.cancelAtEndOfCycle} />
+                        <SubscriptionMarks inTrial={row.inTrial} cancelling={row.cancelling} notChecked={sub.checkedAt === null} />
                       </span>
                     </td>
                     <td className="adm-nowrap">{period ? t(period) : (sub.billingPeriod ?? "—")}</td>
                     <td className="adm-nowrap">{dateOr(sub.trialEndsAt)}</td>
                     <td className="adm-nowrap">{dateOr(sub.currentPeriodEnd)}</td>
                     <td>{pending ? <PlanBadge plan={pending} /> : "—"}</td>
-                    <td className="adm-nowrap adm-muted" title={i18n.dateTime(sub.checkedAt)}>
-                      {i18n.shortDateTime(sub.checkedAt)}
+                    {/* Null: not asked since the store was (re)installed (only a reset answer has none; this list shows active ones). */}
+                    <td className="adm-nowrap adm-muted" title={sub.checkedAt ? i18n.dateTime(sub.checkedAt) : undefined}>
+                      {sub.checkedAt ? i18n.shortDateTime(sub.checkedAt) : t("mark.notChecked")}
                     </td>
                     <td className="adm-num">{row.monthlyRevenueUsd > 0 ? i18n.usd(row.monthlyRevenueUsd, { cents: true }) : <span className="adm-muted">—</span>}</td>
                   </tr>

@@ -1,13 +1,13 @@
 /**
  * Activity: who changed which list price, when and why, and the recent
- * sign-ins to the console (active or ended).
+ * sign-ins to the console (active or ended; a card per sign-in on a phone).
  */
 import { ROLE_LABEL } from "../../admin/labels";
 import type { SignInView } from "../../.server/admin/activity";
 import type { PriceChangeView } from "../../.server/admin/prices";
 import { useAdminI18n } from "./context";
 import { PriceHistory } from "./PricesView";
-import { Badge, Card, EmptyState, PageHeader, Table } from "./ui";
+import { Badge, Card, CardTables, EmptyState, PageHeader, Table } from "./ui";
 
 export interface ActivityData {
   priceChanges: PriceChangeView[];
@@ -21,13 +21,15 @@ export function ActivityView({ priceChanges, signIns }: ActivityData) {
     <>
       <PageHeader title={t("activity.title")} lead={t("activity.lead")} />
       <Card id="price-changes" icon="tag" title={t("activity.pricesTitle")} flush>
-        <PriceHistory changes={priceChanges} />
+        <CardTables columns={2}>
+          <PriceHistory changes={priceChanges} />
+        </CardTables>
       </Card>
       <Card id="sign-ins" icon="user" title={t("activity.signInsTitle")} lead={t("activity.keptNote")} flush>
         {signIns.length === 0 ? (
           <EmptyState icon="user" title={t("activity.signInsEmpty")} />
         ) : (
-          <Table caption={t("activity.signInsCaption")}>
+          <Table caption={t("activity.signInsCaption")} cards={2}>
             <thead>
               <tr>
                 <th scope="col">{t("activity.colWho")}</th>

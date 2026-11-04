@@ -193,6 +193,26 @@ describe("database posture", () => {
     expect(kept).toEqual({ counters: true, sessions: true, prices: true, history: true });
   });
 
+  it("flags column grants that write admin accounts or the operator's grants, not only table-wide ones", async () => {
+    // An INSERT on the columns without a default is enough to add an owner account; has_table_privilege doesn't see it.
+    const cases: Array<[string, string]> = [
+      [`GRANT INSERT ("email", "passwordHash", "totpSecret", "role", "updatedAt") ON "AdminUser" TO linguva_app`, "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser: INSERT"],
+      [`GRANT INSERT ("email") ON "AdminUser" TO linguva_app`, "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser: INSERT"],
+      [`GRANT INSERT ("shopId", "shopifyShopGid", "reason", "grantedBy", "monthlyCharLimit") ON "ComplimentaryAccess" TO linguva_app`, "RUNTIME_CAN_WRITE_GRANTS ComplimentaryAccess"],
+      [`GRANT UPDATE ("revokedAt") ON "ComplimentaryAccess" TO linguva_app`, "RUNTIME_CAN_WRITE_GRANTS ComplimentaryAccess"],
+    ];
+    for (const [grant, finding] of cases) {
+      const revoke = grant.replace(/^GRANT/, "REVOKE").replace(" TO ", " FROM ");
+      try {
+        await ownerDb.$executeRawUnsafe(grant);
+        expect(await posture(), grant).toEqual([finding]);
+      } finally {
+        await ownerDb.$executeRawUnsafe(revoke);
+      }
+    }
+    expect(await checkDatabasePosture(app)).toEqual([]);
+  });
+
   it("detects a privileged connection (the check isn't vacuous)", async () => {
     const codes = (await checkDatabasePosture(ownerDb)).map((i) => i.code);
     expect(codes).toContain("RUNTIME_OWNS_TABLE");

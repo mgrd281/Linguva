@@ -26,7 +26,7 @@ export function subscribedRows(rows: readonly ShopRow[]): ShopRow[] {
 }
 
 export function isCancelling(row: ShopRow): boolean {
-  return row.subscription?.state === "ACTIVE" && row.subscription.cancelAtEndOfCycle;
+  return row.cancelling;
 }
 
 /** Per plan (in plan order, only plans with a subscription): monthly, yearly, in trial and all. */

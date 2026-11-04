@@ -2,7 +2,9 @@
  * One store: its plan, revenue and usage at a glance, then the subscription
  * as Shopify last reported it (with "Ask Shopify again" for admins who may),
  * six months of usage, languages, complimentary access, jobs, settings and
- * installations. Figures and dates only, no merchant content.
+ * installations. Figures and dates only, no merchant content. "AI
+ * characters" are the ones Linguva pays for (with their estimated cost); the
+ * store's own-key characters are counted apart.
  */
 import { Form, useNavigation } from "react-router";
 import { INSTALL_EVENT_LABEL, JOB_STATUS_LABEL, JOB_STATUSES, periodLabel, PLAN_LABEL, planOfHandle, REFRESH_RESULT_LABEL, SUB_STATE_LABEL } from "../../admin/labels";
@@ -37,6 +39,7 @@ export function CustomerView({ detail, refresh }: CustomerData & { refresh?: Ref
   const sub = shop.subscription;
   const cancelling = shop.status === "ACTIVE" && sub?.state === "ACTIVE" && sub.cancelAtEndOfCycle;
   const pendingPlan = sub?.state === "ACTIVE" ? planOfHandle(sub.pendingPlanHandle) : null;
+  // The bars share one scale: Linguva's characters, then the own-key ones after them.
   const usageMax = Math.max(1, ...detail.usageByMonth.map((m) => m.chars + m.ownKeyChars));
   const dateOr = (iso: string | null | undefined, fallback = "—") => (iso ? i18n.dateTime(iso) : fallback);
   const yesNo = (value: boolean) => (value ? t("common.yes") : t("common.no"));
@@ -46,7 +49,7 @@ export function CustomerView({ detail, refresh }: CustomerData & { refresh?: Ref
   return (
     <>
       <PageHeader
-        title={shop.name ?? shop.shopDomain}
+        title={<bdi>{shop.name ?? shop.shopDomain}</bdi>}
         back={{ to: "/admin/customers", label: t("customer.back") }}
         lead={
           <span className="adm-inline">
@@ -90,9 +93,14 @@ export function CustomerView({ detail, refresh }: CustomerData & { refresh?: Ref
         <Kpi
           icon="sparkles"
           label={t("customer.factChars")}
-          value={i18n.compact(shop.usage.chars + shop.usage.ownKeyChars)}
-          title={i18n.number(shop.usage.chars + shop.usage.ownKeyChars)}
-          context={t("overview.kpiUsageContext", { cost: i18n.usd(shop.usage.costUsd, { cents: true }) })}
+          value={i18n.compact(shop.usage.chars)}
+          title={i18n.number(shop.usage.chars)}
+          context={
+            <>
+              <span>{t("overview.kpiUsageContext", { cost: i18n.usd(shop.usage.costUsd, { cents: true }) })}</span>
+              {shop.usage.ownKeyChars > 0 ? <span>{t("overview.ownKey", { chars: i18n.compact(shop.usage.ownKeyChars) })}</span> : null}
+            </>
+          }
         />
         <Kpi icon="globe" label={t("customer.factLanguages")} value={i18n.number(shop.languages)} />
       </KpiGrid>
@@ -135,7 +143,8 @@ export function CustomerView({ detail, refresh }: CustomerData & { refresh?: Ref
                   { term: t("customer.subPeriodEnds"), value: dateOr(sub.currentPeriodEnd) },
                   { term: t("customer.subCancels"), value: yesNo(sub.cancelAtEndOfCycle) },
                   { term: t("customer.subPending"), value: pendingPlan ? <PlanBadge plan={pendingPlan} /> : "—" },
-                  { term: t("customer.subChecked"), value: i18n.dateTime(sub.checkedAt) },
+                  // Null: not asked since the store was (re)installed (the reset answer, never a check on Jan 1, 1970).
+                  { term: t("customer.subChecked"), value: sub.checkedAt ? i18n.dateTime(sub.checkedAt) : t("mark.notChecked") },
                 ]}
               />
             ) : (
@@ -148,8 +157,27 @@ export function CustomerView({ detail, refresh }: CustomerData & { refresh?: Ref
             ) : null}
           </Card>
 
-          <Card id="usage" icon="sparkles" title={t("customer.usageTitle")} lead={t("customer.usageLead")} flush>
-            <Table caption={t("customer.usageTitle")}>
+          <Card
+            id="usage"
+            icon="sparkles"
+            title={t("customer.usageTitle")}
+            lead={
+              // The bars' two colours, named (on a phone the columns' names stand in the cards, without the colours).
+              <span className="adm-inline">
+                <span>{t("customer.usageLead")}</span>
+                <span className="adm-legend">
+                  <span className="adm-dot adm-dot--accent" aria-hidden="true" />
+                  {t("customer.usageLinguva")}
+                </span>
+                <span className="adm-legend">
+                  <span className="adm-dot adm-dot--teal" aria-hidden="true" />
+                  {t("customer.usageOwnKeys")}
+                </span>
+              </span>
+            }
+            flush
+          >
+            <Table caption={t("customer.usageTitle")} cards={3}>
               <thead>
                 <tr>
                   <th scope="col">{t("customer.usageMonth")}</th>
@@ -173,8 +201,8 @@ export function CustomerView({ detail, refresh }: CustomerData & { refresh?: Ref
                     <th scope="row" className="adm-nowrap">
                       {i18n.month(month.period)}
                     </th>
-                    <td className="adm-col-bar">
-                      <Bar value={month.chars + month.ownKeyChars} max={usageMax} />
+                    <td className="adm-col-bar adm-cell--plain adm-cell--wide">
+                      <Bar value={month.chars} extra={month.ownKeyChars} max={usageMax} />
                     </td>
                     <td className="adm-num">{i18n.number(month.chars)}</td>
                     <td className="adm-num">{i18n.number(month.ownKeyChars)}</td>

@@ -7,13 +7,15 @@
  * session, the role's capability, and for every write the Origin and the
  * session's CSRF token (docs/SECURITY_MODEL.md §5s).
  */
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { AdminRole, PrismaClient } from "@prisma/client";
-import { redirect } from "react-router";
 import { getConfig, type AppConfig } from "../lib/config";
 import { TokenCipher } from "../lib/crypto";
 import { prisma as defaultClient } from "../lib/db";
 import { ensureDatabasePosture } from "../lib/db-guard";
+import { adminRedirect, adminResponse } from "../lib/security-headers";
+import { createRedis, keyPrefix } from "../queue/redis";
+import { MemoryCounters, RedisCounters, type Counters } from "../usage/request-limits";
 import { clearCookie, csrfTokenFor, isHttps, publicOrigin, readSession, sessionToken } from "./session";
 import { openTotpSecret, totpStepMatching } from "./totp";
 
@@ -41,9 +43,13 @@ export function roleCan(role: AdminRole, capability: AdminCapability): boolean {
 /** Consecutive wrong passwords or codes (sign-in and fresh codes together) before the account locks. */
 export const MAX_FAILED_LOGINS = 5;
 export const LOCK_MINUTES = 15;
+/** A run of wrong attempts is forgotten this long after its last one (for an account and an unknown e-mail alike). */
+export const FAILURES_KEPT_SECONDS = 24 * 60 * 60;
 
-const notFound = () => new Response("Not Found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
-const forbidden = () => new Response("Forbidden", { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+const TEXT = { "Content-Type": "text/plain; charset=utf-8" };
+/** The console's 404 (off, another host) and 403, with its headers: thrown, they are answered as they are. */
+export const notFound = (request: Request) => adminResponse(request, "Not Found", { status: 404, headers: TEXT });
+export const forbidden = (request: Request) => adminResponse(request, "Forbidden", { status: 403, headers: TEXT });
 
 /**
  * Whether this request may reach the console at all: ADMIN_CONSOLE=on, the
@@ -59,17 +65,30 @@ export function adminConsoleAvailable(request: Request, config: AppConfig = getC
 
 /** Throws 404 unless the console is available here; nothing else (no database) happens before. */
 export async function requireAdminConsole(request: Request): Promise<void> {
-  if (!adminConsoleAvailable(request)) throw notFound();
+  if (!adminConsoleAvailable(request)) throw notFound(request);
 }
 
+const NEXT_BASE = "http://next.invalid";
+
 /**
- * A `next` value for after sign-in: an /admin path of this site, else
- * /admin. Never another origin ("//host", "/\host", a scheme).
+ * A `next` value for after sign-in: an /admin path of this site, exactly as
+ * a URL serializer writes it (printable ASCII, so always a valid Location
+ * header), else /admin. Never another origin ("//host", "/\host", a scheme),
+ * nothing a browser would read differently (control characters, spaces,
+ * dot segments, backslashes) and no doubled or encoded slash in the path.
+ * The console's own links (signInRedirect: a URL's path and query) always
+ * pass unchanged.
  */
 export function safeNext(value: string | null | undefined): string {
-  if (!value || !/^\/admin(?:[/?#]|$)/.test(value) || value.includes("\\")) return "/admin";
-  // Control characters (a browser drops tabs and line breaks from URLs, so "/admin\n/x" isn't what it seems).
-  if ([...value].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f)) return "/admin";
+  if (!value || value.length > 2048 || !/^[\x21-\x7e]+$/.test(value)) return "/admin";
+  let url: URL;
+  try {
+    url = new URL(value, NEXT_BASE);
+  } catch {
+    return "/admin";
+  }
+  if (url.origin !== NEXT_BASE || `${url.pathname}${url.search}` !== value) return "/admin";
+  if (!/^\/admin(?:\/|$)/.test(url.pathname) || /\/\/|%2f|%5c/i.test(url.pathname)) return "/admin";
   return value;
 }
 
@@ -82,7 +101,7 @@ function signInRedirect(request: Request): Response {
   const next = request.method === "GET" ? safeNext(`${path}${url.search}`) : "/admin";
   const target = next === "/admin" ? "/admin/login" : `/admin/login?next=${encodeURIComponent(next)}`;
   // A stale cookie is removed on the way.
-  return redirect(target, sessionToken(request) ? { headers: { "Set-Cookie": clearCookie(request) } } : undefined);
+  return adminRedirect(request, target, sessionToken(request) ? { headers: { "Set-Cookie": clearCookie(request) } } : undefined);
 }
 
 function sameText(a: string, b: string): boolean {
@@ -129,11 +148,11 @@ export async function requireAdmin(request: Request, capability: AdminCapability
     csrfToken,
     can: (wanted) => roleCan(user.role, wanted),
   };
-  if (!context.can(capability)) throw forbidden();
+  if (!context.can(capability)) throw forbidden(request);
   if (request.method !== "GET" && request.method !== "HEAD") {
-    if (!originAllowed(request)) throw forbidden();
+    if (!originAllowed(request)) throw forbidden(request);
     const submitted = await submittedCsrfToken(request);
-    if (!submitted || !sameText(submitted, csrfToken)) throw forbidden();
+    if (!submitted || !sameText(submitted, csrfToken)) throw forbidden(request);
   }
   return context;
 }
@@ -157,21 +176,82 @@ export function accountTotpSecret(user: { id: string; totpSecret: string }, ciph
   }
 }
 
+let sharedCounters: Counters | undefined;
+
+/** The sign-in counters: Redis when configured (all instances share them; required in production), else this process's memory. */
+export function loginCounters(config: Pick<AppConfig, "REDIS_URL"> = getConfig()): Counters {
+  sharedCounters ??= config.REDIS_URL ? new RedisCounters(createRedis(config.REDIS_URL)) : new MemoryCounters();
+  return sharedCounters;
+}
+
+/** Hashed, so Redis keys carry no addresses, e-mails or account ids. */
+export const keyPart = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 32);
+
 /**
- * Records a wrong password or code: after MAX_FAILED_LOGINS in a row the
- * account locks for LOCK_MINUTES (its sessions stop working too). One
- * statement, so parallel attempts can't skip the lock.
+ * Whose attempt it is: an enabled account, with its last accepted code step
+ * (an accepted code, at sign-in or as a fresh code, starts a new run of
+ * wrong attempts), or an e-mail without one (unknown, or a disabled
+ * account's).
  */
-export async function noteFailedLogin(userId: string, now: Date = new Date(), client: PrismaClient = defaultClient): Promise<boolean> {
-  const until = new Date(now.getTime() + LOCK_MINUTES * 60_000);
-  const rows = await client.$queryRaw<Array<{ locked: boolean }>>`
-    UPDATE "AdminUser"
-    SET "failedLogins" = "failedLogins" + 1,
-        "lockedUntil" = CASE WHEN ("failedLogins" + 1) % ${MAX_FAILED_LOGINS}::int = 0 THEN ${until}::timestamptz ELSE "lockedUntil" END,
-        "updatedAt" = ${now}::timestamptz
-    WHERE "id" = ${userId}::uuid
-    RETURNING ("failedLogins" % ${MAX_FAILED_LOGINS}::int = 0) AS "locked"`;
-  return rows[0]?.locked ?? false;
+export type Attempter = { userId: string; lastTotpStep: number } | { email: string };
+
+export interface AttemptDeps {
+  client?: PrismaClient;
+  counters?: Counters;
+  config?: AppConfig;
+}
+
+function attemptKeys(who: Attempter, config: Pick<AppConfig, "NODE_ENV">) {
+  const prefix = keyPrefix(config.NODE_ENV);
+  const id = "userId" in who ? `a:${keyPart(`${who.userId}:${who.lastTotpStep}`)}` : keyPart(who.email);
+  return { fails: `${prefix}:admin-login-fails:${id}`, lock: `${prefix}:admin-login-lock:${id}` };
+}
+
+/**
+ * Counts an attempt before it is checked (one that can't be counted is
+ * never checked), and returns its number in its run, for noteFailedLogin.
+ * Accounts and e-mails without one share this one count, in Redis, each run
+ * forgotten FAILURES_KEPT_SECONDS after its last attempt: neither the
+ * answers nor when they change tell which accounts exist
+ * (docs/SECURITY_MODEL.md §5s).
+ */
+export async function countAttempt(who: Attempter, { counters, config = getConfig() }: AttemptDeps = {}): Promise<number> {
+  return (counters ?? loginCounters(config)).incr(attemptKeys(who, config).fails, FAILURES_KEPT_SECONDS);
+}
+
+/**
+ * After a wrong password or code, with its number from countAttempt: every
+ * MAX_FAILED_LOGINS-th in a run locks for LOCK_MINUTES (from the latest),
+ * and returns true. An account's lock is its lockedUntil, authoritative:
+ * sign-in refuses it, its sessions stop working, the operator tool lifts
+ * it; its failedLogins counts the wrong attempts since its last accepted
+ * code, for the operator's list. An e-mail without an account is locked
+ * in Redis, for exactly as long.
+ */
+export async function noteFailedLogin(
+  who: Attempter,
+  attempt: number,
+  now: Date = new Date(),
+  { client = defaultClient, counters, config = getConfig() }: AttemptDeps = {},
+): Promise<boolean> {
+  const locks = attempt % MAX_FAILED_LOGINS === 0;
+  if ("userId" in who) {
+    const lockedUntil = new Date(now.getTime() + LOCK_MINUTES * 60_000);
+    // One statement: parallel attempts each count.
+    await client.adminUser.updateMany({
+      where: { id: who.userId },
+      data: { failedLogins: { increment: 1 }, updatedAt: now, ...(locks ? { lockedUntil } : {}) },
+    });
+  } else if (locks) {
+    // incr, not once: like lockedUntil, the latest lock decides when it ends.
+    await (counters ?? loginCounters(config)).incr(attemptKeys(who, config).lock, LOCK_MINUTES * 60);
+  }
+  return locks;
+}
+
+/** Whether an e-mail without an account is locked (an account's lock is its lockedUntil). */
+export async function emailLocked(email: string, { counters, config = getConfig() }: AttemptDeps = {}): Promise<boolean> {
+  return (await (counters ?? loginCounters(config)).get(attemptKeys({ email }, config).lock)) > 0;
 }
 
 /**
@@ -197,22 +277,24 @@ export async function claimTotpStep(
 /**
  * A new TOTP code for a sensitive action (saving prices), with the same
  * replay protection as sign-in: a code used to sign in, or once here, is
- * refused. A wrong code counts towards the account lock, so a stolen
- * session can't guess codes.
+ * refused. A wrong code counts towards the account lock (in the same run
+ * as wrong sign-ins), so a stolen session can't guess codes.
  */
 export async function verifyFreshCode(
   ctx: AdminContext,
   code: string,
-  { now = new Date(), client = defaultClient }: { now?: Date; client?: PrismaClient } = {},
+  { now = new Date(), client = defaultClient, counters }: { now?: Date; client?: PrismaClient; counters?: Counters } = {},
 ): Promise<boolean> {
   const user = await client.adminUser.findUnique({
     where: { id: ctx.user.id },
-    select: { id: true, totpSecret: true, disabledAt: true, lockedUntil: true, failedLogins: true },
+    select: { id: true, totpSecret: true, disabledAt: true, lockedUntil: true, failedLogins: true, lastTotpStep: true },
   });
   if (!user || user.disabledAt || (user.lockedUntil && user.lockedUntil > now)) return false;
+  const who = { userId: user.id, lastTotpStep: user.lastTotpStep };
+  const attempt = await countAttempt(who, { counters });
   const secret = accountTotpSecret(user);
   const step = secret ? totpStepMatching(secret, code, now.getTime()) : null;
   if (step !== null && (await claimTotpStep(user.id, step, now, user.failedLogins > 0 ? { failedLogins: 0 } : {}, client))) return true;
-  await noteFailedLogin(user.id, now, client);
+  await noteFailedLogin(who, attempt, now, { client, counters });
   return false;
 }

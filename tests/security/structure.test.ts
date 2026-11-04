@@ -298,6 +298,42 @@ describe("every page and webhook authenticates", () => {
       expect(outside).toEqual([]);
     });
 
+    it("its routes' own Responses carry the console's headers: adminRedirect and adminResponse, never react-router's redirects or a bare Response", () => {
+      // React Router answers with a loader's or action's Response as it is, past entry.server's headers: a redirect
+      // thrown on a page request, and everything a route without a page (a resource route) returns or throws.
+      const unheaded = (file: Source) => {
+        const source = parse(file);
+        const page =
+          source.statements.some((s) => ts.isExportAssignment(s) || (exported(s) && (ts.getModifiers(s as ts.HasModifiers) ?? []).some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))) ||
+          exportsOf(source, ["ErrorBoundary"]).length > 0;
+        const found: string[] = [];
+        for (const s of source.statements) {
+          if (!ts.isImportDeclaration(s) || !ts.isStringLiteral(s.moduleSpecifier) || s.moduleSpecifier.text !== "react-router" || s.importClause?.isTypeOnly) continue;
+          const bindings = s.importClause?.namedBindings;
+          if (bindings && ts.isNamespaceImport(bindings)) found.push("* as react-router");
+          if (!bindings || !ts.isNamedImports(bindings)) continue;
+          for (const e of bindings.elements) {
+            const name = (e.propertyName ?? e.name).text;
+            // data() is rendered into a page (entry.server's headers); a resource route answers with it as it is.
+            if (!e.isTypeOnly && (["redirect", "redirectDocument", "replace"].includes(name) || (!page && name === "data"))) found.push(name);
+          }
+        }
+        ts.forEachChild(source, function visit(node) {
+          if (ts.isNewExpression(node) && node.expression.getText() === "Response") found.push("new Response");
+          if (ts.isPropertyAccessExpression(node) && node.expression.getText() === "Response") found.push(node.getText());
+          ts.forEachChild(node, visit);
+        });
+        return found.map((f) => `${file.path}: ${f}`);
+      };
+      // The check isn't vacuous.
+      const probe = (text: string, path = "app/routes/admin.probe.tsx") => unheaded({ path, text }).map((f) => f.slice(path.length + 2));
+      expect(probe(`import { redirect as go, data } from "react-router";\nexport const loader = () => { throw go("/admin"); };\nexport default function P() { return null; }`)).toEqual(["redirect"]);
+      expect(probe(`import { data } from "react-router";\nexport const action = () => data({}, { status: 400 });`)).toEqual(["data"]);
+      expect(probe(`export const loader = () => new Response(null, { status: 302 });\nexport const action = () => Response.json({});`)).toEqual(["new Response", "Response.json"]);
+      expect(probe(`import { adminRedirect } from "../.server/lib/security-headers";\nexport const loader = ({ request }) => { throw adminRedirect(request, "/admin"); };`)).toEqual([]);
+      expect(modules.filter((m) => isAdminRoute(m.path)).flatMap(unheaded)).toEqual([]);
+    });
+
     it("its authentication root checks the console, the session and every write", () => {
       const text = readFileSync(join(ROOT, ADMIN_AUTH), "utf8");
       const source = parse({ path: ADMIN_AUTH, text });

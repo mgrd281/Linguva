@@ -3,11 +3,15 @@
  * two steps of a change (Partner Dashboard first: Shopify charges what it
  * says), one form for every plan with a reason and a fresh authenticator
  * code, and the history. Admins without the "prices" capability see the
- * same figures without the form.
+ * same figures without the form. The form carries the version of every
+ * plan it shows; a save after someone else's is refused and the page shows
+ * the current prices. Free text (reasons, e-mails) is isolated for
+ * right-to-left pages; lists are joined the way the language joins them.
  */
 import { useEffect, type ReactNode } from "react";
 import { Form, useNavigation } from "react-router";
 import { PLAN_LABEL, PRICE_ERROR_LABEL } from "../../admin/labels";
+import type { AdminLocale } from "../../admin/locale";
 import type { AdminMessageKey } from "../../admin/messages";
 import type { PriceChangeView, PricesPageData } from "../../.server/admin/prices";
 import type { PriceWarning } from "../../lib/plan-prices";
@@ -17,7 +21,12 @@ import { Badge, Card, describedBy, EmptyState, ErrorSummary, Field, Notice, Page
 
 type Handle = PricesPageData["plans"][number]["handle"];
 
-export type PricesActionData = { ok: false; errors: Record<string, string>; values: Record<string, string> } | { ok: true; changed: Handle[]; savedAt: string };
+/** The plans saved by someone else since the form was read (the save was refused). */
+export type PricesConflict = Handle[];
+
+export type PricesActionData =
+  | { ok: false; errors: Record<string, string>; values: Record<string, string>; conflict?: PricesConflict }
+  | { ok: true; changed: Handle[]; savedAt: string };
 
 export interface PricesData {
   page: PricesPageData;
@@ -29,6 +38,21 @@ const inputValue = (usd: number | null) => (usd === null ? "" : Number.isInteger
 
 const MARGIN_FLOOR = 0.4;
 
+/** The form's error codes (app/admin/labels.ts) and the ones only this page shows. */
+const ERROR_LABEL: Record<string, AdminMessageKey> = {
+  ...PRICE_ERROR_LABEL,
+  MONTHLY_ONLY: "prices.error.MONTHLY_ONLY",
+  REASON_INVALID: "prices.error.REASON_INVALID",
+  SAVE_REFUSED: "prices.error.SAVE_REFUSED",
+};
+
+const LIST_LOCALE: Record<AdminLocale, string> = { en: "en-US", ar: "ar" };
+
+/** "Starter, Pro and Business" / "Starter وPro وBusiness": the language's own separators. */
+function listOf(locale: AdminLocale, items: readonly string[]): string {
+  return new Intl.ListFormat(LIST_LOCALE[locale], { style: "long", type: "conjunction" }).format(items);
+}
+
 export function PricesView({ page, canEdit, result }: PricesData & { result?: PricesActionData | null }) {
   const i18n = useAdminI18n();
   const { t } = i18n;
@@ -36,23 +60,28 @@ export function PricesView({ page, canEdit, result }: PricesData & { result?: Pr
   const navigation = useNavigation();
   const saving = navigation.state === "submitting";
   const failed = result && !result.ok ? result : null;
+  const conflict = failed?.conflict ?? null;
   const errors = failed?.errors ?? {};
   const values = failed?.values ?? {};
   const planName = (handle: string) => (handle in PLAN_LABEL ? t(PLAN_LABEL[handle as Handle]) : handle);
 
   // After a save (or a refused one), the result is announced and gets the focus.
   useEffect(() => {
-    if (result) document.getElementById(result.ok ? "prices-saved" : "prices-errors")?.focus();
+    if (result) document.getElementById(result.ok ? "prices-saved" : result.conflict ? "prices-conflict" : "prices-errors")?.focus();
   }, [result]);
 
-  // A new form (its fields show the stored prices, reason and code empty) once the prices read are new, or after a save.
-  const formKey = `${page.plans.map((plan) => `${plan.handle}:${plan.monthlyUsd}:${plan.yearlyUsd}`).join("|")}|${result?.ok ? result.savedAt : ""}`;
+  // A new form (its fields show the stored prices, reason and code empty) once the prices read are new (a conflict reads them again), or after a save.
+  const formKey = `${page.plans.map((plan) => `${plan.handle}:${plan.monthlyUsd}:${plan.yearlyUsd}:${plan.version}`).join("|")}|${result?.ok ? result.savedAt : ""}`;
   const fieldId = (handle: string, period: "monthly" | "yearly") => `price-${handle}-${period}`;
-  const errorFor = (name: string) => (errors[name] ? t(PRICE_ERROR_LABEL[errors[name]!] ?? "prices.error.NOT_A_PRICE") : null);
+  const label = (code: string) => t(ERROR_LABEL[code] ?? "prices.error.NOT_A_PRICE");
+  const errorFor = (name: string) => (errors[name] ? label(errors[name]!) : null);
+  const firstPrice = page.plans.find((plan) => plan.handle !== "free");
   const summary = Object.entries(errors).map(([name, code]) => {
     const [handle, period] = name.split(".") as [string, "monthly" | "yearly" | undefined];
-    const message = t(PRICE_ERROR_LABEL[code] ?? "prices.error.NOT_A_PRICE");
-    if (period) return { field: fieldId(handle, period), message: `${planName(handle)}, ${t(period === "monthly" ? "prices.colMonthly" : "prices.colYearly")}: ${message}` };
+    const message = label(code);
+    if (period) return { field: fieldId(handle, period), message: t("prices.errorField", { plan: planName(handle), period: t(period === "monthly" ? "prices.colMonthly" : "prices.colYearly"), message }) };
+    // "prices": the database refused the table (no one field): the first price.
+    if (name === "prices") return { field: firstPrice ? fieldId(firstPrice.handle, "monthly") : "list-prices", message };
     return { field: name === "reason" ? "prices-reason" : "prices-code", message };
   });
 
@@ -92,12 +121,18 @@ export function PricesView({ page, canEdit, result }: PricesData & { result?: Pr
         <Notice tone="success" title={t("prices.savedTitle")} role="status" id="prices-saved">
           {result.changed.length > 0 ? (
             <>
-              <p>{t("prices.savedChanged", { plans: result.changed.map(planName).join(", ") })}</p>
+              <p>{t("prices.savedChanged", { plans: listOf(i18n.locale, result.changed.map(planName)) })}</p>
               <p>{t("prices.savedReminder")}</p>
             </>
           ) : (
             <p>{t("prices.savedNothing")}</p>
           )}
+        </Notice>
+      ) : null}
+
+      {conflict ? (
+        <Notice tone="critical" title={t("prices.conflictTitle")} role="alert" id="prices-conflict">
+          <p>{t("prices.conflictBody", { plans: listOf(i18n.locale, conflict.map(planName)) })}</p>
         </Notice>
       ) : null}
 
@@ -115,6 +150,9 @@ export function PricesView({ page, canEdit, result }: PricesData & { result?: Pr
         {canEdit && session ? (
           <Form method="post" action="/admin/prices" className="adm-priceform" key={formKey} noValidate>
             <input type="hidden" name="_csrf" value={session.csrfToken} />
+            {page.plans.map((plan) => (
+              <input key={plan.handle} type="hidden" name={`${plan.handle}.version`} value={plan.version} />
+            ))}
             <div className="adm-priceform__errors">
               <ErrorSummary id="prices-errors" title={t("prices.errorsTitle")} errors={summary} />
             </div>
@@ -133,6 +171,15 @@ export function PricesView({ page, canEdit, result }: PricesData & { result?: Pr
                     </>
                   ) : (
                     (["monthly", "yearly"] as const).map((period) => {
+                      if (period === "yearly" && !plan.offersYearly) {
+                        // Own key: monthly only (its plan in the Partner Dashboard), so no field.
+                        return (
+                          <div className="adm-pricegrid__cell adm-pricegrid__cell--empty" key={period}>
+                            <span className="adm-pricegrid__celllabel">{t("prices.colYearly")}</span>
+                            <span className="adm-muted">{t("prices.monthlyOnly")}</span>
+                          </div>
+                        );
+                      }
                       const name = `${plan.handle}.${period}`;
                       const id = fieldId(plan.handle, period);
                       const error = errorFor(name);
@@ -363,7 +410,9 @@ export function PriceHistory({ changes }: { changes: PriceChangeView[] }) {
             </th>
             <td className="adm-num adm-muted">{price(change.oldMonthlyUsd, change.oldYearlyUsd)}</td>
             <td className="adm-num">{price(change.newMonthlyUsd, change.newYearlyUsd)}</td>
-            <td className="adm-reason">{change.reason}</td>
+            <td className="adm-reason">
+              <bdi>{change.reason}</bdi>
+            </td>
             <td>
               <bdi className="adm-truncate">{change.by ?? t("common.deletedAccount")}</bdi>
             </td>

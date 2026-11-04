@@ -69,6 +69,16 @@ export function sharedMonthsFree(prices: PriceTable = DEFAULT_PRICES): number | 
  */
 export const MARGIN_MODEL = { keptAfterShopify: 0.821, usdPerMillionChars: 27.5, fixedShareUsd: 0.5, floor: 0.4 } as const;
 
+/**
+ * A plan the admin console may give a yearly price: the paid ladder only.
+ * Own key is monthly only, like its plan in the Partner Dashboard, so the
+ * Plan page's texts about it ("monthly only", the yearly plans in the
+ * questions) stay true; Free has no price at all.
+ */
+export function offersYearly(handle: KnownPriceHandle): boolean {
+  return handle !== "free" && handle !== OWN_KEY;
+}
+
 /** Characters a plan includes per month (Own key: none, the merchant's keys pay). */
 export function includedChars(handle: KnownPriceHandle): number {
   return handle === OWN_KEY ? OWN_KEY_PLAN.monthlyChars : PLANS[handle].monthlyChars;

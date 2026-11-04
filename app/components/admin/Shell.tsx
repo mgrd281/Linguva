@@ -1,17 +1,19 @@
 /**
  * The console's frame: the top bar (mark, language, the signed-in admin,
  * sign out), the navigation (a sidebar from 960 px, a scrolling tab bar on
- * phones) and the main area; the language switch; and the error page.
- * Everything works before (and without) JavaScript: links and plain forms.
+ * phones that brings the current page's tab into view) and the main area;
+ * the language switch; and the error page. Everything works before (and
+ * without) JavaScript: links and plain forms.
  */
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { ROLE_LABEL } from "../../admin/labels";
 import { languageHref, type AdminLocale } from "../../admin/locale";
 import type { AdminMessageKey } from "../../admin/messages";
 import { useAdminI18n, useAdminSession } from "./context";
+import { jumpTo, revealCurrent } from "./dom";
 import { BrandMark, Icon, type IconName } from "./Icon";
-import { Badge } from "./ui";
+import { Badge, CardTables } from "./ui";
 
 const NAV: Array<{ to: string; key: AdminMessageKey; icon: IconName; end?: boolean }> = [
   { to: "/admin", key: "nav.overview", icon: "overview", end: true },
@@ -53,6 +55,20 @@ export function LanguageSwitch() {
   );
 }
 
+/**
+ * "Skip to content": focuses the main area without a navigation (React
+ * Router would treat the fragment as one and drop the page's action
+ * result, such as a "saved" notice or the errors of a form).
+ */
+function SkipLink() {
+  const { t } = useAdminI18n();
+  return (
+    <a className="adm-skip" href="#main" onClick={(event) => jumpTo(event, "main", { block: "start" })}>
+      {t("shell.skip")}
+    </a>
+  );
+}
+
 function Brand() {
   const { t } = useAdminI18n();
   return (
@@ -67,19 +83,24 @@ function Brand() {
 export function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useAdminI18n();
   const session = useAdminSession();
+  const { pathname } = useLocation();
+  const nav = useRef<HTMLElement>(null);
+  // On a phone the tabs scroll sideways: the current one is brought into view (Prices and Activity start off-screen).
+  useEffect(() => {
+    revealCurrent(nav.current);
+  }, [pathname]);
   return (
     <div className="adm-app">
-      <a className="adm-skip" href="#main">
-        {t("shell.skip")}
-      </a>
+      <SkipLink />
       <header className="adm-top">
         <Brand />
         <div className="adm-top__end">
           <LanguageSwitch />
           {session ? (
             <>
+              {/* On a phone this takes its own row under the bar (admin.css): who is signed in, and as what, stays visible. */}
               <p className="adm-account">
-                <span className="adm-sr">{t("shell.account")} </span>
+                <span className="adm-account__label">{`${t("shell.account")} `}</span>
                 <bdi className="adm-account__email">{session.email}</bdi>
                 <Badge tone="neutral" icon="user">
                   {t(ROLE_LABEL[session.role])}
@@ -99,7 +120,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </header>
       <div className="adm-frame">
         <div className="adm-sidebar">
-          <nav className="adm-nav" aria-label={t("shell.nav")}>
+          <nav className="adm-nav" aria-label={t("shell.nav")} ref={nav}>
             <ul className="adm-nav__list">
               {NAV.map((item) => (
                 <li key={item.to}>
@@ -113,7 +134,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
         <main className="adm-main" id="main" tabIndex={-1}>
-          {children}
+          {/* Wide tables are cards on a phone, on every page (the Prices page's history too). */}
+          <CardTables columns={2}>{children}</CardTables>
         </main>
       </div>
     </div>
@@ -122,12 +144,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
 /** A page outside the frame (sign-in, an error before the admin is known): centred, with the mark and the language switch. */
 export function StandalonePage({ children }: { children: ReactNode }) {
-  const { t } = useAdminI18n();
   return (
     <div className="adm-standalone">
-      <a className="adm-skip" href="#main">
-        {t("shell.skip")}
-      </a>
+      <SkipLink />
       <header className="adm-standalone__top">
         <Brand />
         <LanguageSwitch />

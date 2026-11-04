@@ -1,7 +1,9 @@
 /**
  * Overview: the KPIs, the plan mix, trials ending soon, the newest stores
  * and the subscription changes waiting, from one directory read (shown with
- * its time and a Reload link that reads the database again).
+ * its time and a Reload link that reads the database again: the loader
+ * answers `?refresh=1` with a redirect to the plain URL, and the link
+ * replaces the history entry, so Back doesn't stop at the same page).
  */
 import { Link } from "react-router";
 import { PLAN_LABEL, PLAN_TONE, type ConsolePlan } from "../../admin/labels";
@@ -33,7 +35,7 @@ export function OverviewView({ summary, builtAt }: OverviewData) {
         actions={
           <p className="adm-freshness">
             <span>{t("overview.dataFrom", { time: i18n.time(builtAt) })}</span>
-            <Link className="adm-btn adm-btn--secondary adm-btn--sm" to="/admin?refresh=1" preventScrollReset>
+            <Link className="adm-btn adm-btn--secondary adm-btn--sm" to="/admin?refresh=1" preventScrollReset replace>
               <Icon name="refresh" size={16} />
               {t("overview.reload")}
             </Link>

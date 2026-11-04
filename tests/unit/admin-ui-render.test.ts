@@ -68,6 +68,7 @@ function shopRow(domain: string, extra: Partial<ShopRow> = {}): ShopRow {
     },
     plan: "pro",
     inTrial: false,
+    cancelling: false,
     complimentary: false,
     usage: { chars: 824_310, ownKeyChars: 0, costUsd: 20.61 },
     languages: 4,
@@ -122,7 +123,8 @@ describe("Overview", () => {
   it("shows the KPIs, the plan mix, trials, newest stores and the data's time", async () => {
     const html = await render(createElement(OverviewView, { summary: summary(), builtAt: "2026-11-04T10:54:00.000Z" }));
     checkPage(html);
-    for (const text of ["Active stores", ">11<", "Paying stores", "$802.67", "$9,632 a year (ARR)", "Ending within 7 days: 1", "7.6M", "Own keys: 1.2M", "Data from 10:54 UTC"]) {
+    // "AI characters" are Linguva's (with their cost) on every page; own keys on a line of their own.
+    for (const text of ["Active stores", ">11<", "Paying stores", "$802.67", "$9,632 a year (ARR)", "Ending within 7 days: 1", "AI characters (Linguva)", "7.6M", "Plus own keys: 1.2M", "Data from 10:54 UTC"]) {
       expect(html).toContain(text);
     }
     expect(html).toContain('href="/admin?refresh=1"');
@@ -163,8 +165,10 @@ describe("Customers", () => {
     checkPage(html);
     expect(html).toMatch(/<form method="get" action="\/admin\/customers" class="adm-toolbar" role="search"[^>]*>/);
     expect(html).toMatch(/<label class="adm-sr" for="q">Search<\/label>/);
-    expect(html).toContain('<th scope="col" class="adm-num">Revenue / month</th>');
-    expect(count(html, /<th scope="row">/)).toBe(2);
+    // A card per store on a phone: every part keeps its table role (admin.css lays the rows out as blocks there).
+    expect(html).toContain('<table class="adm-table adm-table--cards adm-table--cards-2" role="table">');
+    expect(html).toContain('<th scope="col" class="adm-num" role="columnheader">Revenue / month</th>');
+    expect(count(html, /<th scope="row" role="rowheader">/)).toBe(2);
     expect(html).toContain('href="/admin/customers/00000000-0000-4000-8000-000000000005"');
     expect(html).toContain("51–100 of 120");
     expect(html).toContain("$99.00");
@@ -207,7 +211,7 @@ describe("One customer", () => {
   it("shows the subscription, usage, languages and the rest, and asks Shopify again with the CSRF token", async () => {
     const html = await render(createElement(CustomerView, { detail: detail() }), { url: "/admin/customers/abc" });
     checkPage(html);
-    expect(html).toContain('<h1 class="adm-h1">Store atelier</h1>');
+    expect(html).toContain('<h1 class="adm-h1"><bdi>Store atelier</bdi></h1>');
     expect(html).toMatch(/<a class="adm-btn adm-btn--secondary" href="https:\/\/admin.shopify.com\/store\/atelier" target="_blank" rel="noopener noreferrer">/);
     expect(html).toMatch(
       /<form method="post" action="\/admin\/customers\/abc" class="adm-inline-form"[^>]*><input type="hidden" name="_csrf" value="csrf-token-of-the-session"\/>/,
@@ -269,6 +273,8 @@ const PRICES: PricesPageData = {
       yearlyUsd: null,
       isDefault: true,
       updatedAt: null,
+      version: "default",
+      offersYearly: false,
       defaultMonthlyUsd: 0,
       defaultYearlyUsd: null,
       margin: { monthly: null, yearly: null },
@@ -281,6 +287,8 @@ const PRICES: PricesPageData = {
       yearlyUsd: 290,
       isDefault: true,
       updatedAt: null,
+      version: "default",
+      offersYearly: true,
       defaultMonthlyUsd: 29,
       defaultYearlyUsd: 290,
       margin: { monthly: 0.52, yearly: 0.46 },
@@ -293,6 +301,8 @@ const PRICES: PricesPageData = {
       yearlyUsd: 990,
       isDefault: true,
       updatedAt: null,
+      version: "default",
+      offersYearly: true,
       defaultMonthlyUsd: 99,
       defaultYearlyUsd: 990,
       margin: { monthly: 0.48, yearly: 0.41 },
@@ -305,6 +315,8 @@ const PRICES: PricesPageData = {
       yearlyUsd: null,
       isDefault: false,
       updatedAt: "2026-11-04T10:50:00.000Z",
+      version: "2026-11-04T10:50:00.000Z/14900/-",
+      offersYearly: true,
       defaultMonthlyUsd: 299,
       defaultYearlyUsd: null,
       margin: { monthly: 0.07, yearly: null },
@@ -327,6 +339,8 @@ const PRICES: PricesPageData = {
       yearlyUsd: null,
       isDefault: true,
       updatedAt: null,
+      version: "default",
+      offersYearly: false,
       defaultMonthlyUsd: 49,
       defaultYearlyUsd: null,
       margin: { monthly: 0.81, yearly: null },
@@ -351,13 +365,16 @@ describe("Prices", () => {
       /<form method="post" action="\/admin\/prices" class="adm-priceform" novalidate=""[^>]*><input type="hidden" name="_csrf" value="csrf-token-of-the-session"\/>/,
     );
     for (const handle of ["starter", "pro", "business", "own-key"]) {
-      for (const period of ["monthly", "yearly"]) {
+      for (const period of handle === "own-key" ? ["monthly"] : ["monthly", "yearly"]) {
         expect(html).toMatch(new RegExp(`<label class="adm-pricegrid__label" for="price-${handle}-${period}">`));
         expect(html).toContain(`id="price-${handle}-${period}" name="${handle}.${period}"`);
       }
     }
-    // Free stays free: no fields.
+    // Free stays free: no fields. Own key is monthly only (its plan in the Partner Dashboard): no yearly field.
     expect(html).not.toContain('name="free.monthly"');
+    expect(html).not.toContain('name="own-key.yearly"');
+    // Every plan's version goes back with the form: a save after someone else's is refused.
+    for (const plan of PRICES.plans) expect(html).toContain(`<input type="hidden" name="${plan.handle}.version" value="${plan.version}"/>`);
     expect(html).toContain('value="149"');
     expect(html).toMatch(/<input class="adm-input adm-input--code" id="prices-code" name="code" type="text" inputMode="numeric" autoComplete="one-time-code"/);
     expect(html).toMatch(/<textarea class="adm-input adm-textarea" id="prices-reason" name="reason"/);
@@ -377,6 +394,7 @@ describe("Prices", () => {
     );
     expect(html).toMatch(/<div class="adm-notice adm-notice--critical adm-errsum" role="alert" id="prices-errors" tabindex="-1"/);
     expect(html).toContain('<a href="#price-starter-monthly">Starter, Monthly: Enter an amount like 29 or 9.99.</a>');
+    expect(html).not.toContain('id="prices-conflict"');
     expect(html).toContain('<a href="#prices-code">That code is wrong or was already used. Wait for the next one.</a>');
     expect(html).toMatch(/id="price-starter-monthly" name="starter.monthly"[^>]*aria-invalid="true" aria-describedby="price-starter-monthly-error"[^>]*value="abc"/);
     expect(html).toContain(">Because</textarea>");
@@ -386,8 +404,56 @@ describe("Prices", () => {
     const html = await render(
       createElement(PricesView, { page: PRICES, canEdit: true, result: { ok: true, changed: ["starter", "own-key"], savedAt: "2026-11-04T11:00:00.000Z" } }),
     );
-    expect(html).toContain("Changed: Starter, Own key.");
+    expect(html).toContain("Changed: Starter and Own key.");
     expect(html).toContain("Make sure the Partner Dashboard has the same prices");
+  });
+
+  it("in Arabic, joins lists and the error's parts with the language's own separators", async () => {
+    const refused = await render(
+      createElement(PricesView, { page: PRICES, canEdit: true, result: { ok: false, errors: { "starter.monthly": "NOT_A_PRICE", "pro.yearly": "TOO_LOW" }, values: {} } }),
+      { locale: "ar" },
+    );
+    expect(refused).toContain('<a href="#price-starter-monthly">Starter، شهريًا: أدخل مبلغًا مثل 29 أو 9.99.</a>');
+    expect(refused).not.toMatch(/Starter, |Pro, /);
+    const saved = await render(createElement(PricesView, { page: PRICES, canEdit: true, result: { ok: true, changed: ["pro", "business"], savedAt: "2026-11-04T11:00:00.000Z" } }), { locale: "ar" });
+    expect(saved).toContain("تغيّرت: Pro وBusiness.");
+    const three = await render(createElement(PricesView, { page: PRICES, canEdit: true, result: { ok: true, changed: ["starter", "pro", "business"], savedAt: "2026-11-04T11:00:00.000Z" } }));
+    expect(three).toContain("Changed: Starter, Pro, and Business.");
+  });
+
+  it("says when the prices changed meanwhile: nothing saved, the current prices in the form, the reason kept", async () => {
+    const html = await render(
+      createElement(PricesView, { page: PRICES, canEdit: true, result: { ok: false, conflict: ["pro", "business"], errors: {}, values: { reason: "Pro up" } } }),
+    );
+    checkPage(html);
+    expect(html).toMatch(/<div class="adm-notice adm-notice--critical" role="alert" id="prices-conflict" tabindex="-1">/);
+    expect(html).toContain("The prices changed meanwhile");
+    expect(html).toContain("Pro and Business changed after you opened this page, so nothing was saved.");
+    // The form shows the prices read now (the loader's), not the refused ones; no field is marked.
+    expect(html).toMatch(/id="price-business-monthly" name="business.monthly"[^>]*value="149"/);
+    expect(html).not.toContain('aria-invalid="true"');
+    expect(html).not.toContain('id="prices-errors"');
+    expect(html).toContain(">Pro up</textarea>");
+  });
+
+  it("names a refused Own key yearly price, a refused reason and a table the database refused", async () => {
+    const html = await render(
+      createElement(PricesView, {
+        page: PRICES,
+        canEdit: true,
+        result: { ok: false, errors: { "own-key.yearly": "MONTHLY_ONLY", reason: "REASON_INVALID", prices: "SAVE_REFUSED" }, values: {} },
+      }),
+    );
+    expect(html).toContain("Own key, Yearly: Own key is monthly only, like its plan in the Partner Dashboard.");
+    expect(html).toContain('<a href="#prices-reason">Remove the invisible control characters from the reason.</a>');
+    expect(html).toContain('<a href="#price-starter-monthly">The database refused these prices. Reload the page and check them.</a>');
+  });
+
+  it("isolates free text in the history (a Latin reason in an Arabic page keeps its punctuation)", async () => {
+    const page = { ...PRICES, history: [{ ...PRICES.history[0]!, reason: "Price cut (Q4).", by: "finance@linguva.test" }] };
+    const html = await render(createElement(PricesView, { page, canEdit: false }), { locale: "ar", session: READONLY });
+    expect(html).toContain('<td class="adm-reason"><bdi>Price cut (Q4).</bdi></td>');
+    expect(html).toContain('<bdi class="adm-truncate">finance@linguva.test</bdi>');
   });
 
   it("shows a role without the capability the prices, without a form", async () => {

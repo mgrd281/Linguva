@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { AdminRole } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { adminCipher, requireAdmin, verifyFreshCode, type AdminContext } from "../../app/.server/admin/auth";
+import { adminCipher, keyPart, requireAdmin, verifyFreshCode, type AdminContext } from "../../app/.server/admin/auth";
 import { LOGIN_ATTEMPTS_PER_CLIENT, signIn, signOut, type SignInDeps } from "../../app/.server/admin/login";
 import { hashPassword } from "../../app/.server/admin/password";
 import { readSession, tokenHash } from "../../app/.server/admin/session";
@@ -181,6 +181,51 @@ describe("signing in", () => {
     expect(await ownerDb.adminSession.count()).toBe(0);
   });
 
+  it("counts an account and an e-mail without one in the same way over time: a run is forgotten a day after its last attempt, alike", async () => {
+    const owner = await seedAdmin();
+    const disabled = await seedAdmin("former@example.com");
+    await ownerDb.adminUser.update({ where: { id: disabled.id }, data: { disabledAt: new Date() } });
+    const start = Date.now();
+    let clock = start;
+    const counters = new MemoryCounters(() => clock);
+    const answers: Record<string, string[]> = {};
+    for (const [i, email] of [owner.email, "nobody@example.com", disabled.email].entries()) {
+      const attempt = async () => {
+        const result = await signIn(loginRequest({ "x-forwarded-for": `203.0.113.${i}` }), { email, password: "wrong password here", code: "000000" }, { counters, now: new Date(clock) });
+        return result.ok ? "OK" : result.error;
+      };
+      const seen: string[] = [];
+      clock = start;
+      for (let n = 0; n < 4; n++) seen.push(await attempt());
+      // A day and an hour later the four are forgotten: five more before the lock...
+      clock = start + 25 * 60 * MINUTE;
+      for (let n = 0; n < 6; n++) seen.push(await attempt());
+      // ...which ends 15 minutes after it began.
+      clock = start + 25 * 60 * MINUTE + 15 * MINUTE;
+      seen.push(await attempt());
+      answers[email] = seen;
+    }
+    const expected = [...Array<string>(9).fill("INVALID"), "LOCKED", "INVALID"];
+    expect(answers).toEqual({ [owner.email]: expected, "nobody@example.com": expected, [disabled.email]: expected });
+    // The account's lock is in the database (authoritative: its sessions stop too).
+    const row = await ownerDb.adminUser.findUniqueOrThrow({ where: { id: owner.id } });
+    expect(row.lockedUntil).toEqual(new Date(start + 25 * 60 * MINUTE + 15 * MINUTE));
+    expect(row.failedLogins).toBe(10);
+  }, 30_000);
+
+  it("starts a new run with each accepted code: only wrong attempts in a row lock", async () => {
+    const user = await seedAdmin();
+    const start = new Date();
+    const wrong = () => signIn(loginRequest(), { email: user.email, password: "wrong password here", code: "000000" }, { ...deps, now: start });
+    for (let i = 0; i < 4; i++) expect(await wrong()).toEqual({ ok: false, error: "INVALID" });
+    await signedIn(user, start);
+    for (let i = 0; i < 4; i++) expect(await wrong()).toEqual({ ok: false, error: "INVALID" });
+    expect(await ownerDb.adminUser.findUniqueOrThrow({ where: { id: user.id } })).toMatchObject({ failedLogins: 4, lockedUntil: null });
+    // The fifth in a row.
+    expect(await wrong()).toEqual({ ok: false, error: "INVALID" });
+    expect(await wrong()).toEqual({ ok: false, error: "LOCKED" });
+  });
+
   it("limits each client to 20 attempts in 15 minutes across instances (Redis), whatever is forged left in X-Forwarded-For", async () => {
     const user = await seedAdmin();
     const redis = createRedis(process.env.REDIS_URL!);
@@ -209,8 +254,12 @@ describe("signing in", () => {
       expect((await audits("admin.sign_in_failed")).filter((f) => (f.metadata as { reason: string }).reason === "rate_limited")).toHaveLength(1);
       const keys = await redis.keys("lv:test:admin-login:*");
       expect(keys.length).toBeGreaterThan(0);
-      // Keys carry no address or e-mail.
-      expect((await redis.keys(`lv:test:admin-login*`)).join(" ")).not.toMatch(/198\.|example\.com/);
+      // Keys carry no address, e-mail or account id (the signed-in account's run is there too).
+      const all = (await redis.keys(`lv:test:admin-login*`)).join(" ");
+      expect(all).not.toMatch(/198\.|example\.com/);
+      expect(all).not.toContain(user.id);
+      // The account's sign-in was counted (before it was checked) in its run, under a hash.
+      expect(await redis.get(`lv:test:admin-login-fails:a:${keyPart(`${user.id}:0`)}`)).toBe("1");
     } finally {
       await redis.quit();
     }
@@ -379,11 +428,12 @@ describe("fresh codes for sensitive actions", () => {
     const user = await seedAdmin();
     const now = new Date();
     const { ctx } = await context(user, now);
-    expect(await verifyFreshCode(ctx, codeAt(user.secret, now), { now })).toBe(false);
+    const { counters } = deps;
+    expect(await verifyFreshCode(ctx, codeAt(user.secret, now), { now, counters })).toBe(false);
     const next = later(now, 30_000);
-    expect(await verifyFreshCode(ctx, codeAt(user.secret, next), { now: next })).toBe(true);
-    expect(await verifyFreshCode(ctx, codeAt(user.secret, next), { now: next })).toBe(false);
-    expect(await verifyFreshCode(ctx, "12345", { now: next })).toBe(false);
+    expect(await verifyFreshCode(ctx, codeAt(user.secret, next), { now: next, counters })).toBe(true);
+    expect(await verifyFreshCode(ctx, codeAt(user.secret, next), { now: next, counters })).toBe(false);
+    expect(await verifyFreshCode(ctx, "12345", { now: next, counters })).toBe(false);
   });
 
   it("count wrong codes towards the lock, so a stolen session can't guess codes", async () => {
@@ -391,13 +441,39 @@ describe("fresh codes for sensitive actions", () => {
     const now = new Date();
     const { ctx, cookie } = await context(user, now);
     expect(await readSession(new Request(`${ORIGIN}/admin`, { headers: { cookie } }))).not.toBeNull();
-    for (let i = 0; i < 5; i++) expect(await verifyFreshCode(ctx, "000000", { now })).toBe(false);
+    for (let i = 0; i < 5; i++) expect(await verifyFreshCode(ctx, "000000", { now, counters: deps.counters })).toBe(false);
     const row = await ownerDb.adminUser.findUniqueOrThrow({ where: { id: user.id } });
     expect(row.lockedUntil).toEqual(later(now, 15 * MINUTE));
     // Locked: even the right code is refused, and the session no longer works.
     const next = later(now, 30_000);
-    expect(await verifyFreshCode(ctx, codeAt(user.secret, next), { now: next })).toBe(false);
+    expect(await verifyFreshCode(ctx, codeAt(user.secret, next), { now: next, counters: deps.counters })).toBe(false);
     expect(await readSession(new Request(`${ORIGIN}/admin`, { headers: { cookie } }))).toBeNull();
     await expect(requireAdmin(new Request(`${ORIGIN}/admin`, { headers: { cookie } }))).rejects.toMatchObject({ status: 302 });
+  });
+
+  it("count in the same run as wrong sign-ins", async () => {
+    const user = await seedAdmin();
+    const now = new Date();
+    const { ctx } = await context(user, now);
+    for (let i = 0; i < 3; i++) expect(await verifyFreshCode(ctx, "000000", { now, counters: deps.counters })).toBe(false);
+    for (let i = 0; i < 2; i++) {
+      expect(await signIn(loginRequest(), { email: user.email, password: "wrong password here", code: "000000" }, { ...deps, now })).toEqual({ ok: false, error: "INVALID" });
+    }
+    expect((await ownerDb.adminUser.findUniqueOrThrow({ where: { id: user.id } })).lockedUntil).toEqual(later(now, 15 * MINUTE));
+    const next = later(now, 30_000);
+    expect(await signIn(loginRequest(), { email: user.email, password: PASSWORD, code: codeAt(user.secret, next) }, { ...deps, now: next })).toEqual({ ok: false, error: "LOCKED" });
+  });
+
+  it("are never checked without being counted first", async () => {
+    const user = await seedAdmin();
+    const now = new Date();
+    const { ctx } = await context(user, now);
+    const down = new Error("Redis is not reachable");
+    const unreachable = { get: () => Promise.reject(down), incr: () => Promise.reject(down), once: () => Promise.reject(down) };
+    const next = later(now, 30_000);
+    // The right code: refused with the error, and still unused.
+    await expect(verifyFreshCode(ctx, codeAt(user.secret, next), { now: next, counters: unreachable })).rejects.toBe(down);
+    expect((await ownerDb.adminUser.findUniqueOrThrow({ where: { id: user.id } })).lastTotpStep).toBe(totpStep(now.getTime()));
+    expect(await verifyFreshCode(ctx, codeAt(user.secret, next), { now: next, counters: deps.counters })).toBe(true);
   });
 });

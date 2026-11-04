@@ -31,12 +31,13 @@ describe("the console's language", () => {
   it("stores ?lang= in a cookie for the console's paths and drops the parameter", () => {
     expect(languageSwitch(request("/admin/customers?q=nord&lang=ar&page=2"))).toEqual({
       location: "/admin/customers?q=nord&page=2",
-      cookie: "lv_admin_lang=ar; Path=/admin; Max-Age=31536000; SameSite=Lax",
+      // Path=/: the pages' data requests (/admin.data) carry it too.
+      cookie: "lv_admin_lang=ar; Path=/; Max-Age=31536000; SameSite=Lax",
     });
     // An unknown language: the parameter goes, the choice stays.
     expect(languageSwitch(request("/admin?lang=xx"))).toEqual({ location: "/admin", cookie: null });
     expect(languageSwitch(request("/admin/prices"))).toBeNull();
-    expect(adminLangCookie("en", request("/admin", { "x-forwarded-proto": "http, https" }))).toBe("lv_admin_lang=en; Path=/admin; Max-Age=31536000; SameSite=Lax; Secure");
+    expect(adminLangCookie("en", request("/admin", { "x-forwarded-proto": "http, https" }))).toBe("lv_admin_lang=en; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
     expect(languageHref("/admin/customers", "?q=a&lang=en", "ar")).toBe("/admin/customers?q=a&lang=ar");
   });
 
@@ -138,6 +139,7 @@ function row(domain: string, extra: Partial<ShopRow> & { sub?: Partial<NonNullab
           },
     plan: "pro",
     inTrial: false,
+    cancelling: false,
     complimentary: false,
     usage: { chars: 0, ownKeyChars: 0, costUsd: 0 },
     languages: 1,
@@ -152,7 +154,7 @@ describe("the Subscriptions page's figures", () => {
     row("a"),
     row("b", { sub: { billingPeriod: "ANNUAL", currentPeriodEnd: "2027-05-01T00:00:00.000Z" } }),
     row("c", { plan: "starter", inTrial: true, sub: { planHandle: "starter", currentPeriodEnd: "2026-11-20T00:00:00.000Z" } }),
-    row("d", { plan: "business", sub: { planHandle: "business", cancelAtEndOfCycle: true } }),
+    row("d", { plan: "business", cancelling: true, sub: { planHandle: "business", cancelAtEndOfCycle: true } }),
     row("e", { plan: "free", sub: { state: "NONE", planHandle: null } }),
     row("f", { plan: "unknown", sub: null }),
     row("g", { status: "UNINSTALLED" }),

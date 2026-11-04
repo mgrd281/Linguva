@@ -7,8 +7,9 @@
  * child's action without this loader.
  */
 import type { LinksFunction, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { isRouteErrorResponse, Outlet, redirect, useLoaderData, useRouteError, useRouteLoaderData } from "react-router";
+import { isRouteErrorResponse, Outlet, useLoaderData, useRouteError, useRouteLoaderData } from "react-router";
 import { requireAdmin } from "../.server/admin/auth";
+import { adminRedirect } from "../.server/lib/security-headers";
 import { adminLocaleOf, isAdminLocale, languageSwitch, type AdminLocale } from "../admin/locale";
 import { adminTitle } from "../admin/meta";
 import { AdminProvider, type AdminSessionView } from "../components/admin/context";
@@ -20,7 +21,8 @@ export const links: LinksFunction = () => [{ rel: "stylesheet", href: adminStyle
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const ctx = await requireAdmin(request, "view");
   const switched = languageSwitch(request);
-  if (switched) throw redirect(switched.location, switched.cookie ? { headers: { "Set-Cookie": switched.cookie } } : undefined);
+  // With the console's headers (React Router hands a page request's redirect out as it is).
+  if (switched) throw adminRedirect(request, switched.location, switched.cookie ? { headers: { "Set-Cookie": switched.cookie } } : undefined);
   return {
     user: { email: ctx.user.email },
     role: ctx.user.role,

@@ -30,7 +30,7 @@
 - **Yearly:** Starter and Pro cost 10 × the monthly price. Business has no yearly price at launch.
   - A private yearly plan can be offered on request once real usage is known.
   - Its handle must first be mapped in `app/lib/plans.ts` (§9 step 4).
-- **In the app:** prices come from `PLAN_PRICES`, formatted in USD for each language. There is no monthly/yearly switch and no "popular" badge (§10.3).
+- **In the app:** prices come from the price table (the prices saved in the admin console, `PlanPrice`, else `PLAN_PRICES`), formatted in USD for each language. There is no monthly/yearly switch and no "popular" badge (§10.3).
 - **Daily caps at billing launch:**
   - `AI_DAILY_CHAR_LIMIT=1000000`. Each shop gets min(1,000,000, its allowance) per UTC day.
   - `AI_PLATFORM_DAILY_CHAR_LIMIT=3000000`.
@@ -419,9 +419,10 @@ Do nothing here before steps 0 and 1 are done. Nothing in this section has been 
 7. **Revenue share:** register for the 0% share on the first $1M (one-time $19 per Partner account, shopify.dev revenue-share page). Link any associated developer accounts.
 8. **Changing a price later** (docs/ADMIN_CONSOLE.md §3): read Shopify's current rules on price changes for existing subscribers before you change a live plan. Then, on the same day and in this order:
    1. Change the plan's charge in the Partner Dashboard. Shopify charges that price; the app can't change it (there is no API for it).
-   2. Save the same price in the admin console (Prices; role OWNER or FINANCE, a reason and a fresh 6-digit code). The website and the app's Plan page show it: the Plan page within 30 seconds, the website within about 5 minutes.
+   2. Save the same price in the admin console (Prices; role OWNER or FINANCE, a reason and a fresh 6-digit code). The website and the app's Plan page show it: the Plan page within about 30 seconds, the website within about 5 minutes. If someone saved a price after you opened the Prices page, nothing is saved: the page shows the current prices to check and save again.
    3. Check the pricing content in both listing languages and the prices line in `docs/APP_STORE_LISTING.md`.
    - Without the console (it is off by default), a price change is a code change: `PLAN_PRICES` or `OWN_KEY_PRICE`, the default texts between the website's price markers (`site/index.html`, `site/preise.html`) and the pinned values in `tests/unit/plan-prices.test.ts`, deployed the same day. Do the same when a console price should also become the default: the defaults are what a plan without a saved price shows, and what the static website image always shows.
+   - **This works only for a plan that was never saved in the console.** A saved price (a `PlanPrice` row, also one saved back to its default value) stays in force on the website and the Plan page, also with `ADMIN_CONSOLE=off`. For such a plan, turn the console on and save the new price there. Or delete that plan's row with the owner role: `psql "$MIGRATION_DATABASE_URL" -c "DELETE FROM \"PlanPrice\" WHERE \"handle\" = 'starter';"` (the runtime role can't). The default then shows on the Plan page within about 30 seconds, on the website within about 5 minutes more. Then check `/preise` and the Plan page (docs/ADMIN_CONSOLE.md §3, "A saved price stays in force").
 
 Later, once steps 0–8 are done and the four plans are live:
 
@@ -434,7 +435,7 @@ Later, once steps 0–8 are done and the four plans are live:
     5. **Public plan without content.** Public plans → **Add** (after Business): handle **`own-key`** (type exactly; if refused, `ownkey`, which is mapped too), Billing **Monthly**, **49.00**, no yearly charge, Free trial duration **empty**, "Free for partners and developers" **off**, Welcome link **`/app/welcome`**. Enter **no display name and no top features in any language**: merchants can't see it yet.
     6. **One sitting, in this order:** (a) pricing content in English and German: Display name **Own key**, top features and the additional-charges text from `docs/APP_STORE_LISTING.md` (Own key block); (b) set `OWN_KEY_PLAN_VISIBLE=on` in Railway production and redeploy; (c) check the Plan page card, `/preise`, Shopify's plan page on `linguva-test-lab` (five plans; how the yearly toggle shows the monthly-only plan, DEV_STORE_TEST_PLAN L11) and, with `PUBLIC_PAGES=on`, the privacy and support pages.
     7. **Rollback:** delete the pricing content of `own-key` in both languages (the plan disappears for merchants), set the flag off and redeploy. Existing subscribers keep their entitlements (handles are mapped regardless of the flag).
-    8. Price changes later: as step 8 above (Partner Dashboard, then the admin console, then both listing languages, the same day). Keep Own key monthly only unless the Partner Dashboard plan gets a yearly charge: the Plan page's comparison note still says "monthly only".
+    8. Price changes later: as step 8 above (Partner Dashboard, then the admin console, then both listing languages, the same day). Own key stays monthly only: the admin console takes only a monthly price for it (no yearly field; the form and the save refuse one), and the Plan page's comparison note says "monthly only". A yearly Own key charge would need a code change first (`offersYearly` in `app/lib/plan-prices.ts`, the Plan page's texts).
 
 ## 10. What the app and the docs must change
 
@@ -623,7 +624,7 @@ Own key plan (2026-11), additions only (the pinned cases of the four plans are u
 | 5 | Price perception: LLM- and Google-based apps include from about 3× (Langwill) to about 40× (EA) more words per dollar. T Lab (5.0 from 1,037 reviews) even has bulk AI and a glossary in its Free plan (§7.2) | Position on DeepL quality, review before publishing and free memory reuse (§7.2). Watch install → paid conversion for 60 days. Later options: a cheaper second engine (AI_ENGINES.md) or "bring your own DeepL key" for large stores |
 | 6 | Business ($299) is above every listed competitor plan, so few will choose it | It exists for large first passes. Merchants can step up for one month and back down. Review after 90 days |
 | 7 | Yearly lock-in: a DeepL price rise can't reach yearly subscribers for up to 12 months; yearly Pro is 41.5% at full use (36.5–39.5% in countries with the fee) | Business has no yearly price. Real use after the first pass is far below 100%. Re-check yearly prices against DeepL every quarter |
-| 8 | The Partner Dashboard, `PLAN_PRICES` and the listing drift apart, or the trial text stays after the trial is set to 0 days. App Review then rejects, or merchants are misled | Change all three on the same day (§9 step 8). The plan-prices test pins `PLAN_PRICES` and `TRIAL_DAYS`; the dev-store check compares them with Shopify's page (§9 step 5); the trial line needs `TRIAL_DAYS > 0` (§10.3) |
+| 8 | The Partner Dashboard, the app's prices (the admin console's saved prices, else `PLAN_PRICES`) and the listing drift apart, or the trial text stays after the trial is set to 0 days. App Review then rejects, or merchants are misled | Change all three on the same day (§9 step 8). The plan-prices test pins `PLAN_PRICES` and `TRIAL_DAYS`; the dev-store check compares them with Shopify's page (§9 step 5); the trial line needs `TRIAL_DAYS > 0` (§10.3) |
 | 9 | Shopify fees: 2.9% always, 15% after $1M, 2–5% country fees, refunds still count toward the gross | All modelled in §6.2. Register for the 0% tier ($19) before the first sale |
 | 10 | Daily cap friction: a Business first pass pauses three times at 1M a day | The smart schedule continues automatically. Optional automatic resume for bulk jobs (§8). The platform cap is raised by rule |
 | 11 | Development stores: a paid plan marked free for partners would give Business away | Leave the option off on paid plans (§9 step 2) |

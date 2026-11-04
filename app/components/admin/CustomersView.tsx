@@ -1,14 +1,18 @@
 /**
  * Customers: every store, searchable (name or domain), filtered by status
  * and plan, sorted, 50 a page. A plain GET form: the filters are the URL,
- * so a view can be bookmarked or shared and works without JavaScript.
+ * so a view can be bookmarked or shared and works without JavaScript. On a
+ * phone each store is a card (Table's `cards`). "AI characters" are the
+ * ones Linguva pays for, as everywhere in the console; a store's own-key
+ * characters show on a line of their own.
  */
+import { useRef } from "react";
 import { Form, Link, useSubmit } from "react-router";
 import { CONSOLE_PLANS, PLAN_LABEL, type ConsolePlan } from "../../admin/labels";
 import type { ShopRow } from "../../.server/admin/directory";
 import { useAdminI18n } from "./context";
 import { Icon } from "./Icon";
-import { Card, EmptyState, PageHeader, PlanBadge, StoreCell, StoreStatusBadge, SubscriptionMarks, Table } from "./ui";
+import { Card, EmptyState, PageHeader, PlanBadge, StoreCell, StoreStatusBadge, SubscriptionMarks, Table, useFormValues } from "./ui";
 
 export const CUSTOMER_SORTS = ["newest", "oldest", "usage", "revenue", "name"] as const;
 export type CustomerSort = (typeof CUSTOMER_SORTS)[number];
@@ -57,6 +61,9 @@ export function CustomersView({ rows, total, totalAll, page, pages, filters }: C
   const i18n = useAdminI18n();
   const { t } = i18n;
   const submit = useSubmit();
+  const form = useRef<HTMLFormElement>(null);
+  // The fields follow the URL (Clear filters, Back, Forward), not only their first value.
+  useFormValues(form, { q: filters.q, status: filters.status, plan: filters.plan, sort: filters.sort });
   const filtered = filters.q !== "" || filters.status !== "all" || filters.plan !== "all";
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(total, page * PAGE_SIZE);
@@ -72,7 +79,7 @@ export function CustomersView({ rows, total, totalAll, page, pages, filters }: C
         lead={totalAll > 0 ? <span className="adm-num">{t("customers.range", { from: i18n.number(from), to: i18n.number(to), total: i18n.number(total) })}</span> : undefined}
         flush
       >
-        <Form method="get" action={CUSTOMERS_PATH} className="adm-toolbar" role="search">
+        <Form ref={form} method="get" action={CUSTOMERS_PATH} className="adm-toolbar" role="search">
           <div className="adm-toolbar__search">
             <label className="adm-sr" htmlFor="q">
               {t("customers.search")}
@@ -143,7 +150,7 @@ export function CustomersView({ rows, total, totalAll, page, pages, filters }: C
             }
           />
         ) : (
-          <Table caption={t("customers.caption")}>
+          <Table caption={t("customers.caption")} cards={2}>
             <thead>
               <tr>
                 <th scope="col">{t("customers.colStore")}</th>
@@ -167,22 +174,30 @@ export function CustomersView({ rows, total, totalAll, page, pages, filters }: C
                   <th scope="row">
                     <StoreCell id={row.id} name={row.name} domain={row.shopDomain} />
                   </th>
-                  <td>
+                  <td className="adm-cell--plain">
                     <span className="adm-badges">
                       <PlanBadge plan={row.plan} />
                       <SubscriptionMarks
                         inTrial={row.inTrial}
-                        cancelling={row.status === "ACTIVE" && row.subscription?.state === "ACTIVE" && row.subscription.cancelAtEndOfCycle}
+                        cancelling={row.cancelling}
+                        notChecked={row.subscription !== null && row.subscription.checkedAt === null}
                       />
                     </span>
                   </td>
-                  <td>
+                  <td className="adm-cell--plain">
                     <StoreStatusBadge status={row.status} />
                   </td>
                   <td className="adm-nowrap">{i18n.date(row.installedAt)}</td>
                   <td className="adm-num">{i18n.number(row.languages)}</td>
-                  <td className="adm-num" title={i18n.number(row.usage.chars + row.usage.ownKeyChars)}>
-                    {i18n.number(row.usage.chars + row.usage.ownKeyChars)}
+                  <td className="adm-num">
+                    {row.usage.ownKeyChars > 0 ? (
+                      <span className="adm-stacked">
+                        <span>{i18n.number(row.usage.chars)}</span>
+                        <span className="adm-muted adm-small">{t("overview.ownKey", { chars: i18n.number(row.usage.ownKeyChars) })}</span>
+                      </span>
+                    ) : (
+                      i18n.number(row.usage.chars)
+                    )}
                   </td>
                   <td className="adm-num">{row.monthlyRevenueUsd > 0 ? i18n.usd(row.monthlyRevenueUsd, { cents: true }) : <span className="adm-muted">—</span>}</td>
                 </tr>

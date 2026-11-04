@@ -2,18 +2,30 @@
  * Signing in to the admin console: e-mail, password and a TOTP code in one
  * form, one generic answer whatever was wrong. Per client at most 20
  * attempts in 15 minutes; per account 5 wrong attempts in a row lock it for
- * 15 minutes (unknown e-mails behave the same, so the answers don't tell
- * which accounts exist); each code works once. Every attempt is audited
- * without the e-mail or password (docs/SECURITY_MODEL.md §5s).
+ * 15 minutes (unknown e-mails are counted and locked alike, in the same
+ * count: neither the answers nor when they change tell which accounts
+ * exist); each code works once. Every attempt is audited without the
+ * e-mail or password (docs/SECURITY_MODEL.md §5s).
  */
-import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getConfig, type AppConfig } from "../lib/config";
 import { prisma as defaultClient } from "../lib/db";
 import { ensureDatabasePosture } from "../lib/db-guard";
-import { createRedis, keyPrefix } from "../queue/redis";
-import { MemoryCounters, RedisCounters, type Counters } from "../usage/request-limits";
-import { accountTotpSecret, adminConsoleAvailable, claimTotpStep, LOCK_MINUTES, MAX_FAILED_LOGINS, noteFailedLogin, originAllowed } from "./auth";
+import { keyPrefix } from "../queue/redis";
+import type { Counters } from "../usage/request-limits";
+import {
+  accountTotpSecret,
+  adminConsoleAvailable,
+  claimTotpStep,
+  countAttempt,
+  emailLocked,
+  forbidden,
+  keyPart,
+  loginCounters,
+  noteFailedLogin,
+  notFound,
+  originAllowed,
+} from "./auth";
 import { DUMMY_HASH, PASSWORD_MAX_LENGTH, verifyPassword } from "./password";
 import { clearCookie, createSession, readSession, revokeSession, sessionToken, tokenHash } from "./session";
 import { totpStepMatching } from "./totp";
@@ -27,8 +39,6 @@ export const LOGIN_WINDOW_SECONDS = 15 * 60;
 /** Sign-ins are kept this long after they ended, for the console's list of recent sign-ins; older ones are deleted at the next sign-in. */
 export const SESSION_HISTORY_DAYS = 30;
 
-const COUNTER_TTL_SECONDS = 24 * 60 * 60;
-
 /** Why an attempt failed, as audited (never shown: the page says only INVALID, LOCKED or RATE_LIMITED). */
 type FailureReason = "unknown_account" | "disabled" | "locked" | "wrong_password" | "wrong_code" | "reused_code" | "rate_limited";
 
@@ -38,17 +48,6 @@ export interface SignInDeps {
   config?: AppConfig;
   now?: Date;
 }
-
-let sharedCounters: Counters | undefined;
-
-/** Redis when configured (all instances share the limits; required in production), else this process's memory. */
-function loginCounters(config: AppConfig): Counters {
-  sharedCounters ??= config.REDIS_URL ? new RedisCounters(createRedis(config.REDIS_URL)) : new MemoryCounters();
-  return sharedCounters;
-}
-
-/** Hashed, so Redis keys carry no addresses or e-mails. */
-const keyPart = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 32);
 
 /**
  * The client, for the per-client limit: the right-most X-Forwarded-For
@@ -81,13 +80,14 @@ export async function signIn(
   deps: SignInDeps = {},
 ): Promise<SignInResult> {
   const config = deps.config ?? getConfig();
-  if (!adminConsoleAvailable(request, config)) throw new Response("Not Found", { status: 404 });
-  if (!originAllowed(request)) throw new Response("Forbidden", { status: 403 });
+  if (!adminConsoleAvailable(request, config)) throw notFound(request);
+  if (!originAllowed(request)) throw forbidden(request);
   const client = deps.client ?? defaultClient;
   if (!deps.client) await ensureDatabasePosture();
   const counters = deps.counters ?? loginCounters(config);
   const now = deps.now ?? new Date();
   const prefix = keyPrefix(config.NODE_ENV);
+  const attemptDeps = { client, counters, config };
 
   const attempts = await counters.incr(`${prefix}:admin-login:${keyPart(clientAddress(request))}`, LOGIN_WINDOW_SECONDS);
   if (attempts > LOGIN_ATTEMPTS_PER_CLIENT) {
@@ -107,15 +107,17 @@ export async function signIn(
       : null;
 
   if (!user || user.disabledAt) {
-    // As long as a real check, and the same lock after the same number of attempts.
-    await verifyPassword(password, DUMMY_HASH);
-    const account = keyPart(email);
-    if ((await counters.get(`${prefix}:admin-login-lock:${account}`)) > 0) {
+    // What an account goes through, at the same cost: a password check, and the same count and lock
+    // (countAttempt, noteFailedLogin), only the lock kept in Redis.
+    const who = { email };
+    if (await emailLocked(email, attemptDeps)) {
+      await verifyPassword(password, DUMMY_HASH);
       await failed(client, user?.id ?? null, "locked");
       return { ok: false, error: "LOCKED" };
     }
-    const fails = await counters.incr(`${prefix}:admin-login-fails:${account}`, COUNTER_TTL_SECONDS);
-    if (fails % MAX_FAILED_LOGINS === 0) await counters.once(`${prefix}:admin-login-lock:${account}`, LOCK_MINUTES * 60);
+    const attempt = await countAttempt(who, attemptDeps);
+    await verifyPassword(password, DUMMY_HASH);
+    await noteFailedLogin(who, attempt, now, attemptDeps);
     await failed(client, user?.id ?? null, user ? "disabled" : "unknown_account");
     return { ok: false, error: "INVALID" };
   }
@@ -126,13 +128,15 @@ export async function signIn(
     return { ok: false, error: "LOCKED" };
   }
 
+  const who = { userId: user.id, lastTotpStep: user.lastTotpStep };
+  const attempt = await countAttempt(who, attemptDeps);
   const passwordOk = await verifyPassword(password, user.passwordHash);
   const secret = accountTotpSecret(user);
   const step = secret ? totpStepMatching(secret, input.code, now.getTime()) : null;
   const reason: FailureReason | null = !passwordOk ? "wrong_password" : step === null ? "wrong_code" : step <= user.lastTotpStep ? "reused_code" : null;
   // The step is claimed atomically: of two requests with the same code, one wins.
   if (reason || !(await claimTotpStep(user.id, step!, now, { failedLogins: 0, lockedUntil: null, lastLoginAt: now }, client))) {
-    await noteFailedLogin(user.id, now, client);
+    await noteFailedLogin(who, attempt, now, attemptDeps);
     await failed(client, user.id, reason ?? "reused_code");
     return { ok: false, error: "INVALID" };
   }

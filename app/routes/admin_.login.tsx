@@ -3,13 +3,16 @@
  * console must be on here (requireAdminConsole: 404 otherwise, before
  * anything else); an admin already signed in goes on to the console. The
  * form posts natively (a fresh page load either way); signIn checks the
- * e-mail, password and code, limits attempts and audits each one.
+ * e-mail, password and code, limits attempts and audits each one. Its
+ * redirects carry the console's headers themselves (adminRedirect): React
+ * Router answers a page request with them as they are.
  */
 import type { ActionFunctionArgs, LinksFunction, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { data, redirect, useActionData, useLoaderData } from "react-router";
+import { data, useActionData, useLoaderData } from "react-router";
 import { requireAdminConsole, safeNext } from "../.server/admin/auth";
 import { signIn } from "../.server/admin/login";
 import { readSession } from "../.server/admin/session";
+import { adminRedirect } from "../.server/lib/security-headers";
 import { adminLocaleOf, languageSwitch } from "../admin/locale";
 import { adminTitle } from "../admin/meta";
 import { AdminProvider } from "../components/admin/context";
@@ -22,9 +25,9 @@ export const links: LinksFunction = () => [{ rel: "stylesheet", href: adminStyle
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdminConsole(request);
   const switched = languageSwitch(request);
-  if (switched) throw redirect(switched.location, switched.cookie ? { headers: { "Set-Cookie": switched.cookie } } : undefined);
+  if (switched) throw adminRedirect(request, switched.location, switched.cookie ? { headers: { "Set-Cookie": switched.cookie } } : undefined);
   const next = safeNext(new URL(request.url).searchParams.get("next"));
-  if (await readSession(request)) throw redirect(next);
+  if (await readSession(request)) throw adminRedirect(request, next);
   return { locale: adminLocaleOf(request), next };
 };
 
@@ -34,7 +37,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const field = (name: string) => String(form.get(name) ?? "");
   const next = safeNext(field("next"));
   const result = await signIn(request, { email: field("email"), password: field("password"), code: field("code") });
-  if (result.ok) throw redirect(next, { headers: { "Set-Cookie": result.cookie } });
+  if (result.ok) throw adminRedirect(request, next, { status: 303, headers: { "Set-Cookie": result.cookie } });
   // The e-mail is shown again (never the password or the code).
   const email = field("email").trim().slice(0, 254);
   return data({ error: result.error as SignInError, email }, { status: result.error === "INVALID" ? 401 : 429 });

@@ -67,8 +67,8 @@ function adminPolicy(scriptNonce: string | undefined, production: boolean): stri
 
 /**
  * The console's headers. Applied by addSecurityHeaders to its pages and data
- * requests; a resource route under /admin (no page, its own Response) sets
- * them itself.
+ * requests; every Response the console builds itself (redirects, refusals,
+ * resource routes) gets them from adminResponse or adminRedirect.
  */
 export function adminHeaders(headers: Headers, scriptNonce?: string, production = process.env.NODE_ENV === "production"): void {
   headers.set("X-Content-Type-Options", "nosniff");
@@ -101,8 +101,47 @@ export function addSecurityHeaders(
     const scripts = scriptNonce ? ` script-src 'self' 'nonce-${scriptNonce}' ${SCRIPT_HOSTS};` : "";
     headers.set("Content-Security-Policy", `${csp.endsWith(";") ? csp : `${csp};`} ${EXTRA_CSP}${scripts}`);
   }
-  // HSTS only where the app is really served over HTTPS (behind a proxy in
-  // production), never on local http.
+  strictTransportSecurity(request, headers, production);
+}
+
+/** HSTS only where the app is really served over HTTPS (behind a proxy in production), never on local http. */
+function strictTransportSecurity(request: Request, headers: Headers, production: boolean): void {
   const https = new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
   if (production && https) headers.set("Strict-Transport-Security", "max-age=31536000");
+}
+
+/**
+ * A Response the console builds itself (a refusal, a resource route's
+ * answer), with the console's headers and HSTS. React Router hands some
+ * loader and action Responses out as they are, past entry.server: a
+ * redirect, even on a page request, and whatever a resource route answers
+ * or throws. So these carry the headers themselves.
+ */
+export function adminResponse(
+  request: Request,
+  body: BodyInit | null,
+  { status, headers: init }: { status: number; headers?: HeadersInit },
+  production = process.env.NODE_ENV === "production",
+): Response {
+  const headers = new Headers(init);
+  adminHeaders(headers, undefined, production);
+  strictTransportSecurity(request, headers, production);
+  return new Response(body, { status, headers });
+}
+
+/**
+ * A redirect from the console (to the sign-in page, after signing in or
+ * out, a language switch), with the console's headers: 302 unless told
+ * otherwise. `location` must be a valid header value (ASCII; safeNext's
+ * answers are).
+ */
+export function adminRedirect(
+  request: Request,
+  location: string,
+  { status = 302, headers: init }: { status?: 301 | 302 | 303 | 307 | 308; headers?: HeadersInit } = {},
+  production = process.env.NODE_ENV === "production",
+): Response {
+  const headers = new Headers(init);
+  headers.set("Location", location);
+  return adminResponse(request, null, { status, headers }, production);
 }

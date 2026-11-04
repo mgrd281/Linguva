@@ -2,10 +2,13 @@
  * The admin console (/admin) in the production build with ADMIN_CONSOLE=on,
  * against the UI test database: an admin seeded as the operator tool does
  * (owner role), signed in with password and a TOTP code computed here.
- * Every page renders in English and Arabic (right to left) without axe
- * violations, inline-style or script errors, or horizontal scrolling on a
- * phone; a wrong code is refused with the generic message; signing out
- * ends the session. @responsive
+ * Every page renders in English and Arabic (right to left), light and dark,
+ * without axe violations, inline-style or script errors, or horizontal
+ * scrolling on a phone (wide tables become cards there, the current tab is
+ * in view, the signed-in admin and role show); filters follow the URL;
+ * Reload leaves no parameter behind; following an error summary's link
+ * keeps the errors; a wrong code is refused with the generic message;
+ * signing out ends the session. @responsive
  */
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -110,6 +113,11 @@ test("the sign-in page is accessible and answers a wrong code with the generic m
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.getByRole("heading", { level: 1, name: "تسجيل الدخول" })).toBeVisible();
   expect(page.url()).toBe(`${UI_ENV.appUrl}/admin/login`);
+  // For every console request, the pages' data requests (/admin.data) too.
+  expect((await context.cookies()).find((c) => c.name === "lv_admin_lang")).toMatchObject({ value: "ar", path: "/" });
+  await expectAccessible(page);
+  // Dark: the primary button's white text on its fill (4.5:1).
+  await page.emulateMedia({ colorScheme: "dark" });
   await expectAccessible(page);
   // The refused sign-in answers 401 (the browser notes the status); nothing else.
   expect(errors.filter((e) => !/status of 401/.test(e))).toEqual([]);
@@ -132,7 +140,8 @@ const PAGES = [
 for (const locale of ["en", "ar"] as const) {
   test(`every console page renders in ${locale === "en" ? "English" : "Arabic"}, accessible and without horizontal scrolling @responsive`, async ({ context, page }) => {
     await useSession(context);
-    await context.addCookies([{ name: "lv_admin_lang", value: locale, url: `${UI_ENV.appUrl}/admin` }]);
+    await context.addCookies([{ name: "lv_admin_lang", value: locale, domain: "localhost", path: "/" }]);
+    const width = page.viewportSize()!.width;
     const errors = watchErrors(page);
     for (const p of PAGES) {
       const response = await page.goto(p.path());
@@ -145,8 +154,25 @@ for (const locale of ["en", "ar"] as const) {
       if (p[locale]) await expect(heading).toHaveText(p[locale]!);
       const nav = page.getByRole("navigation", { name: locale === "en" ? "Console" : "لوحة التحكم" });
       await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+      // The current tab is on screen (on a phone the tabs scroll sideways: Prices and Activity start beyond the edge).
+      await expect.poll(async () => {
+        const box = (await nav.locator('[aria-current="page"]').boundingBox())!;
+        return box.x >= 0 && box.x + box.width <= width;
+      }, p.path()).toBe(true);
+      // Who is signed in, and as what, on a phone too.
+      await expect(page.locator(".adm-account")).toBeVisible();
+      await expect(page.locator(".adm-account")).toContainText(locale === "en" ? "Owner" : "مالك");
+      if (width < 720) {
+        // Wide tables are cards: nothing to scroll sideways, nothing cut off.
+        for (const wrap of await page.locator(".adm-table-wrap:has(.adm-table--cards)").all()) {
+          expect(await wrap.evaluate((el) => el.scrollWidth - el.clientWidth), p.path()).toBeLessThanOrEqual(1);
+        }
+      }
       await expectAccessible(page);
       await expectNoHorizontalScroll(page);
+      await page.emulateMedia({ colorScheme: "dark" });
+      await expectAccessible(page);
+      await page.emulateMedia({ colorScheme: "light" });
     }
     expect(errors).toEqual([]);
   });
@@ -158,10 +184,47 @@ test("the navigation and filters work, and a wrong code saves no price", async (
   await page.goto("/admin");
   await page.getByRole("navigation", { name: "Console" }).getByRole("link", { name: "Customers" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Customers" })).toBeVisible();
+  // The selects are named by the label around them (with the chosen option's text).
+  const plan = page.locator('select[name="plan"]');
+  const sort = page.locator('select[name="sort"]');
   await page.getByLabel("Search").fill("no-store-is-called-this");
   await page.getByLabel("Search").press("Enter");
   await expect(page.getByText("No stores match")).toBeVisible();
   expect(page.url()).toContain("q=no-store-is-called-this");
+  // A changed filter applies at once and the select keeps the focus (the form isn't rebuilt).
+  await plan.focus();
+  await plan.selectOption("pro");
+  await expect(page).toHaveURL(/plan=pro/);
+  await expect(page.getByText("No stores match")).toBeVisible();
+  await expect(plan).toBeFocused();
+
+  // Clear filters: the fields show what the URL holds, and the next change doesn't bring the old filters back.
+  await page.getByRole("link", { name: "Clear filters" }).first().click();
+  await expect(page).toHaveURL(`${UI_ENV.appUrl}/admin/customers`);
+  await expect(page.getByLabel("Search")).toHaveValue("");
+  await expect(plan).toHaveValue("all");
+  await sort.selectOption("name");
+  await expect(page).toHaveURL(/sort=name/);
+  expect(new URL(page.url()).searchParams.get("q") ?? "").toBe("");
+  expect(new URL(page.url()).searchParams.get("plan")).toBe("all");
+  // Back and Forward: the filters of that URL again (a changed select replaces its entry).
+  await page.goBack();
+  await expect(page).toHaveURL(/plan=pro/);
+  await expect(page.getByLabel("Search")).toHaveValue("no-store-is-called-this");
+  await expect(plan).toHaveValue("pro");
+  await expect(sort).toHaveValue("newest");
+  await page.goForward();
+  await expect(page).toHaveURL(/sort=name/);
+  await expect(page.getByLabel("Search")).toHaveValue("");
+  await expect(plan).toHaveValue("all");
+  await expect(sort).toHaveValue("name");
+
+  // Reload reads the database again and leaves no parameter in the URL (a later reload or language switch reads the kept data).
+  await page.goto("/admin");
+  await page.getByRole("link", { name: "Reload" }).click();
+  await expect(page).toHaveURL(`${UI_ENV.appUrl}/admin`);
+  await expect(page.getByText(/^Data from /)).toBeVisible();
+  expect(await page.getByRole("link", { name: "العربية" }).getAttribute("href")).toBe("/admin?lang=ar");
 
   await page.goto("/admin/prices");
   await page.getByLabel("Reason").fill("UI test: never saved");
@@ -171,6 +234,17 @@ test("the navigation and filters work, and a wrong code saves no price", async (
   await expect(page.locator("#prices-errors")).toContainText("That code is wrong or was already used.");
   await expect(page.getByLabel("Authenticator code")).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByLabel("Reason")).toHaveValue("UI test: never saved");
+  // The summary's link takes the focus to the field and keeps the errors (no navigation that would drop them).
+  await page.locator("#prices-errors").getByRole("link", { name: "That code is wrong or was already used. Wait for the next one." }).click();
+  await expect(page.getByLabel("Authenticator code")).toBeFocused();
+  await expect(page.locator("#prices-errors")).toBeVisible();
+  await expect(page.getByLabel("Authenticator code")).toHaveAttribute("aria-invalid", "true");
+  expect(new URL(page.url()).hash).toBe("");
+  // So does the skip link.
+  await page.locator(".adm-skip").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#main")).toBeFocused();
+  await expect(page.locator("#prices-errors")).toBeVisible();
   expect(await owner.planPriceChange.count({ where: { reason: "UI test: never saved" } })).toBe(0);
   // The refused save answers 400 (the browser notes the status); nothing else.
   expect(errors.filter((e) => !/status of 400/.test(e))).toEqual([]);

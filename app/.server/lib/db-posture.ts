@@ -119,17 +119,21 @@ export async function checkDatabasePosture(client: PrismaClient): Promise<Postur
     else if (!v.invoker) add("VIEW_NOT_SECURITY_INVOKER", v.relname);
   }
 
+  // INSERT and UPDATE can be granted per column too (has_table_privilege sees only table-wide grants);
+  // DELETE and TRUNCATE only per table.
   for (const table of READ_ONLY_TABLES) {
     const [grant] = await client.$queryRaw<Array<{ write: boolean }>>`
-      SELECT has_table_privilege(current_user, ${`public."${table}"`}, 'INSERT, UPDATE, DELETE, TRUNCATE') AS "write"`;
+      SELECT has_any_column_privilege(current_user, ${`public."${table}"`}, 'INSERT, UPDATE')
+             OR has_table_privilege(current_user, ${`public."${table}"`}, 'DELETE, TRUNCATE') AS "write"`;
     if (grant?.write) add("RUNTIME_CAN_WRITE_GRANTS", table);
   }
 
   // Admin console accounts are created and changed by the operator tool only (owner role): the runtime role
   // reads them and keeps the sign-in counters, so a flaw in the app can't add an account, take one over,
-  // raise a role or enable a disabled one. Price history is append-only (§5s).
+  // raise a role or enable a disabled one. Price history is append-only (§5s). An INSERT on any column
+  // (all columns without a default) is enough to add an account.
   const [accounts] = await client.$queryRaw<Array<{ insert: boolean; delete: boolean; columns: string[] }>>`
-    SELECT has_table_privilege(current_user, c.oid, 'INSERT') AS "insert", has_table_privilege(current_user, c.oid, 'DELETE') AS "delete",
+    SELECT has_any_column_privilege(current_user, c.oid, 'INSERT') AS "insert", has_table_privilege(current_user, c.oid, 'DELETE') AS "delete",
            ARRAY(SELECT a.attname::text FROM pg_attribute a
                  WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
                    AND a.attname IN ('id', 'email', 'passwordHash', 'totpSecret', 'role', 'disabledAt', 'createdAt')

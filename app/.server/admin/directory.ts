@@ -2,7 +2,9 @@
  * Every store that installed the app, for the admin console: status, plan,
  * subscription (the cached Partner API answer), this UTC month's usage and
  * an estimated revenue. Counts, dates, plans and figures only: no merchant
- * content.
+ * content. The cache is refreshed only when the store uses the app (Shopify
+ * sends no billing webhooks), so a row is read with its own dates: a cycle
+ * that ended with a cancellation or a plan change counts as what followed.
  *
  * Shop is a global table; everything else is the shop's own and is read
  * inside withTenant(shop.id), as every job across shops does (never a bypass
@@ -39,10 +41,13 @@ export interface ShopRow {
     cancelAtEndOfCycle: boolean;
     currentPeriodEnd: string | null;
     pendingPlanHandle: string | null;
-    checkedAt: string;
+    /** Null: not checked since the store was (re)installed (the cache was reset; see readShopFacts). */
+    checkedAt: string | null;
   };
   plan: AdminPlanKey;
   inTrial: boolean;
+  /** An installed store whose subscription ends with the current cycle, and that cycle hasn't ended yet. */
+  cancelling: boolean;
   complimentary: boolean;
   /** This UTC month: Linguva's characters, the merchant's own keys' characters, Linguva's estimated engine cost. */
   usage: { chars: number; ownKeyChars: number; costUsd: number };
@@ -72,7 +77,8 @@ export interface ShopFacts {
     cancelAtEndOfCycle: boolean;
     currentPeriodEnd: Date | null;
     pendingPlanHandle: string | null;
-    checkedAt: Date;
+    /** Null: not checked since the store was (re)installed (NOT_CHECKED_SINCE_INSTALL). */
+    checkedAt: Date | null;
   };
   grant: ComplimentaryAccess | null;
   /** Linguva's characters this month per engine (no engine: DeepL's, as getMonthlyUsageByProvider). */
@@ -108,6 +114,14 @@ type FactsRow = {
 };
 
 export const SHOP_SELECT = { id: true, shopDomain: true, name: true, status: true, installedAt: true, uninstalledAt: true, shopifyShopGid: true } as const;
+
+/**
+ * The checkedAt an uninstall or reinstall writes (shop-service.ts,
+ * CANCELLED_SUBSCRIPTION: state NONE, checked at the epoch): "not checked
+ * since", never a check on Jan 1, 1970. The app asks the Partner API again
+ * at the store's next request.
+ */
+const NOT_CHECKED_SINCE_INSTALL = 0;
 
 /**
  * The shop's subscription cache, complimentary grant, month's usage, language count and newest job:
@@ -147,7 +161,7 @@ export async function readShopFacts(tx: TenantTx, shop: ShopFacts["shop"], perio
             cancelAtEndOfCycle: row.cancelAtEndOfCycle ?? false,
             currentPeriodEnd: row.currentPeriodEnd,
             pendingPlanHandle: row.pendingPlanHandle,
-            checkedAt: row.checkedAt,
+            checkedAt: row.checkedAt.getTime() === NOT_CHECKED_SINCE_INSTALL ? null : row.checkedAt,
           }
         : null,
     grant:
@@ -194,13 +208,43 @@ export async function rowContext(opts: { client?: PrismaClient; now?: Date; conf
 
 const PAID: ReadonlySet<AdminPlanKey> = new Set(["starter", "pro", "business", "own-key"]);
 
-function planKey(facts: ShopFacts, complimentary: boolean, billingConfigured: boolean): AdminPlanKey {
+type Instant = Date | string | null;
+const ms = (at: Date | string) => (typeof at === "string" ? Date.parse(at) : at.getTime());
+
+/**
+ * A cached ACTIVE subscription whose billing cycle is over by its own data:
+ * Shopify answered before the cycle's end (currentPeriodEnd), and that end
+ * has passed. Then what was due at the end of the cycle happened: a
+ * cancellation ended it, a pending plan change took effect. (An answer
+ * given after the end is Shopify's word on the new cycle.) Works on a
+ * ShopFacts subscription (dates) and a ShopRow's (ISO strings).
+ */
+export function cycleEnded(sub: { state: string; currentPeriodEnd: Instant; checkedAt: Instant } | null, now: Date): boolean {
+  if (sub?.state !== "ACTIVE" || sub.currentPeriodEnd === null) return false;
+  const end = ms(sub.currentPeriodEnd);
+  return end <= now.getTime() && (sub.checkedAt === null || ms(sub.checkedAt) < end);
+}
+
+function handleKey(handle: string | null): AdminPlanKey {
+  if (isOwnKeyHandle(handle)) return "own-key";
+  return handle && Object.hasOwn(PLANS, handle) ? (handle as PlanHandle) : "unknown";
+}
+
+function planKey(facts: ShopFacts, complimentary: boolean, ctx: Pick<RowContext, "billingConfigured" | "now">): AdminPlanKey {
   if (complimentary) return "complimentary";
   const sub = facts.subscription;
-  if (!sub) return billingConfigured ? "unknown" : "free";
+  // Never checked, or not since the store was (re)installed: unknown while billing is configured.
+  if (!sub || sub.checkedAt === null) return ctx.billingConfigured ? "unknown" : "free";
   if (sub.state === "NONE") return "free";
-  if (isOwnKeyHandle(sub.planHandle)) return "own-key";
-  return sub.planHandle && Object.hasOwn(PLANS, sub.planHandle) ? (sub.planHandle as PlanHandle) : "unknown";
+  if (cycleEnded(sub, ctx.now)) {
+    // Cancelled at the end of a cycle that is over: the subscription ended, so the store is on Free (what Shopify
+    // does then: no subscription, no charge), never counted as paying. The store page still shows the cached
+    // answer with its past period end; "Ask Shopify again" confirms it.
+    if (sub.cancelAtEndOfCycle) return "free";
+    // A plan change that waited for the end of the cycle: the new plan applies now.
+    if (sub.pendingPlanHandle) return handleKey(sub.pendingPlanHandle);
+  }
+  return handleKey(sub.planHandle);
 }
 
 /**
@@ -221,10 +265,11 @@ const iso = (date: Date | null) => (date ? date.toISOString() : null);
 export function shopRow(facts: ShopFacts, ctx: RowContext): ShopRow {
   const { shop } = facts;
   const complimentary = isActiveGrant(facts.grant, shop, ctx.complimentaryGids, ctx.now);
-  const plan = planKey(facts, complimentary, ctx.billingConfigured);
+  const plan = planKey(facts, complimentary, ctx);
   const sub = facts.subscription;
   const inTrial = shop.status === "ACTIVE" && !complimentary && sub?.state === "ACTIVE" && sub.trialEndsAt !== null && sub.trialEndsAt.getTime() > ctx.now.getTime();
   const chars = Object.values(facts.byProvider).reduce((sum, n) => sum + n, 0);
+  const cancelling = shop.status === "ACTIVE" && sub?.state === "ACTIVE" && sub.cancelAtEndOfCycle && !cycleEnded(sub, ctx.now);
   const row: Omit<ShopRow, "monthlyRevenueUsd"> = {
     id: shop.id,
     shopDomain: shop.shopDomain,
@@ -242,11 +287,12 @@ export function shopRow(facts: ShopFacts, ctx: RowContext): ShopRow {
           cancelAtEndOfCycle: sub.cancelAtEndOfCycle,
           currentPeriodEnd: iso(sub.currentPeriodEnd),
           pendingPlanHandle: sub.pendingPlanHandle,
-          checkedAt: sub.checkedAt.toISOString(),
+          checkedAt: iso(sub.checkedAt),
         }
       : null,
     plan,
     inTrial,
+    cancelling,
     complimentary,
     usage: { chars, ownKeyChars: facts.ownKeyChars, costUsd: estimatedCostByProvider(facts.byProvider, ctx.rates) },
     languages: facts.languages,
@@ -353,7 +399,7 @@ export function filterRows(rows: ShopRow[], f: DirectoryFilter): ShopRow[] {
   const order: Record<NonNullable<DirectoryFilter["sort"]>, (a: ShopRow, b: ShopRow) => number> = {
     newest: (a, b) => time(b.installedAt) - time(a.installedAt),
     oldest: (a, b) => time(a.installedAt) - time(b.installedAt),
-    usage: (a, b) => b.usage.chars + b.usage.ownKeyChars - (a.usage.chars + a.usage.ownKeyChars),
+    usage: (a, b) => b.usage.chars - a.usage.chars,
     revenue: (a, b) => b.monthlyRevenueUsd - a.monthlyRevenueUsd,
     name: (a, b) => (a.name ?? a.shopDomain).localeCompare(b.name ?? b.shopDomain, "en", { sensitivity: "base" }),
   };

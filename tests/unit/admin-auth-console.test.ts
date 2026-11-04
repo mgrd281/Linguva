@@ -100,6 +100,74 @@ describe("after sign-in", () => {
       expect(safeNext(wrong), String(wrong)).toBe("/admin");
     }
   });
+
+  it("keeps every page the console sends to sign-in exactly (a URL's path and query, already encoded)", () => {
+    for (const page of [
+      "/admin/",
+      "/admin/customers/2f4d1c2e-0b7a-4d8e-9a51-3c1f0e6b7d90",
+      "/admin/customers?q=caf%C3%A9&plan=pro&page=2",
+      "/admin/customers?q=a+b%2Fc%5Cd",
+      "/admin/subscriptions?status=cancelling",
+      "/admin/prices",
+    ]) {
+      expect(safeNext(page), page).toBe(page);
+    }
+    // What signInRedirect builds from a request: the same string again.
+    const url = new URL("http://localhost:3000/admin/customers/%D8%A7?q=café bar&_routes=x");
+    url.searchParams.delete("_routes");
+    expect(safeNext(`${url.pathname}${url.search}`)).toBe(`${url.pathname}${url.search}`);
+  });
+
+  it("refuses what isn't a valid Location header or reads differently in a browser: non-ASCII, spaces, controls", () => {
+    for (const wrong of ["/admin/ ", "/admin/café", "/admin?q=é", "/admin/\u0000", "/admin/\t", "/admin\r\nSet-Cookie: x=1", "/admin /x", "/admin/x\u007f", `/admin/${"a".repeat(2050)}`]) {
+      expect(safeNext(wrong), JSON.stringify(wrong)).toBe("/admin");
+    }
+  });
+
+  it("refuses another origin and paths that only look like the console's: doubled, encoded or back slashes, dot segments", () => {
+    for (const wrong of [
+      "/admin//evil.example",
+      "/admin/%2f%2fevil.example",
+      "/admin/%2F..%2F..%2Fapp",
+      "/admin%2f..%2fapp",
+      "/admin/%5cevil.example",
+      "/admin/../app",
+      "/admin/./x",
+      "/admin/%2e%2e/app",
+      "/admin/.%2E/app",
+      "/ADMIN/customers",
+      "/%61dmin",
+      "/admin?q=<script>",
+      "/admin#x",
+      "http:/admin",
+      "javascript:alert(1)//",
+      "/\\/evil.example/admin",
+    ]) {
+      expect(safeNext(wrong), wrong).toBe("/admin");
+    }
+  });
+
+  it("answers only values a redirect can carry, whatever comes in", () => {
+    const samples = ["/admin/ ", "/admin/é", "/admin/😀", "/admin/%E2%80%A8", "/admin?q=%00", "/admin/\u0085"];
+    for (const value of samples) {
+      const next = safeNext(value);
+      expect(() => new Headers({ Location: next }), JSON.stringify(value)).not.toThrow();
+    }
+    // Percent-encoded, it is just a path of the console's.
+    expect(safeNext("/admin/%E2%80%A8")).toBe("/admin/%E2%80%A8");
+  });
+});
+
+describe("the console's own answers", () => {
+  it("carry its headers: thrown, React Router returns them as they are", async () => {
+    const refused = (await requireAdminConsole(req("http://localhost:3000/admin/logout")).catch((e: unknown) => e)) as Response;
+    expect(refused.status).toBe(404);
+    expect(refused.headers.get("Cache-Control")).toBe("no-store");
+    expect(refused.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(refused.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+    expect(refused.headers.get("Content-Security-Policy")).toMatch(/^default-src 'none';/);
+    expect(await refused.text()).toBe("Not Found");
+  });
 });
 
 describe("cookies", () => {

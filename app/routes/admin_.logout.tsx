@@ -1,17 +1,23 @@
 /**
  * Signing out of the admin console (POST /admin/logout, the frame's plain
  * form with the CSRF token): ends the session, removes the cookie, back to
- * the sign-in page. Action only, so a resource route: no page renders, the
- * response carries the console's headers itself.
+ * the sign-in page. No page, so a resource route: its answers carry the
+ * console's headers themselves (adminRedirect; requireAdmin's refusals do
+ * too). A GET (a typed or followed link) signs nobody out: it answers like
+ * any console URL, 404 while the console is off or on another host, else
+ * the sign-in page or the console.
  */
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { requireAdmin } from "../.server/admin/auth";
 import { signOut } from "../.server/admin/login";
-import { adminHeaders } from "../.server/lib/security-headers";
+import { adminRedirect } from "../.server/lib/security-headers";
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  await requireAdmin(request, "view");
+  throw adminRedirect(request, "/admin");
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   await requireAdmin(request, "view");
-  const headers = new Headers({ Location: "/admin/login", "Set-Cookie": await signOut(request) });
-  adminHeaders(headers);
-  return new Response(null, { status: 303, headers });
+  return adminRedirect(request, "/admin/login", { status: 303, headers: { "Set-Cookie": await signOut(request) } });
 };

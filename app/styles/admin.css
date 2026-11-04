@@ -23,15 +23,22 @@
   --adm-text-2: #475467;
   --adm-text-3: #5f6b7d;
   --adm-accent: #2563eb;
-  --adm-accent-hover: #1d4ed8;
   --adm-accent-strong: #1e40af;
   --adm-accent-soft: #eef3ff;
+  /* Filled controls (primary button, skip link): white text on them is at least 4.5:1, hovered too. */
+  --adm-accent-fill: #2563eb;
+  --adm-accent-fill-hover: #1d4ed8;
+  /* Links and other accent text: 4.5:1 on every surface, the tinted notices included. */
+  --adm-link: #2563eb;
+  --adm-link-hover: #1d4ed8;
   --adm-on-accent: #ffffff;
   --adm-focus: #2563eb;
   --adm-track: #edf0f4;
   --adm-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
   --adm-shadow-raised: 0 16px 40px -16px rgba(16, 24, 40, 0.22);
   --adm-top-bg: rgba(255, 255, 255, 0.86);
+  /* The edge of a row that scrolls on: more tabs that way. */
+  --adm-edge-shade: rgba(16, 24, 40, 0.14);
   --adm-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235f6b7d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
   /* Badges and notices: text, background, edge; bars and dots: the solid colour. */
@@ -89,15 +96,21 @@
     --adm-text-2: #b8bfcb;
     --adm-text-3: #949cab;
     --adm-accent: #4f7cff;
-    --adm-accent-hover: #6b91ff;
     --adm-accent-strong: #b4c6ff;
     --adm-accent-soft: rgba(79, 124, 255, 0.16);
+    /* #4f7cff is right for links on the dark surface (4.84:1) but too light behind white text (3.71:1): 5.11:1, hovered 6.11:1. */
+    --adm-accent-fill: #3563e9;
+    --adm-accent-fill-hover: #2b57d6;
+    /* #4f7cff is 4.47:1 on the Prices page's blue-tinted steps: lighter, and lighter still on hover. */
+    --adm-link: #7a9cff;
+    --adm-link-hover: #9db6ff;
     --adm-on-accent: #ffffff;
     --adm-focus: #8eaaff;
     --adm-track: #232831;
     --adm-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     --adm-shadow-raised: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
     --adm-top-bg: rgba(20, 23, 29, 0.86);
+    --adm-edge-shade: rgba(0, 0, 0, 0.55);
     --adm-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b8bfcb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
     --adm-neutral-fg: #d0d5dd;
@@ -199,7 +212,7 @@ body:lang(ar) {
   z-index: 50;
   padding: 10px 14px;
   border-radius: var(--adm-radius-control);
-  background: var(--adm-accent);
+  background: var(--adm-accent-fill);
   color: var(--adm-on-accent);
   font-weight: 600;
   text-decoration: none;
@@ -229,6 +242,17 @@ body:lang(ar) {
 
 .adm-strong {
   font-weight: 600;
+}
+
+.adm-small {
+  font-size: 12px;
+}
+
+/* A column head with its colour (the bars' segments): the dot, then the name. */
+.adm-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .adm-nowrap {
@@ -382,6 +406,16 @@ body:lang(ar) {
   font-size: 13px;
 }
 
+.adm-account__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .adm-account__email {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -526,7 +560,7 @@ body:lang(ar) {
 }
 
 .adm-back:hover {
-  color: var(--adm-accent);
+  color: var(--adm-link-hover);
 }
 
 .adm-pagehead__row {
@@ -864,6 +898,11 @@ body:lang(ar) {
   fill: var(--adm-accent-solid);
 }
 
+/* A second segment after the first (a store's own-key characters after Linguva's). */
+.adm-bar__extra {
+  fill: var(--adm-teal-solid);
+}
+
 .adm-bar--neutral .adm-bar__fill { fill: var(--adm-neutral-solid); }
 .adm-bar--info .adm-bar__fill { fill: var(--adm-info-solid); }
 .adm-bar--success .adm-bar__fill { fill: var(--adm-success-solid); }
@@ -1025,7 +1064,7 @@ body:lang(ar) {
 }
 
 .adm-store:hover .adm-store__name {
-  color: var(--adm-accent);
+  color: var(--adm-link-hover);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -1317,13 +1356,13 @@ body:lang(ar) {
 }
 
 .adm-btn--primary {
-  background: var(--adm-accent);
+  background: var(--adm-accent-fill);
   color: var(--adm-on-accent);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
 }
 
 .adm-btn--primary:hover {
-  background: var(--adm-accent-hover);
+  background: var(--adm-accent-fill-hover);
 }
 
 .adm-btn--secondary {
@@ -1366,14 +1405,14 @@ body:lang(ar) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--adm-accent);
+  color: var(--adm-link);
   font-weight: 500;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .adm-link:hover {
-  color: var(--adm-accent-hover);
+  color: var(--adm-link-hover);
 }
 
 .adm-link--quiet {
@@ -1626,6 +1665,8 @@ body:lang(ar) {
   font-weight: 600;
   line-height: 1.35;
   vertical-align: bottom;
+  /* A long column name ("AI chars this month (Linguva)") wraps rather than widening the table past its card. */
+  white-space: normal;
 }
 
 .adm-table tbody th {
@@ -1951,12 +1992,24 @@ body:lang(ar) {
     border-block-end: 1px solid var(--adm-border);
   }
 
+  /*
+   * One row that scrolls sideways. A shade shows at an edge while more tabs
+   * lie beyond it: covers in the surface colour scroll with the tabs (local)
+   * and hide the fixed shades (scroll) once that end is reached. The shell
+   * also scrolls the current tab into view.
+   */
   .adm-nav {
     position: static;
     padding: 0 8px;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
+    background:
+      linear-gradient(to right, var(--adm-surface) 40%, transparent) left center / 32px 100% no-repeat local,
+      linear-gradient(to left, var(--adm-surface) 40%, transparent) right center / 32px 100% no-repeat local,
+      linear-gradient(to right, var(--adm-edge-shade), transparent) left center / 20px 100% no-repeat scroll,
+      linear-gradient(to left, var(--adm-edge-shade), transparent) right center / 20px 100% no-repeat scroll;
+    background-color: var(--adm-surface);
   }
 
   .adm-nav::-webkit-scrollbar {
@@ -1994,7 +2047,9 @@ body:lang(ar) {
   }
 
   .adm-lang__link {
-    min-height: 36px;
+    min-height: 44px;
+    min-inline-size: 44px;
+    justify-content: center;
   }
 
   .adm-link--quiet {
@@ -2074,8 +2129,57 @@ body:lang(ar) {
 }
 
 @media (max-width: 719px) {
+  /*
+   * Two rows: the mark and the language, then who is signed in (e-mail and
+   * role, the e-mail shortened if need be) with Sign out. The ::after is the
+   * line between them; the items keep their order in the page.
+   */
+  .adm-top {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0 12px;
+    padding-block-end: 0;
+  }
+
+  .adm-top::after {
+    content: "";
+    order: 2;
+    flex: 0 0 calc(100% + 32px);
+    margin: 6px -16px 0;
+    border-block-start: 1px solid var(--adm-border-subtle);
+  }
+
+  .adm-top__end {
+    display: contents;
+  }
+
+  .adm-top .adm-lang {
+    margin-inline-start: auto;
+  }
+
   .adm-account {
-    display: none;
+    order: 3;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    font-size: 12.5px;
+  }
+
+  .adm-account__email {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: none;
+    color: var(--adm-text);
+    font-weight: 500;
+  }
+
+  .adm-account .adm-badge {
+    flex: none;
+  }
+
+  .adm-signout {
+    order: 4;
+    margin-inline-end: -10px;
   }
 
   .adm-kpis {
@@ -2108,6 +2212,120 @@ body:lang(ar) {
 
   .adm-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Tables with `cards` (Table in ui.tsx): below 720 px a row is a card. The
+ * row header (the store, the admin) on top, then every cell under its
+ * column's name (data-label; the name is decoration, "/ ''" keeps screen
+ * readers from reading it twice: they announce the column header), in 2 or
+ * 3 columns. Nothing scrolls sideways or hides off-screen. The ARIA roles
+ * that Table adds keep the table a table for assistive technology.
+ */
+@media (max-width: 719px) {
+  .adm-table--cards,
+  .adm-table--cards tbody,
+  .adm-table--cards tfoot {
+    display: block;
+    width: 100%;
+  }
+
+  .adm-table--cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .adm-table--cards tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
+    padding: 14px 16px;
+    border-block-end: 1px solid var(--adm-border-subtle);
+  }
+
+  .adm-table--cards-3 tr {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .adm-table--cards tbody tr:last-child {
+    border-block-end: 0;
+  }
+
+  .adm-table--cards tr > *,
+  .adm-table--cards tr > :first-child,
+  .adm-table--cards tr > :last-child {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: start;
+  }
+
+  .adm-table--cards tbody tr:hover > * {
+    background: transparent;
+  }
+
+  .adm-table--cards .adm-num {
+    text-align: start;
+    white-space: normal;
+  }
+
+  .adm-table--cards .adm-num .adm-stacked,
+  .adm-table--cards .adm-stacked.adm-num {
+    align-items: flex-start;
+  }
+
+  /* The row's name first and across, even where it isn't the first cell (a price change's plan). */
+  .adm-table--cards tr > [role="rowheader"] {
+    grid-column: 1 / -1;
+    order: -1;
+    font-weight: 600;
+  }
+
+  .adm-table--cards .adm-cell--wide,
+  .adm-table--cards .adm-col-bar {
+    grid-column: 1 / -1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .adm-table--cards [data-label]::before {
+    content: attr(data-label);
+    content: attr(data-label) / "";
+    display: block;
+    margin-block-end: 2px;
+    color: var(--adm-text-3);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .adm-table--cards [role="rowheader"]::before,
+  .adm-table--cards .adm-cell--plain::before {
+    content: none;
+  }
+
+  .adm-table--cards .adm-store {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .adm-table--cards .adm-truncate {
+    max-width: 100%;
+  }
+
+  /* A price change's reason: across, after the figures and who. */
+  .adm-table--cards .adm-reason {
+    grid-column: 1 / -1;
+    order: 1;
+    min-width: 0;
+    max-width: none;
   }
 }
 
@@ -2147,8 +2365,14 @@ body:lang(ar) {
   }
 
   .adm-btn--sm,
-  .adm-nav__link {
+  .adm-nav__link,
+  .adm-lang__link {
     min-height: 44px;
+  }
+
+  .adm-lang__link {
+    min-inline-size: 44px;
+    justify-content: center;
   }
 }
 

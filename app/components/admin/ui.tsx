@@ -1,13 +1,15 @@
 /**
  * The console's building blocks (app/styles/admin.css): page header, cards,
  * KPI tiles, badges, notices, empty states, tables that scroll inside their
- * card, bars, fields and the error summary. No inline styles (the console's
- * policy forbids them): sizes come from classes and SVG attributes.
+ * card (or become a stack of cards on a phone), bars, fields and the error
+ * summary. No inline styles (the console's policy forbids them): sizes come
+ * from classes and SVG attributes.
  */
-import type { ReactNode } from "react";
+import { Children, cloneElement, createContext, isValidElement, useContext, useEffect, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Link } from "react-router";
 import { PLAN_LABEL, PLAN_TONE, STATUS_LABEL, type ConsolePlan, type Tone } from "../../admin/labels";
 import { useAdminI18n } from "./context";
+import { applyFormValues, jumpTo } from "./dom";
 import { Icon, type IconName } from "./Icon";
 
 const cx = (...names: Array<string | false | null | undefined>) => names.filter(Boolean).join(" ");
@@ -23,7 +25,8 @@ export function PageHeader({
   back,
   children,
 }: {
-  title: string;
+  /** Free text (a store's name) comes wrapped in <bdi>, so a right-to-left page shows its punctuation where it belongs. */
+  title: ReactNode;
   lead?: ReactNode;
   actions?: ReactNode;
   back?: { to: string; label: string };
@@ -153,11 +156,30 @@ export function StoreStatusBadge({ status }: { status: "ACTIVE" | "UNINSTALLED" 
   );
 }
 
-/** The marks next to a plan: trial, cancelling, a plan change waiting. */
-export function SubscriptionMarks({ inTrial, cancelling, pendingPlan }: { inTrial: boolean; cancelling: boolean; pendingPlan?: ConsolePlan | null }) {
+/**
+ * The marks next to a plan: trial, cancelling, a plan change waiting, and
+ * Shopify not asked since the store was (re)installed (its cached answer
+ * was reset; the plan is unknown until the app asks again).
+ */
+export function SubscriptionMarks({
+  inTrial,
+  cancelling,
+  pendingPlan,
+  notChecked = false,
+}: {
+  inTrial: boolean;
+  cancelling: boolean;
+  pendingPlan?: ConsolePlan | null;
+  notChecked?: boolean;
+}) {
   const { t } = useAdminI18n();
   return (
     <>
+      {notChecked ? (
+        <Badge tone="neutral" icon="clock">
+          {t("mark.notChecked")}
+        </Badge>
+      ) : null}
       {inTrial ? (
         <Badge tone="info" icon="clock">
           {t("mark.trial")}
@@ -219,29 +241,109 @@ export function EmptyState({ icon, title, body, action }: { icon: IconName; titl
 /**
  * A table that scrolls sideways inside its card on narrow screens (never the
  * page), focusable so the keyboard can scroll it, with a caption.
+ *
+ * `cards`: below 720 px each row becomes a card (admin.css), its row header
+ * on top and every other cell under its column's name, in 2 or 3 columns,
+ * so nothing hides off-screen on a phone. A cell with the class
+ * `adm-cell--plain` shows no name (badges that speak for themselves);
+ * `adm-cell--wide` takes the card's whole width. Inside the console's frame
+ * that is the default (CardTables in AdminShell); `cards={false}` keeps a
+ * narrow table a table.
  */
-export function Table({ caption, className, children }: { caption: string; className?: string; children: ReactNode }) {
+export function Table({ caption, className, cards: own, children }: { caption: string; className?: string; cards?: 2 | 3 | false; children: ReactNode }) {
   const { t } = useAdminI18n();
+  const inherited = useContext(CardsContext);
+  const cards = own ?? inherited;
   return (
     // A scrolling region must be reachable by keyboard (WCAG 2.1.1); it is named by the table's caption.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
     <div className="adm-table-wrap" role="region" aria-label={t("common.scrollTable", { name: caption })} tabIndex={0}>
-      <table className={cx("adm-table", className)}>
+      <table className={cx("adm-table", cards && `adm-table--cards adm-table--cards-${cards}`, className)} role={cards ? "table" : undefined}>
         <caption className="adm-sr">{caption}</caption>
-        {children}
+        {cards ? asCards(children) : children}
       </table>
     </div>
   );
 }
 
-/** A horizontal bar (SVG: no inline style), `value` of `max`; mirrored right to left by admin.css. */
-export function Bar({ value, max, tone = "accent" }: { value: number; max: number; tone?: Tone }) {
+const CardsContext = createContext<2 | 3 | undefined>(undefined);
+
+/**
+ * Every Table inside becomes cards on a phone, as with `cards`, unless it
+ * says `cards={false}`. The frame sets it for every page (a table someone
+ * adds never hides columns off a phone's screen); a view sets it for a
+ * table another component draws (Activity shows the Prices page's history).
+ */
+export function CardTables({ columns, children }: { columns: 2 | 3; children: ReactNode }) {
+  return <CardsContext.Provider value={columns}>{children}</CardsContext.Provider>;
+}
+
+type Part = ReactElement<{ children?: ReactNode; scope?: string }>;
+
+const isPart = (node: ReactNode): node is Part => isValidElement(node);
+
+/** The text of a header cell ("Installed"), for the card's labels. */
+function textOf(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  return isPart(node) ? textOf(node.props.children) : "";
+}
+
+/**
+ * The card form's markup: each body cell gets its column's name
+ * (`data-label`, from the head row; admin.css shows it on a phone), and
+ * every part gets its ARIA table role. A table whose rows are laid out as
+ * blocks loses its table semantics in some browsers (Safari); the roles
+ * keep the headers announced with each cell.
+ */
+function asCards(children: ReactNode): ReactNode {
+  const head = Children.toArray(children).find((part) => isPart(part) && part.type === "thead") as Part | undefined;
+  const headRow = head ? (Children.toArray(head.props.children).find(isPart) as Part | undefined) : undefined;
+  // Children.map counts empty slots too, so a label's index is its cell's column.
+  const labels: string[] = headRow ? (Children.map(headRow.props.children, (cell) => (isPart(cell) ? textOf(cell.props.children).trim() : "")) ?? []) : [];
+  return Children.map(children, (section) => {
+    if (!isPart(section)) return section;
+    const body = section.type !== "thead";
+    return cloneElement(
+      section,
+      { role: "rowgroup" } as object,
+      Children.map(section.props.children, (row) =>
+        isPart(row)
+          ? cloneElement(
+              row,
+              { role: "row" } as object,
+              Children.map(row.props.children, (cell, index) => {
+                if (!isPart(cell)) return cell;
+                const role = cell.type === "th" ? (cell.props.scope === "row" ? "rowheader" : "columnheader") : "cell";
+                // The row header names the card itself: no label over it.
+                const label = body && role !== "rowheader" ? labels[index] : undefined;
+                return cloneElement(cell, { role, ...(label ? { "data-label": label } : {}) } as object);
+              }),
+            )
+          : row,
+      ),
+    );
+  });
+}
+
+/** A non-zero share stays visible as a sliver. */
+const barWidth = (value: number, max: number) => {
   const share = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
-  // A non-zero value stays visible as a sliver.
-  const width = share === 0 ? 0 : Math.max(share * 100, 1.5);
+  return share === 0 ? 0 : Math.max(share * 100, 1.5);
+};
+
+/**
+ * A horizontal bar (SVG: no inline style), `value` of `max`; mirrored right
+ * to left by admin.css. `extra` adds a second segment after the first, in
+ * the "teal" tone (a store's own-key characters after Linguva's).
+ */
+export function Bar({ value, max, tone = "accent", extra = 0 }: { value: number; max: number; tone?: Tone; extra?: number }) {
+  const width = barWidth(value, max);
+  const extraWidth = extra > 0 ? Math.min(100 - width, barWidth(extra, max)) : 0;
   return (
     <svg className={`adm-bar adm-bar--${tone}`} width="100%" height="8" aria-hidden="true" focusable="false" preserveAspectRatio="none">
       <rect className="adm-bar__track" x="0" y="0" width="100%" height="8" rx="4" />
+      {extraWidth > 0 ? <rect className="adm-bar__extra" x="0" y="0" width={`${(width + extraWidth).toFixed(2)}%`} height="8" rx="4" /> : null}
       {width > 0 ? <rect className="adm-bar__fill" x="0" y="0" width={`${width.toFixed(2)}%`} height="8" rx="4" /> : null}
     </svg>
   );
@@ -268,7 +370,7 @@ export function StoreCell({ id, name, domain }: { id: string; name: string | nul
   const dot = domain.indexOf(".");
   return (
     <Link className="adm-store" to={`/admin/customers/${id}`}>
-      <span className="adm-store__name">{name ?? t("common.unnamed")}</span>
+      <bdi className="adm-store__name">{name ?? t("common.unnamed")}</bdi>
       <bdi className="adm-store__domain">
         {dot > 0 ? (
           <>
@@ -297,7 +399,10 @@ export function ErrorSummary({ id, title, errors }: { id: string; title: string;
         <ul className="adm-errsum__list">
           {errors.map((error) => (
             <li key={`${error.field}:${error.message}`}>
-              <a href={`#${error.field}`}>{error.message}</a>
+              {/* To the field without a navigation: one would drop the result that holds these errors. */}
+              <a href={`#${error.field}`} onClick={(event) => jumpTo(event, error.field)}>
+                {error.message}
+              </a>
             </li>
           ))}
         </ul>
@@ -337,4 +442,17 @@ export function Field({ id, label, hint, error, children }: { id: string; label:
 export function describedBy(id: string, { hint = false, error = false }: { hint?: boolean; error?: boolean }): string | undefined {
   const ids = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean);
   return ids.length > 0 ? ids.join(" ") : undefined;
+}
+
+/**
+ * Keeps an uncontrolled GET form (filters that work without JavaScript)
+ * showing `values`, the filters of the URL now shown, after "Clear
+ * filters", Back or Forward. Remounting the form instead would take the
+ * focus from the field just changed.
+ */
+export function useFormValues(form: RefObject<HTMLFormElement | null>, values: Record<string, string | boolean>): void {
+  const key = JSON.stringify(values);
+  useEffect(() => {
+    if (form.current) applyFormValues(form.current, JSON.parse(key) as Record<string, string | boolean>);
+  }, [form, key]);
 }

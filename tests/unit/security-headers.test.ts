@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addSecurityHeaders, adminHeaders, isAdminPath } from "../../app/.server/lib/security-headers";
+import { addSecurityHeaders, adminHeaders, adminRedirect, adminResponse, isAdminPath } from "../../app/.server/lib/security-headers";
 
 const req = (url: string, headers: Record<string, string> = {}) => new Request(url, { headers });
 
@@ -131,6 +131,31 @@ describe("the admin console's headers", () => {
     adminHeaders(headers, undefined, true);
     expect(headers.get("Content-Security-Policy")).toBe(STRICT.replace(" 'nonce-bm9uY2U='", ""));
     expect(headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  const CONSOLE = {
+    "content-security-policy": STRICT.replace(" 'nonce-bm9uY2U='", ""),
+    "x-frame-options": "DENY",
+    "cache-control": "no-store",
+    "x-robots-tag": "noindex, nofollow",
+    "referrer-policy": "same-origin",
+    "x-content-type-options": "nosniff",
+    "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "strict-transport-security": "max-age=31536000",
+  };
+
+  it("are on the redirects and refusals the console builds itself, HSTS included over https", () => {
+    const request = req("http://admin.linguva.app/admin/login", { "x-forwarded-proto": "https" });
+    const signedIn = adminRedirect(request, "/admin/customers?q=a", { status: 303, headers: { "Set-Cookie": "__Host-lv_admin=t; Path=/; Secure" } }, true);
+    expect(signedIn.status).toBe(303);
+    expect(Object.fromEntries(signedIn.headers)).toEqual({ ...CONSOLE, location: "/admin/customers?q=a", "set-cookie": "__Host-lv_admin=t; Path=/; Secure" });
+    expect(adminRedirect(request, "/admin", {}, true).status).toBe(302);
+
+    const refused = adminResponse(request, "Not Found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } }, true);
+    expect(refused.status).toBe(404);
+    expect(Object.fromEntries(refused.headers)).toEqual({ ...CONSOLE, "content-type": "text/plain; charset=utf-8" });
+    // Local http: no HSTS.
+    expect(adminRedirect(req("http://localhost:3000/admin"), "/admin/login", {}, true).headers.get("Strict-Transport-Security")).toBeNull();
   });
 });
 

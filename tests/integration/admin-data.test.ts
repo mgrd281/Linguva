@@ -41,7 +41,16 @@ async function shop(name: string, gid: number | null = null) {
   const { shop } = await upsertInstalledShop({ shopDomain: `${name}.myshopify.com`, name: `Store ${name}`, shopifyShopGid: gid === null ? null : GID(gid) }, app);
   return shop;
 }
-type Sub = { state?: "ACTIVE" | "NONE"; planHandle?: string | null; billingPeriod?: string | null; trialEndsAt?: Date | null; cancelAtEndOfCycle?: boolean; pendingPlanHandle?: string | null };
+type Sub = {
+  state?: "ACTIVE" | "NONE";
+  planHandle?: string | null;
+  billingPeriod?: string | null;
+  trialEndsAt?: Date | null;
+  cancelAtEndOfCycle?: boolean;
+  pendingPlanHandle?: string | null;
+  currentPeriodEnd?: Date;
+  checkedAt?: Date;
+};
 async function subscribe(shopId: string, sub: Sub) {
   await withTenant(
     shopId,
@@ -55,8 +64,8 @@ async function subscribe(shopId: string, sub: Sub) {
           trialEndsAt: sub.trialEndsAt ?? null,
           cancelAtEndOfCycle: sub.cancelAtEndOfCycle ?? false,
           pendingPlanHandle: sub.pendingPlanHandle ?? null,
-          currentPeriodEnd: new Date(NOW.getTime() + 20 * DAY),
-          checkedAt: NOW,
+          currentPeriodEnd: sub.currentPeriodEnd ?? new Date(NOW.getTime() + 20 * DAY),
+          checkedAt: sub.checkedAt ?? NOW,
         },
       }),
     app,
@@ -180,7 +189,8 @@ describe("plans, trials and revenue", () => {
         ["starter-annual", "starter", false, false, 24.17, "ACTIVE"],
         ["business-trial", "business", true, false, 0, "ACTIVE"],
         ["owner-store", "complimentary", false, true, 0, "ACTIVE"],
-        ["uninstalled", "free", false, false, 0, "UNINSTALLED"],
+        // Uninstalled: the cache was reset (not checked since), unknown while billing is configured.
+        ["uninstalled", "unknown", false, false, 0, "UNINSTALLED"],
         ["own-key-store", "own-key", false, false, 49, "ACTIVE"],
         ["never-checked", "unknown", false, false, 0, "ACTIVE"],
         ["no-plan", "free", false, false, 0, "ACTIVE"],
@@ -189,6 +199,9 @@ describe("plans, trials and revenue", () => {
     );
     expect(dir.rows).toHaveLength(9);
     expect(row("never-checked").subscription).toBeNull();
+    // The reset's epoch is no check date: "not checked since".
+    expect(row("uninstalled").subscription).toMatchObject({ state: "NONE", planHandle: null, checkedAt: null });
+    expect(row("no-plan").subscription?.checkedAt).toBe(NOW.toISOString());
     expect(row("owner-store").hasGid).toBe(true);
 
     const summary = summarize(dir, NOW);
@@ -210,9 +223,42 @@ describe("plans, trials and revenue", () => {
     expect(byDomain(off.rows, "owner-store")).toMatchObject({ plan: "pro", complimentary: false, monthlyRevenueUsd: 99 });
 
     expect(filterRows(dir.rows, { q: "STORE PRO", status: "all", plan: "all" }).map((r) => r.shopDomain)).toEqual(["pro-monthly.myshopify.com"]);
-    expect(filterRows(dir.rows, { plan: "unknown", sort: "name" }).map((r) => r.shopDomain)).toEqual(["never-checked.myshopify.com", "odd-plan.myshopify.com"]);
+    expect(filterRows(dir.rows, { plan: "unknown", sort: "name" }).map((r) => r.shopDomain)).toEqual(["never-checked.myshopify.com", "odd-plan.myshopify.com", "uninstalled.myshopify.com"]);
+    // Without billing, the uninstalled store's reset row is Free, as a store never checked.
+    expect(byDomain(off.rows, "uninstalled").plan).toBe("free");
     expect(filterRows(dir.rows, { status: "UNINSTALLED" }).map((r) => r.shopDomain)).toEqual(["uninstalled.myshopify.com"]);
     expect(filterRows(dir.rows, { sort: "revenue" }).slice(0, 3).map((r) => r.monthlyRevenueUsd)).toEqual([99, 49, 24.17]);
+  });
+
+  it("reads a cached cycle that is over as what followed it, and a reinstalled store as not checked since", async () => {
+    const cancelled = await shop("cancelled", 1);
+    const downgraded = await shop("downgraded", 2);
+    const renewing = await shop("renewing", 3);
+    const reinstalled = await shop("reinstalled", 4);
+    // Checked during a cycle that ended 35 days ago; no answer since.
+    const checkedAt = new Date(NOW.getTime() - 40 * DAY);
+    const over = new Date(NOW.getTime() - 35 * DAY);
+    await subscribe(cancelled.id, { planHandle: "pro", cancelAtEndOfCycle: true, currentPeriodEnd: over, checkedAt });
+    await subscribe(downgraded.id, { planHandle: "pro", pendingPlanHandle: "starter", currentPeriodEnd: over, checkedAt });
+    await subscribe(renewing.id, { planHandle: "pro", currentPeriodEnd: over, checkedAt });
+    await subscribe(reinstalled.id, { planHandle: "business" });
+    await markShopUninstalled(reinstalled.shopDomain, app);
+    await upsertInstalledShop({ shopDomain: reinstalled.shopDomain }, app);
+
+    const dir = await loadDirectory({ client: app, now: NOW, config: billingOn, force: true });
+    expect(dir.rows.map((r) => [r.shopDomain.split(".")[0], r.status, r.plan, r.monthlyRevenueUsd, r.subscription ? r.subscription.checkedAt : "none"])).toEqual(
+      expect.arrayContaining([
+        ["cancelled", "ACTIVE", "free", 0, checkedAt.toISOString()],
+        ["downgraded", "ACTIVE", "starter", 29, checkedAt.toISOString()],
+        ["renewing", "ACTIVE", "pro", 99, checkedAt.toISOString()],
+        ["reinstalled", "ACTIVE", "unknown", 0, null],
+      ]),
+    );
+    const summary = summarize(dir, NOW);
+    expect(summary).toMatchObject({ cancelling: 0, pendingChanges: 0, revenue: { mrrUsd: 128, payingStores: 2 } });
+    expect(summary.plans).toMatchObject({ free: 1, starter: 1, pro: 1, unknown: 1 });
+    // The store's own page says the same.
+    expect((await loadCustomer(reinstalled.id, { client: app, now: NOW, config: billingOn }))!.shop).toMatchObject({ plan: "unknown", subscription: { checkedAt: null } });
   });
 
   it("follows the list prices at once, and keeps the database part for 60 s unless forced", async () => {

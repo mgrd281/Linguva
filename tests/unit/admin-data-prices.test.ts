@@ -1,7 +1,9 @@
 /**
  * List prices that the admin console can change (app/.server/admin/prices.ts,
- * app/lib/plan-prices.ts): the form's rules, the cached table and its
- * fallback, and every place that shows a price with a table other than the
+ * app/lib/plan-prices.ts): the form's rules (the reason counted as
+ * PostgreSQL counts it, Own key monthly only, every plan's version), the
+ * cached table, its fallback and its time bound (a slow or unreachable
+ * database never keeps a page waiting), and every place that shows a price with a table other than the
  * defaults: the Plan page's cards, table and questions, and the website
  * (German formatting as before; with the defaults, byte for byte the text
  * written between the markers, which is the text before the markers existed).
@@ -19,7 +21,7 @@ import { PlanCards } from "../../app/components/plan/PlanCards";
 import { PlanFaq } from "../../app/components/plan/PlanFaq";
 import { PlanFeatureTable } from "../../app/components/plan/PlanFeatureTable";
 import { translator } from "../../app/i18n/i18n";
-import { estimatedMargin, formatCostUsd, formatUsd, monthsFree, priceLabel, priceWarnings, sharedMonthsFree, yearlyHandles } from "../../app/lib/plan-prices";
+import { estimatedMargin, formatCostUsd, formatUsd, monthsFree, offersYearly, priceLabel, priceWarnings, sharedMonthsFree, yearlyHandles } from "../../app/lib/plan-prices";
 import { planView } from "../../app/lib/plan-view";
 import { DEFAULT_PRICES, OWN_KEY_PRICE, PLAN_PRICES, planPrice, PRICE_HANDLES, type PriceTable } from "../../app/lib/plans";
 
@@ -102,12 +104,15 @@ describe("the Prices form", () => {
       "business.yearly": "",
       "own-key.monthly": "49",
       "own-key.yearly": "",
+      ...VERSIONS,
       reason: "Price review",
       code: "123456",
     };
     for (const [name, value] of Object.entries({ ...base, ...values })) if (!omit.includes(name)) data.set(name, value);
     return data;
   };
+  const VERSIONS = Object.fromEntries(PRICE_HANDLES.map((handle) => [`${handle}.version`, handle === "pro" ? "2026-11-04T10:50:00.000Z/9900/99000" : "default"]));
+  const versions = { free: "default", starter: "default", pro: "2026-11-04T10:50:00.000Z/9900/99000", business: "default", "own-key": "default" };
   const errors = (values: Record<string, string>, omit: string[] = []) => {
     const result = parsePriceForm(form(values, omit));
     return result.ok ? {} : result.errors;
@@ -115,8 +120,34 @@ describe("the Prices form", () => {
 
   it("accepts the defaults, decimal comma or point, Free's fields left out, a spaced code", () => {
     const result = parsePriceForm(form({ "starter.monthly": " 19,9 ", "starter.yearly": "199.00", code: " 123 456 ", reason: "  Lower   start\nprice " }, ["free.monthly", "free.yearly"]));
-    expect(result).toEqual({ ok: true, table: table({ starter: { monthlyUsd: 19.9, yearlyUsd: 199 } }), reason: "Lower start price", code: "123456" });
+    expect(result).toEqual({ ok: true, table: table({ starter: { monthlyUsd: 19.9, yearlyUsd: 199 } }), versions, reason: "Lower start price", code: "123456" });
     expect(parsePriceForm(form({}))).toMatchObject({ ok: true, table: DEFAULT_PRICES });
+  });
+
+  it("returns every plan's version as sent, a missing one empty (it never matches: savePrices refuses)", () => {
+    const missing = parsePriceForm(form({}, ["pro.version", "free.version"]));
+    expect(missing).toMatchObject({ ok: true, versions: { ...versions, pro: "", free: "" } });
+  });
+
+  it("keeps Own key monthly only, like its plan in the Partner Dashboard", () => {
+    expect(PRICE_HANDLES.filter(offersYearly)).toEqual(["starter", "pro", "business"]);
+    expect(errors({ "own-key.yearly": "490" })).toEqual({ "own-key.yearly": "MONTHLY_ONLY" });
+    expect(errors({ "own-key.yearly": "abc" })).toEqual({ "own-key.yearly": "MONTHLY_ONLY" });
+    expect(errors({ "own-key.monthly": "59", "own-key.yearly": "" })).toEqual({});
+  });
+
+  it("counts the reason as PostgreSQL does (code points) and refuses control characters", () => {
+    // "📈a" is 3 UTF-16 units but 2 code points: PostgreSQL's length() says 2, under the CHECK's 3.
+    expect("📈a".length).toBe(3);
+    expect(errors({ reason: "📈a" })).toEqual({ reason: "REASON_REQUIRED" });
+    expect(errors({ reason: "🇺🇸" })).toEqual({ reason: "REASON_REQUIRED" });
+    expect(errors({ reason: "📈ab" })).toEqual({});
+    expect(errors({ reason: "📈".repeat(500) })).toEqual({});
+    expect(errors({ reason: "📈".repeat(501) })).toEqual({ reason: "REASON_REQUIRED" });
+    // NUL (PostgreSQL refuses it in text and JSON) and every other control character; tabs and line breaks are spaces.
+    for (const bad of ["abc\u0000def", "abc\u0007def", "abc\u001bdef", "abc\u007fdef", "abc\u0085def"]) expect(errors({ reason: bad }), JSON.stringify(bad)).toEqual({ reason: "REASON_INVALID" });
+    const spaced = parsePriceForm(form({ reason: "Line one\r\n\tline two" }));
+    expect(spaced).toMatchObject({ ok: true, reason: "Line one line two" });
   });
 
   it("names each field's problem", () => {
@@ -148,8 +179,10 @@ describe("the Prices form", () => {
   });
 });
 
+type Row = { handle: string; monthlyCents: number; yearlyCents: number | null };
+
 describe("the cached table", () => {
-  const client = (rows: () => Promise<Array<{ handle: string; monthlyCents: number; yearlyCents: number | null }>>) => {
+  const client = (rows: () => Promise<Row[]>) => {
     const calls = { count: 0 };
     return { calls, client: { planPrice: { findMany: () => (calls.count++, rows()) } } as unknown as PrismaClient };
   };
@@ -201,10 +234,81 @@ describe("the cached table", () => {
     // Logged for the first outage, then again only after a good read; the error's class, never its message.
     expect(warn).toHaveBeenCalledTimes(2);
     for (const [fields] of warn.mock.calls) expect(fields).toEqual({ error: "PrismaClientInitializationError" });
-    // A failed read is kept for 30 s too: no read per page during an outage.
+    // A failed read is kept for 5 s too: no read per page during an outage.
     const before = failing.calls.count;
     await getPriceTable(failing.client);
     expect(failing.calls.count).toBe(before);
+    // Then one try in the background; the page gets the fallback at once.
+    vi.advanceTimersByTime(5_000);
+    expect(await getPriceTable(failing.client)).toBe(read);
+    expect(failing.calls.count).toBe(before + 1);
+  });
+
+  /** A database that answers only when told to (a dropped connection, a full pool). */
+  const hangingClient = () => {
+    const answers: Array<(rows: Row[]) => void> = [];
+    const db = client(() => new Promise<Row[]>((resolve) => answers.push(resolve)));
+    return { ...db, answer: (rows: Row[]) => answers.shift()!(rows) };
+  };
+
+  it("never keeps a page waiting on a hanging database: the first pages at most 1.5 s, one read for all, then no wait at all", async () => {
+    vi.resetModules();
+    const { getPriceTable } = await import("../../app/.server/admin/prices");
+    const { logger } = await import("../../app/.server/lib/logger");
+    const { DEFAULT_PRICES } = await import("../../app/lib/plans");
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const db = hangingClient();
+    let served = 0;
+    const pages = [0, 1, 2].map(() => getPriceTable(db.client).then((t) => (served++, t)));
+    await vi.advanceTimersByTimeAsync(1_499);
+    expect(served).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    // No table read yet in this process: the defaults, for every page, after 1.5 s at most.
+    expect(await Promise.all(pages)).toEqual([DEFAULT_PRICES, DEFAULT_PRICES, DEFAULT_PRICES]);
+    expect(db.calls.count).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toEqual({ error: "PriceReadTimeout" });
+    // The read is still under way: later pages get the fallback at once, and no second read starts.
+    expect(await getPriceTable(db.client)).toBe(DEFAULT_PRICES);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await getPriceTable(db.client)).toBe(DEFAULT_PRICES);
+    expect(db.calls.count).toBe(1);
+    // It answers at last: its table from then on.
+    db.answer([{ handle: "pro", monthlyCents: 10_900, yearlyCents: 109_000 }]);
+    await vi.advanceTimersByTimeAsync(0);
+    const read = await getPriceTable(db.client);
+    expect(read).toEqual(table({ pro: { monthlyUsd: 109, yearlyUsd: 1090 } }));
+
+    // 30 s later the database hangs again: the table read before, at once (no timer runs), while it is read again.
+    vi.advanceTimersByTime(30_000);
+    let fresh: unknown = null;
+    void getPriceTable(db.client).then((t) => (fresh = t));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fresh).toBe(read);
+    expect(db.calls.count).toBe(2);
+    db.answer([{ handle: "pro", monthlyCents: 11_900, yearlyCents: null }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await getPriceTable(db.client)).pro).toEqual({ monthlyUsd: 119, yearlyUsd: null });
+    expect(db.calls.count).toBe(2);
+  });
+
+  it("waits for a slow first read that answers in time, and shows the last table read when the next one doesn't", async () => {
+    vi.resetModules();
+    const { getPriceTable, invalidatePriceCache } = await import("../../app/.server/admin/prices");
+    const { logger } = await import("../../app/.server/lib/logger");
+    vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const db = hangingClient();
+    const page = getPriceTable(db.client);
+    await vi.advanceTimersByTimeAsync(400);
+    db.answer([{ handle: "starter", monthlyCents: 3_900, yearlyCents: 39_000 }]);
+    const read = await page;
+    expect(read.starter).toEqual({ monthlyUsd: 39, yearlyUsd: 390 });
+    // After a save in this process the cache is gone; the database hangs now: the table read before, not the defaults.
+    invalidatePriceCache();
+    const next = getPriceTable(db.client);
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(await next).toBe(read);
   });
 });
 

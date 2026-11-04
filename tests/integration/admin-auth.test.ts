@@ -328,7 +328,8 @@ describe("requireAdmin", () => {
       page("/admin/prices", cookie, { method: "POST", body: new URLSearchParams(fields), headers: { origin: ORIGIN, ...headers } });
 
     await expect(requireAdmin(form({ "pro.monthly": "49" }))).rejects.toMatchObject({ status: 403 });
-    await expect(requireAdmin(form({ _csrf: `${csrfToken.slice(0, -1)}A` }))).rejects.toMatchObject({ status: 403 });
+    // One character off (never the token itself: a token can end in "A").
+    await expect(requireAdmin(form({ _csrf: `${csrfToken.slice(0, -1)}${csrfToken.endsWith("A") ? "B" : "A"}` }))).rejects.toMatchObject({ status: 403 });
     await expect(requireAdmin(form({ _csrf: csrfToken }, { origin: "https://evil.example" }))).rejects.toMatchObject({ status: 403 });
     await expect(requireAdmin(form({ _csrf: csrfToken }, { origin: "null" }))).rejects.toMatchObject({ status: 403 });
     // Another session's token is no good either.

@@ -328,6 +328,8 @@ What I changed in the repository (this branch, nothing deployed): the Dockerfile
 | `LINGUVA_EMBEDDED_WORKER` | not set (on in production, §8b) | — |
 | `PUBLIC_PAGES` | `on`, so `/privacy` and `/support` exist for the listing (production refuses it without `LEGAL_TEXTS_REVIEWED=yes`) | Owner, after the lawyer |
 | `LEGAL_TEXTS_REVIEWED` | `yes` once the lawyer has resolved every open point (docs/LEGAL_FACTS.md) | Owner, after the lawyer |
+| `ADMIN_CONSOLE` | not set (`off`: every `/admin` address answers 404) on this merchant-facing `web` service. The console runs as a **second service from the same image** in the same project and environment (for example `admin`), with its own domain, the same variables as `web` plus `ADMIN_CONSOLE=on` and `ADMIN_HOST`, `LINGUVA_EMBEDDED_WORKER=off`, and accounts created with `pnpm ops:admin add` (owner role, your terminal) | Owner |
+| `ADMIN_HOST` | not set here; on the console's service its domain, without `https://` (for example `admin.PUBLIC-APP-DOMAIN`): `/admin` answers 404 on every other host. Production refuses `ADMIN_CONSOLE=on` without it | Owner (domain) |
 | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `60` (§8b) | Owner |
 
 `tests/unit/deploy-config.test.ts` checks that this table names every setting in `app/.server/lib/config.ts`.

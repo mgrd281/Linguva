@@ -5,6 +5,8 @@ import { parseServiceAccount, type ServiceAccountCredentials } from "../provider
 
 const keyEntry = /^[A-Za-z0-9_-]{1,32}:[A-Za-z0-9+/]{43}=$/;
 const shopDomain = /^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$/;
+const hostLabel = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const hostName = new RegExp(`^(?=.{1,253}$)${hostLabel}(?:\\.${hostLabel})*$`);
 
 /**
  * Stores a staging deployment must never serve, whatever ALLOWED_SHOPS says:
@@ -254,6 +256,18 @@ const schema = z.object({
   PUBLIC_PAGES: z.enum(["on", "off"]).default("off"),
   // "yes" once a lawyer has reviewed those texts: hides their draft notice.
   LEGAL_TEXTS_REVIEWED: z.enum(["yes"]).optional(),
+  // The admin console at /admin (docs/ADMIN_CONSOLE.md): "off" (default) answers 404 there before
+  // any database access. "on" only on the console's own service.
+  ADMIN_CONSOLE: z.enum(["on", "off"]).default("off"),
+  // The console's own host name (admin.example.com, no scheme or port): /admin answers 404 on every
+  // other host. Required in production when the console is on.
+  ADMIN_HOST: z.preprocess(
+    (value) => {
+      const v = pasted(value);
+      return typeof v === "string" ? v.toLowerCase() : v;
+    },
+    z.string().regex(hostName, "must be a host name like admin.example.com (no scheme, path or port)").optional(),
+  ),
 }).refine((c) => !(c.NODE_ENV === "production" && c.TRANSLATION_PROVIDER === "mock" && c.LINGUVA_STAGE !== "staging"), {
   message: "the mock translation provider can't be used in production",
   path: ["TRANSLATION_PROVIDER"],
@@ -307,6 +321,10 @@ const schema = z.object({
   // subscriber would cost Linguva money. The same rule as partnerApiSettings.
   message: "OWN_KEY_PLAN_VISIBLE=on needs billing (SHOPIFY_PARTNER_*): without it an Own key subscriber would translate with Linguva's engines",
   path: ["OWN_KEY_PLAN_VISIBLE"],
+}).refine((c) => c.LINGUVA_STAGE !== "production" || c.ADMIN_CONSOLE === "off" || Boolean(c.ADMIN_HOST), {
+  // In production the console lives on a domain of its own, never on the merchant-facing address.
+  message: "ADMIN_CONSOLE=on in production needs ADMIN_HOST (the console's own domain)",
+  path: ["ADMIN_HOST"],
 });
 
 /**

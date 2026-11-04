@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, Microsoft Azure, Google Cloud, mock; several engines behind a router) and the bulk worker (§2.1–2.3) are **implemented and tested**; the admin center is **planned**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
+Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, Microsoft Azure, Google Cloud, mock; several engines behind a router) and the bulk worker (§2.1–2.3) are **implemented and tested**; the admin console (§2.4) is **implemented and tested locally, not deployed**. Domain code lives under `app/.server/` rather than a top-level `server/`, so React Router enforces that it never reaches the browser bundle.
 
 ## 1. Principles
 
@@ -39,11 +39,12 @@ Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, Mi
                           (offline token, per    (DeepL, LLM via
                            shop throttle)          adapter layer)
 
-┌──────────────────────────────────────────┐
-│ admin (separate app + deployment, Phase 5)│
-│  own auth + MFA + RBAC, audited, no      │
-│  merchant secrets, separate DB role       │
-└──────────────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│ admin console (/admin, same image, off by     │
+│ default; its own Railway service and domain)  │
+│  password + TOTP, roles, audited, no merchant │
+│  content or tokens; runtime role + withTenant │
+└───────────────────────────────────────────────┘
 ```
 
 ### 2.1 Web app
@@ -72,9 +73,9 @@ Status: the web app, tenancy, webhooks, translation engine, providers (DeepL, Mi
 
 `TranslationProvider` interface (`app/.server/providers/types.ts`): `id`, optional `capabilities` (`formality`, `context`; absent = everything, as DeepL), `translate(request, signal?)` returning the translations, the characters charged to the shop, the engine that answered (`provider`) and, for the HTML-transport engines, what they couldn't apply (`dropped`) and per-segment notes (`notes`); optional `targetSupport(locales)` read from the engine's own language list. Errors are `TranslationProviderError` with a `kind` (retryable, quota, auth, invalid), an optional `reason` (`UNSUPPORTED_LANGUAGE`, `REQUEST_TOO_LARGE`, `RATE_LIMITED`, `CONFIGURATION`, `TOKEN_GRANT`) and what earlier batches billed. Adapters: DeepL (one key or a key pool), Microsoft Azure Translator v3, Google Cloud Translation (v2 with an API key, v3 on the EU endpoint with a service account; markup through `html-transport.ts`), and a mock for tests. With one engine configured `getTranslationProvider()` returns it; with two or more an `EngineRouter` (`engine-router.ts`): consented engines only, DeepL first, failover per request, rests per process (docs/AI_ENGINES.md).
 
-### 2.4 Admin control center
+### 2.4 Admin console
 
-A separate application with separate authentication (not Shopify OAuth), mandatory MFA, RBAC, and a dedicated PostgreSQL role. It is built in Phase 5. It never sees access tokens. Support access to merchant content requires a reason and is logged.
+Routes under `/admin` in the same app and image (`app/routes/admin*.tsx`, server code in `app/.server/admin/`), off unless `ADMIN_CONSOLE=on`, and only on `ADMIN_HOST` when set (required in production). Recommended: a second Railway service from the same image with its own domain; the merchant-facing `web` service keeps it off. Its own authentication (not Shopify OAuth): e-mail, password and a mandatory TOTP code, sessions in an HttpOnly cookie, roles OWNER, FINANCE, SUPPORT, READONLY; accounts only through `pnpm ops:admin` with the owner role. It reads every store shop by shop inside `withTenant` as the runtime role (never a bypass role), shows no merchant content and never sees access tokens. It sets the list prices the website and the Plan page show (`PlanPrice`); Shopify charges the Partner Dashboard's prices. Details: docs/ADMIN_CONSOLE.md; review: SECURITY_MODEL.md §5s, §6.
 
 ## 3. Request lifecycle (translation of selected products)
 
@@ -138,7 +139,7 @@ linguva/
 └── .github/workflows/ci.yml
 ```
 
-`admin/` (the control center) is added in Phase 5 as a separate build target and deployment in the same repository. See decision D-03 in ROADMAP.md.
+The admin console is part of the same build (`app/routes/admin*.tsx`, `app/.server/admin/`), deployed as its own service from the same image (§2.4; decision D-03 in ROADMAP.md).
 
 ## 6. Architecture decision records
 

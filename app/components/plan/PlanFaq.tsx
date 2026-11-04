@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { INTL_LOCALE, type I18n } from "../../i18n/i18n";
 import { yearlyHandles } from "../../lib/plan-prices";
 import { planName } from "../../lib/plan-view";
+import { DEFAULT_PRICES, type PriceTable } from "../../lib/plans";
 import { Card } from "../Card";
 import { Disclosure } from "../Disclosure";
 
@@ -25,10 +26,21 @@ function Question({ question, children }: { question: string; children: ReactNod
  * `canChange`: the page has a plan button (else the question how to change is left out).
  * `ownKeyPlan`: the Own key plan's question when it is shown; a subscriber's downgrade answer says
  * that characters through its own keys don't count toward the new plan.
+ * `prices`: the list prices (which plans have a yearly price; the defaults when absent).
  */
-export function PlanFaq({ i18n, canChange, ownKeyPlan }: { i18n: I18n; canChange: boolean; ownKeyPlan?: { visible: boolean; current: boolean } | null }) {
+export function PlanFaq({
+  i18n,
+  canChange,
+  ownKeyPlan,
+  prices = DEFAULT_PRICES,
+}: {
+  i18n: I18n;
+  canChange: boolean;
+  ownKeyPlan?: { visible: boolean; current: boolean } | null;
+  prices?: PriceTable;
+}) {
   const { t } = i18n;
-  const yearly = yearlyHandles();
+  const yearly = yearlyHandles(prices);
   return (
     <Card heading={t("plan.faq.heading")}>
       <s-stack direction="block" gap="none">

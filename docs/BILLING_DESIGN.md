@@ -14,7 +14,7 @@ Status: **Implemented and tested locally against a simulated Partner API; not ve
 | Part | File | State |
 |---|---|---|
 | Plan handle → entitlements (characters, languages, bulk, glossary, automatic publishing); unknown handles get the free plan | `app/lib/plans.ts` | Implemented, Tested locally |
-| List prices for display (`PLAN_PRICES`: Free, $29 / $290, $99 / $990, $299 monthly only), `TRIAL_DAYS`, `TRIAL_AI_CHARS`. A hand-kept copy of the Partner Dashboard, which decides what merchants pay; pinned by `tests/unit/plan-prices.test.ts` | `app/lib/plans.ts`, `app/lib/plan-prices.ts` | Implemented, Tested locally |
+| List prices for display: the default `PLAN_PRICES` (Free, $29 / $290, $99 / $990, $299 monthly only) and `OWN_KEY_PRICE` (`DEFAULT_PRICES`), overridden by the prices saved in the admin console (`PlanPrice`, `getPriceTable`, cached 30 s), `TRIAL_DAYS`, `TRIAL_AI_CHARS`. A hand-kept copy of the Partner Dashboard, which decides what merchants pay; the defaults are pinned by `tests/unit/plan-prices.test.ts` | `app/lib/plans.ts`, `app/lib/plan-prices.ts`, `app/.server/admin/prices.ts` | Implemented, Tested locally |
 | Trial allowance: while the cached `trialEndsAt` is ahead of now, the monthly allowance is at most `TRIAL_AI_CHARS` (100,000); it only ever lowers an allowance. The full allowance applies the moment the trial ends, without a new check. `BillingStatus.trialEndsAt` is set only while the trial runs | `app/.server/billing/subscription.ts` (`statusFrom`) | Implemented, Tested locally |
 | Partner API client: errors, timeouts and throttling raise "couldn't check", never "not subscribed"; token only in the header | `app/.server/billing/partner-api.ts` | Implemented, Tested locally |
 | Cache `ShopSubscription` (RLS) with a 6-hour TTL; forced refresh after the welcome link; the last known state is kept when the Partner API fails | `app/.server/billing/subscription.ts` | Implemented, Tested locally |
@@ -32,7 +32,7 @@ Testing without charges: locally, every subscription state (none, active plan, t
 
 Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `SHOPIFY_APP_GID`, `SHOPIFY_APP_HANDLE`, `BILLING_REQUIRED`. Handles must be `free`, `starter`, `pro`, `business` or `own-key` (the app also maps `ownkey`/`own_key` in case the Partner Dashboard refuses the hyphen, and the private test handles `own-key-test`/`ownkeytest`/`own_key_test`: `OWN_KEY_HANDLES`), or `app/lib/plans.ts` must be changed to match them.
 
-## 2. Plans (decided 2026-10-30, PRICING_DECISION.md; `app/lib/plans.ts` follows this table)
+## 2. Plans (decided 2026-10-30, PRICING_DECISION.md; `app/lib/plans.ts` follows this table; the prices below are the defaults, the admin console can show others)
 
 | Plan | Monthly (USD) | Yearly (USD) | Monthly characters | Languages with AI | Features (as the code enforces them) |
 |---|---|---|---|---|---|
@@ -49,7 +49,7 @@ Configuration: `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (secret), `
 - Cost safety (implemented): a daily cap per shop, a platform-wide daily cap on our provider cost, a per-request size cap and request rate limits per staff member and shop (SECURITY_MODEL §5a). Plans will set the per-shop values.
 - Overage: not at launch. Managed Pricing has no usage caps, so a merchant couldn't set a spending cap; $40 per extra million would earn 13.3% (PRICING_DECISION.md §6.3). If ever, at least $69 per extra million and only with an in-app cap.
 - Yearly: Starter and Pro cost 10 × the monthly price (2 months free); Business is billed monthly only.
-- **Changing a price** (both places, the same day): the plan in the Partner Dashboard, `PLAN_PRICES` in `app/lib/plans.ts` with its pinned values in `tests/unit/plan-prices.test.ts`, and the pricing details in both listing languages (APP_STORE_LISTING.md). Read Shopify's rules for existing subscribers first (PRICING_DECISION.md §9 step 8).
+- **Changing a price** (the same day, in this order; docs/ADMIN_CONSOLE.md §3): read Shopify's rules for existing subscribers first (PRICING_DECISION.md §9 step 8); (1) change the plan in the Partner Dashboard: that is what Shopify charges; (2) save the same price in the admin console (Prices: a reason and a fresh TOTP code), which the website and the app's Plan page then show (the Plan page within 30 seconds, the website within about 5 minutes); (3) check the pricing content in both listing languages (APP_STORE_LISTING.md). The console never changes what Shopify charges. `PLAN_PRICES` and `OWN_KEY_PRICE` stay the defaults (a plan without a saved price, a database that can't be read before any table was read, the static website image); to change a default too, change it with the website's marker texts and the pinned values in `tests/unit/plan-prices.test.ts` in a code change.
 - Up to 8 public plans are allowed (VERIFIED). We use 4 public plans plus private plans, and a fifth public plan, Own key, once the owner creates it (PRICING_DECISION.md §9 step 11).
 
 ## 3. Entitlement resolution (server-side only)

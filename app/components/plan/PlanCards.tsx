@@ -1,6 +1,6 @@
 /**
  * "Compare plans": the four plans side by side, each with its sign, its
- * list price (display only, from PLAN_PRICES), its allowances and the five
+ * list price (display only, from the price table), its allowances and the five
  * features plans differ in; "Fits your store", computed only from the
  * store's own use; the footnote on prices; and "In every plan". Every plan
  * button is a link to Shopify's plan page (target _top): the app never
@@ -16,7 +16,7 @@ import { INTL_LOCALE, type I18n, type MessageKey } from "../../i18n/i18n";
 import { everyPlanRows, FEATURE_ICON, FEATURE_TINT, PLAN_CARD_FEATURES, PLAN_ICON, PLAN_TINT } from "../../lib/plan-features";
 import { formatUsd, monthsFree, priceLabel } from "../../lib/plan-prices";
 import { PLAN_ORDER, planName, recommendationKind, type FitReason, type HeroView, type OwnKeyPlanView, type ShopUse } from "../../lib/plan-view";
-import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type KnownPlanHandle, type PlanHandle } from "../../lib/plans";
+import { DEFAULT_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type KnownPlanHandle, type PlanHandle, type PriceTable } from "../../lib/plans";
 import { Button } from "../Button";
 import { Card } from "../Card";
 import { IconSquare } from "../IconSquare";
@@ -85,12 +85,14 @@ export interface PlanCardsProps {
   use: ShopUse | null;
   /** The Own key plan: its card under the four, when it is shown (OwnKeyPlanView.visible). */
   ownKeyPlan?: OwnKeyPlanView | null;
+  /** The list prices (the loader's getPriceTable; the defaults when absent). */
+  prices?: PriceTable;
 }
 
-export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recommendation, use, ownKeyPlan }: PlanCardsProps) {
+export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recommendation, use, ownKeyPlan, prices = DEFAULT_PRICES }: PlanCardsProps) {
   const { t } = i18n;
   const buttonFor = (handle: PlanHandle) => choosePlanUrl !== null && hero.current !== handle;
-  const hasFoot = PLAN_ORDER.some((handle) => buttonFor(handle) || (trial && PLAN_PRICES[handle].monthlyUsd > 0));
+  const hasFoot = PLAN_ORDER.some((handle) => buttonFor(handle) || (trial && prices[handle].monthlyUsd > 0));
   const strip = everyPlanRows(Object.values(PLANS));
   const fit = recommendation && use ? recommendationText(i18n, recommendation, use, hero.current) : null;
   return (
@@ -123,7 +125,8 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
               now={now}
               rows={hasFoot ? 8 : 7}
               button={buttonFor(handle) ? choosePlanUrl : null}
-              trial={trial && PLAN_PRICES[handle].monthlyUsd > 0}
+              trial={trial && prices[handle].monthlyUsd > 0}
+              prices={prices}
               // The store's own plan already says "Your plan": no second badge on its card.
               fits={recommendation?.plan === handle && hero.current !== handle}
             />
@@ -172,12 +175,13 @@ interface PlanCardProps {
   button: string | null;
   trial: boolean;
   fits: boolean;
+  prices: PriceTable;
 }
 
-function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCardProps) {
+function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits, prices }: PlanCardProps) {
   const { t } = i18n;
   const plan = PLANS[handle];
-  const price = PLAN_PRICES[handle];
+  const price = prices[handle];
   const paid = price.monthlyUsd > 0;
   const current = hero.current === handle;
   const nameId = `plan-${handle}`;
@@ -208,7 +212,7 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
         {t("plan.recommend.badge")}
       </s-badge>,
     );
-  const months = monthsFree(handle);
+  const months = monthsFree(handle, prices);
   return (
     <div role="group" aria-labelledby={nameId} className="lv-plan-card" style={{ gridRow: `span ${rows}` }}>
       <CardBack current={current} />
@@ -228,7 +232,7 @@ function PlanCard({ i18n, handle, hero, now, rows, button, trial, fits }: PlanCa
       </s-stack>
       <s-stack direction="block" gap="small-300">
         <s-stack direction="inline" gap="small-200" alignItems="baseline">
-          <span className="lv-plan-price">{priceLabel(i18n, handle)}</span>
+          <span className="lv-plan-price">{priceLabel(i18n, handle, prices)}</span>
           {paid ? (
             <>
               <s-text color="subdued" accessibilityVisibility="hidden">

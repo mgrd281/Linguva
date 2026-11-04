@@ -39,6 +39,8 @@ const serverEnv: Record<string, string> = {
   SHOPIFY_TIMEOUT_MS: "3000",
   // The app's privacy policy and support page, as drafts (no LEGAL_TEXTS_REVIEWED).
   PUBLIC_PAGES: "on",
+  // The admin console (tests/ui/admin.spec.ts): over plain http here, no LINGUVA_STAGE.
+  ADMIN_CONSOLE: "on",
 };
 // A second server with DeepL, Microsoft Azure and Google Cloud (fictional keys that pass the
 // configuration's checks, so it really has three engines; preload.ts answers only their free

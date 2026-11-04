@@ -3,7 +3,9 @@
  * prices, trials and plan selection live in the Partner Dashboard (Shopify
  * hosts the plan page and creates the subscription); the app maps the
  * subscribed plan handle to entitlements and shows a hand-kept copy of the
- * prices (PLAN_PRICES), which must equal the Partner Dashboard. Handles must
+ * prices, which must equal the Partner Dashboard: PLAN_PRICES and
+ * OWN_KEY_PRICE by default, or the ones set in the admin console
+ * (PriceTable, DEFAULT_PRICES). Handles must
  * match the plans configured there: free, starter, pro and business (PLANS,
  * the ladder), and own-key with its aliases (OWN_KEY_HANDLES, the Own key
  * plan: OWN_KEY_PLAN) (docs/BILLING_DESIGN.md, docs/PRICING_DECISION.md).
@@ -41,11 +43,12 @@ export const PLANS = {
 export type PlanHandle = keyof typeof PLANS;
 
 /**
- * Plan prices in USD. They must equal the plans in the Partner Dashboard
- * (Shopify App Pricing) and the listing's pricing texts; Shopify's plan page
- * is authoritative. yearlyUsd null = no yearly price (Free; Business is
- * monthly only). docs/BILLING_DESIGN.md §2 has the table; a change touches
- * the Partner Dashboard, both listing languages and
+ * Plan prices in USD, the defaults: the admin console may show others
+ * (DEFAULT_PRICES, PriceTable). They must equal the plans in the Partner
+ * Dashboard (Shopify App Pricing) and the listing's pricing texts; Shopify's
+ * plan page is authoritative. yearlyUsd null = no yearly price (Free;
+ * Business is monthly only). docs/BILLING_DESIGN.md §2 has the table; a
+ * change touches the Partner Dashboard, both listing languages and
  * tests/unit/plan-prices.test.ts on the same day (docs/PRICING_DECISION.md §9).
  * Own key: OWN_KEY_PRICE.
  */
@@ -103,14 +106,33 @@ export const OWN_KEY_PLAN = {
 /** $49 a month, monthly only (must equal the Partner Dashboard). */
 export const OWN_KEY_PRICE = { monthlyUsd: 49, yearlyUsd: null } as const;
 
+/** A plan's list price in USD (cents allowed, e.g. 9.99); yearlyUsd null = no yearly price. */
+export interface ListPrice {
+  monthlyUsd: number;
+  yearlyUsd: number | null;
+}
+/** The plans that have a list price: the ladder of four, then Own key (one price for all its handles). */
+export const PRICE_HANDLES = ["free", "starter", "pro", "business", OWN_KEY] as const;
+export type KnownPriceHandle = (typeof PRICE_HANDLES)[number];
+/**
+ * The list prices shown on the website and the Plan page. The admin console
+ * keeps them in the database (PlanPrice, app/.server/admin/prices.ts); a plan
+ * without a row shows its default below. Client-safe: loaders pass the table
+ * to the page.
+ */
+export type PriceTable = Readonly<Record<KnownPriceHandle, Readonly<ListPrice>>>;
+/** PLAN_PRICES and OWN_KEY_PRICE (the same objects): the prices before anyone changes one. */
+export const DEFAULT_PRICES: PriceTable = Object.freeze({ ...PLAN_PRICES, [OWN_KEY]: OWN_KEY_PRICE });
+
 export function isKnownPlanHandle(handle: string | null | undefined): handle is KnownPlanHandle {
   return isOwnKeyHandle(handle) || (typeof handle === "string" && handle !== "" && Object.hasOwn(PLANS, handle));
 }
 export function planEntitlements(handle: KnownPlanHandle): Entitlements {
   return isOwnKeyHandle(handle) ? OWN_KEY_PLAN : PLANS[handle];
 }
-export function planPrice(handle: KnownPlanHandle): { monthlyUsd: number; yearlyUsd: number | null } {
-  return isOwnKeyHandle(handle) ? OWN_KEY_PRICE : PLAN_PRICES[handle];
+/** A handle's list price in `prices` (every Own key handle has Own key's). */
+export function planPrice(handle: KnownPlanHandle, prices: PriceTable = DEFAULT_PRICES): Readonly<ListPrice> {
+  return isOwnKeyHandle(handle) ? prices[OWN_KEY] : prices[handle];
 }
 /** Free trial days per plan (Partner Dashboard "Free trial duration"): none on Own key. */
 export function trialDaysFor(handle: KnownPlanHandle): number {

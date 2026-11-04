@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getConfig } from "../../app/.server/lib/config";
 import { applyEngineBlocks, applyOwnKeyBlocks, DEEPL_ONLY, ownKeyBlocksHaveOpenMarks } from "../../app/.server/site/engine-blocks";
-import { openOwnKeySection, pageHtml, siteConfigWarnings, sitePage, type SitePage } from "../../app/.server/site/pages";
+import { applyPrices, openOwnKeySection, pageHtml, siteConfigWarnings, sitePage, type SitePage } from "../../app/.server/site/pages";
 import { FAKE_AZURE_KEY } from "../support/engine-fixtures";
 
 const base = {
@@ -202,7 +202,7 @@ describe("the website's own-key blocks", () => {
 
   // site/Dockerfile hides the plan's texts for the separate Caddy image (it can't see the app's config).
   const perl = spawnSync("perl", ["-v"]).status === 0;
-  it.skipIf(!perl)("resolve in the Caddy image exactly as the app serves them with the flag off", () => {
+  it.skipIf(!perl)("resolve in the Caddy image exactly as the app serves them with the flag off and the default prices", () => {
     const programs = [...readFileSync("site/Dockerfile", "utf8").matchAll(/perl -0pi -e '([^']+)' \/pages\/\*\.html/g)].map(([, program]) => program!);
     expect(programs).toHaveLength(2);
     const markers = (html: string) => html.replace(/<!--\/?(?:engines:single|engine:deepl)-->/g, "");
@@ -214,8 +214,8 @@ describe("the website's own-key blocks", () => {
         expect(run.status, file).toBe(0);
         built = run.stdout;
       }
-      expect(built, file).not.toMatch(/ownkey/);
-      expect(markers(built), file).toBe(applyOwnKeyBlocks(applyEngineBlocks(html, DEEPL_ONLY), false));
+      expect(built, file).not.toMatch(/ownkey|<!--\/?price/);
+      expect(markers(built), file).toBe(applyPrices(applyOwnKeyBlocks(applyEngineBlocks(html, DEEPL_ONLY), false)));
     }
   });
 });

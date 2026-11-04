@@ -152,6 +152,47 @@ describe("database posture", () => {
     expect(await checkDatabasePosture(app)).toEqual([]);
   });
 
+  it("flags any way for the runtime role to write admin accounts beyond the sign-in counters, or to rewrite price history", async () => {
+    // Column grants only: revoking a table-wide UPDATE would also revoke the reviewed column grants (§5s).
+    const grants = [
+      `GRANT INSERT ON "AdminUser" TO linguva_app`,
+      `GRANT DELETE ON "AdminUser" TO linguva_app`,
+      `GRANT UPDATE ("email") ON "AdminUser" TO linguva_app`,
+      `GRANT UPDATE ("passwordHash", "totpSecret") ON "AdminUser" TO linguva_app`,
+      `GRANT UPDATE ("role", "disabledAt") ON "AdminUser" TO linguva_app`,
+      `GRANT UPDATE ("id", "createdAt") ON "AdminUser" TO linguva_app`,
+      `GRANT UPDATE ("reason") ON "PlanPriceChange" TO linguva_app`,
+      `GRANT DELETE ON "PlanPriceChange" TO linguva_app`,
+    ];
+    try {
+      for (const sql of grants) await ownerDb.$executeRawUnsafe(sql);
+      expect(await posture()).toEqual([
+        "RUNTIME_CAN_REWRITE_PRICE_HISTORY PlanPriceChange: DELETE",
+        "RUNTIME_CAN_REWRITE_PRICE_HISTORY PlanPriceChange: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser.createdAt: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser.disabledAt: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser.email: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser.id: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser.passwordHash: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser.role: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser.totpSecret: UPDATE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser: DELETE",
+        "RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS AdminUser: INSERT",
+      ]);
+    } finally {
+      for (const sql of grants) await ownerDb.$executeRawUnsafe(sql.replace(/^GRANT/, "REVOKE").replace(" TO ", " FROM "));
+    }
+    expect(await checkDatabasePosture(app)).toEqual([]);
+    // The reviewed grants are still there: the counters, sessions, prices and appending history.
+    const [kept] = await ownerDb.$queryRaw<Array<{ counters: boolean; sessions: boolean; prices: boolean; history: boolean }>>`
+      SELECT has_column_privilege('linguva_app', '"AdminUser"', 'failedLogins', 'UPDATE')
+               AND has_column_privilege('linguva_app', '"AdminUser"', 'lastTotpStep', 'UPDATE') AS counters,
+             has_table_privilege('linguva_app', '"AdminSession"', 'INSERT, UPDATE, DELETE') AS sessions,
+             has_table_privilege('linguva_app', '"PlanPrice"', 'INSERT') AND has_table_privilege('linguva_app', '"PlanPrice"', 'UPDATE') AS prices,
+             has_table_privilege('linguva_app', '"PlanPriceChange"', 'INSERT') AS history`;
+    expect(kept).toEqual({ counters: true, sessions: true, prices: true, history: true });
+  });
+
   it("detects a privileged connection (the check isn't vacuous)", async () => {
     const codes = (await checkDatabasePosture(ownerDb)).map((i) => i.code);
     expect(codes).toContain("RUNTIME_OWNS_TABLE");
@@ -185,6 +226,20 @@ describe("runtime role cannot change security", () => {
     ["truncate merchant engine keys", `TRUNCATE "ShopEngineCredential"`],
     ["delete revisions", `DELETE FROM "TranslationRevision"`],
     ["read the audit log", `SELECT * FROM "AuditLog"`],
+    // Admin console accounts: only the operator tool (owner role) creates or changes them (§5s).
+    [
+      "create an admin account",
+      `INSERT INTO "AdminUser" ("email", "passwordHash", "totpSecret", "role", "updatedAt") VALUES ('x@example.com', 'x', 'x', 'OWNER', now())`,
+    ],
+    ["delete an admin account", `DELETE FROM "AdminUser"`],
+    ["raise an admin's role", `UPDATE "AdminUser" SET "role" = 'OWNER'`],
+    ["enable a disabled admin", `UPDATE "AdminUser" SET "disabledAt" = NULL`],
+    ["change an admin's password", `UPDATE "AdminUser" SET "passwordHash" = 'x'`],
+    ["change an admin's TOTP secret", `UPDATE "AdminUser" SET "totpSecret" = 'x'`],
+    ["change an admin's e-mail", `UPDATE "AdminUser" SET "email" = 'x@example.com'`],
+    ["rewrite price history", `UPDATE "PlanPriceChange" SET "reason" = 'nothing happened'`],
+    ["delete price history", `DELETE FROM "PlanPriceChange"`],
+    ["delete a list price (the default would show silently)", `DELETE FROM "PlanPrice"`],
   ];
   for (const [name, sql] of attempts) {
     it(`can't ${name}`, async () => {
@@ -213,7 +268,7 @@ describe("a database user without grants (linguva_probe)", () => {
         return callFuzzy(tx as unknown as PrismaClient);
       }),
     ).rejects.toThrow(/permission denied/);
-    for (const table of ["Shop", "Session", "AuditLog", "TranslationDraft", "UsageLedger", "CoverageItem", "CoverageCount"]) {
+    for (const table of ["Shop", "Session", "AuditLog", "TranslationDraft", "UsageLedger", "CoverageItem", "CoverageCount", "AdminUser", "AdminSession"]) {
       await expect(probe.$queryRawUnsafe(`SELECT 1 FROM "${table}" LIMIT 1`)).rejects.toThrow(/permission denied/);
     }
   });

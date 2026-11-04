@@ -2,9 +2,10 @@
  * Checks the database security posture the app relies on: the runtime role
  * can't bypass or change row-level security, every tenant table (partitioned
  * ones too) is under RLS and goes with its shop, no view reads tables with
- * its owner's rights, and the only SECURITY DEFINER functions are the
- * reviewed ones, owned by an ordinary role with a fixed search path. Run as
- * the runtime role.
+ * its owner's rights, the only SECURITY DEFINER functions are the reviewed
+ * ones, owned by an ordinary role with a fixed search path, and the admin
+ * console's accounts and price history can't be rewritten by it. Run as the
+ * runtime role.
  */
 import type { PrismaClient } from "@prisma/client";
 
@@ -123,6 +124,28 @@ export async function checkDatabasePosture(client: PrismaClient): Promise<Postur
       SELECT has_table_privilege(current_user, ${`public."${table}"`}, 'INSERT, UPDATE, DELETE, TRUNCATE') AS "write"`;
     if (grant?.write) add("RUNTIME_CAN_WRITE_GRANTS", table);
   }
+
+  // Admin console accounts are created and changed by the operator tool only (owner role): the runtime role
+  // reads them and keeps the sign-in counters, so a flaw in the app can't add an account, take one over,
+  // raise a role or enable a disabled one. Price history is append-only (§5s).
+  const [accounts] = await client.$queryRaw<Array<{ insert: boolean; delete: boolean; columns: string[] }>>`
+    SELECT has_table_privilege(current_user, c.oid, 'INSERT') AS "insert", has_table_privilege(current_user, c.oid, 'DELETE') AS "delete",
+           ARRAY(SELECT a.attname::text FROM pg_attribute a
+                 WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                   AND a.attname IN ('id', 'email', 'passwordHash', 'totpSecret', 'role', 'disabledAt', 'createdAt')
+                   AND has_column_privilege(current_user, c.oid, a.attnum, 'UPDATE')
+                 ORDER BY a.attname) AS columns
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = 'AdminUser'`;
+  if (accounts?.insert) add("RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS", "AdminUser: INSERT");
+  if (accounts?.delete) add("RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS", "AdminUser: DELETE");
+  for (const column of accounts?.columns ?? []) add("RUNTIME_CAN_WRITE_ADMIN_ACCOUNTS", `AdminUser.${column}: UPDATE`);
+  const [history] = await client.$queryRaw<Array<{ update: boolean; delete: boolean }>>`
+    SELECT has_any_column_privilege(current_user, c.oid, 'UPDATE') AS "update", has_table_privilege(current_user, c.oid, 'DELETE') AS "delete"
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = 'PlanPriceChange'`;
+  if (history?.update) add("RUNTIME_CAN_REWRITE_PRICE_HISTORY", "PlanPriceChange: UPDATE");
+  if (history?.delete) add("RUNTIME_CAN_REWRITE_PRICE_HISTORY", "PlanPriceChange: DELETE");
 
   const policies = await client.$queryRaw<Array<{ table: string; qual: string | null; check: string | null; permissive: boolean; cmd: string }>>`
     SELECT c.relname AS "table", pg_get_expr(p.polqual, p.polrelid) AS qual,

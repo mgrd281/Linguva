@@ -2,7 +2,8 @@
  * The Own key plan's card on the Plan page: outside the ladder of four (so
  * the 1/2/4-column grid above stays as it is), one full-width card under it.
  * Pro's features with the merchant's own DeepL, Microsoft Azure or Google
- * Cloud key, $49 a month, monthly only, never a trial line and never "0 AI
+ * Cloud key, its list price (OwnKeyPlanView.price: $49 a month, monthly only,
+ * unless the admin console set another), never a trial line and never "0 AI
  * characters per month": its figure is the key's own quota. Its button is a
  * link to Shopify's plan page like every other card's (target _top), at the
  * card's foot as on the four cards.
@@ -11,9 +12,9 @@ import type { ReactNode } from "react";
 import type { I18n, MessageKey } from "../../i18n/i18n";
 import type { IconType } from "../../lib/icons";
 import { OWN_KEY_ICON, PLAN_TINT } from "../../lib/plan-features";
-import { formatUsd } from "../../lib/plan-prices";
+import { formatUsd, monthsFree } from "../../lib/plan-prices";
 import { OWN_KEY_NAME, type HeroView, type OwnKeyPlanView } from "../../lib/plan-view";
-import { isOwnKeyHandle, OWN_KEY_PLAN } from "../../lib/plans";
+import { DEFAULT_PRICES, isOwnKeyHandle, OWN_KEY, OWN_KEY_PLAN } from "../../lib/plans";
 import { Button } from "../Button";
 import { IconSquare } from "../IconSquare";
 import { PLAIN_LIST } from "../LanguageLayout";
@@ -58,6 +59,7 @@ export function OwnKeyPlanCard({ i18n, plan, hero, now }: OwnKeyPlanCardProps) {
       </s-badge>,
     );
   const button = plan.choosePlanUrl !== null && !current ? plan.choosePlanUrl : null;
+  const months = monthsFree(OWN_KEY, { ...DEFAULT_PRICES, [OWN_KEY]: plan.price });
   // The allowance comes from OWN_KEY_PLAN, never typed into a text.
   const words = (key: MessageKey) => (key === "plan.ownKey.features" ? t(key, { count: OWN_KEY_PLAN.maxTargetLocales }) : t(key));
   return (
@@ -86,7 +88,18 @@ export function OwnKeyPlanCard({ i18n, plan, hero, now }: OwnKeyPlanCardProps) {
                 </s-text>
                 <s-text accessibilityVisibility="exclusive">{t("plan.price.perMonthSpoken")}</s-text>
               </s-stack>
-              <s-text color="subdued">{t("plan.price.monthlyOnly")}</s-text>
+              {plan.price.yearlyUsd !== null ? (
+                // A yearly price set in the admin console: the four cards' yearly line.
+                <s-stack direction="inline" alignItems="start" gap="small-300">
+                  <s-text color="subdued" accessibilityVisibility="hidden">
+                    {t("plan.price.yearly", { amount: formatUsd(i18n.locale, plan.price.yearlyUsd) })}
+                  </s-text>
+                  <s-text accessibilityVisibility="exclusive">{t("plan.price.yearlySpoken", { amount: formatUsd(i18n.locale, plan.price.yearlyUsd) })}</s-text>
+                  {months ? <s-badge tone="success">{t("plan.price.monthsFree", { count: months })}</s-badge> : null}
+                </s-stack>
+              ) : (
+                <s-text color="subdued">{t("plan.price.monthlyOnly")}</s-text>
+              )}
             </s-stack>
           </s-stack>
           <s-stack direction="block" gap="base">

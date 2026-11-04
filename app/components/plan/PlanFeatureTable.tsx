@@ -9,9 +9,9 @@
  */
 import { INTL_LOCALE, type I18n } from "../../i18n/i18n";
 import { FEATURE_ICON, PLAN_FEATURE_ROWS, PRICE_ROW, type FeatureRow } from "../../lib/plan-features";
-import { formatUsd, monthsFree, priceLabel, yearlyHandles } from "../../lib/plan-prices";
+import { formatUsd, priceLabel, sharedMonthsFree, yearlyHandles } from "../../lib/plan-prices";
 import { PLAN_ORDER, planName, type OwnKeyPlanView } from "../../lib/plan-view";
-import { PLANS, type KnownPlanHandle, type PlanHandle } from "../../lib/plans";
+import { DEFAULT_PRICES, PLANS, type KnownPlanHandle, type PlanHandle, type PriceTable } from "../../lib/plans";
 import { Card } from "../Card";
 import { Disclosure } from "../Disclosure";
 
@@ -24,12 +24,26 @@ export function featureTableCounts() {
   return { rows: PLAN_FEATURE_ROWS.reduce((sum, group) => sum + group.rows.length, 0), groups: PLAN_FEATURE_ROWS.length };
 }
 
-/** `ownKeyPlan`: when the Own key plan is shown, one note under the table (it isn't one of the columns). */
-export function PlanFeatureTable({ i18n, current, ownKeyPlan }: { i18n: I18n; current: KnownPlanHandle | null; ownKeyPlan?: Pick<OwnKeyPlanView, "visible" | "price"> | null }) {
+/**
+ * `ownKeyPlan`: when the Own key plan is shown, one note under the table (it isn't one of the columns).
+ * `prices`: the list prices (the loader's getPriceTable; the defaults when absent).
+ */
+export function PlanFeatureTable({
+  i18n,
+  current,
+  ownKeyPlan,
+  prices = DEFAULT_PRICES,
+}: {
+  i18n: I18n;
+  current: KnownPlanHandle | null;
+  ownKeyPlan?: Pick<OwnKeyPlanView, "visible" | "price"> | null;
+  prices?: PriceTable;
+}) {
   const { t } = i18n;
   const counts = featureTableCounts();
-  const yearly = yearlyHandles();
-  const months = yearly.length ? monthsFree(yearly[0]!) : null;
+  const yearly = yearlyHandles(prices);
+  // "Starter and Pro also yearly: 2 months free" only while every yearly price saves the same whole months.
+  const months = sharedMonthsFree(prices);
   // The current plan's cells, in the chosen look (ui.css: .lv-plan-table [data-current]).
   const mine = (handle: PlanHandle) => (handle === current ? { "data-current": "" } : {});
   const value = (row: FeatureRow, handle: PlanHandle) => {
@@ -102,7 +116,7 @@ export function PlanFeatureTable({ i18n, current, ownKeyPlan }: { i18n: I18n; cu
                 </th>
                 {PLAN_ORDER.map((handle) => (
                   <td key={handle} className="lv-plan-table__value lv-plan-table__value--price" {...mine(handle)}>
-                    {priceLabel(i18n, handle)}
+                    {priceLabel(i18n, handle, prices)}
                   </td>
                 ))}
               </tr>

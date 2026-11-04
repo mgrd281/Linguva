@@ -3,7 +3,8 @@
  * used, every plan side by side with its list price, and the way to change
  * it, which is always Shopify's plan page (a link, target _top). The app
  * never creates, changes or cancels a subscription; prices are display only
- * (PLAN_PRICES must equal the Partner Dashboard). A job stopped by the plan
+ * (the list prices, which must equal the Partner Dashboard: the defaults in
+ * app/lib/plans.ts or the admin console's). A job stopped by the plan
  * or the month's AI characters links here with `?job=<id>`; once the plan
  * allows it, the page leads back to it.
  */
@@ -197,9 +198,10 @@ export default function Plan() {
           recommendation={recommendation}
           use={data.use}
           ownKeyPlan={data.ownKeyPlan}
+          prices={data.prices}
         />
-        <PlanFeatureTable i18n={i18n} current={hero.current} ownKeyPlan={data.ownKeyPlan} />
-        <PlanFaq i18n={i18n} canChange={choosePlanUrl !== null} ownKeyPlan={data.ownKeyPlan} />
+        <PlanFeatureTable i18n={i18n} current={hero.current} ownKeyPlan={data.ownKeyPlan} prices={data.prices} />
+        <PlanFaq i18n={i18n} canChange={choosePlanUrl !== null} ownKeyPlan={data.ownKeyPlan} prices={data.prices} />
       </s-stack>
     </s-page>
   );

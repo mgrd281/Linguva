@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { translator, type AppLocale } from "../../app/i18n/i18n";
-import { formatCostUsd, formatUsd, inTrial, monthsFree, priceLabel, showTrial, yearlyHandles } from "../../app/lib/plan-prices";
+import { estimatedMargin, formatCostUsd, formatUsd, inTrial, MARGIN_MODEL, monthsFree, priceLabel, showTrial, yearlyHandles } from "../../app/lib/plan-prices";
 import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type PlanHandle } from "../../app/lib/plans";
 import * as plans from "../../app/lib/plans";
 
@@ -16,10 +16,8 @@ import * as plans from "../../app/lib/plans";
 // docs/COST_MODEL.md §2): Shopify keeps 17.9 % (15 % revenue share after the first
 // $1M plus the 2.9 % processing fee), DeepL bills $27.50 per million characters
 // (API Growth, USD rate card), and every paying shop carries $0.50 of DeepL's
-// fixed monthly fee. A plan uses its whole monthly allowance.
-const KEPT_AFTER_SHOPIFY = 0.821;
-const DEEPL_USD_PER_MILLION_CHARS = 27.5;
-const FIXED_SHARE_USD = 0.5;
+// fixed monthly fee. A plan uses its whole monthly allowance. The admin console
+// warns with the same function (estimatedMargin, MARGIN_MODEL).
 const MARGIN_FLOOR = 0.4;
 
 const HANDLES = Object.keys(PLANS) as PlanHandle[];
@@ -46,15 +44,22 @@ describe("plan prices", () => {
     }
   });
 
+  it("models the worst case as PRICING_DECISION §6.1 does", () => {
+    expect(MARGIN_MODEL).toEqual({ keptAfterShopify: 0.821, usdPerMillionChars: 27.5, fixedShareUsd: 0.5, floor: MARGIN_FLOOR });
+    // §6.1's table: Starter monthly 51.9 %, Pro yearly 41.5 %, Business monthly 45.1 %.
+    expect(estimatedMargin(29, 300_000)!.toFixed(3)).toBe("0.519");
+    expect(estimatedMargin(990 / 12, 1_200_000)!.toFixed(3)).toBe("0.415");
+    expect(estimatedMargin(299, 4_000_000)!.toFixed(3)).toBe("0.451");
+    expect(estimatedMargin(0, 20_000)).toBeNull();
+  });
+
   it("keeps at least 40 % margin on every paid price at full use, in the worst case", () => {
     for (const handle of HANDLES) {
       const { monthlyUsd, yearlyUsd } = PLAN_PRICES[handle];
       if (monthlyUsd === 0) continue;
-      const cost = (PLANS[handle].monthlyChars * DEEPL_USD_PER_MILLION_CHARS) / 1_000_000 + FIXED_SHARE_USD;
       // The monthly price, and the yearly price per month.
       for (const price of yearlyUsd === null ? [monthlyUsd] : [monthlyUsd, yearlyUsd / 12]) {
-        const margin = (price * KEPT_AFTER_SHOPIFY - cost) / price;
-        expect(margin, `${handle} at $${price.toFixed(2)} a month`).toBeGreaterThanOrEqual(MARGIN_FLOOR);
+        expect(estimatedMargin(price, PLANS[handle].monthlyChars), `${handle} at $${price.toFixed(2)} a month`).toBeGreaterThanOrEqual(MARGIN_FLOOR);
       }
     }
   });
@@ -138,9 +143,7 @@ describe("the Own key plan's price (outside PLAN_PRICES, the ladder of four)", (
   });
 
   it("keeps at least 40 % margin with the same worst-case formula (0 included characters: only the fixed share)", () => {
-    const cost = (OWN_KEY_PLAN.monthlyChars * DEEPL_USD_PER_MILLION_CHARS) / 1_000_000 + FIXED_SHARE_USD;
-    const margin = (OWN_KEY_PRICE.monthlyUsd * KEPT_AFTER_SHOPIFY - cost) / OWN_KEY_PRICE.monthlyUsd;
-    expect(margin).toBeGreaterThanOrEqual(MARGIN_FLOOR);
+    expect(estimatedMargin(OWN_KEY_PRICE.monthlyUsd, OWN_KEY_PLAN.monthlyChars)).toBeGreaterThanOrEqual(MARGIN_FLOOR);
   });
 
   it("has no trial and no months-free claim; the four plans keep theirs", () => {

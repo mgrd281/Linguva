@@ -867,3 +867,81 @@ model ShopEngineCredential {
 
   @@unique([shopId, engine])
 }
+
+/// Who may use the admin console (docs/ADMIN_CONSOLE.md): OWNER everything,
+/// FINANCE prices too, SUPPORT may ask Shopify again, READONLY looks only.
+enum AdminRole {
+  OWNER
+  FINANCE
+  SUPPORT
+  READONLY
+}
+
+/// An operator of the admin console. Created, changed and disabled only by the
+/// operator tool with the owner role (scripts/ops/admin.ts); the runtime role
+/// reads it and updates only the sign-in counters (column grants,
+/// docs/SECURITY_MODEL.md §5s). No shop data: a global table.
+model AdminUser {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Lower case; the sign-in name.
+  email        String    @unique
+  /// scrypt$<N>$<r>$<p>$<salt>$<hash> (app/.server/admin/password.ts).
+  passwordHash String
+  /// TokenCipher envelope of the TOTP secret, bound to this row's id.
+  totpSecret   String
+  role         AdminRole
+  disabledAt   DateTime? @db.Timestamptz(3)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime? @db.Timestamptz(3)
+  /// The last accepted TOTP time step: each code works once.
+  lastTotpStep Int       @default(0)
+  lastLoginAt  DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  sessions     AdminSession[]
+  priceChanges PlanPriceChange[]
+}
+
+/// A signed-in admin console session. The cookie holds a random token; only
+/// its SHA-256 is stored.
+model AdminSession {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminUserId String    @db.Uuid
+  tokenHash   String    @unique
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  lastSeenAt  DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt   DateTime  @db.Timestamptz(3)
+  revokedAt   DateTime? @db.Timestamptz(3)
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, createdAt])
+}
+
+/// The list price shown for a plan, in US cents, set in the admin console.
+/// Shopify's Partner Dashboard charges and must say the same. No row: the
+/// default in app/lib/plans.ts.
+model PlanPrice {
+  handle       String   @id
+  monthlyCents Int
+  yearlyCents  Int?
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+}
+
+/// Append-only history of list price changes: who, when, why, before and after.
+model PlanPriceChange {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  handle          String
+  oldMonthlyCents Int
+  oldYearlyCents  Int?
+  newMonthlyCents Int
+  newYearlyCents  Int?
+  reason          String
+  adminUserId     String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}

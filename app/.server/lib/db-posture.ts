@@ -11,7 +11,19 @@ import type { PrismaClient } from "@prisma/client";
 /** Tenant tables that intentionally don't force RLS on their owner (see SECURITY_MODEL §5c, §5l). */
 export const NOT_FORCED_TABLES = ["TranslationMemory", "TranslationDraft"] as const;
 /** Tables without RLS by design: global records, or no tenant data. */
-export const GLOBAL_TABLES = ["Shop", "Session", "WebhookEvent", "PrivacyRequest", "AuditLog", "PlatformUsageDay", "_prisma_migrations"] as const;
+export const GLOBAL_TABLES = [
+  "Shop",
+  "Session",
+  "WebhookEvent",
+  "PrivacyRequest",
+  "AuditLog",
+  "PlatformUsageDay",
+  "AdminUser",
+  "AdminSession",
+  "PlanPrice",
+  "PlanPriceChange",
+  "_prisma_migrations",
+] as const;
 /** Tables the runtime role may only read: entitlements granted by the operator. */
 export const READ_ONLY_TABLES = ["ComplimentaryAccess"] as const;
 /**

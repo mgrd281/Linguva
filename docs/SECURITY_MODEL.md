@@ -319,6 +319,15 @@ Hosting on Railway (docs/RAILWAY_STAGING.md) adds configuration guards, one publ
 
 Evidence: `tests/unit/staging-config.test.ts`, `tests/integration/webhooks.test.ts` (staging cases), `tests/integration/healthz.test.ts`, `tests/integration/worker-health.test.ts`, `tests/unit/embedded-worker.test.ts`, `tests/unit/deploy-config.test.ts`, `scripts/ci/image-check.sh` (CI: image built, migrated, started in staging mode, smoke-checked; started in production mode with the worker inside, worker killed and restarted, clean stop).
 
+## 5s. Database change review: admin console (migration 20261107090000)
+
+| Change | Review |
+|---|---|
+| `AdminUser`, `AdminSession`, `PlanPrice`, `PlanPriceChange` (new, global) | The admin console's operators, their sessions, the displayed list prices and their history (docs/ADMIN_CONSOLE.md). No shop data and no `shopId`: global tables, listed in `GLOBAL_TABLES`. CHECKs: lower-case e-mail, an scrypt hash format, the TOTP secret only as a TokenCipher envelope, a 43-character token hash (never the token), known plan handles, Free at 0, paid prices between $1 and $100,000 a month, a reason of 3–500 characters |
+| Row-level security | None: global tables like `Shop` and `AuditLog`. Tenant tables unchanged; no new policies, functions, views or roles |
+| Grants | `AdminUser`: SELECT, and UPDATE only on the sign-in counters (`failedLogins`, `lockedUntil`, `lastTotpStep`, `lastLoginAt`, `updatedAt`): the runtime role can't create an account, change an e-mail, password, TOTP secret or role, or enable a disabled account (the operator tool does, with the owner role). `AdminSession`: SELECT, INSERT, UPDATE, DELETE. `PlanPrice`: SELECT, INSERT, UPDATE (no DELETE). `PlanPriceChange`: SELECT, INSERT (append-only) |
+| Cross-tenant risk | The console reads tenant tables shop by shop through `withTenant`, as the scheduled jobs do (DATABASE_SCHEMA §3); it never uses a bypass role |
+
 ## 6. Admin control center (planned, not built)
 
 There is no admin UI. Operators use the command-line tools with the owner role on their own machine (complimentary access: BILLING_DESIGN §4, audited). When an admin control center is built, it follows this plan:

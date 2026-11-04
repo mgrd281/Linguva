@@ -1,7 +1,8 @@
 /**
  * The Content page's language (pure, shared by server and UI; tested in
  * tests/unit/content-language.test.ts): which one it shows when the URL
- * names none, and the order its chips are read in.
+ * names none (and which one a list opens in), and the order its chips are
+ * read in.
  */
 import type { I18n } from "../i18n/i18n";
 import { upperFirst } from "./name-lists";
@@ -41,6 +42,15 @@ export function chooseLanguage(input: LanguageChoiceInput): string | null {
     return counted.reduce((best, l) => (open(l.locale) > open(best.locale) ? l : best)).locale;
   }
   return (visibleInPlan[0] ?? targets.find((l) => l.published) ?? targets[0])?.locale ?? null;
+}
+
+/**
+ * The language a list opens in (an area's list from an old per-type address, a type's own list): `?lang`
+ * when it is one of the store's additional languages, else the first visible one (a hidden one only when
+ * none is visible); none without an additional language.
+ */
+export function listLanguage<T extends { locale: string; published: boolean }>(targets: readonly T[], lang: string | null): T | undefined {
+  return targets.find((l) => l.locale === lang) ?? targets.find((l) => l.published) ?? targets[0];
 }
 
 /** A language's name as a chip shows it: the interface language's name, capitalised ("Dänisch", "Allemand"). */

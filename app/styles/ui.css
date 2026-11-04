@@ -42,6 +42,8 @@
   font-size: 22px;
   font-weight: 700;
   line-height: 28px;
+  /* An item's name without spaces (the editor's heading) breaks at the edge instead of widening the page. */
+  overflow-wrap: break-word;
 }
 .lv-h2 {
   margin: 0;
@@ -476,13 +478,14 @@
  * A page's header (PageHeader's HeaderRow, also ToolHeader's and a job's): the sign centred on the heading
  * and its lead on a wide page; on a narrow one, where the lead wraps to several lines, level with the
  * heading instead of beside the lead. Polaris' s-grid takes no container query in alignItems, so it is
- * set here. 640 px is where the trail becomes the phone's back row.
+ * set here. 640 px is where the trail becomes the phone's back row. The sign is the row's first child:
+ * a page's icon square, or PageHeader's `sign` (a flag, a picture).
  */
 .lv-page-head {
   container-type: inline-size;
 }
 @container (max-width: 640px) {
-  .lv-page-head > s-grid > .lv-icon-square {
+  .lv-page-head > s-grid > :first-child {
     align-self: start;
   }
 }
@@ -1039,10 +1042,11 @@
 /* ── Content and language pages (app.content.*, app.languages*, ContentTiles, CategoryCard, CategoryList, LanguageLayout, StepStrip): its own rules here, media queries included. ── */
 
 /*
- * Content's language chips: flag, name and percentage, as wide as their words (at least 168 px, so two
- * share a phone's row), the chips of a row equally tall (a hidden language's chip has two lines). The
- * current language isn't a link and wears the app's chosen look (the blue ring and tint of the current
- * Settings section and plan).
+ * The language picker's chips (LanguagePicker: Content, an area's list, Review, Coverage): flag and name
+ * (a figure only where the page gives one), as wide as their words (at least 168 px, so two share a
+ * phone's row), the chips of a row equally tall (a hidden language's chip has two lines). The current
+ * language isn't a link and wears the app's chosen look (the blue ring and tint of the current Settings
+ * section and plan).
  */
 .lv-langs {
   display: flex;
@@ -1057,6 +1061,16 @@
   flex: 0 0 auto;
   min-width: min(168px, 100%);
   max-width: 100%;
+}
+/* A phone's one row that swipes sideways instead of wrapping (2 px of room, so a chip's focus ring isn't cut). */
+.lv-langs--swipe {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px;
+}
+.lv-langs--swipe > .lv-langs__item {
+  max-width: none;
 }
 .lv-lang {
   display: flex;
@@ -1144,6 +1158,21 @@ a.lv-filter:focus-visible {
   box-shadow: var(--lv-selected-shadow);
   font-weight: 650;
 }
+/* A chosen pill that is a link (Review's "With notes") keeps its chosen look under the pointer. */
+a.lv-filter[aria-current]:hover {
+  border-color: transparent;
+  background: var(--lv-selected-bg);
+}
+/* A phone's one row of pills that swipes sideways instead of wrapping (2 px of room for a pill's focus ring). */
+.lv-filters--swipe {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px;
+}
+.lv-filters--swipe > li {
+  flex: none;
+}
 
 /*
  * A row of an area's list: the item's name is its link, stretched over the whole row (the row opens the
@@ -1221,27 +1250,6 @@ a.lv-filter:focus-visible {
   margin-inline-start: auto;
 }
 
-/* The language tabs: they wrap on a wide card; on a phone one row that swipes sideways (like the area chips). */
-.lv-review-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lv-review-tabs > li {
-  display: grid;
-  flex: none;
-}
-/* (2 px of room around the row, so a tab's focus ring isn't cut at the row's edges.) */
-.lv-review-tabs--swipe {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding: 2px;
-}
-
 /* The share of the page already decided, under the strip's count. */
 .lv-review-progress {
   max-width: 240px;
@@ -1265,7 +1273,7 @@ a.lv-filter:focus-visible {
   margin-block-start: -8px;
 }
 
-/* "Deine Sprachen" as link tiles: the name with its hidden marker, the figure and its bar. */
+/* "Deine Sprachen" as link tiles: the name with its hidden marker (a language's figure is on its own page). */
 .lv-review-tile__name {
   display: flex;
   flex-wrap: wrap;
@@ -1278,9 +1286,6 @@ a.lv-filter:focus-visible {
   align-items: center;
   gap: 4px;
   color: var(--lv-text-subdued);
-}
-.lv-review-tile__bar {
-  margin-top: 6px;
 }
 /*
  * Rows always full, as cardGrid fills the area cards: the page gives data-columns from cardColumns. One tile
@@ -1484,9 +1489,10 @@ a.lv-filter:focus-visible {
   display: grid;
   gap: 8px;
 }
+/* The search alone takes the row (it has no button); on a phone the filters' toggle goes under it. */
 .lv-jobs-filters__search {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   align-items: center;
 }
@@ -1764,24 +1770,9 @@ a.lv-filter:focus-visible {
 
 /*
  * The translation editor (ResourceTranslationEditor, EditorParts, AttachedResourcesPanel): the item's
- * header (its picture or its area's icon, the name, what is open), one square tile per text with its
- * state, the heading row of every text (name, state, its one action), the count in a button, an
- * original's HTML as code.
+ * picture in its header (PageHeader's sign), one square tile per text with its state, the heading row of
+ * every text (name, state, its one action), the count in a button, an original's HTML as code.
  */
-.lv-ed-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 14px;
-  align-items: center;
-}
-.lv-ed-header__text {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.lv-ed-header__name {
-  overflow-wrap: anywhere;
-}
 .lv-ed-picture {
   display: block;
   width: 48px;
@@ -1955,109 +1946,6 @@ a.lv-filter:focus-visible {
 
 /* Tools pages (glossary, translation memory, coverage, Countries & markets, import & export): .lv-tools-*. */
 
-/*
- * The glossary's rules as equal tiles (Settings' option tiles, .lv-option): the rule's icon in its square,
- * a native radio at the top (the arrow keys move between the rules), the name and what it means; the chosen
- * rule in the app's chosen look. The whole tile is the radio's label.
- */
-.lv-tools-rules {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-/* A field's label, as "Term" and "Language" under it: the card's 17 px heading is a step above it. */
-.lv-tools-rules__legend {
-  padding: 0;
-  margin-bottom: 8px;
-  color: var(--lv-text);
-  font-size: 13px;
-  line-height: 20px;
-}
-.lv-tools-rule {
-  gap: 4px;
-  padding: 16px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.lv-tools-rule:not(.lv-option--current):hover {
-  border-color: var(--lv-border-hover);
-  box-shadow: var(--lv-shadow-hover);
-}
-.lv-tools-rule:has(input:focus-visible) {
-  outline: 2px solid var(--lv-focus);
-  outline-offset: 2px;
-}
-.lv-tools-rule__radio {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin: 2px;
-  accent-color: var(--lv-selected-ring);
-  cursor: pointer;
-}
-.lv-tools-rules:disabled .lv-tools-rule {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-/* Off (not in the plan): hovering draws no edge, and the current rule keeps its ring. */
-.lv-tools-rules:disabled .lv-tools-rule:not(.lv-option--current):hover {
-  border-color: var(--lv-border);
-  box-shadow: none;
-}
-/*
- * The rules always side by side: three columns at every width, so a mid width never leaves a 2 + 1 row. On a
- * narrow card each tile is its sign, radio and name, and the chosen rule's sentence sits under them, so the
- * term and "Add term" are on a phone's first screen. The tiles' own sentences stay for screen readers (each
- * radio's aria-describedby).
- */
-.lv-tools-rules__tiles {
-  container-type: inline-size;
-}
-.lv-tools-rules__tiles > .lv-options {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.lv-tools-rules__help {
-  display: none;
-  margin: 8px 0 0;
-  color: var(--lv-text-subdued);
-  font-size: 13px;
-  line-height: 20px;
-}
-@container (max-width: 520px) {
-  .lv-tools-rules__tiles > .lv-options {
-    gap: 8px;
-  }
-  .lv-tools-rules__tiles .lv-tools-rule {
-    padding: 12px;
-  }
-  .lv-tools-rules__tiles .lv-option__body {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
-  }
-  .lv-tools-rules__help {
-    display: block;
-  }
-}
-/*
- * Narrower than a 390 px phone's card (a 360 px phone): "übersetzen" at 14 px is wider than its tile, so the
- * names take 13 px, as Settings' square tiles' do. Only a word still too long for its tile breaks.
- */
-@container (max-width: 340px) {
-  .lv-tools-rules__tiles .lv-option__title {
-    font-size: 13px;
-    line-height: 18px;
-    overflow-wrap: break-word;
-  }
-}
-
 /* A tools page's figures under its heading (the memory's entries and reuses): each figure with its caption. */
 .lv-tools-figures {
   display: flex;
@@ -2099,12 +1987,6 @@ a.lv-filter:focus-visible {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
   align-items: center;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lv-tools-rule {
-    transition: none;
-  }
 }
 
 /* ── Smart schedule (app.settings_.automatic.tsx, SmartAutoCard): its own rules here, media queries included. ── */
@@ -2149,166 +2031,6 @@ a.lv-filter:focus-visible {
     margin-inline-start: auto;
     text-align: end;
   }
-}
-
-/*
- * A choice as square tiles (how often, outdated translations): native radio buttons, each tile one
- * label; the chosen one framed in blue like the current section's tile. Five in a row on a wide card,
- * three on a tablet, two on a phone (an odd last one takes the row).
- */
-.lv-smart-choice {
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.lv-smart-choice__legend {
-  margin: 0 0 8px;
-  padding: 0;
-  color: var(--lv-text);
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 20px;
-}
-.lv-smart-choice__wrap {
-  container-type: inline-size;
-}
-.lv-smart-choice__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.lv-smart-choice__grid[data-count="2"] {
-  grid-template-columns: minmax(0, 1fr);
-}
-.lv-smart-choice__grid[data-count="5"] > :last-child {
-  grid-column: 1 / -1;
-}
-@container (min-width: 480px) {
-  .lv-smart-choice__grid[data-count="2"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .lv-smart-choice__grid[data-count="5"] {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .lv-smart-choice__grid[data-count="5"] > :last-child {
-    grid-column: auto;
-  }
-}
-@container (min-width: 760px) {
-  .lv-smart-choice__grid[data-count="5"] {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-.lv-smart-tile {
-  position: relative;
-  display: flex;
-  min-width: 0;
-}
-/* The radio covers the whole tile, invisible: a click anywhere chooses, the arrow keys move between tiles. */
-.lv-smart-tile__input {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.lv-smart-tile__face {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 4px;
-  box-sizing: border-box;
-  min-width: 0;
-  min-height: 128px;
-  padding: 14px;
-  border: 1px solid var(--lv-border);
-  border-radius: var(--lv-radius-card);
-  background: var(--lv-surface);
-  color: var(--lv-text);
-  font-family: var(--lv-font);
-  box-shadow: var(--lv-shadow-1);
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease;
-}
-.lv-smart-tile__top {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-/* A tile without an icon: the radio mark beside its name and line. */
-.lv-smart-tile__face--plain {
-  flex-direction: row;
-  gap: 10px;
-  align-items: flex-start;
-  min-height: 0;
-}
-.lv-smart-tile__face--plain .lv-smart-tile__radio {
-  margin-top: 1px;
-}
-.lv-smart-tile__text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.lv-smart-tile__name {
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 20px;
-  overflow-wrap: break-word;
-  hyphens: auto;
-}
-.lv-smart-tile__line {
-  color: var(--lv-text-subdued);
-  font-size: 13px;
-  line-height: 18px;
-  overflow-wrap: break-word;
-}
-/* The radio mark: an empty ring, a thick blue one when chosen (more than colour: its shape changes). */
-.lv-smart-tile__radio {
-  flex: none;
-  box-sizing: border-box;
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid #8a8a8a;
-  border-radius: 50%;
-  background: var(--lv-surface);
-  transition: border-color 0.15s ease;
-}
-.lv-smart-tile:hover .lv-smart-tile__input:not(:checked):not(:disabled) + .lv-smart-tile__face {
-  border-color: var(--lv-border-hover);
-  box-shadow: var(--lv-shadow-hover);
-}
-.lv-smart-tile:hover .lv-smart-tile__input:not(:checked):not(:disabled) + .lv-smart-tile__face .lv-smart-tile__radio {
-  border-color: var(--lv-selected-ring);
-}
-.lv-smart-tile__input:checked + .lv-smart-tile__face {
-  border-color: transparent;
-  background: var(--lv-selected-bg);
-  box-shadow: var(--lv-selected-shadow);
-}
-.lv-smart-tile__input:checked + .lv-smart-tile__face .lv-smart-tile__radio {
-  border: 5px solid var(--lv-selected-ring);
-}
-.lv-smart-tile__input:focus-visible + .lv-smart-tile__face {
-  outline: 2px solid var(--lv-focus);
-  outline-offset: 2px;
-}
-.lv-smart-tile__input:disabled {
-  cursor: not-allowed;
-}
-/* Read-only after a downgrade: the chosen tile stays framed, the others quiet (no faded text). */
-.lv-smart-tile__input:disabled:not(:checked) + .lv-smart-tile__face {
-  background: var(--lv-surface-subdued);
-  box-shadow: none;
 }
 
 /* The weekdays as one row of square toggles (native checkboxes, the full day as each one's name). */
@@ -2410,8 +2132,6 @@ a.lv-filter:focus-visible {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lv-smart-tile__face,
-  .lv-smart-tile__radio,
   .lv-smart-day__face {
     transition: none;
   }
@@ -2462,7 +2182,6 @@ a.lv-filter:focus-visible {
   .lv-option--current,
   .lv-lang[aria-current="page"],
   .lv-filter[aria-current],
-  .lv-smart-tile__input:checked + .lv-smart-tile__face,
   .lv-smart-day__input:checked + .lv-smart-day__face {
     border: 2px solid Highlight;
   }

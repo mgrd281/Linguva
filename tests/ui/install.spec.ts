@@ -51,7 +51,7 @@ test("a forged session token gets no app content", async ({ page }) => {
   expect(body).not.toContain(shop.name);
 
   // A data request with a forged bearer token is refused.
-  const data = await page.request.get(new URL("/app/products.data?lang=de", UI_ENV.appUrl).toString(), {
+  const data = await page.request.get(new URL("/app/languages/de/products.data", UI_ENV.appUrl).toString(), {
     headers: { Authorization: `Bearer ${forged}` },
     maxRedirects: 0,
   });
@@ -83,7 +83,8 @@ test("pages and data responses carry the security headers, and the admin may sti
   // Local http: no HSTS.
   expect(headers["strict-transport-security"]).toBeUndefined();
 
-  const data = await page.request.get(new URL("/app/products.data?lang=de", UI_ENV.appUrl).toString(), {
+  // A page's data (the products' list in German), not a redirect.
+  const data = await page.request.get(new URL("/app/languages/de/products.data", UI_ENV.appUrl).toString(), {
     headers: { Authorization: `Bearer ${sessionToken(shop.domain)}` },
   });
   expect(data.status()).toBe(200);

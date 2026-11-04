@@ -2,7 +2,7 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
-  "glossary.page.lead": "Words AI always handles the same way: names it keeps, words it always uses, wording it avoids.",
+  "glossary.page.lead": "Words AI always handles the same way.",
   "glossary.delete.heading": "Delete this term?",
   "glossary.delete.body": "New translations won't apply it any more. Published translations don't change. This can't be undone.",
   "glossary.exportCsv": "Export CSV",
@@ -38,6 +38,7 @@ export const en = {
   "glossary.rule.DO_NOT_TRANSLATE": "Never translate",
   "glossary.rule.PREFERRED": "Always translate as",
   "glossary.rule.FORBIDDEN": "Never use",
+  "glossary.ruleChosen": "Chosen",
 
   "glossary.terms.heading": "Terms ({count})",
   "glossary.terms.empty": "No terms yet. Add your brand and product names so they are never translated.",
@@ -83,7 +84,7 @@ export const en = {
   "glossary.error.limit": "A shop can have at most {max} glossary terms",
   "glossary.error.unknownAction": "Unknown action",
 
-  "glossary.csv.unterminated": "Unterminated quoted field",
+  "glossary.csv.unterminated": "A value in quotes isn't closed",
   "glossary.csv.empty": "The file is empty",
   "glossary.csv.header": "Header must include at least: rule, term",
   "glossary.csv.tooManyRows": "At most {max} rows",
@@ -98,7 +99,7 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
-  "glossary.page.lead": "Wörter, die die KI immer gleich behandelt: Namen, die bleiben, Wörter, die sie immer verwendet, und Formulierungen, die sie meidet.",
+  "glossary.page.lead": "Wörter, die die KI immer gleich behandelt.",
   "glossary.delete.heading": "Diesen Begriff löschen?",
   "glossary.delete.body": "Neue Übersetzungen wenden ihn nicht mehr an. Veröffentlichte Übersetzungen ändern sich nicht. Das kann nicht rückgängig gemacht werden.",
   "glossary.exportCsv": "CSV exportieren",
@@ -134,6 +135,7 @@ export const de: Translation<typeof en> = {
   "glossary.rule.DO_NOT_TRANSLATE": "Nie übersetzen",
   "glossary.rule.PREFERRED": "Immer übersetzen als",
   "glossary.rule.FORBIDDEN": "Nie verwenden",
+  "glossary.ruleChosen": "Gewählt",
 
   "glossary.terms.heading": "Begriffe ({count})",
   "glossary.terms.empty": "Noch keine Begriffe. Füge deine Marken- und Produktnamen hinzu, damit sie nie übersetzt werden.",
@@ -179,7 +181,7 @@ export const de: Translation<typeof en> = {
   "glossary.error.limit": "Ein Shop kann höchstens {max} Glossar-Begriffe haben",
   "glossary.error.unknownAction": "Unbekannte Aktion",
 
-  "glossary.csv.unterminated": "Ein Feld in Anführungszeichen wird nicht geschlossen",
+  "glossary.csv.unterminated": "Ein Wert in Anführungszeichen wird nicht geschlossen",
   "glossary.csv.empty": "Die Datei ist leer",
   "glossary.csv.header": "Die Kopfzeile muss mindestens diese Spalten enthalten: rule, term",
   "glossary.csv.tooManyRows": "Höchstens {max} Zeilen",
@@ -194,7 +196,7 @@ export const de: Translation<typeof en> = {
 };
 
 export const fr: Translation<typeof en> = {
-  "glossary.page.lead": "Les mots que l'IA traite toujours de la même façon : les noms qu'elle garde, les mots qu'elle utilise toujours, les formulations qu'elle évite.",
+  "glossary.page.lead": "Les mots que l'IA traite toujours de la même façon.",
   "glossary.delete.heading": "Supprimer ce terme ?",
   "glossary.delete.body": "Les nouvelles traductions ne l'appliqueront plus. Les traductions publiées ne changent pas. Cette action est irréversible.",
   "glossary.exportCsv": "Exporter en CSV",
@@ -230,6 +232,7 @@ export const fr: Translation<typeof en> = {
   "glossary.rule.DO_NOT_TRANSLATE": "Ne jamais traduire",
   "glossary.rule.PREFERRED": "Toujours traduire par",
   "glossary.rule.FORBIDDEN": "Ne jamais utiliser",
+  "glossary.ruleChosen": "Choisie",
 
   "glossary.terms.heading": "Termes ({count})",
   "glossary.terms.empty": "Aucun terme pour l'instant. Ajoutez vos noms de marque et de produits pour qu'ils ne soient jamais traduits.",
@@ -275,7 +278,7 @@ export const fr: Translation<typeof en> = {
   "glossary.error.limit": "Une boutique peut avoir au maximum {max} termes de glossaire",
   "glossary.error.unknownAction": "Action inconnue",
 
-  "glossary.csv.unterminated": "Un champ entre guillemets n'est pas fermé",
+  "glossary.csv.unterminated": "Une valeur entre guillemets n'est pas fermée",
   "glossary.csv.empty": "Le fichier est vide",
   "glossary.csv.header": "L'en-tête doit contenir au moins ces colonnes : rule, term",
   "glossary.csv.tooManyRows": "{max} lignes au maximum",
@@ -290,7 +293,7 @@ export const fr: Translation<typeof en> = {
 };
 
 export const es: Translation<typeof en> = {
-  "glossary.page.lead": "Palabras que la IA trata siempre igual: nombres que mantiene, palabras que siempre usa y expresiones que evita.",
+  "glossary.page.lead": "Palabras que la IA trata siempre igual.",
   "glossary.delete.heading": "¿Eliminar este término?",
   "glossary.delete.body": "Las nuevas traducciones ya no lo aplicarán. Las traducciones publicadas no cambian. Esta acción no se puede deshacer.",
   "glossary.exportCsv": "Exportar CSV",
@@ -326,6 +329,7 @@ export const es: Translation<typeof en> = {
   "glossary.rule.DO_NOT_TRANSLATE": "No traducir nunca",
   "glossary.rule.PREFERRED": "Traducir siempre como",
   "glossary.rule.FORBIDDEN": "No usar nunca",
+  "glossary.ruleChosen": "Elegida",
 
   "glossary.terms.heading": "Términos ({count})",
   "glossary.terms.empty": "Aún no hay términos. Agrega los nombres de tu marca y de tus productos para que nunca se traduzcan.",
@@ -371,7 +375,7 @@ export const es: Translation<typeof en> = {
   "glossary.error.limit": "Una tienda puede tener como máximo {max} términos de glosario",
   "glossary.error.unknownAction": "Acción desconocida",
 
-  "glossary.csv.unterminated": "Un campo entre comillas no está cerrado",
+  "glossary.csv.unterminated": "Un valor entre comillas no está cerrado",
   "glossary.csv.empty": "El archivo está vacío",
   "glossary.csv.header": "El encabezado debe incluir al menos estas columnas: rule, term",
   "glossary.csv.tooManyRows": "Como máximo {max} filas",

@@ -105,10 +105,15 @@ describe("the section tiles' few words", () => {
     for (const [locale, words] of Object.entries(expected) as Array<[AppLocale, string]>) {
       expect(tileState(await render(store(), locale), "style"), locale).toBe(words);
     }
-    // The choice itself keeps its label, explained by the hint beside it.
+    // The choice itself keeps its label ("Automatic", never "DeepL decides"), explained by the hint beside it.
     const style = sectionHtml(await render(store(), "en", "/app/settings?section=style"), "settings-style");
-    expect(style).toContain(">DeepL decides<");
-    expect(decoded(style)).toContain("“DeepL decides” uses the usual form for each language.");
+    expect(style).toContain(">Automatic<");
+    expect(decoded(style)).toContain("Automatic: each language's usual form.");
+    expect(style).not.toContain("DeepL decides");
+    const labels: Record<AppLocale, string> = { en: "Automatic", de: "Automatisch", fr: "Automatique", es: "Automático" };
+    for (const [locale, label] of Object.entries(labels) as Array<[AppLocale, string]>) {
+      expect(sectionHtml(await render(store(), locale, "/app/settings?section=style"), "settings-style"), locale).toContain(`<span class="lv-seg__text">${label}</span>`);
+    }
   });
 });
 
@@ -142,9 +147,48 @@ describe("the Business lock", () => {
 describe("German texts in the options", () => {
   it("write \"KI-\" compounds with a non-breaking hyphen, so a narrow option never ends a line in \"KI-\"", async () => {
     const body = optionBody(await render(store(), "de", "/app/settings?section=memory"), "settings-memory-machine");
-    expect(body).toBe(
-      "Auch ungeprüfte KI‑Übersetzungen werden wiederverwendet. Das spart KI‑Zeichen und hält Formulierungen einheitlich; ein Fehler darin wiederholt sich aber überall, wo derselbe Text vorkommt.",
-    );
+    expect(body).toBe("Spart KI‑Zeichen, aber ein Fehler wiederholt sich überall, wo derselbe Text vorkommt.");
     expect(body).not.toMatch(/KI-/);
+  });
+});
+
+describe("one card per section, with less said twice", () => {
+  it("draws the services added after the permission as a part of its card under a heading, not as a box inside it", async () => {
+    const data = store({ engines: { configured: ["deepl", "azure-eu"], text: ["deepl"], missing: ["azure-eu"], servedBy: null, noFormality: [] } });
+    const ai = sectionHtml(await render(data, "en", "/app/settings?section=ai"), "settings-ai");
+    // The section's card is the only frame.
+    expect(ai.match(/border="base"/g)).toHaveLength(1);
+    expect(ai).toContain('<div id="settings-ai-extra" role="group" aria-labelledby="settings-ai-extra-heading">');
+    expect(ai).toMatch(/<h3 id="settings-ai-extra-heading"[^>]*>More translation services<\/h3>/);
+    expect(ai).toContain(">Allow these too<");
+  });
+
+  it("leaves out a lead that only names what follows: How AI writes, Plan & usage and Tools start with their content", async () => {
+    for (const [key, gone] of [
+      ["style", "How AI addresses your customers"],
+      ["plan", "Your plan and the AI characters"],
+      ["tools", "More pages around your translations"],
+    ] as const) {
+      const html = sectionHtml(await render(store(), "en", `/app/settings?section=${key}`), `settings-${key}`);
+      expect(decoded(html), key).not.toContain(gone);
+      // No lead: the section's heading row has no line under it.
+      expect(html.slice(0, html.indexOf("</h2>") + 200), key).not.toContain('<s-text color="subdued">');
+    }
+  });
+
+  it("says what happens while jobs can't run, never a “background service”", async () => {
+    const smart = {
+      entitled: true,
+      status: { state: "waiting", reason: "WORKER" },
+      zone: "UTC",
+      config: { enabled: true, mode: "daily", timeZone: "UTC", times: [180], weekdays: [1, 2, 3, 4, 5, 6, 7], locales: ["de"] },
+      nextChecks: [],
+    };
+    for (const locale of ["en", "de", "fr", "es"] as const) {
+      // What a reader sees: the words without the tags (a box's background="base" is no text).
+      const words = decoded(await render(store({ smart }), locale, "/app/settings?section=changes")).replace(/<[^>]+>/g, " ");
+      expect(words, locale).not.toMatch(/background|Hintergrund|arrière-plan|segundo plano/i);
+    }
+    expect(decoded(await render(store({ smart }), "en", "/app/settings?section=changes"))).toContain("Translating paused");
   });
 });

@@ -18,7 +18,7 @@ test("the next step first, the store's figure, and a card per country that opens
   const store = region(page, "Your store");
   // The original language is left out of the count.
   await expect(store.getByText("Your store in 2 other languages")).toBeVisible();
-  await expect(store.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts are done and live$/ })).toBeVisible();
+  await expect(store.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts done$/ })).toBeVisible();
   await expect(store.getByText("Where nothing is translated yet, customers see English.")).toBeVisible();
 
   const next = region(page, "Next");
@@ -107,9 +107,9 @@ test("names the content Linguva can't read beside the figure, with the way to al
   await expect(store.getByText(/Not in these figures: 1 content type Linguva can't read yet\./)).toBeVisible();
   await expect(store.locator('.lv-ov-note s-icon[type="lock"]')).toHaveCount(1);
   await expect(store.getByRole("link", { name: "Allow access" })).toHaveAttribute("href", "/app/content/policies");
-  // No markets access: languages only, and the offer to show countries. The intro says what a card opens, as the countries' does.
+  // No markets access: languages only, and the offer to show countries. The intro says how the cards are sorted, as the countries' does.
   await expect(page.getByRole("heading", { name: "Your languages" })).toBeVisible();
-  await expect(page.getByText(/ – the least translated first\. Choose one to see every area with pictures and percentages\.$/)).toBeVisible();
+  await expect(page.getByText(/ – the least translated first\.$/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Allow access to markets" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Countries" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /^Arabic Hidden/ })).toHaveAttribute("href", "/app/languages/ar");
@@ -133,8 +133,8 @@ test("the first translation opens the products' list of the visible language; th
   if (info.project.name === "desktop") {
     const box = async (locator: Locator) => (await locator.boundingBox())!;
     const [nextBox, storeBox] = [await box(next), await box(region(page, "Your store"))];
-    // The top row's two cards end on one line (no gap under the shorter one).
-    expect(Math.abs(nextBox.y + nextBox.height - (storeBox.y + storeBox.height))).toBeLessThanOrEqual(2);
+    // The top row's two cards start on one line, each as tall as its content (the shorter one isn't stretched).
+    expect(Math.abs(nextBox.y - storeBox.y)).toBeLessThanOrEqual(2);
     // Two languages fill their row, right under the two cards (never beside an empty third column).
     const [german, french] = [await box(page.getByRole("link", { name: /^German/ })), await box(page.getByRole("link", { name: /^French Hidden/ }))];
     expect(Math.abs(german.x - nextBox.x)).toBeLessThanOrEqual(2);
@@ -190,8 +190,8 @@ test("a count that never started can be started again, in German, without pollin
   await expect(page.getByText("Stalled Store · Original: Deutsch · verkauft in 28 Ländern")).toBeVisible();
   const next = region(page, "Als Nächstes");
   await expect(next.getByText(/^Das Zählen kommt seit .+ nicht voran$/)).toBeVisible();
-  // No worker runs in these tests (no heartbeat): the card says so instead of "start it again".
-  await expect(next.getByText(/^Linguvas Hintergrunddienst läuft gerade nicht/)).toBeVisible();
+  // No worker runs in these tests (no heartbeat): the card says counting is paused instead of "start it again".
+  await expect(next.getByText(/^Das Zählen pausiert\. Linguva macht von selbst weiter, sobald es kann/)).toBeVisible();
   await expect(next.locator('[data-button][data-variant="primary"]', { hasText: "Neu zählen" })).toHaveCount(1);
   await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   // No bar stuck at 0 anywhere.
@@ -225,8 +225,9 @@ test("a stuck newer count keeps the figures and can be started again from the st
   await openApp(page, "remeasure", "/app");
   const store = region(page, "Your store");
   await expect(store.getByText("Your store in 1 other language")).toBeVisible();
-  // No worker runs in these tests: the note says so (with a worker: "A newer count didn't finish…").
-  await expect(store.getByText(/^Linguva's background service isn't running right now/)).toBeVisible();
+  // No worker runs in these tests: the note says what happens (with a worker: "A newer count didn't finish…"), never a "background service".
+  await expect(store.getByText(/^Counting paused\. Linguva continues by itself as soon as it can/)).toBeVisible();
+  await expect(page.getByText(/background service/)).toHaveCount(0);
   // A secondary action: the next step keeps the page's only primary button.
   await expect(page.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
   await store.getByRole("button", { name: "Count translations again" }).click();

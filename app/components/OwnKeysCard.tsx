@@ -1,6 +1,7 @@
 /**
  * Settings › "Your keys" (the Own key plan), a section of its own: one row per
- * translation service (DeepL, Microsoft Azure, Google Cloud), each saved key
+ * translation service (DeepL, Microsoft Azure, Google Cloud), rows of the
+ * section's card apart by a line, each saved key
  * with its state in words, its last four characters and where it processes;
  * a form to add or replace a key, "Check again", and "Remove" behind a
  * dialog. Off the plan, saved keys can only be removed.
@@ -188,13 +189,15 @@ export function OwnKeysCard({ data, i18n, fetchers, primary, top }: OwnKeysCardP
       {notice}
       {/* The services bill every character: their own cost limit is the only one. */}
       {manage ? <StateLine icon="cash-dollar" tone="caution">{ownKeyCostNote(i18n, data.keys)}</StateLine> : null}
-      {data.access === "plan" && data.keys.length === 0 ? <StateLine icon="info">{t("settings.keys.none")}</StateLine> : null}
-      <ul aria-label={t("settings.keys.heading")} style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 12 }}>
-        {engines.map((engine) => (
+      {/* No key yet: the state badge says so, and DeepL's form is open. */}
+      <ul aria-label={t("settings.keys.heading")} style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {engines.map((engine, index) => (
           <KeyRow
             key={engine}
             i18n={i18n}
             engine={engine}
+            first={index === 0}
+            last={index === engines.length - 1}
             saved={data.keys.find((k) => k.engine === engine) ?? null}
             manage={manage}
             fetcher={fetchers[engine]}
@@ -232,6 +235,9 @@ export function OwnKeysCard({ data, i18n, fetchers, primary, top }: OwnKeysCardP
 interface KeyRowProps {
   i18n: I18n;
   engine: EngineId;
+  /** The rows are the card's, apart by a line: none above the first, no room below the last. */
+  first: boolean;
+  last: boolean;
   saved: OwnKeySummary | null;
   /** On the plan or with a pending change to it: add, replace and check (off the plan: remove only). */
   manage: boolean;
@@ -241,7 +247,7 @@ interface KeyRowProps {
   openAdd: boolean;
 }
 
-function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyRowProps) {
+function KeyRow({ i18n, engine, first, last, saved, manage, fetcher, primary, openAdd }: KeyRowProps) {
   const { t } = i18n;
   const name = ENGINE_NAMES[engine];
   // Rebuilt after every result: a typed key never stays on the page.
@@ -271,10 +277,14 @@ function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyR
       {name}
     </span>
   );
+  // A row of the card: a line above it (not the first), room above and below it, none at the card's edges.
+  const rowBox = { paddingBlockStart: first ? ("none" as const) : ("base" as const), paddingBlockEnd: last ? ("none" as const) : ("base" as const) };
+  const divider = first ? null : <s-divider />;
   if (!saved) {
     return (
       <li>
-        <s-box border="base" borderRadius="large-100" padding="base">
+        {divider}
+        <s-box {...rowBox}>
           <s-stack direction="block" gap="small-200">
             {heading}
             <More summary={t("settings.keys.add", { engine: name })} open={openAdd}>
@@ -305,7 +315,8 @@ function KeyRow({ i18n, engine, saved, manage, fetcher, primary, openAdd }: KeyR
   const modal = keyRemoveModal(engine);
   return (
     <li>
-      <s-box border="base" borderRadius="large-100" padding="base">
+      {divider}
+      <s-box {...rowBox}>
         <s-stack direction="block" gap="small-200">
           {heading}
           <StateLine icon={look.icon} {...(look.tone ? { tone: look.tone } : {})}>

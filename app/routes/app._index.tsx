@@ -107,12 +107,6 @@ const COUNTRY_DETAIL: Record<MissingReason, MessageKey> = {
 const LANGUAGE_SETTINGS = "shopify://admin/settings/languages";
 const MARKETS_SETTINGS = "shopify://admin/settings/markets";
 
-/**
- * The top row's cards (Next, the store) end on one line: the row stretches their sections, and a section
- * that is a grid stretches its card (blockSize="100%" too), so no gap opens under the shorter one.
- */
-const FILL = { display: "grid" } as const;
-
 /** A link a step's button follows: an app page, or Shopify's settings (target _top). */
 interface LinkAction {
   href: string;
@@ -357,15 +351,16 @@ function NextSteps({ data, i18n }: { data: Data; i18n: I18n }) {
   const endedQuietly = !measuring && step?.id === "measure" && (ended === "failed" || ended === "stalled") ? view?.title : null;
   const more = data.attention.map((item) => ({ key: item.id, view: attentionView(item, data, i18n) }));
   return (
-    <section id="overview-next" aria-labelledby="overview-next-heading" style={FILL}>
-      <s-box {...CARD} padding="base" blockSize="100%">
+    <section id="overview-next" aria-labelledby="overview-next-heading">
+      <s-box {...CARD} padding="base">
         <s-stack direction="block" gap="base">
           <h2 id="overview-next-heading" className="lv-h2">
             {t("language.next.heading")}
           </h2>
           {counter.data?.error ? <s-banner tone="critical">{t("overview.scan.startFailed")}</s-banner> : null}
           {view ? (
-            <s-box padding="base" background="subdued" borderRadius="large">
+            // The step in the card itself (no box inside the card): its icon square marks it.
+            <div>
               <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="start">
                 {view.icon}
                 <s-stack direction="block" gap="small-200">
@@ -389,7 +384,7 @@ function NextSteps({ data, i18n }: { data: Data; i18n: I18n }) {
                   ) : null}
                 </s-stack>
               </s-grid>
-            </s-box>
+            </div>
           ) : null}
           {more.length ? (
             <s-query-container>
@@ -397,7 +392,8 @@ function NextSteps({ data, i18n }: { data: Data; i18n: I18n }) {
                 {more.map(({ key, view: item }, i) => (
                   <li key={key}>
                     <s-stack direction="block" gap="base">
-                      {i > 0 ? <s-divider /> : null}
+                      {/* A line between the rows, and between the step and the first of them. */}
+                      {i > 0 || view ? <s-divider /> : null}
                       <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
                         {item.icon}
                         <s-grid gridTemplateColumns="@container (inline-size > 480px) 1fr auto, 1fr" gap="small-200 base" alignItems="center" justifyItems="start">
@@ -519,8 +515,8 @@ function StoreFigure({ data, i18n, counting }: { data: Data; i18n: I18n; countin
   if (share && share.total > 0) {
     const percent = percentLabel(i18n, share.complete, share.total);
     return (
-      <section aria-label={t("overview.store.label")} style={FILL}>
-        <s-box {...CARD} padding="base" blockSize="100%">
+      <section aria-label={t("overview.store.label")}>
+        <s-box {...CARD} padding="base">
           <s-stack direction="block" gap="base">
             <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="large" alignItems="center">
               <CoverageRing
@@ -577,8 +573,8 @@ function StoreFigure({ data, i18n, counting }: { data: Data; i18n: I18n; countin
           ? [t("language.hero.counting"), t("language.hero.countingHelp")]
           : [t("language.hero.notCounted"), data.jobsAvailable ? t("overview.store.notCountedHelp") : t("overview.scan.unavailable")];
   return (
-    <section aria-label={t("overview.store.label")} style={FILL}>
-      <s-box {...CARD} padding="base" blockSize="100%">
+    <section aria-label={t("overview.store.label")}>
+      <s-box {...CARD} padding="base">
         <s-stack direction="block" gap="base">
           <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="large" alignItems="center">
             <CoverageRing counts={emptyCounts()} figure="—" caption={t("language.hero.translated")} label={title} size={112} />
@@ -835,9 +831,9 @@ export default function Overview() {
         ) : null}
 
         {/* The next step first: on a phone its button is on the first screen; on a wide page it leads on the left,
-            as tall as the store's card beside it (FILL). */}
+            beside the store's card, each card as tall as its content (no half-empty card stretched to the other). */}
         <s-query-container>
-          <s-grid gridTemplateColumns="@container (inline-size > 760px) 1fr 1fr, 1fr" gap="base" alignItems="stretch">
+          <s-grid gridTemplateColumns="@container (inline-size > 760px) 1fr 1fr, 1fr" gap="base" alignItems="start">
             <NextSteps data={data} i18n={i18n} />
             <StoreFigure
               data={data}

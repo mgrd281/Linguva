@@ -70,6 +70,8 @@ const DELEGATES: Record<string, string> = {
   webhookAction: "app/.server/webhooks/handle.ts",
   loadResourceList: "app/.server/translation/resource-list.ts",
   runResourceListAction: "app/.server/translation/resource-list.ts",
+  // The old area lists (/app/products and the others) only redirect to the area's list in a language.
+  redirectToAreaList: "app/.server/translation/resource-list.ts",
   resolveEditorContext: "app/.server/translation/resource-editor.ts",
   loadCoverageDashboard: "app/.server/coverage/dashboard.ts",
   loadCoverageItemsPage: "app/.server/coverage/dashboard.ts",

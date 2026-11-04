@@ -211,7 +211,8 @@ export interface OptionSelect {
 
 /**
  * One choice, as a tile (styles in ui.css, .lv-option): its icon in a tinted
- * square, its badges, name and what it means. The current one carries
+ * square, its badges, name and what it means (left out where the name says
+ * it all). The current one carries
  * "Current setting" and the blue frame of the current section's tile. Any
  * other one that can be chosen is one button as a whole (a link when
  * choosing it opens a page, a dialog's opener when it asks first); what
@@ -234,7 +235,7 @@ export function OptionCard({
   icon?: IconName;
   tint?: Tint;
   title: string;
-  body: ReactNode;
+  body?: ReactNode;
   current: boolean;
   currentLabel: string;
   badges?: ReactNode;
@@ -273,7 +274,7 @@ export function OptionCard({
         </span>
         {icon ? null : marks}
       </span>
-      <span className="lv-option__body">{body}</span>
+      {body ? <span className="lv-option__body">{body}</span> : null}
     </>
   );
   let control: ReactNode;

@@ -48,19 +48,20 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
   },
   {
     name: "Products",
-    path: "/app/products?lang=de",
+    path: "/app/languages/de/products",
     check: async (page) => {
-      // It opens as every page does (the list's name as the h1), the languages as Content's chips: visible ones first.
-      await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
-      const chips = page.getByRole("navigation", { name: "Translate into" });
+      // The app's one list of products (the area's): it opens as every page does, the languages as Content's chips, visible ones first.
+      await expect(page.getByRole("heading", { level: 1, name: "Products in German" })).toBeVisible();
+      const chips = page.getByRole("navigation", { name: "Choose a language" });
       await expect(chips.locator('.lv-lang[aria-current="page"]')).toContainText("German");
-      await expect(chips.getByRole("link", { name: "Arabic (hidden)" })).toHaveAttribute("href", "/app/products?lang=ar");
-      await expect(page.getByRole("link", { name: "Product 1 jacket" })).toBeVisible();
-      await expect(page.getByText("Outdated").first()).toBeVisible();
-      // The figure in words, without the web address (as in the editor): name and description.
-      await expect(page.getByText("1 of 2 texts", { exact: true }).first()).toBeAttached();
+      await expect(chips.getByRole("link", { name: "Arabic (hidden)" })).toHaveAttribute("href", "/app/languages/ar/products");
+      await expect(page.getByRole("link", { name: "Open: Product 1 jacket" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 3, name: "Outdated" })).toBeVisible();
+      // Each text by its name and state (the web address is never one), no "1 / 2".
+      await expect(page.locator("s-chip[accessibilitylabel='Description, outdated']").first()).toBeAttached();
       await expect(page.getByText(/^\d+ \/ \d+$/)).toHaveCount(0);
-      await expect(page.getByText("Translate all into German")).toBeVisible();
+      // Translating asks first: the next step's one button.
+      await expect(page.getByRole("region", { name: "Progress: Products", exact: true }).getByRole("button", { name: "Translate" })).toBeVisible();
     },
   },
   {

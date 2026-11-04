@@ -113,8 +113,10 @@ describe("Your translation keys", () => {
   it("on the plan: the lead, the cost note (all three services before any key), DeepL's form open and the page's primary button", () => {
     const html = render(view(), "en", { primary: true });
     const words = text(html);
-    expect(words).toContain("On the Own key plan, Linguva translates only with your own keys.");
-    expect(words).toContain("No key yet. Add at least one to translate with AI.");
+    expect(words).toContain("Linguva translates only with your keys: you pay the service directly, and Linguva counts no AI characters.");
+    // No key yet: the badge says it (and DeepL's form is open), no line saying it again.
+    expect(words).toContain("Needs your key");
+    expect(words).not.toContain("No key yet");
     expect(words).toContain("DeepL, Microsoft Azure, and Google Cloud bill you for every character");
     // Open at first (the disclosure carries its class before the attribute).
     expect(html).toMatch(/<details[^>]*\sopen=""/);
@@ -135,6 +137,13 @@ describe("Your translation keys", () => {
     expect(html).not.toContain('href="/app/plan"');
     expect(words).not.toContain("Change plan");
     expect(text(render(view({ keys: [key("deepl"), key("google")] })))).toContain("DeepL and Google Cloud bill you for every character");
+  });
+
+  it("draws the services as rows of the section's card, apart by a line, not as boxes inside it", () => {
+    const html = render(view({ keys: [key("deepl"), key("azure")] }));
+    // The section's card is the only frame; a line above every row but the first.
+    expect(html.match(/border="base"/g)).toHaveLength(1);
+    expect(html.match(/<li><s-divider><\/s-divider>/g)).toHaveLength(2);
   });
 
   it("with a pending change: the date, the cost note and working add and check forms", () => {

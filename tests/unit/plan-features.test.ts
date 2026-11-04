@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { PAGE_LOOK } from "../../app/components/PageHeader";
 import { featureTableCounts } from "../../app/components/plan/PlanFeatureTable";
 import { APP_LOCALES, translate } from "../../app/i18n/i18n";
 import { everyPlanRows, FEATURE_ICON, FEATURE_TINT, OWN_KEY_ICON, PLAN_CARD_FEATURES, PLAN_FEATURE_ROWS, PLAN_ICON, PLAN_TINT, PRICE_ROW, STATE_ICON, type FeatureKey } from "../../app/lib/plan-features";
@@ -98,6 +99,14 @@ describe("icons", () => {
 describe("tints", () => {
   it("draws every plan's sign in the Plan page's colour, Settings' 'Plan & usage' tile", () => {
     expect(PLAN_TINT).toBe("rose");
+    expect(PAGE_LOOK.plan.tint).toBe(PLAN_TINT);
+  });
+
+  it("keeps gauge for the AI characters only: the Plan page's own sign is another icon in its colour", () => {
+    expect(FEATURE_ICON.chars).toBe("gauge");
+    expect(PAGE_LOOK.plan.icon).not.toBe("gauge");
+    expect(PUBLIC_ICONS.has(PAGE_LOOK.plan.icon)).toBe(true);
+    expect(Object.values(FEATURE_ICON)).not.toContain(PAGE_LOOK.plan.icon);
   });
 
   it("gives every feature's square the colour Settings gives the same icon, grey where Settings has none", () => {
@@ -115,8 +124,9 @@ describe("tints", () => {
       globe: "teal",
       "data-table": "slate",
       language: "blue",
-      gauge: "rose",
     };
-    for (const [key, icon] of Object.entries(FEATURE_ICON) as Array<[FeatureKey, string]>) expect(FEATURE_TINT[key], key).toBe(SETTINGS[icon] ?? "grey");
+    // The AI characters (gauge) are the Plan page's own figure: its colour, Settings' "Plan & usage" tile's.
+    const expected = (key: FeatureKey, icon: string) => (key === "chars" ? PLAN_TINT : (SETTINGS[icon] ?? "grey"));
+    for (const [key, icon] of Object.entries(FEATURE_ICON) as Array<[FeatureKey, string]>) expect(FEATURE_TINT[key], key).toBe(expected(key, icon));
   });
 });

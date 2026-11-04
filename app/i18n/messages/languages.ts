@@ -3,7 +3,7 @@ import type { Message, Translation } from "./define";
 
 export const en = {
   "languages.manage": "Manage in Shopify",
-  "languages.subtitle": "Your store's languages: how far each one is, and whether the AI translates into it.",
+  "languages.subtitle": "Your store's languages, and whether the AI translates into them.",
   "languages.primary.detail": "Main language · your originals",
   "languages.limit.heading": "Language limit reached",
   "languages.limit.body": "Shopify allows up to {max} languages per store. Remove a language before adding another.",
@@ -19,8 +19,6 @@ export const en = {
   "languages.ai.none": "Not set up",
   "languages.usage.heading": "Usage",
   "languages.usage.count": "{enabled} of {max} languages in your store, {published} visible to customers.",
-  "languages.usage.source":
-    "Shopify is the source of truth for which languages are enabled and published. This list is read from your store each time you open it.",
   "languages.ai.with": "with {engine}",
   "languages.ai.needsConsent": "Available with {engine} once you allow it in Settings",
   "languages.ai.unsupportedWith": "Not available with {engine}: translate in the editor or import a CSV",
@@ -30,7 +28,7 @@ export const en = {
 
 export const de: Translation<typeof en> = {
   "languages.manage": "In Shopify verwalten",
-  "languages.subtitle": "Die Sprachen deines Shops: wie weit jede ist und ob die KI in sie übersetzt.",
+  "languages.subtitle": "Die Sprachen deines Shops und ob die KI in sie übersetzt.",
   "languages.primary.detail": "Hauptsprache · deine Originale",
   "languages.limit.heading": "Sprachlimit erreicht",
   "languages.limit.body": "Shopify erlaubt bis zu {max} Sprachen pro Shop. Entferne eine Sprache, bevor du eine weitere hinzufügst.",
@@ -39,15 +37,13 @@ export const de: Translation<typeof en> = {
   "languages.rtl.short": "von rechts nach links geschrieben",
   "languages.consent.heading": "Einige Sprachen warten auf deine Erlaubnis",
   "languages.consent.body": "{languages} übersetzt nur ein Übersetzungsdienst, den dein Shop noch nicht erlaubt hat.",
-  "languages.ai.label": "KI‑Übersetzung",
+  "languages.ai.label": "KI\u2011Übersetzung",
   "languages.ai.supported": "Verfügbar",
   "languages.ai.unsupported": "Mit DeepL nicht verfügbar: im Editor übersetzen oder eine CSV importieren",
   "languages.ai.unknown": "Gerade nicht prüfbar",
   "languages.ai.none": "Nicht eingerichtet",
   "languages.usage.heading": "Nutzung",
   "languages.usage.count": "{enabled} von {max} Sprachen in deinem Shop, {published} für Kunden sichtbar.",
-  "languages.usage.source":
-    "Shopify legt fest, welche Sprachen aktiviert und veröffentlicht sind. Diese Liste wird bei jedem Öffnen aus deinem Shop gelesen.",
   "languages.ai.with": "mit {engine}",
   "languages.ai.needsConsent": "Mit {engine} verfügbar, sobald du es in den Einstellungen erlaubst",
   "languages.ai.unsupportedWith": "Mit {engine} nicht verfügbar: im Editor übersetzen oder eine CSV importieren",
@@ -57,7 +53,7 @@ export const de: Translation<typeof en> = {
 
 export const fr: Translation<typeof en> = {
   "languages.manage": "Gérer dans Shopify",
-  "languages.subtitle": "Les langues de votre boutique : l'avancement de chacune et si l'IA traduit vers elle.",
+  "languages.subtitle": "Les langues de votre boutique, et si l'IA traduit vers elles.",
   "languages.primary.detail": "Langue principale · vos originaux",
   "languages.limit.heading": "Limite de langues atteinte",
   "languages.limit.body": "Shopify autorise jusqu'à {max} langues par boutique. Supprimez une langue avant d'en ajouter une autre.",
@@ -73,8 +69,6 @@ export const fr: Translation<typeof en> = {
   "languages.ai.none": "Non configurée",
   "languages.usage.heading": "Utilisation",
   "languages.usage.count": "Langues de votre boutique : {enabled} sur {max} (visibles par les clients : {published}).",
-  "languages.usage.source":
-    "Shopify détermine quelles langues sont activées et publiées. Cette liste est lue depuis votre boutique chaque fois que vous l'ouvrez.",
   "languages.ai.with": "avec {engine}",
   "languages.ai.needsConsent": "Disponible avec {engine} dès que vous l'autorisez dans les paramètres",
   "languages.ai.unsupportedWith": "Indisponible avec {engine} : traduisez dans l'éditeur ou importez un CSV",
@@ -84,7 +78,7 @@ export const fr: Translation<typeof en> = {
 
 export const es: Translation<typeof en> = {
   "languages.manage": "Administrar en Shopify",
-  "languages.subtitle": "Los idiomas de tu tienda: cómo va cada uno y si la IA traduce a él.",
+  "languages.subtitle": "Los idiomas de tu tienda y si la IA traduce a ellos.",
   "languages.primary.detail": "Idioma principal · tus originales",
   "languages.limit.heading": "Límite de idiomas alcanzado",
   "languages.limit.body": "Shopify permite hasta {max} idiomas por tienda. Elimina un idioma antes de agregar otro.",
@@ -100,8 +94,6 @@ export const es: Translation<typeof en> = {
   "languages.ai.none": "Sin configurar",
   "languages.usage.heading": "Uso",
   "languages.usage.count": "Idiomas de tu tienda: {enabled} de {max} (visibles para los clientes: {published}).",
-  "languages.usage.source":
-    "Shopify determina qué idiomas están activados y publicados. Esta lista se lee de tu tienda cada vez que la abres.",
   "languages.ai.with": "con {engine}",
   "languages.ai.needsConsent": "Disponible con {engine} en cuanto lo permitas en Configuración",
   "languages.ai.unsupportedWith": "No disponible con {engine}: traduce en el editor o importa un CSV",

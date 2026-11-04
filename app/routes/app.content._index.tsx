@@ -6,8 +6,9 @@
  * at once; what isn't in the store or can't be read is folded away.
  *
  * The page's only buttons: "Allow access" (the primary one), counting when
- * the language needs it, "Load again" when Shopify didn't answer, and
- * "Show" beside the select of a store with many languages. It reloads every
+ * the language needs it, and "Load again" when Shopify didn't answer (a
+ * store with many languages picks one in a select that opens it at once:
+ * its "Show" is there only without scripts). It reloads every
  * few seconds only while a count reads the language; the areas' pictures
  * load after the page (the language page's previews). Its links into a
  * language's page and lists say where they come from (`?from=content`), so

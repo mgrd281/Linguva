@@ -33,6 +33,7 @@ import { textBoxBlockSize } from "../lib/text-box-height";
 import { MARK_COLOUR, STATE_COLOURS, TRACK_COLOUR } from "./Coverage";
 import type { IconName } from "../lib/icons";
 import { Flag } from "./Flag";
+import { focusSoon } from "./focus";
 import { HtmlPreview } from "./HtmlPreview";
 import { PLAIN_LIST } from "./LanguageLayout";
 import { SeoCounter } from "./SeoPanel";
@@ -323,18 +324,8 @@ function TranslationBox({ children, name, i18n, lang, rtl }: { children: ReactNo
   );
 }
 
-/** Focuses a Polaris control once it can take focus (it may not in the first frame). */
-export function focusSoon(find: () => HTMLElement | null) {
-  let tries = 0;
-  const attempt = () => {
-    const el = find();
-    el?.focus();
-    // A Polaris host stands for its inner control: the document's active element is the host.
-    const done = el !== null && (document.activeElement === el || el.contains(document.activeElement));
-    if (!done && tries++ < 30) requestAnimationFrame(attempt);
-  };
-  requestAnimationFrame(attempt);
-}
+/** Focuses a Polaris control once it can take focus (shared with the search fields: ./focus). */
+export { focusSoon };
 
 /** Whether a control is on screen: a Polaris host draws no box itself (display: contents), its inner control does. */
 function shown(el: HTMLElement): boolean {

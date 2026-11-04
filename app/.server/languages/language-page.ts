@@ -846,6 +846,8 @@ export async function loadCategoryItems(
   return {
     language: languageOf(language),
     primary: primaryOf(locales),
+    /** The store's additional languages, for the list's language switch (each opens this area in it). */
+    languages: locales.locales.filter((l) => !l.primary).map((l) => ({ locale: l.locale, name: l.name, published: l.published })),
     ...marketsFor(markets, locales, locale),
     measured,
     measurement,

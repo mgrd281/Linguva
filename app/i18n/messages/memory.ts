@@ -4,7 +4,7 @@ import type { Message, Translation } from "./define";
 export const en = {
   "memory.delete.heading": "Delete this memory entry?",
   "memory.delete.body": "It won't be reused for new translations. Published translations in your store don't change. This can't be undone.",
-  "memory.intro": "Every translation you publish is saved sentence by sentence and reused for the same text without AI, at no cost.",
+  "memory.intro": "Linguva reuses every translation you publish for the same text, without AI.",
   "memory.figure.entries": { one: "entry", other: "entries" },
   "memory.figure.reused": { one: "reuse", other: "reuses" },
   "memory.search.placeholder": "Original or translation",
@@ -29,7 +29,7 @@ export const en = {
 export const de: Translation<typeof en> = {
   "memory.delete.heading": "Diesen Speichereintrag löschen?",
   "memory.delete.body": "Er wird für neue Übersetzungen nicht mehr verwendet. Veröffentlichte Übersetzungen in deinem Shop ändern sich nicht. Das kann nicht rückgängig gemacht werden.",
-  "memory.intro": "Jede veröffentlichte Übersetzung wird Satz für Satz gespeichert und für gleichen Text ohne KI kostenlos wiederverwendet.",
+  "memory.intro": "Linguva verwendet jede veröffentlichte Übersetzung für gleichen Text wieder, ohne KI.",
   "memory.figure.entries": { one: "Eintrag", other: "Einträge" },
   "memory.figure.reused": { one: "Wiederverwendung", other: "Wiederverwendungen" },
   "memory.search.placeholder": "Original oder Übersetzung",
@@ -54,7 +54,7 @@ export const de: Translation<typeof en> = {
 export const fr: Translation<typeof en> = {
   "memory.delete.heading": "Supprimer cette entrée de la mémoire ?",
   "memory.delete.body": "Elle ne sera plus réutilisée pour les nouvelles traductions. Les traductions publiées dans votre boutique ne changent pas. Cette action est irréversible.",
-  "memory.intro": "Chaque traduction publiée est mémorisée phrase par phrase et réutilisée sans IA pour un texte identique, gratuitement.",
+  "memory.intro": "Linguva réutilise chaque traduction publiée pour un texte identique, sans IA.",
   "memory.figure.entries": { one: "entrée", other: "entrées" },
   "memory.figure.reused": { one: "réutilisation", other: "réutilisations" },
   "memory.search.placeholder": "Original ou traduction",
@@ -79,7 +79,7 @@ export const fr: Translation<typeof en> = {
 export const es: Translation<typeof en> = {
   "memory.delete.heading": "¿Eliminar esta entrada de la memoria?",
   "memory.delete.body": "Ya no se reutilizará en nuevas traducciones. Las traducciones publicadas en tu tienda no cambian. Esta acción no se puede deshacer.",
-  "memory.intro": "Cada traducción publicada se guarda frase por frase y se reutiliza sin IA para el mismo texto, gratis.",
+  "memory.intro": "Linguva reutiliza cada traducción publicada para el mismo texto, sin IA.",
   "memory.figure.entries": { one: "entrada", other: "entradas" },
   "memory.figure.reused": { one: "reutilización", other: "reutilizaciones" },
   "memory.search.placeholder": "Original o traducción",

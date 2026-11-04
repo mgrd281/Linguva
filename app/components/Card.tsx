@@ -12,14 +12,10 @@
 import { useId, type ReactNode } from "react";
 import { CARD } from "./LanguageLayout";
 
-/** A grid item that is a grid itself, so its card fills the row's height beside a taller one. */
-const FILL = { display: "grid" } as const;
-
 export function Card({
   heading,
   labelledBy,
   padding = "base",
-  fill = false,
   children,
 }: {
   /** The card's h2; it names the section too. */
@@ -28,8 +24,6 @@ export function Card({
   labelledBy?: string;
   /** "none": a table or a fold that runs to the card's edges; the heading keeps its room. */
   padding?: "base" | "none";
-  /** Beside other cards in a stretched grid row: as high as the row. */
-  fill?: boolean;
   children?: ReactNode;
 }) {
   const id = useId();
@@ -39,17 +33,16 @@ export function Card({
       {heading}
     </h2>
   ) : null;
-  const size = fill ? { blockSize: "100%" as const } : {};
   return (
-    <section {...(named ? { "aria-labelledby": named } : {})} {...(fill ? { style: FILL } : {})}>
+    <section {...(named ? { "aria-labelledby": named } : {})}>
       {padding === "none" ? (
         // Clipped to the card's corners: a table's rows run to its edges.
-        <s-box {...CARD} padding="none" overflow="hidden" {...size}>
+        <s-box {...CARD} padding="none" overflow="hidden">
           {title ? <s-box padding="base base small-200">{title}</s-box> : null}
           {children}
         </s-box>
       ) : (
-        <s-box {...CARD} padding="base" {...size}>
+        <s-box {...CARD} padding="base">
           {title ? (
             <s-stack direction="block" gap="base">
               {title}

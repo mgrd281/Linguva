@@ -33,9 +33,10 @@ const card = (page: Page, label: string) => page.locator(`s-section[accessibilit
 const row = (page: Page, text: string) => page.locator("s-section[accessibilitylabel] li").filter({ has: page.getByRole("button", { name: `Approve: ${text}`, exact: true }) });
 /** The last number in an element's own text ("German 25", "Approve all 12"): Polaris hosts, whose text is theirs (a role finds the control inside). */
 const numberIn = async (locator: Locator) => Number(((await locator.textContent()) ?? "").match(/\d+/g)!.at(-1));
-const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Languages" }).locator("s-clickable", { hasText: name });
-/** A chip as shown (a wide card wraps its chips; a phone swipes through one row: the other copy is hidden). */
-const chip = (page: Page, name: string) => page.locator("s-clickable-chip", { hasText: name }).filter({ visible: true });
+/** A language's chip in the shared picker (Content's .lv-lang chips): the link to that language. */
+const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Languages" }).locator("a.lv-lang", { hasText: name });
+/** An area's or "With notes" pill (an area list's .lv-filter) as shown (a wide card wraps them; a phone swipes through one row: the other copy is hidden). */
+const chip = (page: Page, name: string) => page.locator(".lv-filter", { hasText: name }).filter({ visible: true });
 /**
  * The control card's strip with the page's count and its two actions. While it is scrolled out of view, a copy
  * floats at the window's foot ([data-review-bar]), so these look in the strip itself.
@@ -54,7 +55,7 @@ const texts = (page: Page) => page.locator("s-section[accessibilitylabel] li");
 test.describe("Review", () => {
   test("approving one text shows the result in its place and lowers every count by one @responsive", async ({ page }) => {
     await open(page);
-    const all = languages(page).locator('[aria-current="true"]');
+    const all = languages(page).locator('[aria-current="page"]');
     const german = languages(page).getByRole("link", { name: /^German \d+$/ });
     const products = areas(page).getByRole("link", { name: /^Products \d+$/ });
     const before = {
@@ -243,7 +244,7 @@ test.describe("Review", () => {
     await open(page, "/app/review?lang=de");
     const chips = areas(page);
     const allAreas = await numberIn(chips.locator('[aria-current="true"]'));
-    const others = await chips.locator("s-clickable-chip").allTextContents();
+    const others = await chips.locator("a.lv-filter").allTextContents();
     expect(others.reduce((sum, text) => sum + Number(text.match(/\d+/g)!.at(-1)), 0)).toBe(allAreas);
 
     const count = await numberIn(chip(page, "Image descriptions"));
@@ -304,7 +305,7 @@ test.describe("Review", () => {
     // Another selection is drawn afresh: this page's banner and outcomes stay behind.
     await languages(page).getByRole("link", { name: /^German \d+$/ }).click();
     await expect(page).toHaveURL(/lang=de/);
-    await expect(languages(page).locator('[aria-current="true"]')).toContainText("German");
+    await expect(languages(page).locator('[aria-current="page"]')).toContainText("German");
     await page.waitForTimeout(500);
     await expect(page.locator('s-banner[heading="1 approved · 1 not published"]')).toHaveCount(0);
     await expect(page.getByText("The marked texts say why.")).toHaveCount(0);
@@ -364,7 +365,7 @@ test.describe("Review", () => {
 
   test("Arabic, still hidden from customers: marked, right to left, and approved as hidden @responsive", async ({ page }) => {
     await open(page, "/app/review?lang=ar");
-    const tab = languages(page).locator('[aria-current="true"]');
+    const tab = languages(page).locator('[aria-current="page"]');
     await expect(tab).toContainText("Arabic");
     await expect(tab).toContainText("hidden");
     const arabic = card(page, "Product 5 jacket, Arabic");
@@ -411,17 +412,20 @@ test.describe("Review", () => {
     const title = page.getByRole("heading", { level: 2, name: "All reviewed" });
     await expect(title).toBeVisible();
     // Imports never publish by themselves: they wait here in every publishing mode.
-    await expect(page.getByText("No translation is waiting for you right now. Imports and AI translations that aren't published automatically wait here until you approve them.")).toBeVisible();
+    await expect(page.getByText("Imports and AI translations that aren't published automatically wait here until you approve them.", { exact: true })).toBeVisible();
     await expect(page.locator('[data-button][data-variant="primary"]')).toHaveText("Continue translating German");
     // The round mark beside the title, not centred on the four lines a phone wraps the words into.
     const mark = (await page.locator(".lv-review-done .lv-status__mark").boundingBox())!;
     const heading = (await title.boundingBox())!;
     expect(Math.abs(mark.y + mark.height / 2 - (heading.y + heading.height / 2))).toBeLessThanOrEqual(4);
 
-    // The language page's word for its figure ("done"), and rows always full: two tiles share the row, a phone stacks them.
+    // Links to the languages without their figures (a language's share is on its own page, the Overview and
+    // Coverage), and rows always full: two tiles share the row, a phone stacks them.
     const tiles = page.getByRole("region", { name: "Your languages" }).getByRole("link");
     await expect(tiles).toHaveCount(2);
-    await expect(tiles.first()).toContainText("0% done");
+    await expect(tiles.first()).toContainText("German");
+    await expect(tiles.first()).not.toContainText("%");
+    await expect(page.getByRole("region", { name: "Your languages" }).locator('[role="progressbar"]')).toHaveCount(0);
     const list = (await page.locator("ul.lv-links").boundingBox())!;
     const last = (await page.locator(".lv-links__item").last().boundingBox())!;
     expect(Math.abs(last.x + last.width - (list.x + list.width))).toBeLessThanOrEqual(1);
@@ -520,7 +524,7 @@ test.describe("Review", () => {
     await expect(page.locator("#review-done-heading")).toBeVisible();
     // Texts of other jobs and imports still wait: the job's page says nothing about them.
     await expect(page.getByRole("heading", { name: "All reviewed" })).toHaveCount(0);
-    await expect(page.getByText(/Nothing else is waiting|No translation is waiting/)).toHaveCount(0);
+    await expect(page.getByText(/Nothing else is waiting|Imports and AI translations that aren't published automatically/)).toHaveCount(0);
     await page.locator("[data-button][href]", { hasText: "Show all" }).click();
     await expect(page).not.toHaveURL(/job=/);
     await expect(page.locator("s-section[accessibilitylabel]").first()).toBeVisible();
@@ -553,7 +557,7 @@ test.describe("Review", () => {
     );
     await open(page, "/app/review?lang=fr");
     // The chosen tab's count: every French text waiting.
-    const total = await numberIn(languages(page).locator('[aria-current="true"]'));
+    const total = await numberIn(languages(page).locator('[aria-current="page"]'));
     expect(total).toBeGreaterThan(50);
     await expect(summary(page)).toHaveText(`50 translations on this page · 1–50 of ${total}`);
     await expect(page.getByText(`1–50 of ${total}`, { exact: true })).toBeVisible();

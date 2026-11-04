@@ -27,7 +27,7 @@ async function settle(page: Page) {
 }
 
 const DESKTOP = [
-  // The products as every way into them shows them: the area's list (the per-type list is the fallback before counting).
+  // The products as every way into them shows them: the area's list, the app's one list of them.
   { file: "1-products.png", path: "/app/languages/de/products" },
   { file: "2-editor.png", path: "/app/products/1?lang=de" },
   { file: "3-outdated.png", path: "/app/products/2?lang=de" },

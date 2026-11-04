@@ -81,14 +81,15 @@ for (const { locale, nav } of [
 }
 
 test("navigation, product list and editor are German; merchant content stays as it is", async ({ page }) => {
-  await openApp(page, "full", "/app/products?lang=fr", { locale: "de" });
+  await openApp(page, "full", "/app/languages/fr/products", { locale: "de" });
   // Five entries; every list opens from Inhalte, the tools from Einstellungen.
   await expect(page.locator("s-app-nav s-link")).toHaveText(["Übersicht", "Inhalte", "Prüfen", "Aufträge", "Einstellungen"]);
-  await expect(page.getByText("Product 1 jacket").first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Produkte auf Französisch" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Öffnen: Product 1 jacket" })).toBeVisible();
   // Language names in German, not Shopify's English names.
   await expect(page.locator('.lv-lang[aria-current="page"]', { hasText: "Französisch" })).toBeVisible();
-  await expect(page.locator("[data-button]", { hasText: "Alle in Französisch übersetzen" })).toBeVisible();
-  await page.getByText("Product 1 jacket").first().click();
+  await expect(page.locator("[data-button]", { hasText: /^Übersetzen$/ })).toBeVisible();
+  await page.getByRole("link", { name: "Öffnen: Product 1 jacket" }).click();
   await expect(page).toHaveURL(/\/app\/products\/1\?lang=fr/);
   // The interface stays German after moving inside the app (no `locale` on in-app links).
   await expect(page.locator("s-app-nav s-link", { hasText: "Übersicht" })).toHaveCount(1);
@@ -97,7 +98,7 @@ test("navigation, product list and editor are German; merchant content stays as 
 
 test("the app's target language never changes the interface language", async ({ page }) => {
   // ?lang=de is the language to translate into; the admin user is English.
-  await openApp(page, "full", "/app/products?lang=de");
+  await openApp(page, "full", "/app/content?lang=de");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator("s-app-nav s-link", { hasText: "Content" })).toHaveCount(1);
 });

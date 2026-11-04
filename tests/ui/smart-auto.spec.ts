@@ -3,8 +3,9 @@
  * three ways changes are translated on Settings (with real values, its lock
  * on lower plans, and paused after a move to a plan without it), switching
  * between the three ways with the server's explicit flags, the smart page
- * (summary, recent checks and exclusions first, the schedule picker with
- * live next checks, publishing in its dialog, budgets), setting it up and
+ * (summary, recent checks and exclusions first, how often, the texts and
+ * outdated translations as Settings' option cards, the next checks live,
+ * publishing in its dialog, budgets), setting it up and
  * turning it on in one step, the preview without Business and the read-only
  * page after a downgrade, pause and resume, Check now, forged requests,
  * German texts, accessibility and the phone layout.
@@ -155,7 +156,7 @@ test("switching between the three ways: one step each, the other way turned off,
   await expect(basic.getByText("Replaces the smart schedule.")).toBeVisible();
   for (const name of ["German", "French"]) await expect(basic.getByRole("checkbox", { name, exact: true })).toBeChecked();
   await basic.getByRole("button", { name: "Turn on", exact: true }).click();
-  await expectToast(page, /translated about a minute later/);
+  await expectToast(page, "Automatic translation is on.");
   await isCurrent(page, card, "Shortly after saving");
   await expect(page.locator("#settings-changes-basic")).toBeFocused();
   await expect(option(page, card, "On a schedule").getByText("Replaces translating shortly after saving.")).toBeVisible();
@@ -211,7 +212,8 @@ test("after a move to a plan without the schedule: paused with the plan named, i
   const card = page.locator("#settings-changes");
   await expect(card.locator("s-badge").first()).toHaveText("Paused");
   await expect(card.locator("s-badge").nth(1)).toHaveText("Business");
-  await expect(card.getByText("Your plan no longer includes the smart schedule. Since then, changes aren't translated automatically. Your settings stay saved.")).toBeVisible();
+  // The notice's heading says it isn't in the plan; its line says what that means, once.
+  await expect(card.getByText("Changes aren't translated automatically anymore. Your settings stay saved.")).toBeVisible();
   await expect(card.getByRole("link", { name: "View schedule" })).toHaveAttribute("href", "/app/settings/automatic");
   // The status row says so too: the one thing that needs the merchant.
   await expect(page.locator("#settings-status")).toHaveText(/^Smart schedule is paused\s*Not in your plan$/, { useInnerText: true });
@@ -220,21 +222,24 @@ test("after a move to a plan without the schedule: paused with the plan named, i
   await openApp(page, "smartDowngraded", "/app/settings/automatic");
   const status = page.locator("#smart-status");
   await expect(status.locator("s-badge").first()).toHaveText("Paused");
-  await expect(status.getByText("Your schedule is paused because your plan no longer includes it. Your settings stay saved and apply again once you move to Business.")).toBeVisible();
-  await expect(page.getByRole("radio", { name: /^Shortly after each change/ })).toBeDisabled();
+  // The badge says "Paused"; the notice says what is kept.
+  await expect(status.getByText("Your settings stay saved and apply again once you move to Business.")).toBeVisible();
+  // The choices are shown, the saved one marked, and none can be chosen.
+  await expect(page.locator("#smart-schedule .lv-option--current")).toHaveCount(1);
+  await expect(page.locator("#smart-schedule, #smart-scope").locator(".lv-option__choose")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Check now" })).toHaveCount(0);
   await expect(page.locator("ui-save-bar")).toHaveCount(0);
   await expectAccessible(page);
 
   await openApp(page, "smartDowngraded", "/app/settings");
   await card.getByRole("button", { name: "Translate automatically instead" }).click();
-  await expectToast(page, /translated about a minute later/);
+  await expectToast(page, "Automatic translation is on.");
   await isCurrent(page, "#settings-changes", "Shortly after saving");
   await expect(languagesPanel(page).getByRole("checkbox", { name: "German", exact: true })).toBeChecked();
   // The two never run together: the schedule was turned off (and is kept).
   await openApp(page, "smartDowngraded", "/app/settings/automatic");
   await expect(page.locator("#smart-status s-badge").first()).toHaveText("Off");
-  await expect(page.locator("#smart-status").getByText("Your plan doesn't include the smart schedule. Your settings stay saved and apply again once you move to Business.")).toBeVisible();
+  await expect(page.locator("#smart-status").getByText("Your settings stay saved and apply again once you move to Business.")).toBeVisible();
 });
 
 test("the smart page: summary, recent checks and exclusions first, then the schedule and budgets @responsive", async ({ page }) => {
@@ -248,9 +253,10 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Every day at 11:00\sPM$/);
   // The next check as a day and a time; the zone is the store's own, so it isn't repeated.
   await expect(status.getByText(/^Next check: (today|tomorrow), 11:00\s?PM$/)).toBeVisible();
-  await expect(status.getByText("3 changes in 12 fields")).toBeVisible();
+  // Texts, never "fields".
+  await expect(status.getByText("3 changes in 12 texts")).toBeVisible();
   // Nothing being translated: no line for it.
-  await expect(status.getByText("Translating now")).toHaveCount(0);
+  await expect(status.getByText("Translating", { exact: true })).toHaveCount(0);
   // The actions with their icons; Turn off is the quiet red one, and one line says how it differs from Pause.
   await expect(status.locator('[data-button][data-tone="critical"]')).toHaveText("Turn off");
   await expect(status.locator('[data-button][data-tone="critical"]')).toHaveAttribute("data-variant", "tertiary");
@@ -258,7 +264,7 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   const activity = page.locator("#smart-activity");
   // A check's figures, each with its name in the app's words; sent and reused, no estimate beside them.
   const check = activity.getByRole("listitem").first();
-  await expect(check).toContainText(/Checked\s*64\s*Needed translation\s*3\s*\(12 fields\)\s*AI characters\s*1,200\s*From translation memory\s*640/, { useInnerText: true });
+  await expect(check).toContainText(/Checked\s*64\s*Needed translation\s*3\s*\(12 texts\)\s*AI characters\s*1,200\s*From translation memory\s*640/, { useInnerText: true });
   await expect(check).not.toContainText("1,840");
   await expect(check.locator(".lv-figure-row")).toHaveText(["64", "3", "1,200", "640"]);
   await expect(activity.getByText("On schedule").first()).toBeVisible();
@@ -268,11 +274,13 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   // Two checks: no fold for earlier ones.
   await expect(activity.locator("details")).toHaveCount(0);
   await expect(page.locator("#smart-exclusions").getByText("No exclusions")).toBeVisible();
-  // The schedule: "How often" as five tiles (native radios), the time, the next three checks in its zone.
-  const often = page.getByRole("group", { name: "How often" });
-  await expect(often.getByRole("radio")).toHaveCount(5);
-  await expect(page.getByRole("radio", { name: /^Every day/ })).toBeChecked();
-  await expect(often.getByRole("radio", { name: "Only on demand", exact: true })).toHaveAccessibleDescription("When you press “Check now”");
+  // The schedule: "How often" as five of Settings' option cards (the saved one current, every other one a button with
+  // its line), the time, the next three checks in its zone.
+  const often = page.getByRole("group", { name: "How often", exact: true });
+  await expect(often.locator(".lv-option")).toHaveCount(5);
+  await isCurrent(page, "#smart-schedule", "Every day");
+  await expect(often.locator(".lv-option__choose")).toHaveCount(4);
+  await expect(option(page, "#smart-schedule", "Only on demand").getByRole("button")).toContainText("When you press “Check now”");
   await expect(page.getByRole("combobox", { name: "Time", exact: true })).toHaveValue("23:00");
   const schedule = page.locator("#smart-schedule");
   // The chosen way's title leads its panel; the next checks are named like the Time field and don't repeat the store's own zone.
@@ -288,9 +296,9 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   await expect(page.getByRole("combobox", { name: "Time zone" })).toHaveCount(0);
   await schedule.getByRole("button", { name: "Change: Time zone" }).click();
   await expect(page.getByRole("combobox", { name: "Time zone" })).toHaveValue("Europe/Berlin");
-  // Budgets with the saved value written out, and each one's meter.
+  // Budgets with each one's meter (the saved value is the field's own, not written out again under it).
   const budgets = page.locator("#smart-budgets");
-  await expect(budgets.getByText("Saved: 50,000 characters")).toBeVisible();
+  await expect(budgets.getByText(/^Saved:/)).toHaveCount(0);
   await expect(budgets.getByRole("progressbar", { name: "Used today: 0 of 50,000" })).toBeVisible();
   await expect(budgets.getByRole("progressbar", { name: /^Used in \w+ \d{4}: 0 of 1,000,000$/ })).toBeVisible();
   await expectAccessible(page);
@@ -321,7 +329,7 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   const status = page.locator("#smart-status");
   await expect(status.locator("s-badge").first()).toHaveText("Off");
   await expect(status.getByRole("heading", { level: 2 })).toHaveText(/Not set up yet$/);
-  await expect(status.getByText("The suggestions below suit most stores. Adjust them, or turn the schedule on right away.")).toBeVisible();
+  await expect(status.getByText("The suggestions below suit most stores.")).toBeVisible();
   // The suggestion itself, in the summary: what "Turn on with these settings" would use, and the first check's characters.
   await expect(status.getByText(/^Every day at 3:00\sAM$/)).toBeVisible();
   await expect(status.getByText("Products, Collections, Pages, Blog posts, and Blogs")).toBeVisible();
@@ -344,7 +352,10 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   for (const name of ["French", "German", "Spanish"]) await expect(page.getByRole("checkbox", { name, exact: true })).toBeChecked();
   await isCurrent(page, "#smart-publishing", "Review first");
 
-  await page.getByRole("radio", { name: /^On chosen weekdays/ }).check();
+  await choose(page, "#smart-schedule", "On chosen weekdays");
+  // The chosen card is now the current one, and the focus is on it.
+  await isCurrent(page, "#smart-schedule", "On chosen weekdays");
+  await expect(page.locator("#smart-mode-weekly")).toBeFocused();
   // The days as one row of seven toggles, each named by its whole day.
   await expect(page.getByRole("group", { name: "Days", exact: true }).getByRole("checkbox")).toHaveCount(7);
   for (const day of ["Tuesday", "Wednesday", "Friday", "Saturday", "Sunday"]) await page.getByRole("checkbox", { name: day, exact: true }).uncheck();
@@ -365,7 +376,7 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await expect(status.locator("s-badge").first()).toHaveText("On");
   await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(false);
   await page.reload();
-  await expect(page.getByRole("radio", { name: /^On chosen weekdays/ })).toBeChecked();
+  await isCurrent(page, "#smart-schedule", "On chosen weekdays");
   await expect(page.getByRole("checkbox", { name: "Tuesday", exact: true })).not.toBeChecked();
 
   // Set up: the save bar only saves.
@@ -379,7 +390,7 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
 test("a refused save is shown at the top and focused; Discard brings back what is saved", async ({ page }) => {
   await openApp(page, "businessEdit", "/app/settings/automatic");
   const schedule = page.locator("#smart-schedule");
-  await page.getByRole("radio", { name: /^Several times a day/ }).check();
+  await choose(page, "#smart-schedule", "Several times a day");
   // Only the times in use: one, the time the schedule had, and a way to add more (as far from it as it can be).
   await expect(page.getByRole("combobox", { name: /^Check \d$/ })).toHaveCount(1);
   await expect(page.getByRole("combobox", { name: "Check 1", exact: true })).toHaveValue("09:00");
@@ -400,12 +411,11 @@ test("a refused save is shown at the top and focused; Discard brings back what i
   await schedule.getByRole("button", { name: "Remove check 2" }).click();
   await expect(page.getByRole("list", { name: "Next checks" }).getByRole("listitem")).toHaveCount(3);
   await clickSaveBarButton(page, "smart-auto-save-bar", 1);
-  await expect(page.getByRole("radio", { name: /^On chosen weekdays/ })).toBeChecked();
+  await isCurrent(page, "#smart-schedule", "On chosen weekdays");
 });
 
 test("automatic publishing on the smart page asks first in the same dialog, and the server still needs the confirmation", async ({ page }) => {
   await openApp(page, "businessEdit", "/app/settings/automatic");
-  await expect(page.locator("#smart-publishing").getByText("Applies to the smart schedule's translations.")).toBeVisible();
   const dialog = page.getByRole("dialog", { name: "Publish automatically?" });
   await choose(page, "#smart-publishing", "Publish automatically");
   await expect(dialog).toBeVisible();
@@ -461,7 +471,7 @@ test("pause, resume and Check now", async ({ page }) => {
   await expect(page.locator("#smart-activity").getByText("Started by you")).toBeVisible();
 });
 
-test("waiting for the background service: Settings' status row says why once, and Turn off stays the quiet word @responsive", async ({ page }, info) => {
+test("waiting while jobs can't run: Settings' status row says what happens, once, and Turn off stays the quiet word @responsive", async ({ page }, info) => {
   await setWorkerRunning(false);
   try {
     await openApp(page, "business", "/app/settings/automatic");
@@ -469,8 +479,10 @@ test("waiting for the background service: Settings' status row says why once, an
     await expect(status.locator("s-badge").first()).toHaveText("Waiting");
     // The app's status row, not a banner: the reason as its title (the badge says "Waiting"), what happens next under it.
     const row = status.locator(".lv-status[data-tone='warning']");
-    await expect(row.locator(".lv-status__title")).toHaveText("Linguva's background service isn't running");
-    await expect(row).toContainText("Checks start again by themselves once it's back.");
+    await expect(row.locator(".lv-status__title")).toHaveText("Translating paused");
+    await expect(row).toContainText("Linguva continues by itself as soon as it can.");
+    // What happens, never a "background service".
+    await expect(page.getByText(/background service/)).toHaveCount(0);
     await expect(status.locator("s-banner")).toHaveCount(0);
     await expect(status.getByText("Smart schedule is waiting")).toHaveCount(0);
     // Turn off, the one action while it waits: the quiet red word at the card's edge, never the main action's full-width place.
@@ -490,7 +502,7 @@ test("waiting for the background service: Settings' status row says why once, an
     // Settings' section says it in the same look.
     await openApp(page, "business", "/app/settings?section=changes");
     const changes = page.locator("#settings-changes");
-    await expect(changes.locator(".lv-status .lv-status__title")).toHaveText("Linguva's background service isn't running");
+    await expect(changes.locator(".lv-status .lv-status__title")).toHaveText("Translating paused");
     await expect(changes.locator("s-banner")).toHaveCount(0);
   } finally {
     await setWorkerRunning(true);
@@ -572,14 +584,14 @@ test("the smart page is German for a German admin user, with one word for each t
   expect(text).not.toMatch(/\b(the|your|and|Translate|Settings|Save|Schedule|Check|Every day|items|changes)\b/);
   expect(text).not.toMatch(/Ausgenommen|Maschinenübersetz|maschinell|Kontingent|URL-Handles|In Echtzeit|live gehen|Geplant\b/);
   await expect(page.getByText("Jeden Tag um 23:00").first()).toBeVisible();
-  await expect(page.getByText("3 Änderungen in 12 Feldern")).toBeVisible();
+  await expect(page.getByText("3 Änderungen in 12 Texten")).toBeVisible();
   // The ways in the merchant's words, the one that differs from Settings' "Selbst starten" named apart.
   for (const name of ["Kurz nach jeder Änderung", "Jeden Tag", "An gewählten Wochentagen", "Mehrmals täglich", "Nur auf Knopfdruck"]) {
-    await expect(page.getByRole("group", { name: "Wie oft" }).getByRole("radio", { name, exact: true })).toBeAttached();
+    await expect(page.getByRole("group", { name: "Wie oft", exact: true }).getByRole("group", { name, exact: true })).toBeAttached();
   }
   await expect(page.locator("#smart-activity").getByText("Der Zeitplan war pausiert.")).toBeVisible();
-  // Only certain fields: the Coverage page's names for the field groups (Review's words), never their codes ("seo_title").
-  await page.getByRole("radio", { name: "Nur bestimmte Felder" }).check();
+  // Only certain texts: the Coverage page's names for the kinds of text (Review's words), never their codes ("seo_title").
+  await choose(page, "#smart-scope", "Nur bestimmte Texte");
   const groups = page.locator("#smart-scope");
   for (const name of ["Titel und Namen", "Beschreibungen", "Google-Titel", "Google-Beschreibungen", "Bildbeschreibungen", "Zusatzinfos", "Weitere Texte"]) {
     await expect(groups.getByRole("checkbox", { name, exact: true })).toBeVisible();
@@ -640,7 +652,7 @@ test("the smart page on a plan without it shows what it would add and the way to
 test("the smart page groups content by the Content page's areas, under four labels of one level @responsive", async ({ page }) => {
   await openApp(page, "business", "/app/settings/automatic");
   const scope = page.locator("#smart-scope");
-  await expect(scope.getByRole("heading", { level: 3 })).toHaveText(["Languages", "Content", "Fields", "Outdated translations"]);
+  await expect(scope.getByRole("heading", { level: 3 })).toHaveText(["Languages", "Content", "Texts", "Outdated translations"]);
   const menus = scope.getByRole("group", { name: "Menus & filters" });
   for (const name of ["Menus", "Menu links", "Storefront filters"]) await expect(menus.getByRole("checkbox", { name, exact: true })).toBeVisible();
   // An area with one kind of content is that checkbox alone (named like the Content page's area); the saved choice is kept.
@@ -658,15 +670,31 @@ test("the smart page groups content by the Content page's areas, under four labe
   await expect(areas.getByRole("listitem").nth(1).locator(".lv-icon-square")).toHaveAttribute("data-tint", "violet");
   await expect(scope.getByRole("checkbox", { name: "Size charts & more (Metaobjects)" })).not.toBeChecked();
   await expect(scope.getByRole("checkbox", { name: "Menus", exact: true })).not.toBeChecked();
-  await expect(scope.getByRole("radio", { name: "All fields (except web addresses)" })).toBeChecked();
-  // Outdated translations: two tiles, the saved choice chosen.
-  const outdated = scope.getByRole("group", { name: "Outdated translations" });
-  await expect(outdated.getByRole("radio")).toHaveCount(2);
-  await expect(outdated.getByRole("radio", { name: "Translate again", exact: true })).toBeChecked();
-  const keep = outdated.getByRole("radio", { name: "Keep them as they are", exact: true });
-  await expect(keep).not.toBeChecked();
-  // A tile's line is its radio's description.
-  await expect(keep).toHaveAccessibleDescription("They stay and are marked “Outdated”.");
+  // The languages and the content are rows of the card: its own frame is the only one.
+  await expect(scope.locator("s-box[border]")).toHaveCount(1);
+  // The texts and outdated translations: two option cards each, the saved choice current, the other one a button with its line.
+  await isCurrent(page, "#smart-scope", "All texts (except web addresses)");
+  const outdated = scope.getByRole("group", { name: "Outdated translations", exact: true });
+  await expect(outdated.locator(".lv-option")).toHaveCount(2);
+  await isCurrent(page, "#smart-scope", "Translate again");
+  const keep = option(page, "#smart-scope", "Keep them as they are");
+  await expect(keep.getByText("Current setting")).toHaveCount(0);
+  await expect(keep.getByRole("button")).toContainText("They stay and are marked “Outdated”.");
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
+
+  // Choosing one: it becomes the current one and takes the focus; the kinds of text show under "Only certain texts";
+  // the form has changed (its save bar), and Discard brings back what is saved.
+  await choose(page, "#smart-scope", "Only certain texts");
+  await isCurrent(page, "#smart-scope", "Only certain texts");
+  await expect(page.locator("#smart-fields-chosen")).toBeFocused();
+  await expect(scope.getByRole("checkbox", { name: "Titles and names", exact: true })).toBeVisible();
+  await choose(page, "#smart-scope", "Keep them as they are");
+  await isCurrent(page, "#smart-scope", "Keep them as they are");
+  await expect(page.locator("#smart-outdated-keep")).toBeFocused();
+  await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
+  await clickSaveBarButton(page, "smart-auto-save-bar", 1);
+  await isCurrent(page, "#smart-scope", "All texts (except web addresses)");
+  await isCurrent(page, "#smart-scope", "Translate again");
+  await expect(scope.getByRole("checkbox", { name: "Titles and names", exact: true })).toHaveCount(0);
 });

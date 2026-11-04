@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Link, useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
+import { useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { bulkTargetOf, coverageAction, loadCoverageDashboard } from "../.server/coverage/dashboard";
 import { useI18n } from "../i18n/react";
@@ -12,6 +12,8 @@ import { CoverageConfirm, type CoverageConfirmTarget } from "../components/Cover
 import { FieldStateLinks, FieldStateList } from "../components/CoverageStates";
 import { Disclosure } from "../components/Disclosure";
 import { Flag } from "../components/Flag";
+import { LanguagePicker, pickerLanguages } from "../components/LanguagePicker";
+import { VisibilityBadge } from "../components/LanguageLayout";
 import { ProgressBar } from "../components/ProgressBar";
 import { SmartStateBadge, SmartStateBanner } from "../components/SmartAutoCard";
 import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
@@ -19,7 +21,7 @@ import { Strong } from "../components/Type";
 import { bulkTypes, openTexts, type BulkTarget } from "../lib/coverage-bulk";
 import { byFieldGroup, byTypeCounted, coverageNextStep, headlineByLocale, storeWide, unreadableTypes, urlsByType, type CoverageNextStep, type Tally } from "../lib/coverage-view";
 import { contentTypeName } from "../lib/content-type-names";
-import { chipName, chipOrder, switcherKind } from "../lib/content-language";
+import { switcherKind } from "../lib/content-language";
 import { inParentheses, languageList, upperFirst } from "../lib/name-lists";
 import { languagePath } from "../lib/language-categories";
 import { emptyCounts, FIELD_GROUPS, HEADLINE_EXCLUDED_TYPES } from "../lib/coverage-rules";
@@ -95,72 +97,23 @@ function stepView(step: Step, data: Data, i18n: I18n): { text: string; action: {
 }
 
 /**
- * The languages as the Content page's chips: flag, name and figure, visible languages first, the shown
- * one in the chosen look; more than six: one select that opens the chosen language at once.
+ * The languages as the Content page's chips (LanguagePicker): flag and name, visible languages first, the
+ * shown one in the chosen look, the others links to the same page in their language. The shown language's
+ * figure is in its part under them, once. More than six: one select that opens the chosen language at once
+ * (without scripts its GET form keeps the market).
  */
-function LanguageChips({ data, i18n, measured, headline, hrefFor }: { data: Data; i18n: I18n; measured: ReadonlySet<string>; headline: Map<string, Tally>; hrefFor: (locale: string) => string }) {
+function Languages({ data, i18n, hrefFor }: { data: Data; i18n: I18n; hrefFor: (locale: string) => string }) {
   const { t } = i18n;
-  const navigate = useNavigate();
-  const ordered = chipOrder(i18n, data.targets);
-  const figure = (locale: string) => {
-    const tally = headline.get(locale) ?? EMPTY;
-    return measured.has(locale) ? percentLabel(i18n, tally.complete, tally.total) : "—";
-  };
-  const label = (l: Data["targets"][number]) => {
-    const name = chipName(i18n, l);
-    const shown = l.published ? name : t("resources.hiddenLanguage", { language: name });
-    const tally = headline.get(l.locale) ?? EMPTY;
-    return measured.has(l.locale) ? t("content.language.chip", { language: shown, percent: percentLabel(i18n, tally.complete, tally.total) }) : t("content.language.chipNotCounted", { language: shown });
-  };
-  if (switcherKind(ordered.length) === "select") {
-    return (
-      <s-select label={t("content.language.label")} value={data.selected ?? ""} onInput={(e) => void navigate(hrefFor(e.currentTarget.value))}>
-        {ordered.map((l) => (
-          <s-option key={l.locale} value={l.locale}>
-            {label(l)}
-          </s-option>
-        ))}
-      </s-select>
-    );
-  }
+  const market = data.markets.selected;
   return (
-    <nav aria-label={t("content.language.label")}>
-      <ul className="lv-langs">
-        {ordered.map((l) => {
-          const current = l.locale === data.selected;
-          const body = (
-            <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
-              <Flag country={localeCountry(l.locale, data.marketCountries)} fallback={l.locale} size={20} />
-              <s-stack direction="block">
-                <span>{current ? <Strong>{chipName(i18n, l)}</Strong> : <s-text>{chipName(i18n, l)}</s-text>}</span>
-                {l.published ? null : (
-                  <s-stack direction="inline" gap="small-400" alignItems="center">
-                    <s-icon type="hide" size="small" color="subdued" />
-                    <s-text color="subdued">{t("content.language.hidden")}</s-text>
-                  </s-stack>
-                )}
-              </s-stack>
-              <span className={current ? "lv-figure-row" : undefined}>{current ? figure(l.locale) : <s-text color="subdued">{figure(l.locale)}</s-text>}</span>
-            </s-grid>
-          );
-          return (
-            <li key={l.locale} className="lv-langs__item">
-              {current ? (
-                <span className="lv-lang" aria-current="page">
-                  {body}
-                </span>
-              ) : (
-                // The link's own text is its name for screen readers; the words inside are hidden from them (nothing read twice).
-                <Link className="lv-lang" to={hrefFor(l.locale)}>
-                  <span className="lv-sr">{label(l)}</span>
-                  <span aria-hidden="true">{body}</span>
-                </Link>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <LanguagePicker
+      languages={pickerLanguages(i18n, data.targets, { href: (l) => hrefFor(l.locale), country: (l) => localeCountry(l.locale, data.marketCountries) })}
+      current={data.selected ?? ""}
+      i18n={i18n}
+      label={t("content.language.label")}
+      navLabel={t("content.language.nav")}
+      fallback={{ action: "/app/coverage", keep: market ? <input type="hidden" name="market" value={market} /> : null }}
+    />
   );
 }
 
@@ -350,7 +303,7 @@ export default function Coverage() {
                 </s-grid>
               </s-query-container>
               {data.markets.selected ? (
-                <s-text color="subdued">{t("coverage.filter.marketNote", { market: data.markets.list.find((m) => m.id === data.markets.selected)?.name ?? "" })}</s-text>
+                <s-text color="subdued">{t("coverage.filter.marketNote")}</s-text>
               ) : null}
             </s-stack>
           </Card>
@@ -364,7 +317,7 @@ export default function Coverage() {
                 return (
                   <s-stack key={job.id} direction="block" gap="small-200">
                     <s-stack direction="inline" gap="small-200" alignItems="center">
-                      <s-icon type="in-progress" color="subdued" size="small" />
+                      <s-icon type={job.discoveryDone ? "in-progress" : "search-list"} tone="info" size="small" />
                       <s-text>{job.discoveryDone ? t("coverage.jobs.progress", vars) : t("coverage.jobs.finding", vars)}</s-text>
                       <s-link href={`/app/jobs/${job.id}`}>{t("coverage.jobs.open")}</s-link>
                     </s-stack>
@@ -415,9 +368,10 @@ export default function Coverage() {
 
         {scanned ? (
           <s-query-container>
-            {/* Next first: on the left on a wide page, on top on a phone, as on the Overview. */}
-            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base" alignItems="stretch">
-              <Card heading={t("coverage.next.heading")} fill>
+            {/* Next first: on the left on a wide page, on top on a phone, as on the Overview; each card as
+                tall as its content (no half-empty card stretched to the other's height). */}
+            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base" alignItems="start">
+              <Card heading={t("coverage.next.heading")}>
                 <s-stack direction="block" gap="small">
                   {step ? (
                     <>
@@ -439,7 +393,7 @@ export default function Coverage() {
                   )}
                 </s-stack>
               </Card>
-              <Card heading={t("coverage.store.heading")} fill>
+              <Card heading={t("coverage.store.heading")}>
                 <s-stack direction="block" gap="small">
                   <span className="lv-figure">{percentLabel(i18n, store.complete, store.total)}</span>
                   {/* No bar before a language is read in full: an empty one would read "nothing to translate". */}
@@ -492,42 +446,36 @@ export default function Coverage() {
         {scanned && data.targets.length && selectedTarget ? (
           <Card heading={t("coverage.languages.heading")}>
             <s-stack direction="block" gap="base">
-              <LanguageChips data={data} i18n={i18n} measured={measured} headline={headline} hrefFor={languageHref} />
-              <s-box padding="base" border="base" borderRadius="large-100">
-                <s-stack direction="block" gap="small">
-                  {/* The chip above shows the language, whether it's hidden and its figure: the box names it for
-                      screen readers only. A select (more than six languages) is less plain, so there it stays. */}
-                  {switcherKind(data.targets.length) === "select" ? (
-                    <s-stack direction="inline" gap="small-200" alignItems="center">
-                      <Flag country={localeCountry(selectedTarget.locale, data.marketCountries)} fallback={selectedTarget.locale} size={20} />
-                      <h3 className="lv-h3">{upperFirst(selectedName)}</h3>
-                      {selectedTarget.published ? (
-                        <s-badge tone="success">{t("coverage.languages.published")}</s-badge>
-                      ) : (
-                        <s-badge tone="warning" icon="hide">
-                          {t("coverage.languages.unpublished")}
-                        </s-badge>
-                      )}
-                    </s-stack>
-                  ) : (
-                    <h3 className="lv-sr">{upperFirst(selectedName)}</h3>
-                  )}
-                  {measured.has(selectedTarget.locale) ? (
-                    <>
-                      <StateBar counts={selectedTally.counts} label={t("coverage.languages.progressLabel", { language: selectedName })} i18n={i18n} />
-                      <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(selectedTally.complete), total: i18n.number(selectedTally.total) })}</s-text>
-                    </>
-                  ) : (
-                    // A share of what was read so far could read as 100 %: no figure until every type is read.
-                    <s-text color="subdued">{t("coverage.languages.notMeasured")}</s-text>
-                  )}
-                  {!selectedTarget.published ? <s-text color="subdued">{t("coverage.languages.unpublishedHelp")}</s-text> : null}
-                  <FieldStateLinks counts={selectedTally.counts} i18n={i18n} states={["review", "draft", "failed", "outdated", "missing"]} hrefFor={(state) => itemsHref({ lang: selectedTarget.locale, state })} />
-                  <span>
-                    <s-link href={languagePath(selectedTarget.locale)}>{t("content.language.next", { language: selectedName })}</s-link>
-                  </span>
-                </s-stack>
-              </s-box>
+              <Languages data={data} i18n={i18n} hrefFor={languageHref} />
+              <s-stack direction="block" gap="small">
+                {/* The chip above shows the language and whether it's hidden: the part names it for screen readers
+                    only. A select (more than six languages) is less plain, so there its name and badge stay. */}
+                {switcherKind(data.targets.length) === "select" ? (
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <Flag country={localeCountry(selectedTarget.locale, data.marketCountries)} fallback={selectedTarget.locale} size={20} />
+                    <h3 className="lv-h3">{upperFirst(selectedName)}</h3>
+                    <VisibilityBadge published={selectedTarget.published} i18n={i18n} />
+                  </s-stack>
+                ) : (
+                  <h3 className="lv-sr">{upperFirst(selectedName)}</h3>
+                )}
+                {measured.has(selectedTarget.locale) ? (
+                  <>
+                    {/* The language's figure here, once: its chip names it only. */}
+                    <span className="lv-figure">{percentLabel(i18n, selectedTally.complete, selectedTally.total)}</span>
+                    <StateBar counts={selectedTally.counts} label={t("coverage.languages.progressLabel", { language: selectedName })} i18n={i18n} />
+                    <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(selectedTally.complete), total: i18n.number(selectedTally.total) })}</s-text>
+                  </>
+                ) : (
+                  // A share of what was read so far could read as 100 %: no figure until every type is read.
+                  <s-text color="subdued">{t("coverage.languages.notMeasured")}</s-text>
+                )}
+                {!selectedTarget.published ? <s-text color="subdued">{t("coverage.languages.unpublishedHelp")}</s-text> : null}
+                <FieldStateLinks counts={selectedTally.counts} i18n={i18n} states={["review", "draft", "failed", "outdated", "missing"]} hrefFor={(state) => itemsHref({ lang: selectedTarget.locale, state })} />
+                <span>
+                  <s-link href={languagePath(selectedTarget.locale)}>{t("content.language.next", { language: selectedName })}</s-link>
+                </span>
+              </s-stack>
             </s-stack>
           </Card>
         ) : null}
@@ -611,22 +559,21 @@ export default function Coverage() {
                 })}
               </s-table-body>
             </s-table>
-            <s-box padding="base">
-              <s-stack direction="block" gap="small-200">
-                {/* Why the AI buttons are off, with the way to the fix: a key on the Own key plan, else the AI permission. */}
-                {!data.canTranslate ? (
-                  <s-stack direction="inline" gap="small-200" alignItems="center">
-                    <s-text color="subdued">{t(data.ownKeyMissing ? "coverage.items.noKey" : "coverage.items.cantTranslate")}</s-text>
-                    <s-link href={data.ownKeyMissing ? "/app/settings?section=keys" : "/app/settings?section=ai"}>{t(data.ownKeyMissing ? "language.unlock.keyMissing.action" : "language.unlock.consent.action")}</s-link>
-                  </s-stack>
-                ) : null}
-                {hiddenTypes > 0 ? <s-text color="subdued">{t("coverage.types.hideEmpty", { count: hiddenTypes })}</s-text> : null}
-                {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "theme") ? <s-text color="subdued">{t("coverage.types.excludedHelp.theme")}</s-text> : null}
-                {visibleTypes.some((type) => HEADLINE_EXCLUDED_TYPES[type] === "notifications") ? (
-                  <s-text color="subdued">{t("coverage.types.excludedHelp.notifications")}</s-text>
-                ) : null}
-              </s-stack>
-            </s-box>
+            {/* Why theme texts and notifications are left out of the totals: "How coverage is counted" says it once. */}
+            {!data.canTranslate || hiddenTypes > 0 ? (
+              <s-box padding="base">
+                <s-stack direction="block" gap="small-200">
+                  {/* Why the AI buttons are off, with the way to the fix: a key on the Own key plan, else the AI permission. */}
+                  {!data.canTranslate ? (
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <s-text color="subdued">{t(data.ownKeyMissing ? "coverage.items.noKey" : "coverage.items.cantTranslate")}</s-text>
+                      <s-link href={data.ownKeyMissing ? "/app/settings?section=keys" : "/app/settings?section=ai"}>{t(data.ownKeyMissing ? "language.unlock.keyMissing.action" : "language.unlock.consent.action")}</s-link>
+                    </s-stack>
+                  ) : null}
+                  {hiddenTypes > 0 ? <s-text color="subdued">{t("coverage.types.hideEmpty", { count: hiddenTypes })}</s-text> : null}
+                </s-stack>
+              </s-box>
+            ) : null}
           </Card>
         ) : null}
 

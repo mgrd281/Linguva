@@ -4,11 +4,10 @@
  * turn it on when it's off, check now when it's on.
  *
  * The smart page's own controls are here too, with their styles in the smart
- * schedule's section of app/styles/ui.css: a choice as square tiles with
- * native radio buttons (how often, outdated translations), the weekdays as a
- * row of square toggles, and a budget's meter.
+ * schedule's section of app/styles/ui.css: the weekdays as a row of square
+ * toggles, and a budget's meter (its choices are Settings' option cards).
  */
-import { useId, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { I18n, Instant, MessageKey } from "../i18n/i18n";
 import { kindLabel } from "../i18n/labels";
 import { cardColumns } from "../lib/content-areas";
@@ -18,7 +17,6 @@ import { languageList, upperFirst } from "../lib/name-lists";
 import type { SmartPauseReason, SmartStatus } from "../lib/smart-auto";
 import { usagePercent } from "../lib/plan-view";
 import { usageLevel } from "../lib/usage";
-import { IconSquare, type Tint } from "./IconSquare";
 import { ProgressBar } from "./ProgressBar";
 import { StatusRow } from "./SettingsNav";
 
@@ -127,7 +125,7 @@ const PAUSE_NEXT = {
 
 type WaitingReason = Extract<SmartStatus, { state: "waiting" }>["reason"];
 
-/** What it waits for, as Settings says it ("Linguva's background service isn't running"). */
+/** What it waits for, as Settings says it ("Translating paused"). */
 const WAITING_TITLE = {
   PLAN: "settings.changes.waiting.PLAN",
   CONSENT: "settings.changes.waiting.CONSENT",
@@ -136,14 +134,13 @@ const WAITING_TITLE = {
   NO_LANGUAGE: "settings.changes.waiting.NO_LANGUAGE",
 } as const satisfies Record<WaitingReason, MessageKey>;
 
-/** What the merchant does, or what happens next. */
-const WAITING_NEXT = {
+/** What the merchant does, or what happens next (not set up on this installation: the title says all there is). */
+const WAITING_NEXT: Partial<Record<WaitingReason, MessageKey>> = {
   PLAN: "automatic.blocked.PLAN",
   CONSENT: "automatic.blocked.CONSENT",
-  UNAVAILABLE: "automatic.waiting.UNAVAILABLE",
   WORKER: "automatic.waiting.WORKER",
   NO_LANGUAGE: "automatic.waiting.NO_LANGUAGE",
-} as const satisfies Record<WaitingReason, MessageKey>;
+};
 
 export function SmartStateBadge({ status }: { status: SmartStatus }) {
   const { t } = useI18n();
@@ -211,17 +208,21 @@ export function SmartStateBanner({
         here
       );
     // A button that says what to do ("Allow AI translation", "Choose languages") needs no line saying it again.
-    const detail = grant || here ? null : t(WAITING_NEXT[status.reason]);
+    const next = WAITING_NEXT[status.reason];
+    const detail = grant || here || !next ? null : t(next);
     return <StatusRow status={{ tone: "warning", title: t(WAITING_TITLE[status.reason]), detail }} action={action} />;
   }
   return null;
 }
 
-/** One fact of the preview: its icon, its name (subdued) and its value (semibold, like the Content page's names). */
+/**
+ * One fact of the preview: its icon, its name (subdued) and its value (semibold, like the Content page's names).
+ * Work that runs now has the app's one look for it: in-progress in the info tone.
+ */
 function Fact({ icon, label, children }: { icon: IconName; label: string; children: React.ReactNode }) {
   return (
     <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
-      <s-icon type={icon} color="subdued" />
+      {icon === "in-progress" ? <s-icon type={icon} tone="info" /> : <s-icon type={icon} color="subdued" />}
       <s-stack direction="block" gap="small-500">
         <s-text color="subdued">{label}</s-text>
         <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{children}</span>
@@ -367,96 +368,6 @@ const PREVIEW_COLUMNS = {
   2: "@container (inline-size > 520px) 1fr 1fr, 1fr",
   3: "@container (inline-size > 520px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr",
 } as const;
-
-/** One choice of a set of tiles. */
-export interface ChoiceTile {
-  value: string;
-  name: string;
-  /** One short line under the name. */
-  line: string;
-  icon?: IconName;
-  tint?: Tint;
-}
-
-/**
- * A choice as square tiles (the smart page's "How often", its outdated
- * translations): native radio buttons in a fieldset, so the form posts the
- * chosen value, the arrow keys move between the tiles and a screen reader
- * hears the group's name with each one. Each tile is one label: its icon in
- * a tinted square, a radio mark, its name and one line (the radio's
- * accessible name is the name, its description the line). The chosen one is framed in blue
- * like the current section's tile. Uncontrolled (defaultValue): the form's
- * change event says a choice was made, as for the Segmented control. Five
- * in a row on a wide card, three on a tablet, two on a phone; tiles without
- * an icon show their radio mark beside the name.
- */
-export function ChoiceTiles({
-  name,
-  legend,
-  legendHidden = false,
-  options,
-  defaultValue,
-  disabled = false,
-}: {
-  name: string;
-  /** The group's name ("How often"), visible unless a heading above says it (`legendHidden`). */
-  legend: string;
-  legendHidden?: boolean;
-  options: readonly ChoiceTile[];
-  defaultValue: string;
-  disabled?: boolean;
-}) {
-  const id = useId();
-  return (
-    <fieldset className="lv-smart-choice" disabled={disabled}>
-      <legend className={legendHidden ? "lv-sr" : "lv-smart-choice__legend"}>{legend}</legend>
-      <div className="lv-smart-choice__wrap">
-        <div className="lv-smart-choice__grid" data-count={options.length}>
-          {options.map((option) => {
-            // The radio is named by the tile's name; its line is the description (read after the name).
-            const lineId = `${id}-${option.value}`;
-            const line = (
-              <span id={lineId} className="lv-smart-tile__line" aria-hidden="true">
-                {option.line}
-              </span>
-            );
-            return (
-              <label key={option.value} className="lv-smart-tile" data-choice={option.value}>
-                <input
-                  type="radio"
-                  className="lv-smart-tile__input"
-                  name={name}
-                  value={option.value}
-                  defaultChecked={option.value === defaultValue}
-                  disabled={disabled}
-                  aria-describedby={lineId}
-                />
-                {option.icon ? (
-                  <span className="lv-smart-tile__face">
-                    <span className="lv-smart-tile__top" aria-hidden="true">
-                      <IconSquare icon={option.icon} tint={option.tint ?? "grey"} size={36} />
-                      <span className="lv-smart-tile__radio" />
-                    </span>
-                    <span className="lv-smart-tile__name">{option.name}</span>
-                    {line}
-                  </span>
-                ) : (
-                  <span className="lv-smart-tile__face lv-smart-tile__face--plain">
-                    <span className="lv-smart-tile__radio" aria-hidden="true" />
-                    <span className="lv-smart-tile__text">
-                      <span className="lv-smart-tile__name">{option.name}</span>
-                      {line}
-                    </span>
-                  </span>
-                )}
-              </label>
-            );
-          })}
-        </div>
-      </div>
-    </fieldset>
-  );
-}
 
 /**
  * The weekdays as one row of square toggles ("Mon … Sun"): native

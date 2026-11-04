@@ -3,8 +3,8 @@
  * export route (session token via fetch) in the language chosen, its next
  * part only for the choice it continues, a filled row comes back as a draft
  * on Review, rows that can't be trusted are listed with their line. Step 1
- * says "export" as the Glossary does; importing without a file is answered
- * on the file's field at once.
+ * says "export" as the Glossary does; "Import as drafts" is the page's one
+ * primary button, waiting for a file.
  */
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
@@ -13,12 +13,15 @@ import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 test("exports what's missing, imports translations as drafts and lists skipped rows @responsive", async ({ page }) => {
   await openApp(page, "owner", "/app/translations");
   await expect(page.getByRole("heading", { level: 1, name: "Import & export" })).toBeVisible();
-  await expect(page.getByText(/Imported translations wait on Review; nothing goes live until you approve it/)).toBeVisible();
+  await expect(page.getByText(/Imported translations wait on Review until you approve them/)).toBeVisible();
   // Three numbered steps: export, fill in, import, each a card named by its step.
   for (const step of ["Export what to translate", "Fill in the translations", "Import the file"]) await expect(page.getByRole("region", { name: step, exact: true }).getByRole("heading", { level: 2, name: step })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
+  // The page's one primary button is the import's: exporting is the way there, a secondary button.
+  await expect(page.locator('[data-variant="primary"]')).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Export CSV" })).toHaveAttribute("data-variant", "secondary");
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV" }).click();
   const csv = (await readFile((await (await download).path())!, "utf8")).replace(/^\uFEFF/, "");
@@ -28,14 +31,11 @@ test("exports what's missing, imports translations as drafts and lists skipped r
   expect(rows).toHaveLength(15);
   await expect(page.getByText("Exported 15 texts to translate into German.")).toBeVisible();
 
-  // No file chosen yet: the import isn't the step's main button, and pressing it says so on the field at once,
-  // without a trip to the server (whose answer would be a banner).
+  // No file chosen yet: the import is the page's primary button, waiting for one (nothing to send yet).
   const zone = page.locator('s-drop-zone[name="file"]');
   const importButton = page.getByRole("button", { name: "Import as drafts" });
-  await expect(importButton).toHaveAttribute("data-variant", "secondary");
-  await importButton.click();
-  await expect(zone).toHaveAttribute("error", "Choose a CSV file first.");
-  await expect(page.locator("s-banner", { hasText: "Choose a CSV file first." })).toHaveCount(0);
+  await expect(importButton).toHaveAttribute("data-variant", "primary");
+  await expect(importButton).toBeDisabled();
 
   // Fill one title; change another row's digest (as if the original had changed since).
   const title = rows.findIndex((r) => r.startsWith("gid://shopify/Product/1,PRODUCT,title,"));
@@ -47,10 +47,10 @@ test("exports what's missing, imports translations as drafts and lists skipped r
     mimeType: "text/csv",
     buffer: Buffer.from([header, ...filled].join("\r\n")),
   });
-  // Chosen: its name under the field, the error gone, and the import the step's main button.
+  // Chosen: its name under the field, no error, and the import can be pressed.
   await expect(page.getByText("Chosen: translations.csv")).toBeVisible();
   await expect(zone).not.toHaveAttribute("error");
-  await expect(importButton).toHaveAttribute("data-variant", "primary");
+  await expect(importButton).toBeEnabled();
   await importButton.click();
   await expect(page.getByText("1 translation waits on Review.")).toBeVisible();
   const skipped = page.getByRole("region", { name: "Skipped rows", exact: true });

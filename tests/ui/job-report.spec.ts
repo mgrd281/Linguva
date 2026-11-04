@@ -33,7 +33,7 @@ test("a job page explains every result and offers a report @responsive", async (
   const file = await (await download).path();
   const csv = await readFile(file!, "utf8");
   const [header, ...rows] = csv.replace(/^\uFEFF/, "").trim().split("\r\n");
-  expect(header).toBe("ID,Shopify ID,Status,Reason code,Reason,Fields translated,Fields held back,Attempts,Finished (UTC),Reference");
+  expect(header).toBe("ID,Shopify ID,Status,Reason code,Reason,Texts translated,Texts held back,Attempts,Finished (UTC),Reference");
   expect(rows.length).toBeGreaterThan(0);
   expect(rows[0]).toMatch(/^\d+,gid:\/\/shopify\/Product\/\d+,Done,DRAFTED,Saved as drafts for review,\d+,\d+,1,\d{4}-\d\d-\d\dT[\d:.]+Z,[0-9a-f-]{36}$/);
 });
@@ -48,7 +48,7 @@ test("the job report is German for a German admin user", async ({ page }) => {
   const download = page.waitForEvent("download");
   await page.locator("[data-button]", { hasText: "Bericht herunterladen (CSV)" }).click();
   const csv = await readFile((await (await download).path())!, "utf8");
-  expect(csv.replace(/^\uFEFF/, "").split("\r\n")[0]).toBe("Nr.,Shopify-ID,Status,Grund-Code,Grund,Übersetzte Felder,Zurückgehaltene Felder,Versuche,Beendet (UTC),Referenz");
+  expect(csv.replace(/^\uFEFF/, "").split("\r\n")[0]).toBe("Nr.,Shopify-ID,Status,Grund-Code,Grund,Übersetzte Texte,Zurückgehaltene Texte,Versuche,Beendet (UTC),Referenz");
 });
 
 test("another store's job report can't be downloaded", async ({ page }) => {

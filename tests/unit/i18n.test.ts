@@ -21,11 +21,15 @@ const SAME_IN_FRENCH = new Set([
   ...["Navigation", "Notifications", "Description", "Descriptions", "Image", "Menu", "Action", "Actions", "Type", "Original", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
   ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{type} {reference}", "Business", "Budgets", "Exclusions", "{time} ({zone})", "—", "Page {page}", "Version {commit}"],
   ...["{language} · {kind}", "{figure} {caption}. {title}. {states}."],
+  // A language customers can choose: the same word in French.
+  ...["Visible"],
 ]);
 const SAME_IN_SPANISH = new Set([
   ...["Blogs", "Blog", "blogs", "blog", "Plan", "Manual", "Original", "Formal", "Informal", "Formal ({pronoun})", "Informal ({pronoun})", "No", "no", "ID", "Linguva", "SEO", "Shopify", "DeepL", "OK"],
   ...["{language} (original)", "{title}, {field}, original", "{language} · original", "{language}:", "{type} {reference}", "{state}: {fields}", "{language}: {countries}", "Business", "{time} ({zone})", "—"],
   ...["{language} · {kind}", "{name}: {reason}", "{figure} {caption}. {title}. {states}."],
+  // A language customers can choose: the same word in Spanish.
+  ...["Visible"],
 ]);
 
 describe("interface language", () => {
@@ -157,6 +161,7 @@ describe("interface language", () => {
     expect(fieldName(de, "meta_title")).toBe("SEO-Titel");
     expect(fieldName(de, "custom_key")).toBe("Custom key");
     expect(issueName(de, "NUMBERS_CHANGED")).toBe("Zahlen verändert");
-    expect(jobStatus(de, "COMPLETED")).toEqual({ label: "Abgeschlossen", tone: "success" });
+    expect(jobStatus(de, "COMPLETED")).toEqual({ label: "Fertig", tone: "success" });
+    expect(jobStatus(de, "DISCOVERING").label).toBe("Texte werden gesucht");
   });
 });

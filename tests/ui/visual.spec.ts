@@ -13,7 +13,7 @@ import { openApp } from "./helpers";
 // Every page of the "visual" store, unless another store is named.
 const PAGES: Array<[string, string, UiShopKey?]> = [
   ["overview", "/app"],
-  ["products", "/app/products?lang=de"],
+  // The products' one list is the area's ("category"; the old /app/products leads there).
   ["editor", "/app/products/2?lang=de"],
   ["review-empty", "/app/review"],
   ["glossary", "/app/glossary"],
@@ -26,11 +26,11 @@ const PAGES: Array<[string, string, UiShopKey?]> = [
   ["language", "/app/languages/de"],
   ["category", "/app/languages/de/products"],
   ["content", "/app/content"],
-  // The Jobs list's Completed tab (its jobs started on fixed hours of earlier store days).
+  // The Jobs list's Done tab (its jobs started on fixed hours of earlier store days).
   ["jobs-completed", "/app/jobs?status=completed", "jobs"],
-  // The smart schedule on Business: how often as square tiles, its past checks (the store is read only).
+  // The smart schedule on Business: how often as option cards, its past checks (the store is read only).
   ["smart", "/app/settings/automatic", "business"],
-  // Its schedule card, opened at its address (the page scrolls there): the mode tiles and the next checks.
+  // Its schedule card, opened at its address (the page scrolls there): the mode cards and the next checks.
   ["smart-schedule", "/app/settings/automatic#smart-schedule", "business"],
   // The tools of Settings › Tools, each with its header (the glossary is above).
   ["memory", "/app/memory"],

@@ -53,7 +53,7 @@ test.describe("the Jobs list", () => {
     // each named by its word first; Problems with its dot in critical, since a stop needs the merchant.
     const tabs = page.getByRole("navigation", { name: "Show jobs" });
     await expect(tabs.locator('[aria-current="page"]')).toContainText("All");
-    for (const [tab, count] of [["All", "10"], ["Running", "2"], ["Problems", "3"], ["Completed", "5"], ["Cancelled", "1"]]) {
+    for (const [tab, count] of [["All", "10"], ["Running", "2"], ["Problems", "3"], ["Done", "5"], ["Cancelled", "1"]]) {
       await expect(tabs.locator("li", { hasText: tab })).toContainText(count);
     }
     await expect(tabs.getByRole("link", { name: "All 10" })).toHaveAttribute("aria-current", "page");
@@ -133,7 +133,13 @@ test.describe("the Jobs list", () => {
     await expect(rows(page)).toHaveCount(3);
     await expect(page.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/app/jobs");
 
-    await openApp(page, "jobs", `/app/jobs?q=${ids.cancelled!.slice(0, 8)}`);
+    // The search runs as you type (no Search button): the reference finds its job.
+    const reference = ids.cancelled!.slice(0, 8);
+    await openApp(page, "jobs", "/app/jobs");
+    await expect(page.getByRole("search").locator("[data-button]", { hasText: "Search" })).toHaveCount(0);
+    const search = page.getByRole("searchbox", { name: "Search jobs" });
+    await search.pressSequentially(reference, { delay: 30 });
+    await expect(page).toHaveURL(new RegExp(`[?&]q=${reference}(&|$)`));
     await expect(rows(page)).toHaveCount(1);
     await expect(rows(page).first()).toHaveAttribute("href", `/app/jobs/${ids.cancelled}`);
     await expect(rows(page).first()).toContainText("8 of 20 done");
@@ -256,7 +262,7 @@ test.describe("a job's page", () => {
     await expect(page.locator("s-badge", { hasText: "Stopped" })).toBeVisible();
     const hero = page.getByRole("region", { name: "German · Collections: summary" });
     await expect(hero.getByText("Linguva needs your permission for AI translation.")).toBeVisible();
-    await expect(hero.getByText("What is translated stays. Nothing is lost.")).toBeVisible();
+    await expect(hero.getByText("What is translated stays.", { exact: true })).toBeVisible();
     await expect(hero.getByText("How to continue", { exact: true })).toBeVisible();
     await expect(hero.getByText("Allow AI translation")).toBeVisible();
     await expect(hero.locator("[data-button]", { hasText: "Allow in Settings" })).toHaveAttribute("href", `/app/settings?section=ai&job=${ids.stopped}`);
@@ -268,7 +274,7 @@ test.describe("a job's page", () => {
     const ids = await jobIds();
     await openApp(page, "jobs", `/app/jobs/${ids.errors}`);
     await expect(page.getByRole("heading", { level: 1, name: "French · Pages" })).toBeVisible();
-    await expect(page.locator("s-badge", { hasText: "Completed with errors" })).toBeVisible();
+    await expect(page.locator("s-badge", { hasText: "Done with errors" })).toBeVisible();
     // Yesterday, or two days ago in the store's zone shortly after midnight.
     await expect(page.getByText(/^Started (yesterday|on .+) at .+ · by your team$/)).toBeVisible();
     // The one page only the editor finishes: its step opens that page's editor (the page's one primary button).
@@ -289,9 +295,11 @@ test.describe("a job's page", () => {
     await expect(page.getByText(`Reference for support: ${ids.errors!.slice(0, 8)}`, { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy reference" })).toBeVisible();
     await expect(page.locator("[data-button]", { hasText: "Download report (CSV)" })).toBeVisible();
-    await expect(page.getByText("Translated and published")).toBeHidden();
+    // The table's reasons in the app's words ("Done", not "Translated and published"), drawn once opened.
+    const done = page.locator("s-table-cell").filter({ hasText: /^Done$/ });
+    await expect(done).toHaveCount(0);
     await page.getByText("Results in detail").click();
-    await expect(page.getByText("Translated and published")).toBeVisible();
+    await expect(done).toBeVisible();
   });
 
   test("a queued job was created, not started, and says why it starts with a delay", async ({ page }) => {
@@ -301,7 +309,9 @@ test.describe("a job's page", () => {
     await expect(page.getByText(/^Created today at .+ · by you$/)).toBeVisible();
     // No worker runs in these tests.
     await expect(page.getByRole("heading", { level: 2, name: "Starts with a delay" })).toBeVisible();
-    await expect(page.getByText("Linguva's background service isn't running right now. It restarts by itself, then the job starts on its own.")).toBeVisible();
+    // What happens, never a "background service".
+    await expect(page.getByText("Linguva starts it by itself as soon as it can.")).toBeVisible();
+    await expect(page.getByText(/background service/)).toHaveCount(0);
     await expect(page.locator("[data-button]", { hasText: "Cancel job" })).toBeVisible();
   });
 
@@ -309,7 +319,8 @@ test.describe("a job's page", () => {
     const ids = await jobIds();
     await openApp(page, "jobs", `/app/jobs/${ids["click:PRODUCT"]}`);
     await expect(page.getByRole("heading", { level: 2, name: "Products: all 5 were already up to date" })).toBeVisible();
-    await expect(page.getByText("Linguva looked through 5 products. Everything was already translated and up to date.")).toBeVisible();
+    // The title says it: no line under it repeats it.
+    await expect(page.getByText(/^Linguva looked through/)).toHaveCount(0);
     await expect(page.getByText("Nothing to do.")).toBeVisible();
   });
 });

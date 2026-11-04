@@ -4,8 +4,8 @@
  * (.server/translation/resource-editor). From the top:
  *
  * - the way back to the area list the item is opened from ("‹ Produkte"), keeping where that list was
- *   opened from (Content), or to the type's own list it came from (?from=list); the item's picture (or
- *   its area's icon), its name and how much is open in the language;
+ *   opened from (Content); the header (PageHeader) with the item's picture (or its area's icon) as its
+ *   sign, its name and how much is open in the language;
  * - the page's banners (leave without publishing, the AI permission, results and errors);
  * - one square tile per text with its state, each moving to its text;
  * - the toolbar: AI and the translation memory fill only the open texts (missing or outdated), the
@@ -19,7 +19,7 @@
  *   bar) for all of it: their typed and AI texts count as unpublished too.
  */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Form, useBlocker, useFetcher, useLoaderData, useSearchParams } from "react-router";
+import { useBlocker, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import type { MAX_ATTACHED_AI_RESOURCES } from "../.server/translation/attached-editor";
 import type { loadEditorData, runEditorAction } from "../.server/translation/resource-editor";
 
@@ -29,7 +29,8 @@ import { categoryName } from "./CategoryCard";
 import { CountChip, HeadingRow, isTitled, NoteBadges, OptionalBadge, StateBadge, TextTiles, textName, textStateLabel, type TextTile } from "./EditorParts";
 import { HtmlPreview, isEmptyHtml, previewHeight } from "./HtmlPreview";
 import { IconSquare } from "./IconSquare";
-import { Breadcrumbs } from "./LanguageLayout";
+import { PageHeader } from "./PageHeader";
+import { SearchForm } from "./SearchField";
 import { Actions, InlineNotice, StateLine } from "./SettingsParts";
 import { StructuredEditor, StructuredView } from "./StructuredValue";
 import { SeoCounter, SeoPreview } from "./SeoPanel";
@@ -41,7 +42,7 @@ import { ENGINE_NAMES, isEngineId } from "../lib/engines";
 import { parseOwnKeyCode } from "../lib/own-keys";
 import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
-import { editorArea, googlePreviewIndex, isWebAddress, LIST_ORIGIN, openForAi, orderTexts, pickDrafts, storefrontSegment, textCounts, textState, type TextFacts, type TextState } from "../lib/editor-view";
+import { editorArea, googlePreviewIndex, isWebAddress, openForAi, orderTexts, pickDrafts, storefrontSegment, textCounts, textState, type TextFacts, type TextState } from "../lib/editor-view";
 import { CATEGORIES, categoryPath, categoryOf, EXTRAS, languagePath, originOf, withOrigin, type Origin } from "../lib/language-categories";
 import type { IconName } from "../lib/icons";
 import { upperFirst } from "../lib/name-lists";
@@ -120,13 +121,13 @@ function areaIcon(kind: string): IconName {
  * Where "back" leads: the area list the item is opened from (Produkte auf Deutsch), else (the theme's
  * texts, notifications) its list under Content. `label`: the admin's breadcrumb, the parent page's title.
  * A list opened from Content (`origin`) is led back to as it was, so its trail starts at Content again.
- * Opened from the type's own list (`fromList`: the way in for a language not counted yet, whose area list
- * has no rows), back to that list.
+ * An item of an area always leads back to its area list, wherever it was opened (the old lists per type
+ * lead there too).
  */
-function backTarget(data: EditorData, i18n: I18n, language: string, origin: Origin, fromList: boolean) {
+function backTarget(data: EditorData, i18n: I18n, language: string, origin: Origin) {
   const { t } = i18n;
   const locale = data.target.locale;
-  const area = fromList ? null : editorArea(data.kind.type);
+  const area = editorArea(data.kind.type);
   if (area) {
     const name = categoryName(i18n, area);
     const list = withOrigin(categoryPath(locale, area), origin);
@@ -202,9 +203,8 @@ export function ResourceTranslationEditor() {
   // Opened from an area list that came from Content (?from=content): the way back and the pages keep it.
   const [searchParams] = useSearchParams();
   const origin = originOf(searchParams.get("from"));
-  const fromList = searchParams.get("from") === LIST_ORIGIN;
   // What the page's own links keep of where it was opened from.
-  const from = origin ?? (fromList ? LIST_ORIGIN : null);
+  const from = origin;
   const i18n = useI18n();
   const sourceName = i18n.language(data.sourceLocale, data.sourceName);
   const targetName = i18n.language(data.target.locale, data.target.name);
@@ -455,7 +455,7 @@ export function ResourceTranslationEditor() {
   }, [translating]);
 
   const language = targetName;
-  const back = backTarget(data, i18n, language, origin, fromList);
+  const back = backTarget(data, i18n, language, origin);
   const counts = textCounts([...data.fields, ...attachedTexts]);
   const lead = data.paging
     ? t("editor.header.paged", { language, count: data.paging.total })
@@ -465,12 +465,9 @@ export function ResourceTranslationEditor() {
         ? t("editor.header.open", { language, open: counts.open, count: counts.total })
         : t("editor.header.done", { language, count: counts.total });
   // Under the buttons: the texts open for AI (a later request's too); else the open texts only a person
-  // translates (a web link, a file: "Manual only"), which the header counts too; else that none is open.
-  const openLine = aiCount
-    ? t("editor.toolbar.open", { count: aiCount + attachedLater })
-    : counts.open
-      ? t("editor.toolbar.manualOpen", { count: counts.open })
-      : t("editor.toolbar.allDone");
+  // translates (a web link, a file: "Manual only"), which the header counts too; nothing when none is open
+  // (the header says every text is done).
+  const openLine = aiCount ? t("editor.toolbar.open", { count: aiCount + attachedLater }) : counts.open ? t("editor.toolbar.manualOpen", { count: counts.open }) : null;
   // As its area list shows it, whatever its image descriptions say (the loader reads it).
   const picture = data.picture;
   const stateOf = (field: (typeof data.fields)[number]) => {
@@ -567,25 +564,22 @@ export function ResourceTranslationEditor() {
 
       {/* One stack for the page, as on every page: s-page spaces only its own sections, so the header, the tiles and the form's texts would touch them. */}
       <s-stack direction="block" gap="base">
-        <s-query-container>
-          <s-stack direction="block" gap="small-200">
-            <Breadcrumbs i18n={i18n} trail={back.trail} current={data.title} touch />
-            <div className="lv-ed-header">
-              {picture ? (
-                <span className="lv-ed-picture">
-                  {/* The name is written beside it. */}
-                  <img src={`${picture}${picture.includes("?") ? "&" : "?"}width=96`} alt="" />
-                </span>
-              ) : (
-                <IconSquare icon={areaIcon(kind)} size={48} />
-              )}
-              <div className="lv-ed-header__text">
-                <h1 className="lv-h1 lv-ed-header__name">{data.title}</h1>
-                <s-text color="subdued">{lead}</s-text>
-              </div>
-            </div>
-          </s-stack>
-        </s-query-container>
+        {/* Every page's header: the item's picture (or its area's icon) as the sign, its name, how much is open. */}
+        <PageHeader
+          sign={
+            picture ? (
+              <span className="lv-ed-picture">
+                {/* The name is written beside it. */}
+                <img src={`${picture}${picture.includes("?") ? "&" : "?"}width=96`} alt="" />
+              </span>
+            ) : (
+              <IconSquare icon={areaIcon(kind)} size={48} />
+            )
+          }
+          title={data.title}
+          lead={lead}
+          trail={{ i18n, links: back.trail }}
+        />
 
         {blocker.state === "blocked" ? (
           <s-banner tone="warning" heading={t("editor.leave.heading")}>
@@ -753,10 +747,12 @@ export function ResourceTranslationEditor() {
                 ) : null}
               </Actions>
             ) : null}
-            <s-text color="subdued">
-              {openLine}
-              {attachedLater ? ` ${t("editor.toolbar.attachedLater", { count: attachedLater, max: ATTACHED_AI_ITEMS })}` : null}
-            </s-text>
+            {openLine ? (
+              <s-text color="subdued">
+                {openLine}
+                {attachedLater ? ` ${t("editor.toolbar.attachedLater", { count: attachedLater, max: ATTACHED_AI_ITEMS })}` : null}
+              </s-text>
+            ) : null}
             {aiCount === 0 && machineKeys.length && !askAgain ? (
               <s-stack direction="inline">
                 <Button
@@ -828,18 +824,11 @@ export function ResourceTranslationEditor() {
         {data.paging ? (
           <s-section heading={t("editor.paging.texts", { count: data.paging.total })}>
             <s-stack direction="block" gap="small">
-              <Form method="get">
+              {/* Runs as you type (after a pause, from two characters, at once on Enter); the language and the way back stay. */}
+              <SearchForm label={t("editor.paging.findLabel")} labelHidden={false} placeholder={t("editor.paging.findPlaceholder")} value={data.paging.query}>
                 <input type="hidden" name="lang" value={data.target.locale} />
                 {from ? <input type="hidden" name="from" value={from} /> : null}
-                <s-stack direction="inline" gap="small" alignItems="end">
-                  <s-search-field name="q" label={t("editor.paging.findLabel")} placeholder={t("editor.paging.findPlaceholder")} value={data.paging.query} />
-                  {/* In a stack of its own: the button's align-self (its width in a block stack) would win over
-                      the row's end alignment and lift it to the field's label. */}
-                  <s-stack direction="inline">
-                    <Button type="submit">{t("common.action.search")}</Button>
-                  </s-stack>
-                </s-stack>
-              </Form>
+              </SearchForm>
               <s-text color="subdued">
                 {data.paging.matching === 0
                   ? t("editor.paging.noMatch")

@@ -1,9 +1,12 @@
 /**
- * One area of a language, item by item (/app/languages/:locale/:category):
- * how far the area is with its next step, filters by each item's one state
- * that add up to "All", search by name, the items grouped by state with
- * pictures and the state of each text, the way to the editor, and pages of
- * 50. Also its no-access, not-counted and not-found states.
+ * One area of a language, item by item (/app/languages/:locale/:category),
+ * the app's one list of products, collections, pages and blog posts: the
+ * store's other languages as Content's chips, how far the area is with its
+ * next step, filters by each item's one state that add up to "All", search
+ * by name as you type, the items grouped by state with pictures and the
+ * state of each text, the way to the editor, and pages of 50. Also its
+ * no-access, not-counted and not-found states, and the old per-type lists
+ * (/app/products …) that lead here.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
@@ -43,14 +46,21 @@ test("an area's items: figure, filters that add up, groups by state, pictures an
   await expect(page.getByRole("heading", { level: 1, name: "Products in German" })).toBeVisible();
   await expect(page.getByText("55 products", { exact: true })).toBeVisible();
 
-  // How far the area is: texts in the figure, products done beside it.
+  // The same area in the store's other language: Content's chips, the current one in the chosen look.
+  const languages = page.getByRole("navigation", { name: "Choose a language" });
+  await expect(languages.locator('[aria-current="page"]')).toHaveText(/German/);
+  await expect(languages.getByRole("link", { name: "French", exact: true })).toHaveAttribute("href", "/app/languages/fr/products");
+  await expect(languages).not.toContainText("%");
+
+  // How far the area is: the ring, the figure in texts and each state (the filters below count the products).
   const hero = region(page, "Progress: Products");
-  await expect(hero.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts are done and live$/ })).toBeVisible();
+  await expect(hero.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts done$/ })).toBeVisible();
   // The figure and Next are the hero's two headings, in the Overview's type scale; the list's heading too.
-  await expect(hero.getByRole("heading", { level: 2, name: /^\d+ of \d+ texts are done and live$/ })).toBeVisible();
+  await expect(hero.getByRole("heading", { level: 2, name: /^\d+ of \d+ texts done$/ })).toBeVisible();
   await expect(hero.getByRole("heading", { level: 2, name: "Next", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Item by item" })).toBeVisible();
-  await expect(hero.getByText("Fully done: 7 of 55 products")).toBeVisible();
+  // One figure line, not a second one in products that the filters below say again.
+  await expect(hero.getByText(/of 55 products/)).toHaveCount(0);
   // One next step with the page's only primary button: translate what is open (asks first).
   await expect(hero.getByText("48 products to translate")).toBeVisible();
   const primary = page.locator('[data-button][data-variant="primary"]').filter({ hasNot: page.locator("s-modal") });
@@ -135,12 +145,15 @@ test("a filter shows one group, and pages hold 50 items", async ({ page }) => {
   await expect(page.getByRole("link", { name: /^Open: / })).toHaveCount(7);
 });
 
-test("search by name keeps the filter and can be cleared @responsive", async ({ page }) => {
+test("search by name runs as you type, keeps the filter and the focus, and can be cleared @responsive", async ({ page }) => {
   await openApp(page, "catalog", "/app/languages/de/products?state=missing");
-  await page.getByRole("searchbox", { name: "Search by name" }).fill("jacket 1");
-  await page.getByRole("button", { name: "Search" }).click();
+  // No Search button: the search runs after a pause in typing (Enter at once), as on Review.
+  await expect(page.getByRole("search").locator("[data-button]")).toHaveCount(0);
+  const search = page.getByRole("searchbox", { name: "Search by name" });
+  await search.pressSequentially("jacket 1", { delay: 30 });
   await expect(page).toHaveURL(/[?&]q=jacket\+1/);
   await expect(page).toHaveURL(/[?&]state=missing/);
+  await expect(search).toBeFocused();
   // Product 1 and 10–19 match; the filter shows those still missing texts (10–19), the chips count every match.
   await expect(page.getByText("11 matches for “jacket 1”")).toBeVisible();
   await expect(filters(page).locator('[aria-current="true"]')).toHaveText("Missing 10");
@@ -227,4 +240,26 @@ test("an unknown area or language is not found", async ({ page }) => {
     expect(response?.status(), path).toBe(404);
     await expect(page.locator(`s-banner[heading="We couldn't find this page"]`)).toBeVisible();
   }
+});
+
+test("the old per-type lists lead to their area's list, in the language they would have opened in", async ({ page }) => {
+  // ?lang names the language; the editors stay where they are.
+  await openApp(page, "catalog", "/app/products?lang=fr");
+  await expect(page).toHaveURL(/\/app\/languages\/fr\/products(\?|$)/);
+  await expect(page.getByRole("heading", { level: 1, name: "Products in French" })).toBeVisible();
+  // Blog posts and blogs: the blog area. Without ?lang: the first visible language.
+  await openApp(page, "catalog", "/app/articles");
+  await expect(page).toHaveURL(/\/app\/languages\/(de|fr)\/blog(\?|$)/);
+  await expect(page.getByRole("heading", { level: 1, name: /^Blog in (German|French)$/ })).toBeVisible();
+});
+
+test("an area's language switch keeps where the list was opened from, and names a hidden language so", async ({ page }) => {
+  await openApp(page, "full", "/app/languages/de/products?from=content");
+  const languages = page.getByRole("navigation", { name: "Choose a language" });
+  await expect(languages.getByRole("link", { name: "French", exact: true })).toHaveAttribute("href", "/app/languages/fr/products?from=content");
+  await expect(languages.getByRole("link", { name: "Arabic (hidden)" })).toHaveAttribute("href", "/app/languages/ar/products?from=content");
+  await languages.getByRole("link", { name: "French", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Products in French" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Content" })).toHaveAttribute("href", "/app/content?lang=fr");
+  await expectAccessible(page);
 });

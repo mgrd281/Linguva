@@ -127,16 +127,13 @@ export async function loadOverview(
   const headline = headlineByLocale(coverage.counts);
   // A store with live translations (measured, made anywhere) is past its first translation.
   const liveTranslations = [...measuredLocales].some((locale) => (headline.get(locale)?.complete ?? 0) > 0);
-  // The first translation opens the products' list of a counted language (a visible one first): its
-  // Translate asks first, as on every other way into Products. A language never counted has no rows
-  // there (no background jobs counted it), so it keeps the Products list, which reads Shopify.
+  // The first translation opens the products' list (the app's one list of them) of a counted language,
+  // a visible one first: its Translate asks first, as on every other way into Products. Before any
+  // language is counted, the first visible one's (its list offers counting first); without a language,
+  // Content, which says where to add one (the step is done only once there is one).
   const countedTarget = targets.find((l) => l.published && measuredLocales.has(l.locale)) ?? targets.find((l) => measuredLocales.has(l.locale));
-  const firstTarget = (targets.find((l) => l.published) ?? targets[0])?.locale;
-  const firstTranslationHref = countedTarget
-    ? categoryPath(countedTarget.locale, "products")
-    : firstTarget
-      ? `/app/products?lang=${encodeURIComponent(firstTarget)}`
-      : "/app/products";
+  const firstTarget = countedTarget ?? targets.find((l) => l.published) ?? targets[0];
+  const firstTranslationHref = firstTarget ? categoryPath(firstTarget.locale, "products") : "/app/content";
 
   const allSteps: ChecklistStep[] = [
     {

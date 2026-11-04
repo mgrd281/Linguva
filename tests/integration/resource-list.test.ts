@@ -1,13 +1,15 @@
 /**
- * The per-type lists (`/app/products`, `/app/content/<type>`): opened without
- * ?lang they show a visible language, never a hidden one while a visible one
- * exists; hidden languages are marked; an item's count leaves its web address
- * out; and a type Shopify refuses although its permission was granted offers
- * no useless "Allow access".
+ * The per-type lists (`/app/content/<type>`): opened without ?lang they show
+ * a visible language, never a hidden one while a visible one exists; hidden
+ * languages are marked; an item's count leaves its web address out; and a
+ * type Shopify refuses although its permission was granted offers no useless
+ * "Allow access". The old lists of products, collections, pages, blog posts
+ * and blogs (`/app/products` …) lead to their area's list in the language
+ * they would have opened in, or to Content without one.
  */
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { resourceListPage } from "../../app/.server/translation/resource-list";
+import { areaListPath, resourceListPage } from "../../app/.server/translation/resource-list";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { ownerDb, resetDatabase } from "../support/db";
 import { FakeShopifyStore } from "../support/fake-store";
@@ -80,5 +82,21 @@ describe("a type's list", () => {
     reads = 0;
     expect((await list("PRODUCT")).denied).toBeNull();
     expect(reads).toBe(0);
+  });
+});
+
+describe("an old per-type list", () => {
+  it("leads to its area's list in the language it would have opened in, or to Content without one", async () => {
+    const { store, shop } = await setUp();
+    const path = (category: Parameters<typeof areaListPath>[2], lang: string | null) => areaListPath(store.asAdmin(), shop.id, category, lang, app);
+    // Without ?lang (or with one the store doesn't have): the first visible language, never the hidden one Shopify lists first.
+    expect(await path("products", null)).toBe("/app/languages/fr/products");
+    expect(await path("pages", "xx")).toBe("/app/languages/fr/pages");
+    expect(await path("blog", "de")).toBe("/app/languages/de/blog");
+    // A hidden language can still be opened on purpose.
+    expect(await path("collections", "ar")).toBe("/app/languages/ar/collections");
+    // No additional language: Content says where to add one.
+    store.locales = [LOCALES[0]!];
+    expect(await path("products", "de")).toBe("/app/content");
   });
 });

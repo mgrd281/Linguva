@@ -6,9 +6,12 @@
  * see in the language and the state of each text
  * (app/components/CategoryList.tsx). Image descriptions and extra details
  * are translated with their products (or collections, pages, blog posts):
- * their list offers that translation, with them ticked. Filters by state, a
- * name search and pages of 50 are links, so every view has its own address;
- * opened from Content (`?from=content`), the trail and every link keep it.
+ * their list offers that translation, with them ticked. The store's other
+ * languages are Content's chips, each the same area in that language (the
+ * app's one list of products, collections, pages and blog posts: the old
+ * /app/products … lead here). Filters by state, a name search (as you type)
+ * and pages of 50 are links, so every view has its own address; opened from
+ * Content (`?from=content`), the trail and every link keep it.
  * The page reloads every few seconds only while a count or a translation of
  * this area runs (each reload reads the shown names from Shopify).
  */
@@ -27,7 +30,9 @@ import { percentLabel } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
 import { Flag } from "../components/Flag";
 import { StateLines } from "../components/ItemStates";
-import { Breadcrumbs, CARD, languageErrorText, NumberedSteps, type StepView } from "../components/LanguageLayout";
+import { CARD, languageErrorText, NumberedSteps, type StepView } from "../components/LanguageLayout";
+import { LanguagePicker, pickerLanguages } from "../components/LanguagePicker";
+import { PageHeader } from "../components/PageHeader";
 import { accessTitle, STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
 import { ProgressBar } from "../components/ProgressBar";
 import { TranslateConfirm, translateWhat } from "../components/TranslateConfirm";
@@ -36,6 +41,7 @@ import type { I18n, MessageKey } from "../i18n/i18n";
 import { emptyCounts, type StateCounts } from "../lib/coverage-rules";
 import { localeCountry } from "../lib/flags";
 import {
+  categoryPath,
   isUnlockGate,
   languagePath,
   originOf,
@@ -75,14 +81,14 @@ const CONFIRM = "category-translate";
 const POLL_MS = 5_000;
 
 /** "48 products": areas whose items are all of one kind name them; the others count entries. */
-const ITEM_NOUNS: Partial<Record<CategoryId, { count: MessageKey; done: MessageKey }>> = {
-  products: { count: "language.category.products.items", done: "language.list.done.products" },
-  collections: { count: "language.category.collections.items", done: "language.list.done.collections" },
-  metaobjects: { count: "language.category.metaobjects.items", done: "language.list.done.metaobjects" },
-  pages: { count: "language.category.pages.items", done: "language.list.done.pages" },
-  images: { count: "language.category.images.items", done: "language.list.done.images" },
+const ITEM_NOUNS: Partial<Record<CategoryId, MessageKey>> = {
+  products: "language.category.products.items",
+  collections: "language.category.collections.items",
+  metaobjects: "language.category.metaobjects.items",
+  pages: "language.category.pages.items",
+  images: "language.category.images.items",
 };
-const ENTRIES = { count: "language.list.items", done: "language.list.done.items" } as const satisfies { count: MessageKey; done: MessageKey };
+const ENTRIES: MessageKey = "language.list.items";
 
 /** "Translate with products": the button that translates an owner with its image descriptions and extra details. */
 const WITH_OWNER: Record<AttachedArea, MessageKey> = {
@@ -128,35 +134,55 @@ function trail(i18n: I18n, data: Data, names: Names, origin: Origin) {
   ];
 }
 
+/**
+ * The page's header (PageHeader): the area's icon square as its sign, "Products in German", and one line:
+ * how many items it has and where customers read the language. On a phone the trail is one 44 px back
+ * row ("‹ German"), as on the job, Plan, tool and editor pages.
+ */
 function Header({ data, i18n, names, origin }: { data: Data; i18n: I18n; names: Names; origin: Origin }) {
   const { t } = i18n;
-  const nouns = ITEM_NOUNS[data.category.id] ?? ENTRIES;
   const countries = data.countries.map((c) => i18n.country(c.code, c.name));
   // A search narrows the counts to its matches: the area's own count only without one.
   const line = [
-    data.measured && !data.filter.q && data.counts.all ? t(nouns.count, { count: data.counts.all }) : null,
+    data.measured && !data.filter.q && data.counts.all ? t(ITEM_NOUNS[data.category.id] ?? ENTRIES, { count: data.counts.all }) : null,
     countries.length ? t("language.countries", { countries: languageList(i18n, countries, 4) }) : null,
   ]
     .filter(Boolean)
     .join(" · ");
   return (
-    // On a phone the trail is one 44 px back row ("‹ German"), as on the job, Plan, tool and editor pages.
-    <s-query-container>
-      <s-stack direction="block" gap="small-200">
-        <Breadcrumbs i18n={i18n} trail={trail(i18n, data, names, origin)} current={names.category} touch />
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-          <AreaIcon id={data.category.id} />
-          <s-stack direction="block" gap="small-500">
-            <h1 className="lv-h1">{t("language.list.heading", { category: names.category, language: names.language })}</h1>
-            {line ? <s-text color="subdued">{line}</s-text> : null}
-          </s-stack>
-        </s-grid>
-      </s-stack>
-    </s-query-container>
+    <PageHeader
+      sign={<AreaIcon id={data.category.id} />}
+      title={t("language.list.heading", { category: names.category, language: names.language })}
+      lead={line || undefined}
+      trail={{ i18n, links: trail(i18n, data, names, origin), current: names.category }}
+    />
   );
 }
 
-/** How far the area is: the ring, the figure in words, its items done and each state. */
+/**
+ * The same area in the store's other languages: Content's chips (LanguagePicker), the current one in the
+ * chosen look. The language is in the address's path, so a select without scripts has nothing to send.
+ */
+function Languages({ data, i18n, origin }: { data: Data; i18n: I18n; origin: Origin }) {
+  const { t } = i18n;
+  if (data.languages.length < 2) return null;
+  return (
+    <LanguagePicker
+      languages={pickerLanguages(i18n, data.languages, {
+        href: (l) => withOrigin(categoryPath(l.locale, data.category.id), origin),
+        country: (l) => localeCountry(l.locale, data.marketCountries),
+      })}
+      current={data.language.locale}
+      i18n={i18n}
+      label={t("content.language.label")}
+      navLabel={t("content.language.nav")}
+      lead
+      fallback={null}
+    />
+  );
+}
+
+/** How far the area is: the ring, the figure in words and each state (the filters below count its items). */
 function Figure({ data, i18n }: { data: Data; i18n: I18n }) {
   const { t } = i18n;
   const { category, measurement: m } = data;
@@ -185,7 +211,6 @@ function Figure({ data, i18n }: { data: Data; i18n: I18n }) {
   if (!figure.total) return empty(t("language.hero.nothing"), t("language.list.empty"));
 
   const percent = percentLabel(i18n, figure.complete, figure.total);
-  const nouns = ITEM_NOUNS[category.id] ?? ENTRIES;
   const waiting = figure.counts.draft + figure.counts.review;
   return (
     <s-stack direction="block" gap="base">
@@ -197,11 +222,7 @@ function Figure({ data, i18n }: { data: Data; i18n: I18n }) {
           label={t("language.hero.ringLabel", { percent, complete: figure.complete, total: figure.total, count: figure.total })}
           size={112}
         />
-        <s-stack direction="block" gap="small-300">
-          <h2 className="lv-h2">{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</h2>
-          {/* In items: the filters below count items, the figure counts texts. */}
-          {!data.filter.q && data.counts.all ? <s-text color="subdued">{t(nouns.done, { done: data.counts.complete, count: data.counts.all })}</s-text> : null}
-        </s-stack>
+        <h2 className="lv-h2">{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</h2>
       </s-grid>
       {/* Each state in the language page's words, its figure semibold ("12 still missing"). */}
       <StateLines counts={figure.counts} i18n={i18n} strong />
@@ -362,7 +383,7 @@ function areaSteps(ctx: StepContext): StepView[] {
       key: "translate",
       icon: areaIcon,
       title: t("language.list.next.translate", { what: translateWhat(i18n, category.id, estimate) }),
-      detail: `${openTexts(i18n, estimate.texts)}. ${t("language.list.next.keep")}`,
+      detail: `${openTexts(i18n, estimate.texts)}.`,
       action:
         gate === null ? (
           <Button
@@ -409,7 +430,7 @@ function areaSteps(ctx: StepContext): StepView[] {
   }
   // Done only when everything was read and every counted text is live (COVERAGE_RULES §6).
   if (!steps.length && figure.total > 0 && figure.complete === figure.total && category.state.kind === "ok" && !data.scanning) {
-    steps.push({ key: "done", icon: <StepIcon {...STEP_LOOK.done} />, title: t("language.next.done.title"), detail: t("language.next.done.detail") });
+    steps.push({ key: "done", icon: <StepIcon {...STEP_LOOK.done} />, title: t("language.next.done.title") });
   }
   return steps.slice(0, 3);
 }
@@ -476,6 +497,7 @@ export default function CategoryPage() {
       </s-link>
       <s-stack direction="block" gap="base">
         <Header data={data} i18n={i18n} names={areaNames} origin={origin} />
+        <Languages data={data} i18n={i18n} origin={origin} />
         {error ? (
           <s-banner tone="critical">
             <s-paragraph>{languageErrorText(i18n, error.error)}</s-paragraph>

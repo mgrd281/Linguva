@@ -30,4 +30,11 @@ describe("DeepLQuota markup", () => {
   it("is unchanged without a key, in German", () => {
     expect(renderToStaticMarkup(createElement(DeepLQuota, { keys: [], i18n: translator("de") }))).toMatchInlineSnapshot(`"<section aria-labelledby="overview-deepl-heading"><s-box background="base" border="base" borderRadius="large-100" padding="base"><s-stack direction="block" gap="base"><s-stack direction="inline" gap="small-200" alignItems="center"><span class="lv-icon-square" data-tint="slate" aria-hidden="true"><s-icon type="key" color="base" size="base"></s-icon></span><s-stack direction="block" gap="small-500"><s-stack direction="inline" gap="small-200" alignItems="center"><h2 id="overview-deepl-heading" class="lv-h3">DeepL-Kontingent</h2><s-badge icon="lock">Nur für dich sichtbar</s-badge></s-stack></s-stack></s-stack><s-text color="subdued">Kein DeepL-Schlüssel eingerichtet.</s-text></s-stack></s-box></section>"`);
   });
+
+  it("draws a key DeepL didn't answer for in a neutral badge: alert-circle stays the refused key's alone", () => {
+    const html = renderToStaticMarkup(createElement(DeepLQuota, { keys: [{ position: 1, plan: "free", hint: "a1b2", used: null, limit: null, state: "unreachable" }], i18n: translator("en") }));
+    const badge = html.match(/<s-badge tone="neutral" icon="([^"]+)">/);
+    expect(badge?.[1]).toBe("connect");
+    expect(html).not.toContain("alert-circle");
+  });
 });

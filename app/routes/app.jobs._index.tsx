@@ -36,6 +36,7 @@ import { IconSquare } from "../components/IconSquare";
 import { GroupBar, GroupIcon, OriginBadges, StatusPanel, useJobWords, type JobWords } from "../components/jobs/JobLooks";
 import { TintMark } from "../components/jobs/TintMark";
 import { PLAIN_LIST } from "../components/LanguageLayout";
+import { SearchField } from "../components/SearchField";
 import { Actions, InlineNotice } from "../components/SettingsParts";
 import { Strong } from "../components/Type";
 import { reliableEta } from "../lib/eta";
@@ -554,7 +555,8 @@ const FILTER_PANEL = "jobs-filters";
 /**
  * The search and the four filters. A filter's choice applies at once: React 18 calls no onChange for a web
  * component, so its input event navigates (and React 19's change event, once, to the same address). The
- * search applies with "Search". On a phone the filters fold behind "Filter (n)".
+ * search runs as you type (SearchField: after a pause, from two characters, at once on Enter). On a phone
+ * the filters fold behind "Filter (n)".
  */
 function Filters({ data, words }: { data: Data; words: JobWords }) {
   const { t } = words.i18n;
@@ -580,9 +582,9 @@ function Filters({ data, words }: { data: Data; words: JobWords }) {
     <Form method="get" role="search" aria-label={t("jobs.search.label")} className="lv-jobs-filters">
       {q.status !== "all" ? <input type="hidden" name="status" value={q.status} /> : null}
       {q.type && !q.area ? <input type="hidden" name="type" value={q.type} /> : null}
+      {/* The field takes the row (no Search button); the phone's toggle goes under it. */}
       <div className="lv-jobs-filters__search">
-        <s-search-field name="q" label={t("jobs.search.label")} labelAccessibilityVisibility="exclusive" placeholder={t("jobs.search.placeholder")} value={q.q ?? ""} />
-        <Button type="submit">{t("common.action.search")}</Button>
+        <SearchField label={t("jobs.search.label")} placeholder={t("jobs.search.placeholder")} value={q.q ?? ""} />
         <div className="lv-jobs-filters__toggle">
           <Button icon={set ? "filter-active" : "filter"} expanded={open} controls={FILTER_PANEL} onClick={() => setOpen(!open)}>
             {set ? t("jobs.filter.toggleCount", { count: set }) : t("jobs.filter.toggle")}

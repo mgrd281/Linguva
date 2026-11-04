@@ -2,14 +2,14 @@
  * An area's items in a language (the list on /app/languages/:locale/:category),
  * one card: filters by each item's one state that add up to "All" (the shown
  * one in the app's chosen look; none while every item has the same state), a
- * name search where Shopify can search, then the items in groups by state,
+ * name search as you type where Shopify can search, then the items in groups by state,
  * open work first, each group saying in one line what its state means. A row
  * shows the item's picture, its name, what customers see in the language,
  * and each of its texts as an icon and a word; the whole row opens the
  * editor (its name is the link, stretched over the row, so what the row says
  * stays readable), 50 a page.
  */
-import { Form, Link } from "react-router";
+import { Link } from "react-router";
 import type { CategoryItems, CategoryRow, ListState } from "../.server/languages/language-page";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { itemErrorMessage, itemKindLabel, jobErrorMessage } from "../i18n/labels";
@@ -18,6 +18,7 @@ import { CATEGORIES, categoryPath, ITEM_STATES, withOrigin, type CategoryId, typ
 import { TRACK_COLOUR } from "./Coverage";
 import { CARD, PLAIN_LIST } from "./LanguageLayout";
 import { StateIcon } from "./ItemStates";
+import { SearchForm } from "./SearchField";
 import { Button } from "./Button";
 import { Strong } from "./Type";
 
@@ -307,19 +308,17 @@ function Filters({ data, i18n, origin }: { data: CategoryItems; i18n: I18n; orig
   );
 }
 
-/** Search by name (a GET form: the filter stays, the list starts again from the top). */
+/**
+ * Search by name as you type (SearchForm, as Review's: after a pause, from two characters, at once on
+ * Enter, the focus kept): a GET form, so the filter stays and the list starts again from the top.
+ */
 function Search({ data, i18n, origin }: { data: CategoryItems; i18n: I18n; origin: Origin }) {
-  const { t } = i18n;
-  const label = t("language.list.search.label");
+  const label = i18n.t("language.list.search.label");
   return (
-    <Form method="get" action={listHref(data.language.locale, data.category.id, {})}>
+    <SearchForm action={listHref(data.language.locale, data.category.id, {})} label={label} placeholder={label} value={data.filter.q}>
       {data.filter.state !== "all" ? <input type="hidden" name="state" value={data.filter.state} /> : null}
       {origin ? <input type="hidden" name="from" value={origin} /> : null}
-      <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="end">
-        <s-search-field name="q" label={label} labelAccessibilityVisibility="exclusive" placeholder={label} value={data.filter.q} />
-        <Button type="submit">{t("language.list.search.submit")}</Button>
-      </s-grid>
-    </Form>
+    </SearchForm>
   );
 }
 
@@ -345,12 +344,9 @@ export function CategoryList({ data, i18n, names, origin = null }: { data: Categ
       <s-box {...CARD} padding="none" overflow="hidden">
         <s-box padding="base">
           <s-stack direction="block" gap="base">
-            <s-stack direction="block" gap="small-500">
-              <h2 id="list-heading" className="lv-h2">
-                {t("language.list.rows.heading")}
-              </h2>
-              <s-text color="subdued">{t("language.list.rows.intro")}</s-text>
-            </s-stack>
+            <h2 id="list-heading" className="lv-h2">
+              {t("language.list.rows.heading")}
+            </h2>
             {data.category.searchable ? <Search data={data} i18n={i18n} origin={from} /> : null}
             {query ? (
               <s-stack direction="inline" gap="small-200 base" alignItems="center">

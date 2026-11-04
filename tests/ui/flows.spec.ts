@@ -20,8 +20,9 @@ test("translate with AI, edit and publish; the published value is read back from
 
   await openApp(page, "full", "/app/products/13?lang=de");
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Warme Jacke Nummer 13");
-  // Nothing is open any more: AI offers to translate everything again, asking first.
-  await expect(page.getByText("Nothing is missing or outdated: every text is translated.")).toBeVisible();
+  // Nothing is open any more: the header says every text is done; AI offers to translate everything again, asking first.
+  await expect(page.getByText(/^In German · (done|all \d+ texts done)$/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Translate everything again" })).toBeVisible();
   // The previous state is in the history (the app's fold) and can be restored.
   const history = page.locator("summary", { hasText: /^History \(\d+\)$/ }).first();
   await history.click();
@@ -37,7 +38,7 @@ test("AI fills only the open texts: a translation the merchant has stays", async
   await page.getByRole("button", { name: "Translate with AI" }).click();
   await expect(page.locator('s-section[data-text="Description"]').locator("s-badge").first()).toHaveText("AI draft");
   await expect(page.locator('s-text-field[name="value:title"] input')).toHaveValue("Produkt 9 Jacke");
-  await expect(page.locator('s-section[data-text="Name"]').locator("s-badge").first()).toHaveText("Translated");
+  await expect(page.locator('s-section[data-text="Name"]').locator("s-badge").first()).toHaveText("Done");
 });
 
 test("image descriptions are translated with the product's texts and published with them", async ({ page }) => {
@@ -68,7 +69,7 @@ test("a ticked “still correct” box is published with a typed image descripti
   await expectToast(page, "2 translations published");
 
   await openApp(page, "jobs", "/app/products/2?lang=de");
-  await expect(description.locator("s-badge").first()).toHaveText("Translated");
+  await expect(description.locator("s-badge").first()).toHaveText("Done");
   await expect(page.locator('s-text-field[name$=":alt"] input')).toHaveValue("Rote Wanderjacke mit Kapuze");
 });
 

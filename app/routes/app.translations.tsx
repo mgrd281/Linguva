@@ -105,9 +105,10 @@ export default function Translations() {
   // quietly start the new choice after the first part's last item.
   const next = exported && exported !== "failed" && exported.locale === lang && exported.type === type && exported.gaps === gaps ? exported.next : null;
 
-  // The file chosen for the import: its name under the zone, and the import is the step's main button once there is one.
+  // The file chosen for the import: its name under the zone; the import (the page's one primary button) waits for it.
   const [file, setFile] = useState<string | null>(null);
-  // "Import" without a file: said on the zone at once, not after a trip to the server (its own check stays).
+  // A form sent without a file all the same (the zone emptied): said on the zone at once, not after a trip to
+  // the server (its own check stays).
   const [noFile, setNoFile] = useState(false);
   const choose = (zone: { files?: readonly File[] }) => {
     const name = zone.files?.[0]?.name ?? null;
@@ -183,7 +184,8 @@ export default function Translations() {
               onChange={(e) => setGaps(e.currentTarget.checked)}
             />
             <s-stack direction="inline" gap="base" alignItems="center">
-              <Button variant="primary" icon="export" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>
+              {/* The page's one primary button is the import's: exporting is the way there. */}
+              <Button icon="export" onClick={() => exportPart(null)} {...(exporting ? { loading: true } : {})}>
                 {t("transfer.export.download")}
               </Button>
               {next ? (
@@ -242,7 +244,7 @@ export default function Translations() {
                 {file ? <s-text color="subdued">{t("transfer.import.chosen", { name: file })}</s-text> : null}
               </s-stack>
               <s-stack direction="inline">
-                <Button type="submit" variant={file ? "primary" : "secondary"} icon="import" {...(importer.state !== "idle" ? { loading: true } : {})}>
+                <Button type="submit" variant="primary" icon="import" disabled={!file} {...(importer.state !== "idle" ? { loading: true } : {})}>
                   {t("transfer.import.submit")}
                 </Button>
               </s-stack>

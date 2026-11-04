@@ -1,9 +1,10 @@
 /**
  * Smart Auto-Translate (Business): when the store is checked, what is
- * translated, publishing, budgets, exclusions and recent checks. How often
- * is a choice of square tiles (native radio buttons), the weekdays a row of
- * square toggles, and the next checks follow the form live, with the
- * problem the server would refuse said in their place. Every
+ * translated, publishing, budgets, exclusions and recent checks. How often,
+ * the texts and outdated translations are choices of option cards (Settings'
+ * own, each posted by a hidden field), the weekdays a row of square toggles,
+ * and the next checks follow the form live, with the problem the server
+ * would refuse said in their place. Every
  * value is validated again on the server (smart/validate.ts); the plan is
  * checked in every action, also for a form posted without this page.
  *
@@ -47,10 +48,21 @@ import { PublishingChoice, type PublishMode } from "../components/PublishingChoi
 import { Disclosure } from "../components/Disclosure";
 import { Flag } from "../components/Flag";
 import { IconSquare, type Tint } from "../components/IconSquare";
-import { FactList, focusById, focusSection, InlineNotice, SETTING_NAME, SettingCard, StateLine, useFreshResult, type SettingState } from "../components/SettingsParts";
+import {
+  FactList,
+  focusById,
+  focusSection,
+  InlineNotice,
+  OptionCard,
+  OptionGrid,
+  SETTING_NAME,
+  SettingCard,
+  StateLine,
+  useFreshResult,
+  type SettingState,
+} from "../components/SettingsParts";
 import {
   BudgetMeter,
-  ChoiceTiles,
   DayToggles,
   failedAction,
   scheduleSummary,
@@ -60,10 +72,10 @@ import {
   sameScope,
   smartToast,
   whenIn,
-  type ChoiceTile,
 } from "../components/SmartAutoCard";
 import { Strong } from "../components/Type";
 import { itemKindLabel, jobErrorMessage, kindLabel } from "../i18n/labels";
+import type { MessageKey } from "../i18n/i18n";
 import { useI18n } from "../i18n/react";
 import { effectivePublishMode } from "../lib/automation-state";
 import { consentLead, enginesText, isDeepLOnly } from "../lib/engine-texts";
@@ -93,6 +105,17 @@ const MODE_LOOK: Record<Mode, { icon: IconName; tint: Tint }> = {
   custom: { icon: "clock", tint: "violet" },
   manual: { icon: "play-circle", tint: "slate" },
 };
+/**
+ * What the chosen way's panel adds to its card's line: what "shortly" means, the hour between checks, that
+ * nothing runs by itself. Every day and chosen weekdays: the card's line says it all.
+ */
+const MODE_DETAILS: Partial<Record<Mode, MessageKey>> = {
+  realtime: "automatic.mode.realtime.details",
+  custom: "automatic.mode.custom.details",
+  manual: "automatic.mode.manual.details",
+};
+/** An option card's id (its name, focused once it is the chosen one). */
+const optionId = (choice: string, value: string) => `smart-${choice}-${value}`;
 /** The last checks shown; the earlier ones (up to RECENT_RUNS) fold behind one line, so the settings start high. */
 const RUNS_SHOWN = 3;
 /** Settings' section of the ways changes are translated: where this page is opened from, and leads back to. */
@@ -405,17 +428,12 @@ export default function SmartAutomatic() {
     const form = formRef.current;
     if (!form) return;
     const fd = new FormData(form);
-    const nextMode = String(fd.get("mode") ?? mode);
-    setMode(nextMode);
-    setFieldsChosen(fd.get("fields") === "chosen");
+    // How often, the texts and outdated translations are option cards: their state is the form's (hidden fields).
     const field = fd.get("time");
     const single = typeof field === "string" && parseTime(field) !== null ? field : null;
     if (single) setTime(single);
     const customs = fd.getAll("customTime").map(String);
     if (customs.length) setSlots((current) => current.map((slot, i) => ({ ...slot, value: customs[i] ?? slot.value })));
-    // Between one time and several a day, the first time moves along (09:00 every day → check 1 at 09:00).
-    if (nextMode !== mode && nextMode === "custom" && slots.length === 1) setSlots([{ ...slots[0]!, value: single ?? time }]);
-    if (nextMode !== mode && mode === "custom" && slots[0]) setTime(customs[0] ?? slots[0].value);
     // The days only while they are shown: hidden, they keep what was chosen.
     if (form.querySelector('input[name="weekday"]')) setWeekdays(fd.getAll("weekday").map(Number).filter((n) => n >= 1 && n <= 7));
     const chosenZone = fd.get("timeZone");
@@ -461,6 +479,26 @@ export default function SmartAutomatic() {
   const openZone = () => {
     setZoneOpen(true);
     focusAfter.current = "smart-zone";
+  };
+  // An option card chosen: the form changed, and focus moves to the card that is now the chosen one.
+  const chooseMode = (next: Mode) => {
+    if (next === mode) return;
+    // Between one time and several a day, the first time moves along (09:00 every day → check 1 at 09:00).
+    if (next === "custom" && slots.length === 1) setSlots([{ ...slots[0]!, value: time }]);
+    if (mode === "custom" && slots[0]) setTime(slots[0].value);
+    setMode(next);
+    focusAfter.current = optionId("mode", next);
+    changed();
+  };
+  const chooseFields = (chosen: boolean) => {
+    setFieldsChosen(chosen);
+    focusAfter.current = optionId("fields", chosen ? "chosen" : "all");
+    changed();
+  };
+  const chooseOutdated = (replace: boolean) => {
+    setScope((current) => ({ ...current, replace }));
+    focusAfter.current = optionId("outdated", replace ? "replace" : "keep");
+    changed();
   };
   // Saved: the form is clean again, once per save (later edits show the save bar again).
   const savedResult = useRef<unknown>(null);
@@ -698,12 +736,7 @@ export default function SmartAutomatic() {
   const firstCheckShown = sameScope({ ...scope, fieldsChosen }, initial) || (panel.estimate === null && !panel.remeasure);
   const checkNow = t("automatic.action.checkNow");
   const modeKey: Mode = (MODES as readonly string[]).includes(mode) ? (mode as Mode) : "daily";
-  const modeTiles: ChoiceTile[] = MODES.map((m) => ({
-    value: m,
-    name: t(`automatic.mode.${m}` as "automatic.mode.daily"),
-    line: t(`automatic.mode.${m}.line` as "automatic.mode.manual.line", { checkNow }),
-    ...MODE_LOOK[m],
-  }));
+  const modeDetails = MODE_DETAILS[modeKey];
   const runRow = (run: (typeof panel.runs)[number], index: number) => {
     const when = whenIn(i18n, run.createdAt, panel.zone, data.now, shopZone);
     const status = RUN_STATUS[run.status] ?? RUN_STATUS.QUEUED!;
@@ -846,8 +879,9 @@ export default function SmartAutomatic() {
                     </s-grid>
                   </s-query-container>
                   {readOnly ? (
+                    // Paused or off, the badge above says which.
                     <InlineNotice icon={stoppedByPlan ? "pause-circle" : "lock"} heading={t("settings.changes.line.notInPlan")}>
-                      {stoppedByPlan ? t("automatic.page.notInPlan") : t("automatic.page.keptOff")}
+                      {t("automatic.page.keptOff")}
                     </InlineNotice>
                   ) : (
                     // Paused or waiting: the reason as Settings' status row, its way on beside it (the grant button while it
@@ -899,11 +933,9 @@ export default function SmartAutomatic() {
 
           {/* Recent checks: when, how it ended (icon and word), what it found and sent, and its jobs; the earlier ones folded. Before setup only if there are any. */}
           {config || panel.runs.length ? (
-            <SettingCard id="smart-activity" icon="clipboard-checklist" heading={t("automatic.section.activity")} lead={t("automatic.section.activity.lead")}>
+            <SettingCard id="smart-activity" icon="clipboard-checklist" heading={t("automatic.section.activity")}>
               {panel.runs.length === 0 ? (
-                <InlineNotice icon="calendar-check" heading={t("automatic.activity.empty")}>
-                  {t("automatic.activity.emptyBody")}
-                </InlineNotice>
+                <InlineNotice icon="calendar-check" heading={t("automatic.activity.empty")} />
               ) : (
                 <>
                   <ul aria-label={t("automatic.section.activity")} style={PLAIN_LIST}>
@@ -980,10 +1012,27 @@ export default function SmartAutomatic() {
             <input type="hidden" name="publishMode" value={publishMode} />
             {publishConfirmed ? <input type="hidden" name="confirmPublish" value="on" /> : null}
             <s-stack direction="block" gap="base">
-              {/* When: how often as square tiles; under them the chosen way's time, days and zone with its next checks.
+              {/* When: how often as option cards; under them the chosen way's time, days and zone with its next checks.
                   No lead: "How often", the choice's own name, says what the card adds to its heading. */}
               <SettingCard id="smart-schedule" icon="calendar-time" heading={t("automatic.section.schedule")}>
-                <ChoiceTiles name="mode" legend={t("automatic.mode.label")} options={modeTiles} defaultValue={initial.mode} disabled={readOnly} />
+                <s-stack direction="block" gap="small-200">
+                  <h3 style={SUB_HEADING}>{t("automatic.mode.label")}</h3>
+                  <input type="hidden" name="mode" value={modeKey} />
+                  <OptionGrid label={t("automatic.mode.label")} min={260}>
+                    {MODES.map((m) => (
+                      <OptionCard
+                        key={m}
+                        id={optionId("mode", m)}
+                        {...MODE_LOOK[m]}
+                        title={t(`automatic.mode.${m}` as "automatic.mode.daily")}
+                        body={t(`automatic.mode.${m}.line` as "automatic.mode.manual.line", { checkNow })}
+                        current={modeKey === m}
+                        currentLabel={t("settings.option.current")}
+                        select={{ onClick: () => chooseMode(m), disabled: readOnly }}
+                      />
+                    ))}
+                  </OptionGrid>
+                </s-stack>
                 <div className="lv-option-panel">
                   <s-stack direction="block" gap="base">
                     <s-stack direction="block" gap="small-300">
@@ -992,7 +1041,7 @@ export default function SmartAutomatic() {
                         <IconSquare icon={MODE_LOOK[modeKey].icon} tint={MODE_LOOK[modeKey].tint} size={28} />
                         <h3 className="lv-h3">{t(`automatic.mode.${modeKey}` as "automatic.mode.daily")}</h3>
                       </s-stack>
-                      <s-text color="subdued">{t(`automatic.mode.${modeKey}.details` as "automatic.mode.realtime.details", { basic: t("settings.changes.basic.title"), checkNow })}</s-text>
+                      {modeDetails ? <s-text color="subdued">{t(modeDetails, { basic: t("settings.changes.basic.title") })}</s-text> : null}
                     </s-stack>
                     <s-query-container>
                       <s-grid gridTemplateColumns={modeKey === "manual" ? "1fr" : "@container (inline-size > 640px) 1fr 1fr, 1fr"} gap="large" alignItems="start">
@@ -1117,41 +1166,40 @@ export default function SmartAutomatic() {
                 </div>
               </SettingCard>
 
-              {/* What: languages, the content by area (as the Content page groups it), the fields, and outdated translations; four labels at one level. */}
-              <SettingCard id="smart-scope" icon="language-translate" heading={t("automatic.section.scope")} lead={t("automatic.section.scope.lead")}>
+              {/* What: languages, the content by area (as the Content page groups it), the texts, and outdated translations; four labels at one level.
+                  No lead: the four labels say what each check translates. */}
+              <SettingCard id="smart-scope" icon="language-translate" heading={t("automatic.section.scope")}>
                 {backIn("smart-scope")}
                 <s-stack direction="block" gap="small-200">
                   <h3 id="smart-languages" style={SUB_HEADING}>
                     {t("automatic.languages.label")}
                   </h3>
-                  {/* One row per language like the content's below: its flag where an area has its icon, so every checkbox
-                      shares one edge. Each checked box posts its own "locale" (the action reads them all). */}
+                  {/* One row per language like the content's below, rows of the card apart by a line: its flag where an area
+                      has its icon, so every checkbox shares one edge. Each checked box posts its own "locale" (the action reads them all). */}
                   {inPlan.length ? (
-                    <s-box border="base" borderRadius="large-100" paddingInline="base">
-                      <ul aria-labelledby="smart-languages" style={PLAIN_LIST}>
-                        {inPlan.map((l, index) => (
-                          <li key={l.locale}>
-                            {index > 0 ? <s-divider /> : null}
-                            <s-box paddingBlock="small-100">
-                              <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
-                                <span style={PICTURE_BOX}>
-                                  <Flag country={localeCountry(l.locale)} fallback={l.locale} size={28} />
-                                </span>
-                                <div style={{ paddingTop: 4 }}>
-                                  <s-checkbox
-                                    name="locale"
-                                    value={l.locale}
-                                    label={languageNames.get(l.locale) ?? l.locale}
-                                    disabled={readOnly}
-                                    {...(initial.locales.includes(l.locale) ? { defaultChecked: true } : {})}
-                                  />
-                                </div>
-                              </s-grid>
-                            </s-box>
-                          </li>
-                        ))}
-                      </ul>
-                    </s-box>
+                    <ul aria-labelledby="smart-languages" style={PLAIN_LIST}>
+                      {inPlan.map((l, index) => (
+                        <li key={l.locale}>
+                          {index > 0 ? <s-divider /> : null}
+                          <s-box paddingBlock="small-100">
+                            <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
+                              <span style={PICTURE_BOX}>
+                                <Flag country={localeCountry(l.locale)} fallback={l.locale} size={28} />
+                              </span>
+                              <div style={{ paddingTop: 4 }}>
+                                <s-checkbox
+                                  name="locale"
+                                  value={l.locale}
+                                  label={languageNames.get(l.locale) ?? l.locale}
+                                  disabled={readOnly}
+                                  {...(initial.locales.includes(l.locale) ? { defaultChecked: true } : {})}
+                                />
+                              </div>
+                            </s-grid>
+                          </s-box>
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
                   {languagesError ? (
                     <StateLine icon="alert-circle" tone="critical">
@@ -1172,47 +1220,46 @@ export default function SmartAutomatic() {
                   <h3 id="smart-types" style={SUB_HEADING}>
                     {t("automatic.types.label")}
                   </h3>
-                  {/* One row per area of the Content page: its icon in its own tint (the same picture and colour everywhere), its name, and its kinds of content side by side. */}
-                  <s-box border="base" borderRadius="large-100" paddingInline="base">
-                    <ul aria-labelledby="smart-types" style={PLAIN_LIST}>
-                      {TYPE_AREAS.map(({ area, icon, tint, types }, index) => (
-                        <li key={area}>
-                          {index > 0 ? <s-divider /> : null}
-                          <s-box paddingBlock="small-100">
-                            <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
-                              <IconSquare icon={icon} tint={tint} size={28} iconSize="base" />
-                              {types.length === 1 ? (
-                                <div style={{ paddingTop: 4 }}>
-                                  <TypeCheckbox
-                                    type={types[0]!}
-                                    // An area named apart from its kind says both ("Size charts & more (Metaobjects)").
-                                    label={areaLabel(i18n, area, types[0]!)}
-                                    checked={chosenTypes.has(types[0]!)}
-                                    i18n={i18n}
-                                    disabled={readOnly}
-                                    engines={data.engines.text}
-                                  />
-                                </div>
-                              ) : (
-                                <div role="group" aria-labelledby={`smart-area-${area}`} style={{ paddingTop: 4 }}>
-                                  <s-stack direction="block" gap="small-200">
-                                    <span id={`smart-area-${area}`} style={SETTING_NAME}>
-                                      {area === "other" ? t("automatic.types.label") : categoryName(i18n, area)}
-                                    </span>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px" }}>
-                                      {types.map((type) => (
-                                        <TypeCheckbox key={type} type={type} label={kindLabel(i18n, type)} checked={chosenTypes.has(type)} i18n={i18n} disabled={readOnly} engines={data.engines.text} />
-                                      ))}
-                                    </div>
-                                  </s-stack>
-                                </div>
-                              )}
-                            </s-grid>
-                          </s-box>
-                        </li>
-                      ))}
-                    </ul>
-                  </s-box>
+                  {/* One row per area of the Content page, rows of the card apart by a line: its icon in its own tint (the same
+                      picture and colour everywhere), its name, and its kinds of content side by side. */}
+                  <ul aria-labelledby="smart-types" style={PLAIN_LIST}>
+                    {TYPE_AREAS.map(({ area, icon, tint, types }, index) => (
+                      <li key={area}>
+                        {index > 0 ? <s-divider /> : null}
+                        <s-box paddingBlock="small-100">
+                          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
+                            <IconSquare icon={icon} tint={tint} size={28} iconSize="base" />
+                            {types.length === 1 ? (
+                              <div style={{ paddingTop: 4 }}>
+                                <TypeCheckbox
+                                  type={types[0]!}
+                                  // An area named apart from its kind says both ("Size charts & more (Metaobjects)").
+                                  label={areaLabel(i18n, area, types[0]!)}
+                                  checked={chosenTypes.has(types[0]!)}
+                                  i18n={i18n}
+                                  disabled={readOnly}
+                                  engines={data.engines.text}
+                                />
+                              </div>
+                            ) : (
+                              <div role="group" aria-labelledby={`smart-area-${area}`} style={{ paddingTop: 4 }}>
+                                <s-stack direction="block" gap="small-200">
+                                  <span id={`smart-area-${area}`} style={SETTING_NAME}>
+                                    {area === "other" ? t("automatic.types.label") : categoryName(i18n, area)}
+                                  </span>
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px" }}>
+                                    {types.map((type) => (
+                                      <TypeCheckbox key={type} type={type} label={kindLabel(i18n, type)} checked={chosenTypes.has(type)} i18n={i18n} disabled={readOnly} engines={data.engines.text} />
+                                    ))}
+                                  </div>
+                                </s-stack>
+                              </div>
+                            )}
+                          </s-grid>
+                        </s-box>
+                      </li>
+                    ))}
+                  </ul>
                   {typesError ? (
                     <StateLine icon="alert-circle" tone="critical">
                       {typesError}
@@ -1227,54 +1274,79 @@ export default function SmartAutomatic() {
                   />
                 </s-stack>
                 <s-divider />
+                {/* Which texts of each item: all of them, or only some kinds, chosen in the list under the cards. */}
                 <s-stack direction="block" gap="small-200">
                   <h3 style={SUB_HEADING}>{t("automatic.fields.label")}</h3>
-                  <s-choice-list name="fields" label={t("automatic.fields.label")} labelAccessibilityVisibility="exclusive" disabled={readOnly}>
-                    <s-choice value="all" defaultSelected={!initial.fieldsChosen}>
-                      {t("automatic.fields.all")}
-                    </s-choice>
-                    <s-choice value="chosen" defaultSelected={initial.fieldsChosen}>
-                      {t("automatic.fields.chosen")}
-                    </s-choice>
-                  </s-choice-list>
+                  <input type="hidden" name="fields" value={fieldsChosen ? "chosen" : "all"} />
+                  <OptionGrid label={t("automatic.fields.label")}>
+                    <OptionCard
+                      id={optionId("fields", "all")}
+                      icon="text-block"
+                      tint="blue"
+                      title={t("automatic.fields.all")}
+                      current={!fieldsChosen}
+                      currentLabel={t("settings.option.current")}
+                      select={{ onClick: () => chooseFields(false), disabled: readOnly }}
+                    />
+                    <OptionCard
+                      id={optionId("fields", "chosen")}
+                      icon="filter"
+                      tint="slate"
+                      title={t("automatic.fields.chosen")}
+                      current={fieldsChosen}
+                      currentLabel={t("settings.option.current")}
+                      select={{ onClick: () => chooseFields(true), disabled: readOnly }}
+                    />
+                  </OptionGrid>
                   {fieldsChosen ? (
-                    <s-box background="subdued" borderRadius="large-100" padding="base">
-                      <s-choice-list name="group" label={t("automatic.fields.groups")} multiple disabled={readOnly} {...(groupsError ? { error: groupsError } : {})}>
-                        {SMART_FIELD_GROUPS.map((g) => (
-                          <s-choice key={g} value={g} defaultSelected={config?.fieldGroups.includes(g) ?? false}>
-                            {/* The Coverage page's names for the field groups ("Titles and names", "SEO titles"), never the codes. */}
-                            {t(`coverage.group.${g}`)}
-                          </s-choice>
-                        ))}
-                      </s-choice-list>
-                    </s-box>
+                    <s-choice-list name="group" label={t("automatic.fields.groups")} multiple disabled={readOnly} {...(groupsError ? { error: groupsError } : {})}>
+                      {SMART_FIELD_GROUPS.map((g) => (
+                        <s-choice key={g} value={g} defaultSelected={config?.fieldGroups.includes(g) ?? false}>
+                          {/* The Coverage page's names for the kinds of text ("Titles and names", "SEO titles"), never the codes. */}
+                          {t(`coverage.group.${g}`)}
+                        </s-choice>
+                      ))}
+                    </s-choice-list>
                   ) : null}
                 </s-stack>
                 <s-divider />
-                {/* Outdated translations: the app's state word, its two choices as tiles like the schedule's. */}
+                {/* Outdated translations: the app's state word, its two choices as option cards like the schedule's. */}
                 <div id="smart-outdated">
                   <s-stack direction="block" gap="small-200">
                     <s-stack direction="block" gap="small-500">
                       <h3 style={SUB_HEADING}>{t("automatic.outdated.label")}</h3>
                       <s-text color="subdued">{t("automatic.section.outdated.lead")}</s-text>
                     </s-stack>
-                    <ChoiceTiles
-                      name="outdated"
-                      legend={t("automatic.outdated.label")}
-                      legendHidden
-                      disabled={readOnly}
-                      defaultValue={config?.replaceOutdatedMachine === false ? "keep" : "replace"}
-                      options={[
-                        { value: "replace", name: t("automatic.outdated.replace"), line: t("automatic.outdated.replace.details") },
-                        { value: "keep", name: t("automatic.outdated.keep"), line: t("automatic.outdated.keep.details", { outdated: t("coverage.state.outdated") }) },
-                      ]}
-                    />
+                    <input type="hidden" name="outdated" value={scope.replace ? "replace" : "keep"} />
+                    <OptionGrid label={t("automatic.outdated.label")}>
+                      <OptionCard
+                        id={optionId("outdated", "replace")}
+                        icon="wand"
+                        tint="violet"
+                        title={t("automatic.outdated.replace")}
+                        body={t("automatic.outdated.replace.details")}
+                        current={scope.replace}
+                        currentLabel={t("settings.option.current")}
+                        select={{ onClick: () => chooseOutdated(true), disabled: readOnly }}
+                      />
+                      <OptionCard
+                        id={optionId("outdated", "keep")}
+                        icon="pin"
+                        tint="slate"
+                        title={t("automatic.outdated.keep")}
+                        body={t("automatic.outdated.keep.details", { outdated: t("coverage.state.outdated") })}
+                        current={!scope.replace}
+                        currentLabel={t("settings.option.current")}
+                        select={{ onClick: () => chooseOutdated(false), disabled: readOnly }}
+                      />
+                    </OptionGrid>
                   </s-stack>
                 </div>
               </SettingCard>
 
               {/* Publishing: the same choice as on Settings, for the smart schedule's own results. */}
-              <SettingCard id="smart-publishing" icon="send" heading={t("automatic.section.publishing")} lead={t("automatic.section.publishing.lead")}>
+              {/* No lead: on this page, publishing is the smart schedule's own (Settings' says it applies elsewhere). */}
+              <SettingCard id="smart-publishing" icon="send" heading={t("automatic.section.publishing")}>
                 <PublishingChoice
                   id="smart-publish"
                   mode={publishing}
@@ -1306,7 +1378,6 @@ export default function SmartAutomatic() {
                         step={1}
                         disabled={readOnly}
                         defaultValue={config?.dailyBudget ? String(config.dailyBudget) : ""}
-                        {...(config?.dailyBudget ? { details: t("automatic.budget.saved", { chars: number(config.dailyBudget) }) } : {})}
                         {...(budgetError ? { error: budgetError } : {})}
                       />
                       <BudgetMeter label={t("automatic.budget.usedToday")} used={panel.usage.today} budget={config?.dailyBudget ?? null} />
@@ -1322,7 +1393,6 @@ export default function SmartAutomatic() {
                         step={1}
                         disabled={readOnly}
                         defaultValue={config?.monthlyBudget ? String(config.monthlyBudget) : ""}
-                        {...(config?.monthlyBudget ? { details: t("automatic.budget.saved", { chars: number(config.monthlyBudget) }) } : {})}
                         {...(budgetError ? { error: budgetError } : {})}
                       />
                       <BudgetMeter label={t("automatic.budget.usedMonth", { month: i18n.month(monthOf(data.now, panel.zone)) })} used={panel.usage.month} budget={config?.monthlyBudget ?? null} />
@@ -1342,11 +1412,10 @@ export default function SmartAutomatic() {
 
               {/* The save bar is the main way to save; this one is for pages opened without it, secondary, and only while there is something to save. */}
               {readOnly || !(dirty || saveToContinue) ? null : (
-                <s-stack direction="inline" gap="small-200 base" alignItems="center">
+                <s-stack direction="inline">
                   <Button type="submit" {...(settingsFetcher.state !== "idle" ? { loading: true } : {})}>
                     {saveTurnsOn ? t("automatic.action.saveAndTurnOn") : t("automatic.action.save")}
                   </Button>
-                  <s-text color="subdued">{t("automatic.save.note")}</s-text>
                 </s-stack>
               )}
             </s-stack>

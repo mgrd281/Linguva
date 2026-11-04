@@ -95,11 +95,16 @@ const attr = (tag: string, name: string) => tag.match(new RegExp(`\\s${name}="([
 // A text's section is named by data-text (its heading row is its one heading), the toolbar's by its Polaris heading.
 const sections = (markup: string) => tags(markup, "s-section").map((tag) => attr(tag, "data-text") ?? attr(tag, "heading"));
 
+/** The header's row (PageHeader's HeaderRow with a lead), its sign first. */
+const SIGN = '<div class="lv-page-head"><s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">';
+
 describe("the editor's page", () => {
   it("leads back to the area list it is opened from, and names the item with what is open", async () => {
     const html = await render(product());
     expect(html).toContain('<s-link slot="breadcrumb-actions" href="/app/languages/de/products">Products in German</s-link>');
-    expect(html).toContain('<h1 class="lv-h1 lv-ed-header__name">Product 2 jacket</h1>');
+    // Every page's header (PageHeader): the trail, then the sign beside the heading and its lead.
+    expect(html).toContain('<h1 class="lv-h1">Product 2 jacket</h1>');
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
     // Name, description, Google title and description, the image's description: the web address doesn't count.
     expect(html).toContain("In German · 3 of 5 texts to translate");
     // The product's picture beside its name.
@@ -109,13 +114,13 @@ describe("the editor's page", () => {
   it("shows the item's picture as its area list does, also when no image has a description; else the area's icon", async () => {
     // The only image has no description: nothing to translate in its section, the picture beside the name all the same.
     const noAlt = product({ attached: { available: true, imagesWithoutAlt: 1, unsupported: 0, items: [] } });
-    expect(await render(noAlt)).toContain('<div class="lv-ed-header"><span class="lv-ed-picture"><img src="https://cdn.example.com/jacket.png?width=96" alt=""');
+    expect(await render(noAlt)).toContain(`${SIGN}<span class="lv-ed-picture"><img src="https://cdn.example.com/jacket.png?width=96" alt=""`);
     // A collection's image (its image description has no picture of its own); the size joins its query.
     const collection = product({ kind: { type: "COLLECTION", label: "Collections", singular: "collection", path: "/app/collections", plural: "collections" }, picture: "https://cdn.example.com/winter.png?v=2" });
     expect(await render(collection)).toContain('<img src="https://cdn.example.com/winter.png?v=2&amp;width=96" alt=""');
     const none = await render(product({ picture: null }));
     expect(none).not.toContain("<img");
-    expect(none).toContain('<div class="lv-ed-header"><span class="lv-icon-square" data-tint="grey" aria-hidden="true" style="width:48px;height:48px;border-radius:14px"><s-icon type="product"');
+    expect(none).toContain(`${SIGN}<span class="lv-icon-square" data-tint="grey" aria-hidden="true" style="width:48px;height:48px;border-radius:14px"><s-icon type="product"`);
   });
 
   it("opened from a list that came from Content, leads back to it and to the language page keeping that; its pages keep it too", async () => {
@@ -129,12 +134,11 @@ describe("the editor's page", () => {
     expect(paged).toContain('<input type="hidden" name="from" value="content"/>');
   });
 
-  it("opened from its type's own list, leads back there: a language not counted yet has no rows in the area list", async () => {
+  it("opened from its type's old list (?from=list), leads back to its area list all the same: one list per area", async () => {
     const html = await render(product(), "en", "http://localhost/app/products/2?lang=de&from=list");
-    expect(html).toContain('<s-link slot="breadcrumb-actions" href="/app/products?lang=de">Products</s-link>');
-    expect(html).toContain('<s-link href="/app/content?lang=de">Content</s-link>');
-    expect(html).toContain('<s-link href="/app/products?lang=de">Products</s-link>');
-    expect(html).not.toContain("/app/languages/de/products");
+    expect(html).toContain('<s-link slot="breadcrumb-actions" href="/app/languages/de/products">Products in German</s-link>');
+    expect(html).toContain('<s-link href="/app/languages/de/products">Products</s-link>');
+    expect(html).not.toContain('href="/app/products?lang=de"');
   });
 
   it("says it in German for a German admin user", async () => {
@@ -184,7 +188,9 @@ describe("the editor's page", () => {
     const badges = tags(html, "s-badge");
     expect(badges.slice(0, 3).map((tag) => attr(tag, "icon"))).toEqual(["check-circle-filled", "refresh", "check-circle-filled"]);
     expect(html).toMatch(/<s-badge icon="refresh" tone="caution">Outdated<\/s-badge>/);
-    expect(html).toMatch(/<s-badge icon="circle-dashed">Not translated<\/s-badge>/);
+    // The language pages' words: Done, Outdated, Missing.
+    expect(html).toMatch(/<s-badge icon="circle-dashed">Missing<\/s-badge>/);
+    expect(html).toMatch(/<s-badge icon="check-circle-filled" tone="success">Done<\/s-badge>/);
     expect(html).toMatch(/<s-badge icon="edit">Manual only<\/s-badge>/);
     const tiles = [...html.matchAll(/<a href="#([^"]+)" class="lv-tile lv-ed-tile" data-state="([^"]+)"/g)].map((m) => [m[1], m[2]]);
     expect(tiles).toEqual([
@@ -209,7 +215,7 @@ describe("the editor's page", () => {
     expect(html).toContain('aria-label="Translate Google texts only: 1 open text"');
     // The memory fills the item's own open texts.
     expect(html).toContain('aria-label="Fill from memory: 2 open texts"');
-    expect(html).toContain("3 texts are missing or outdated: only these get drafts.");
+    expect(html).toContain("Only the 3 missing or outdated texts get drafts.");
     expect(html).not.toContain("Translate everything again");
   });
 
@@ -219,10 +225,11 @@ describe("the editor's page", () => {
       attached: { available: true, imagesWithoutAlt: 0, unsupported: 0, items: [] },
     });
     const html = await render(done);
-    expect(html).toContain("Nothing is missing or outdated: every text is translated.");
+    // The header says it is done; no line under the buttons repeats it.
+    expect(html).not.toContain("missing or outdated");
     expect(html).toMatch(/<button type="button" id="editor-again" class="lv-btn lv-btn--tertiary"[^>]*>/);
     expect(html).not.toContain("Translate with AI");
-    expect(html).toContain("In German · its text is translated");
+    expect(html).toContain("In German · done");
   });
 
   it("says that open texts AI can't write are translated by hand, never that every text is translated", async () => {
@@ -239,7 +246,7 @@ describe("the editor's page", () => {
     expect(html).toContain("In German · 1 of 2 texts to translate");
     expect(html).toContain("1 text is missing or outdated and can only be translated by hand: it&#x27;s marked “Manual only” below.");
     expect(html).toMatch(/<s-badge icon="edit">Manual only<\/s-badge>/);
-    expect(html).not.toContain("every text is translated");
+    expect(html).not.toContain("texts done");
     expect(html).not.toContain("Translate with AI");
   });
 
@@ -258,7 +265,7 @@ describe("the editor's page", () => {
     expect(html).toContain('aria-label="Translate with AI: 27 open texts"');
     expect(html).toContain("In German · 29 of 31 texts to translate");
     expect(html).toContain(
-      "29 texts are missing or outdated: only these get drafts. Texts you&#x27;ve already translated stay as they are. AI translates up to 25 image descriptions and extra details at a time: publish these drafts, then translate the 2 remaining ones with AI.",
+      "Only the 29 missing or outdated texts get drafts. AI translates up to 25 image descriptions and extra details at a time: publish these drafts, then translate the 2 remaining ones with AI.",
     );
   });
 
@@ -299,14 +306,13 @@ describe("the editor's page", () => {
     expect(long).toMatch(/<s-text-area name="value:title" label="German" labelAccessibilityVisibility="exclusive"/);
   });
 
-  it("calls a web address nobody wrote yet optional, never “Not translated” beside the texts the count includes", async () => {
+  it("calls a web address nobody wrote yet optional, never “Missing” beside the texts the count includes", async () => {
     const written = [field("title", "SINGLE_LINE_TEXT_FIELD", "Product 2 jacket", "Produkt 2 Jacke"), field("body_html", "HTML", "<p>Warm.</p>", "<p>Warm.</p>")];
     const none = { available: true, imagesWithoutAlt: 0, unsupported: 0, items: [] };
     const html = await render(product({ fields: [...written, field("handle", "URI", "product-2")], attached: none }));
-    expect(html).toContain("In German · all 2 texts are translated");
-    expect(html).toContain("Nothing is missing or outdated: every text is translated.");
+    expect(html).toContain("In German · all 2 texts done");
     expect(html).toContain('<s-badge icon="minus-circle">Optional</s-badge><s-badge icon="edit">Manual only</s-badge>');
-    expect(html).not.toContain("Not translated");
+    expect(html).not.toContain("Missing");
     const tiles = [...html.matchAll(/class="lv-tile lv-ed-tile" data-state="([^"]+)"/g)].map((m) => m[1]);
     expect(tiles).toEqual(["translated", "translated", "optional"]);
     expect(html).toContain('<span class="lv-sr">Web address: Optional</span>');
@@ -348,6 +354,9 @@ describe("the editor's page", () => {
     expect(html).toContain("In German · 120 texts");
     expect(html).not.toContain("lv-ed-tiles");
     expect(sections(html)).toContain("120 texts");
+    // "Find a text" searches as you type (SearchForm): a search landmark with the language kept, no Search button.
+    expect(html).toMatch(/<form method="get" action="[^"]*" role="search"[^>]*><input type="hidden" name="lang" value="de"\/><s-search-field name="q" label="Find a text" placeholder="Key, original or translation" value=""><\/s-search-field><\/form>/);
+    expect(html).not.toMatch(/<span class="lv-btn__label">Search<\/span>/);
   });
 });
 

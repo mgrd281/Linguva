@@ -22,7 +22,9 @@ test("the content page shows the store area by area for one language @responsive
   await expect(current).toHaveText(/German/);
   await expect(current).toHaveCSS("background-color", "rgb(245, 249, 255)");
   await expect(current).toHaveCSS("box-shadow", /rgb\(0, 91, 211\)/);
-  await expect(languages.getByRole("link", { name: /^French: / })).toHaveAttribute("href", "/app/content?lang=fr");
+  // A chip names its language only: the figures are on the tiles below and on the language's own page.
+  await expect(languages.getByRole("link", { name: "French", exact: true })).toHaveAttribute("href", "/app/content?lang=fr");
+  await expect(languages).not.toContainText("%");
   await expect(languages.locator("li", { hasText: "Arabic" })).toContainText("hidden");
   // When it was counted, as the language page says it, never "today"; the way to its next steps (whose trail leads back here).
   // In the store's time zone (Europe/Berlin in the fixtures), so without "UTC".
@@ -150,13 +152,17 @@ test("a language not counted yet says so, offers counting and shows no figures @
   await expectNoHorizontalScroll(page);
 });
 
-test("a store with many languages picks one in a select, shown on request", async ({ page }) => {
+test("a store with many languages picks one in a select that opens it at once", async ({ page }) => {
   await openApp(page, "stalled", "/app/content");
   const select = page.locator('s-select[name="lang"]');
   await expect(select).toHaveAttribute("label", "Language");
   await expect(page.getByRole("navigation", { name: "Choose a language" }).locator("li")).toHaveCount(0);
-  await expect(page.locator("[data-button]", { hasText: "Show" })).toBeVisible();
+  // Nothing to press after picking: "Show" is there only without scripts (<noscript>).
+  await expect(page.locator("[data-button]", { hasText: "Show" })).toHaveCount(0);
   await expectAccessible(page);
+  await page.getByRole("combobox", { name: "Language" }).selectOption({ label: "French" });
+  await expect(page).toHaveURL(/\/app\/content\?lang=fr/);
+  await expect(page.getByRole("link", { name: "Next steps for French" })).toBeVisible();
 });
 
 test("without an additional language the page says where to add one", async ({ page }) => {
@@ -200,8 +206,9 @@ test("theme content with many texts is searched and paged @responsive", async ({
   await page.locator("[data-button]", { hasText: "Next" }).click();
   await expect(page.getByText(/Showing 51–100 of 120/)).toBeVisible();
 
+  // Enter searches at once (the search also runs while typing).
   await page.locator('s-search-field[name="q"] input').fill("free shipping");
-  await page.getByRole("button", { name: "Search" }).click();
+  await page.locator('s-search-field[name="q"] input').press("Enter");
   await expect(page.getByText(/Showing 1–1 of 1 matching/)).toBeVisible();
   await expect(page.getByText("Free shipping over 50 €")).toBeVisible();
   await expectAccessible(page);
@@ -223,12 +230,15 @@ test("an invalid content reference is a not-found page", async ({ page }) => {
 });
 
 test("bulk translation offers image descriptions and extra details where a type has them", async ({ page }) => {
-  await openApp(page, "full", "/app/products?lang=de");
-  // The language pages' words for them.
-  const option = page.getByRole("checkbox", { name: "Also translate image descriptions and extra details" });
+  // The products' one list (the area's): its Translate asks first, the option in the dialog, unticked for the area's own step.
+  await openApp(page, "full", "/app/languages/de/products");
+  await page.getByRole("region", { name: "Progress: Products", exact: true }).getByRole("button", { name: "Translate" }).click();
+  const dialog = page.locator("s-modal#category-translate");
+  const option = dialog.getByRole("checkbox", { name: "Also translate image descriptions and extra details" });
   await expect(option).toBeVisible();
   await expect(option).not.toBeChecked();
-  await expect(page.getByText("so the job takes longer")).toBeVisible();
+  await expect(dialog.getByText("Takes longer, because every item is read one by one.")).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await openApp(page, "full", "/app/content/menus?lang=de");
   await expect(page.getByText("Translate all into German")).toBeVisible();
@@ -238,7 +248,12 @@ test("bulk translation offers image descriptions and extra details where a type 
 test("a theme part's list is titled as Content names it, its items' states in the area lists' words", async ({ page }) => {
   await openApp(page, "full", "/app/content/theme-templates?lang=de");
   await expect(page.locator("s-page")).toHaveAttribute("heading", "Texts in templates");
-  await openApp(page, "full", "/app/products?lang=de");
-  await expect(page.locator("s-badge", { hasText: "Outdated" }).first()).toHaveAttribute("icon", "refresh");
-  await expect(page.locator("s-badge", { hasText: /^(Done|Missing)$/ }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Texts in templates" })).toBeVisible();
+  // A type's own list: its items' states with the area lists' words and icons (the menu may be published by the test above).
+  await openApp(page, "full", "/app/content/menus?lang=de");
+  const badge = page.locator("s-badge", { hasText: /^(Done|Missing)$/ }).first();
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveAttribute("icon", /^(check-circle-filled|circle-dashed)$/);
+  // Its languages as Content picks them.
+  await expect(page.getByRole("navigation", { name: "Translate into" }).locator('.lv-lang[aria-current="page"]')).toContainText("German");
 });

@@ -1,31 +1,30 @@
 /**
  * The Content page's pieces ("Inhalte", app/routes/app.content._index.tsx):
- * the language chips, the permission card, the count notice, an area's tile
- * (one link per area, no control inside), the pictures on it, "More texts"
- * with the theme's and the notifications' parts, and the folds of what
- * can't be translated now.
+ * the language chips (LanguagePicker), the permission card, the count
+ * notice, an area's tile (one link per area, no control inside), the
+ * pictures on it, "More texts" with the theme's and the notifications'
+ * parts, and the folds of what can't be translated now.
  *
  * Polaris web components and the app's own chips (ui.css, the Content
  * section); inline styles only where Polaris has nothing (list resets, the
- * picture pile, the summary reset, single-line names, even line breaks),
+ * picture pile, the summary reset, even line breaks),
  * colours from Coverage.tsx only. Every state is an icon and words; every
  * area's icon sits in its own tinted square (CATEGORIES).
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Form, Link, type useFetcher } from "react-router";
+import type { useFetcher } from "react-router";
 import type { ContentArea, ContentGroup, ContentPage } from "../.server/content/content-page";
 import type { I18n, MessageKey } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
 import { hasAttached, PART_ICON, SCOPE_ICON, showsFigure, TILE_AREAS, type AttachedArea, type AttachedPart, type GroupId, type HubType } from "../lib/content-areas";
-import { chipName, chipOrder, switcherKind } from "../lib/content-language";
 import { addCounts, emptyCounts } from "../lib/coverage-rules";
 import type { IconName } from "../lib/icons";
 import { categoryOf, languagePath, TIERS, withOrigin } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
 import { AreaIcon, BIG_FIGURE, cardGrid, detailLine, IconTile, ITEM_COUNT_KEYS } from "./CategoryCard";
 import { percentLabel, SURFACE_COLOUR, TRACK_COLOUR } from "./Coverage";
-import { Flag } from "./Flag";
 import { IconSquare, type Tint } from "./IconSquare";
+import { LanguagePicker, pickerLanguages } from "./LanguagePicker";
 import { OpenWorkLine, stateSummary, StateKey, TextStateBar } from "./ItemStates";
 import { BIG_HEADING, CARD, PLAIN_LIST } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
@@ -41,8 +40,6 @@ export const H2 = { ...BIG_HEADING, fontSize: 15, lineHeight: "22px", fontWeight
 const ROW_FIGURE = { fontWeight: 650, fontVariantNumeric: "tabular-nums", textAlign: "end", whiteSpace: "nowrap" } as const;
 /** Content's links into the language pages keep where they came from: those pages' trail starts at "Content". */
 const FROM_CONTENT = "content" as const;
-/** A name that stays on one line (cut with "…" where it can't). */
-const ONE_LINE = { display: "block", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
 /** Lines of a tile's sentence broken evenly, without a last word alone ("… und / FAQ"). */
 const PRETTY = { display: "block", textWrap: "pretty" } as const;
 /** An icon inside a line of text (a link's chevron). */
@@ -66,103 +63,23 @@ function areaName(i18n: I18n, type: HubType): string {
 // ─── Language ────────────────────────────────────────────────────────────────
 
 /**
- * "Dänisch: 30 % übersetzt", "Arabisch (versteckt): noch nicht gezählt": a
- * language's chip as a screen reader names it. It is the link's own text,
- * read instead of the chip's words (an `aria-label` would have to repeat
- * those words exactly: WCAG 2.5.3, axe's label-content-name-mismatch).
- */
-export function chipLabel(i18n: I18n, language: Language): string {
-  const name = chipName(i18n, language);
-  const shown = language.published ? name : i18n.t("resources.hiddenLanguage", { language: name });
-  return language.measured
-    ? i18n.t("content.language.chip", { language: shown, percent: percentLabel(i18n, language.complete, language.total) })
-    : i18n.t("content.language.chipNotCounted", { language: shown });
-}
-
-/** A chip's flag, name (semibold on the current one), the hidden marker and the percentage. */
-function ChipBody({ language, current, i18n }: { language: Language; current: boolean; i18n: I18n }) {
-  const name = chipName(i18n, language);
-  const figure = language.measured ? percentLabel(i18n, language.complete, language.total) : "—";
-  return (
-    <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="small-200" alignItems="center">
-      <Flag country={language.country} fallback={language.locale} size={20} />
-      <s-stack direction="block">
-        <span style={ONE_LINE}>{current ? <Strong>{name}</Strong> : <s-text>{name}</s-text>}</span>
-        {language.published ? null : (
-          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-400" alignItems="center">
-            <s-icon type="hide" size="small" color="subdued" />
-            <span style={ONE_LINE}>
-              <s-text color="subdued">{i18n.t("content.language.hidden")}</s-text>
-            </span>
-          </s-grid>
-        )}
-      </s-stack>
-      {current ? (
-        <span className="lv-strong" style={{ lineHeight: "20px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{figure}</span>
-      ) : (
-        <s-text color="subdued" fontVariantNumeric="tabular-nums">
-          {figure}
-        </s-text>
-      )}
-    </s-grid>
-  );
-}
-
-/**
- * The store's languages with how far each is: visible ones first, each
- * group by its name. The current one isn't a link and wears the app's chosen
- * look (the blue ring and tint of the current Settings section and plan);
- * each chip is as wide as its words, at least 168 px, 40 px high (44 px on a
- * touch screen), the chips of a row equally tall (ui.css .lv-lang). More
- * than six: one select with a "Show" button (nothing changes until it is
- * pressed).
+ * The store's languages (LanguagePicker): visible ones first, each group by its name, each chip with its
+ * flag and name; the current one isn't a link and wears the app's chosen look. A language's figure is on
+ * the tiles below and on its own page, not on its chip. More than six: one select that opens the chosen
+ * language at once.
  */
 export function LanguageChips({ languages, current, i18n }: { languages: Language[]; current: string; i18n: I18n }) {
   const { t } = i18n;
-  const ordered = chipOrder(i18n, languages);
-  if (switcherKind(ordered.length) === "select") {
-    return (
-      <nav aria-label={t("content.language.nav")}>
-        <Form method="get" action="/app/content">
-          <s-grid gridTemplateColumns="@container (inline-size > 640px) 360px auto 1fr, 1fr auto" gap="small-200" alignItems="end">
-            <s-select name="lang" label={t("content.language.label")} value={current}>
-              {ordered.map((l) => (
-                <s-option key={l.locale} value={l.locale}>
-                  {chipLabel(i18n, l)}
-                </s-option>
-              ))}
-            </s-select>
-            <Button type="submit">{t("content.language.show")}</Button>
-          </s-grid>
-        </Form>
-      </nav>
-    );
-  }
   return (
-    <nav aria-label={t("content.language.nav")}>
-      <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr, 1fr" gap="small-200 base" alignItems="center">
-        <Strong>{t("content.language.label")}</Strong>
-        <ul className="lv-langs">
-          {ordered.map((l) => (
-            <li key={l.locale} className="lv-langs__item">
-              {l.locale === current ? (
-                <span className="lv-lang" aria-current="page">
-                  <ChipBody language={l} current i18n={i18n} />
-                </span>
-              ) : (
-                // The link's own text is its name for screen readers; the words inside are hidden from them (nothing read twice).
-                <Link className="lv-lang" to={`/app/content?lang=${encodeURIComponent(l.locale)}`}>
-                  <span className="lv-sr">{chipLabel(i18n, l)}</span>
-                  <span aria-hidden="true">
-                    <ChipBody language={l} current={false} i18n={i18n} />
-                  </span>
-                </Link>
-              )}
-            </li>
-          ))}
-        </ul>
-      </s-grid>
-    </nav>
+    <LanguagePicker
+      languages={pickerLanguages(i18n, languages, { href: (l) => `/app/content?lang=${encodeURIComponent(l.locale)}`, country: (l) => l.country })}
+      current={current}
+      i18n={i18n}
+      label={t("content.language.label")}
+      navLabel={t("content.language.nav")}
+      lead
+      fallback={{ action: "/app/content" }}
+    />
   );
 }
 
@@ -340,9 +257,7 @@ export function CountCard({ data, i18n, counter, primary }: { data: ContentPage;
     case "notCounted":
       return (
         <NoticeCard id="content-count" icon="chart-donut" tint="green" heading={t("content.count.heading", { language: upperFirst(inSentence) })} action={button(t("language.next.count.action"))}>
-          <s-paragraph color="subdued">
-            {t("language.hero.notCountedHelp")} {t("language.next.count.detail", { language: inSentence })}
-          </s-paragraph>
+          <s-paragraph color="subdued">{t("language.hero.notCountedHelp")}</s-paragraph>
         </NoticeCard>
       );
     case "counting":
@@ -505,7 +420,7 @@ export function tileLabel(i18n: I18n, area: Pick<ContentArea, "id" | "state" | "
   const parts = [
     figure ? i18n.t("content.tile.label", { area: name, percent: percentLabel(i18n, figure.complete, figure.total), states: stateSummary(i18n, figure.counts) }) : name,
     ...tileLines(i18n, area).map((line) => line.text),
-    ...(area.translating ? [i18n.t("language.card.jobFinding")] : []),
+    ...(area.translating ? [i18n.t(area.translating === "finding" ? "language.card.jobFinding" : "language.card.translating")] : []),
   ];
   return `${parts.map((part) => part.replace(/[.\s]+$/, "")).join(". ")}.`;
 }
@@ -624,10 +539,11 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
           ) : (
             status
           )}
+          {/* A running translation in the Jobs page's signs: finding its texts first, then translating them. */}
           {area.translating ? (
             <s-stack direction="inline" gap="small-200" alignItems="center">
-              <s-icon type="in-progress" tone="info" size="small" />
-              <s-text>{t("language.card.jobFinding")}</s-text>
+              <s-icon type={area.translating === "finding" ? "search-list" : "in-progress"} tone="info" size="small" />
+              <s-text>{t(area.translating === "finding" ? "language.card.jobFinding" : "language.card.translating")}</s-text>
             </s-stack>
           ) : null}
         </s-stack>

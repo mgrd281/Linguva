@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { ZodError } from "zod";
@@ -26,8 +26,7 @@ import { showToast, useResultToast } from "../components/app-bridge";
 import { Card } from "../components/Card";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Disclosure } from "../components/Disclosure";
-import { IconSquare } from "../components/IconSquare";
-import { LockLine, useFreshResult } from "../components/SettingsParts";
+import { LockLine, OptionCard, OptionGrid, useFreshResult } from "../components/SettingsParts";
 import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
 import { Strong } from "../components/Type";
 import { useI18n } from "../i18n/react";
@@ -189,55 +188,52 @@ async function downloadCsv(): Promise<boolean> {
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
 
+/** A rule's option card: the id of its name, which takes the focus once it is the chosen rule. */
+const ruleOptionId = (rule: GlossaryRule) => `glossary-rule-${rule}`;
+
 /**
- * "Never translate · Always translate as · Never use" as equal tiles with their icon, one native radio each (the
- * arrow keys move between them). The legend is a field's label, as "Term" and "Language" under it. On a narrow
- * card the three stay side by side as their sign, radio and name (ui.css, .lv-tools-rules__tiles), so the term
- * field is on the first screen; the chosen rule's sentence is then one line under them.
+ * "Never translate · Always translate as · Never use": the app's one way to choose one of several (Settings'
+ * option cards, OptionCard), each with its icon, name and what it means, the chosen rule in the chosen look
+ * and marked "Chosen". The form sends the chosen rule (a hidden field). Off (not in the plan), no rule can be
+ * chosen and the chosen one stays marked.
  */
-function RuleTiles({ value, onChange, disabled, i18n }: { value: GlossaryRule; onChange: (rule: GlossaryRule) => void; disabled: boolean; i18n: I18n }) {
+function RuleChoice({ value, onChange, disabled, i18n }: { value: GlossaryRule; onChange: (rule: GlossaryRule) => void; disabled: boolean; i18n: I18n }) {
   const { t } = i18n;
-  const id = useId();
+  // A switch moves the focus to the chosen rule's name (its card is no button any more), never to the page's start.
+  const switched = useRef(false);
+  useEffect(() => {
+    if (!switched.current) return;
+    switched.current = false;
+    document.getElementById(ruleOptionId(value))?.focus();
+  }, [value]);
   return (
-    <fieldset className="lv-tools-rules" disabled={disabled}>
-      <legend className="lv-tools-rules__legend">{t("glossary.field.rule")}</legend>
-      <div className="lv-tools-rules__tiles">
-        <div className="lv-options">
-          {GLOSSARY_RULES.map((rule) => {
-            const look = RULE_LOOK[rule];
-            const checked = rule === value;
-            return (
-              <label key={rule} className={["lv-option", "lv-tools-rule", checked ? "lv-option--current" : null].filter(Boolean).join(" ")}>
-                <span className="lv-option__top">
-                  <IconSquare icon={look.icon} tint={look.tint} />
-                  <input
-                    type="radio"
-                    name="rule"
-                    value={rule}
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={() => onChange(rule)}
-                    className="lv-tools-rule__radio"
-                    aria-labelledby={`${id}-${rule}`}
-                    aria-describedby={`${id}-${rule}-help`}
-                  />
-                </span>
-                <span id={`${id}-${rule}`} className="lv-option__title">
-                  {ruleLabel(i18n, rule)}
-                </span>
-                <span id={`${id}-${rule}-help`} className="lv-option__body">
-                  {t(look.help)}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        {/* Seen on a narrow card only, where the tiles' sentences are hidden; screen readers hear each tile's own. */}
-        <p className="lv-tools-rules__help" aria-hidden="true">
-          {t(RULE_LOOK[value].help)}
-        </p>
-      </div>
-    </fieldset>
+    <>
+      <input type="hidden" name="rule" value={value} />
+      <OptionGrid label={t("glossary.field.rule")}>
+        {GLOSSARY_RULES.map((rule) => {
+          const look = RULE_LOOK[rule];
+          return (
+            <OptionCard
+              key={rule}
+              id={ruleOptionId(rule)}
+              icon={look.icon}
+              tint={look.tint}
+              title={ruleLabel(i18n, rule)}
+              body={t(look.help)}
+              current={rule === value}
+              currentLabel={t("glossary.ruleChosen")}
+              select={{
+                disabled,
+                onClick: () => {
+                  switched.current = true;
+                  onChange(rule);
+                },
+              }}
+            />
+          );
+        })}
+      </OptionGrid>
+    </>
   );
 }
 
@@ -316,7 +312,7 @@ export default function GlossaryPage() {
             <addFetcher.Form method="post" id="glossary-add" key={formRound}>
               <input type="hidden" name="intent" value="add" />
               <s-stack direction="block" gap="base">
-                <RuleTiles value={rule} onChange={setRule} disabled={locked} i18n={i18n} />
+                <RuleChoice value={rule} onChange={setRule} disabled={locked} i18n={i18n} />
                 <s-query-container>
                   <s-grid gridTemplateColumns={preferred ? "@container (inline-size > 640px) 1fr 1fr 1fr, 1fr" : "@container (inline-size > 640px) 2fr 1fr, 1fr"} gap="base">
                     <s-text-field name="term" label={t("glossary.field.term")} details={t(RULE_LOOK[rule].term)} required {...fieldError("term")} {...(locked ? { disabled: true } : {})} />

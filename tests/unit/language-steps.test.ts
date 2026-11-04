@@ -80,14 +80,14 @@ describe("a figure in words", () => {
   const figure = { complete: 1, total: 350, count: 350 };
 
   it("puts the label first in German, French and Spanish: the form follows the total, so 1 done text of 350 reads right", () => {
-    expect(de.t("language.hero.figure", figure)).toBe("Fertig und live: 1 von 350 Texten");
-    expect(de.t("language.hero.figure", { complete: 0, total: 1, count: 1 })).toBe("Fertig und live: 0 von 1 Text");
-    expect(de.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % übersetzt. Fertig und live: 1 von 350 Texten");
+    expect(de.t("language.hero.figure", figure)).toBe("Fertig: 1 von 350 Texten");
+    expect(de.t("language.hero.figure", { complete: 0, total: 1, count: 1 })).toBe("Fertig: 0 von 1 Text");
+    expect(de.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % übersetzt. Fertig: 1 von 350 Texten");
     // French reads 0 as singular too: no verb has to agree with it.
-    expect(fr.t("language.hero.figure", { ...figure, complete: 0 })).toBe("Terminés et en ligne : 0 sur 350 textes");
-    expect(fr.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % traduit. Terminés et en ligne : 1 sur 350 textes");
-    expect(es.t("language.hero.figure", figure)).toBe("Listos y publicados: 1 de 350 textos");
-    expect(es.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % traducido. Listos y publicados: 1 de 350 textos");
+    expect(fr.t("language.hero.figure", { ...figure, complete: 0 })).toBe("Terminés : 0 sur 350 textes");
+    expect(fr.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % traduit. Terminés : 1 sur 350 textes");
+    expect(es.t("language.hero.figure", figure)).toBe("Listos: 1 de 350 textos");
+    expect(es.t("language.hero.ringLabel", { ...figure, percent: "0 %" })).toBe("0 % traducido. Listos: 1 de 350 textos");
   });
 
   it("names the texts after the total on an area's card", () => {

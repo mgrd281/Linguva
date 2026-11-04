@@ -3,8 +3,9 @@
  * far it is, what to do next (exactly one primary button: the first step;
  * each step's icon says what kind of step it is), the three steps from
  * translating to live while texts wait for approval, then each area in the
- * order customers meet it, with real examples from the store, and last what
- * the percentage leaves out. Examples load after the page (their own
+ * order customers meet it, with real examples from the store (each card
+ * leads to its list; "Translate" is the step's, once per area), and last
+ * what the percentage leaves out. Examples load after the page (their own
  * request); the page reloads every few seconds only while a count or a
  * translation of this language runs. Opened from Content (`?from=content`),
  * its trail and its links into the areas lead back there.
@@ -26,7 +27,8 @@ import { CoverageRing } from "../components/CoverageRing";
 import { Disclosure } from "../components/Disclosure";
 import { Flag } from "../components/Flag";
 import { SHOWN_STATES, StateIcon, StateKey, StateLines, TextStateBar } from "../components/ItemStates";
-import { Breadcrumbs, CARD, languageErrorText, NumberedSteps, PLAIN_LIST, type StepView } from "../components/LanguageLayout";
+import { CARD, languageErrorText, NumberedSteps, PLAIN_LIST, type StepView, VisibilityBadge } from "../components/LanguageLayout";
+import { PageHeader } from "../components/PageHeader";
 import { accessTitle, attachedTexts, STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
 import { ProgressBar } from "../components/ProgressBar";
 import { StepStrip } from "../components/StepStrip";
@@ -90,6 +92,12 @@ function backLink(i18n: I18n, locale: string, origin: Origin): { href: string; l
     : { href: "/app", label: i18n.t("common.nav.overview") };
 }
 
+/**
+ * The page's header (PageHeader): the language's flag as its sign, its name with whether customers see it
+ * (Visible / Hidden), and one line: where customers read it and when it was counted; a hidden language
+ * says where to publish it. On a phone the trail is one 44 px back row ("‹ Overview"), as on the job, Plan,
+ * tool and editor pages.
+ */
 function Header({ data, i18n, title, origin }: { data: Data; i18n: I18n; title: string; origin: Origin }) {
   const { t } = i18n;
   const countries = data.countries.map((c) => i18n.country(c.code, c.name));
@@ -100,41 +108,27 @@ function Header({ data, i18n, title, origin }: { data: Data; i18n: I18n; title: 
     .filter(Boolean)
     .join(" · ");
   return (
-    // On a phone the trail is one 44 px back row ("‹ Overview"), as on the job, Plan, tool and editor pages.
-    <s-query-container>
-      <s-stack direction="block" gap="small-200">
-        <Breadcrumbs i18n={i18n} trail={[backLink(i18n, data.language.locale, origin)]} current={title} touch />
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-          <Flag country={localeCountry(data.language.locale, data.marketCountries)} fallback={data.language.locale} size={40} />
-          <s-stack direction="block" gap="small-500">
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <h1 className="lv-h1">{title}</h1>
-              {data.language.published ? (
-                <s-badge tone="success" icon="check-circle">
-                  {t("language.published")}
-                </s-badge>
-              ) : (
-                <s-badge icon="hide">{t("language.hidden")}</s-badge>
-              )}
-            </s-stack>
-            {line ? <s-text color="subdued">{line}</s-text> : null}
-            {data.language.published ? null : (
-              <s-text color="subdued">
-                {t("language.hiddenHelp")}{" "}
-                <s-link href={LANGUAGE_SETTINGS} target="_top">
-                  {t("language.publishInShopify")}
-                </s-link>
-              </s-text>
-            )}
-          </s-stack>
-        </s-grid>
-      </s-stack>
-    </s-query-container>
+    <PageHeader
+      sign={<Flag country={localeCountry(data.language.locale, data.marketCountries)} fallback={data.language.locale} size={40} />}
+      title={title}
+      badges={<VisibilityBadge published={data.language.published} i18n={i18n} />}
+      lead={line || undefined}
+      trail={{ i18n, links: [backLink(i18n, data.language.locale, origin)] }}
+    >
+      {data.language.published ? null : (
+        <s-text color="subdued">
+          {t("language.hiddenHelp")}{" "}
+          <s-link href={LANGUAGE_SETTINGS} target="_top">
+            {t("language.publishInShopify")}
+          </s-link>
+        </s-text>
+      )}
+    </PageHeader>
   );
 }
 
 /** How far the language is: the ring, the figure in words and each state with what it means. */
-function Figure({ data, i18n, names }: { data: Data; i18n: I18n; names: Names }) {
+function Figure({ data, i18n }: { data: Data; i18n: I18n }) {
   const { t } = i18n;
   const m = data.measurement;
   if (!data.headline || !data.headline.total) {
@@ -179,10 +173,8 @@ function Figure({ data, i18n, names }: { data: Data; i18n: I18n; names: Names })
           label={t("language.hero.ringLabel", { percent, complete: figure.complete, total: figure.total, count: figure.total })}
           size={112}
         />
-        <s-stack direction="block" gap="small-300">
-          <h2 className="lv-h2">{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</h2>
-          <s-text color="subdued">{t("language.hero.fallback", { primary: names.primary })}</s-text>
-        </s-stack>
+        {/* What customers see where nothing is translated: the words at the page's end ("Missing"). */}
+        <h2 className="lv-h2">{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</h2>
       </s-grid>
       <StateLines counts={figure.counts} i18n={i18n} strong />
       {data.payoff !== null && data.steps ? (
@@ -205,6 +197,8 @@ interface StepContext {
   confirm: (category: CategoryId, attached: boolean) => void;
   /** Counting the store: the form's fetcher. */
   counter: ReturnType<typeof useFetcher<typeof action>>;
+  /** Translating is starting, for this area. */
+  translating: CategoryId | null;
 }
 
 function list(i18n: I18n, categories: readonly CategoryId[]) {
@@ -275,6 +269,7 @@ function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<St
           command="--show"
           onClick={() => ctx.confirm(step.category, withAttached)}
           accessibilityLabel={`${t("language.action.translate")}: ${name}`}
+          {...(ctx.translating === step.category ? { loading: true } : {})}
         >
           {t("language.action.translate")}
         </Button>
@@ -311,7 +306,7 @@ function stepView(step: LanguageStep, first: boolean, ctx: StepContext): Omit<St
       };
     }
     case "done":
-      return { icon: <StepIcon {...STEP_LOOK.done} />, title: t("language.next.done.title"), detail: t("language.next.done.detail") };
+      return { icon: <StepIcon {...STEP_LOOK.done} />, title: t("language.next.done.title") };
   }
 }
 
@@ -348,18 +343,15 @@ function Areas({
   i18n,
   names,
   previews,
-  translate,
   origin,
 }: {
   data: Data;
   i18n: I18n;
   names: Names;
   previews: ReturnType<typeof useFetcher<typeof previewsLoader>>["data"];
-  translate: (c: LanguageCategory) => { modalId: string; onOpen: () => void; loading: boolean } | null;
   origin: Origin;
 }) {
   const { t } = i18n;
-  const percent = data.headline && data.headline.total ? percentLabel(i18n, data.headline.complete, data.headline.total) : null;
   const tiers = TIERS.map((tier) => ({ id: tier.id, categories: data.categories.filter((c) => c.tier === tier.id && visible(c)) })).filter((tier) => tier.categories.length);
   if (!tiers.length) return null;
   const card = (c: LanguageCategory, featured: boolean) => (
@@ -371,7 +363,6 @@ function Areas({
       primaryName={names.primary}
       preview={previews?.[c.id] ?? null}
       featured={featured}
-      translate={translate(c)}
       origin={origin}
     />
   );
@@ -381,7 +372,7 @@ function Areas({
         <s-grid gridTemplateColumns="@container (inline-size > 760px) 1fr auto, 1fr" gap="base" alignItems="end">
           <s-stack direction="block" gap="small-500">
             <h2 className="lv-h2">{t("language.areas.heading")}</h2>
-            <s-text color="subdued">{percent ? t("language.areas.intro", { percent }) : t("language.areas.introNoPercent")}</s-text>
+            <s-text color="subdued">{t("language.areas.introNoPercent")}</s-text>
           </s-stack>
           {/* The states the page's bars draw (the cards' and More texts', whose theme texts often come translated), not
               all five: the fold at the page's end explains every word. */}
@@ -536,11 +527,6 @@ export default function LanguagePage() {
 
   const error = [counter.data, translator.data].find((d): d is { error: string } => Boolean(d && "error" in d));
   const target = chosen ? data.categories.find((c) => c.id === chosen.category) : undefined;
-  // A card's "Translate": the dialog starts without the image descriptions and extra details.
-  const translate = (c: LanguageCategory) =>
-    data.bulk.gate === null && c.bulk !== null
-      ? { modalId: CONFIRM, onOpen: () => setChosen({ category: c.id, attached: false }), loading: translator.state !== "idle" && chosen?.category === c.id }
-      : null;
   const percent = data.headline ? percentLabel(i18n, data.headline.complete, data.headline.total) : "—";
   const back = backLink(i18n, locale, origin);
 
@@ -563,10 +549,18 @@ export default function LanguagePage() {
             <s-query-container>
               <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr">
                 <s-box padding="large">
-                  <Figure data={data} i18n={i18n} names={languageNames} />
+                  <Figure data={data} i18n={i18n} />
                 </s-box>
                 <s-box padding="large" background="subdued">
-                  <NextSteps data={data} i18n={i18n} names={languageNames} origin={origin} confirm={(category, attached) => setChosen({ category, attached })} counter={counter} />
+                  <NextSteps
+                    data={data}
+                    i18n={i18n}
+                    names={languageNames}
+                    origin={origin}
+                    confirm={(category, attached) => setChosen({ category, attached })}
+                    counter={counter}
+                    translating={translator.state !== "idle" ? (chosen?.category ?? null) : null}
+                  />
                 </s-box>
               </s-grid>
             </s-query-container>
@@ -578,7 +572,7 @@ export default function LanguagePage() {
           <StepStrip steps={data.steps} percent={percent} label={t("language.strip.label", { primary: languageNames.primary, language: languageNames.inSentence })} i18n={i18n} />
         ) : null}
 
-        <Areas data={data} i18n={i18n} names={languageNames} previews={previews.data} translate={translate} origin={origin} />
+        <Areas data={data} i18n={i18n} names={languageNames} previews={previews.data} origin={origin} />
         <Extras data={data} i18n={i18n} />
         {data.measured ? <Words i18n={i18n} names={languageNames} /> : null}
       </s-stack>

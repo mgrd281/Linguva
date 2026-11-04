@@ -1,9 +1,10 @@
 /**
- * Review's control card: the languages as tabs with flags and counts
- * (visible languages first, a hidden one says so in words; a select on a
- * wide card with more than six), a search that runs while typing, the areas
- * and "With notes" as chips (all in view on a wide card, one row that swipes
- * sideways on a phone, as the languages do there), the job's or the old
+ * Review's control card: the languages in the shared picker (LanguagePicker:
+ * chips with flags and counts, visible languages first, a hidden one says so
+ * in words; a select that opens a language at once above six), a search that
+ * runs while typing, the areas and "With notes" as an area list's filter pills
+ * (all in view on a wide card, one row that swipes sideways on a phone, as the
+ * languages do there), the job's or the old
  * field filter's scope, and the strip with the page's count, the share
  * already decided, the payoff for a page of one language and the page's two
  * actions. Filters are links (instant, no "Apply"); every change starts on
@@ -12,7 +13,7 @@
  */
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Form, useSubmit } from "react-router";
+import { Link } from "react-router";
 import type { ReviewPageData } from "../.server/review/page";
 import type { I18n } from "../i18n/i18n";
 import { switcherKind } from "../lib/content-language";
@@ -20,17 +21,15 @@ import { localeCountry } from "../lib/flags";
 import { languagePath } from "../lib/language-categories";
 import { languageOrder, pageProgress, reviewHref, type Facets, type ReviewQuery } from "../lib/review-view";
 import { ALL } from "../lib/select-all";
-import { areaIcon, areaName, focusSoon, languageLabel, NARROW, WIDE } from "./ReviewCard";
-import { Flag } from "./Flag";
-import { PLAIN_LIST } from "./LanguageLayout";
+import { areaIcon, areaName, languageLabel, NARROW, WIDE } from "./ReviewCard";
+import { LanguagePicker, type PickerLanguage } from "./LanguagePicker";
 import { ProgressBar } from "./ProgressBar";
+import { SearchForm } from "./SearchField";
 import { Button } from "./Button";
 import { Strong } from "./Type";
 
-/** Typing pauses this long before the search runs. */
-const SEARCH_DELAY_MS = 350;
-const COUNT = { fontVariantNumeric: "tabular-nums" } as const;
-const NO_WRAP = { whiteSpace: "nowrap" } as const;
+/** A phone's chips stay on the one row that swipes. */
+const NO_WRAP = { flexWrap: "nowrap" } as const;
 
 export interface PageActions {
   /** Texts on the page. */
@@ -67,32 +66,25 @@ function languageTabs(data: ReviewPageData, facets: Facets, i18n: I18n): Languag
   return [{ locale: null, name: i18n.t("language.list.filter.all"), count: facets.total, hidden: false }, ...languages];
 }
 
-/** "Arabisch versteckt 3": a tab as a screen reader names it (the visible words, in their order). */
+/** "Arabisch versteckt 3": a language as a screen reader names it (the visible words, in their order). */
 function tabLabel(tab: LanguageTab, i18n: I18n): string {
-  return [tab.name, tab.hidden ? i18n.t("review.lang.hidden") : null, i18n.number(tab.count)].filter(Boolean).join(" ");
+  return [tab.name, tab.hidden ? i18n.t("content.language.hidden") : null, i18n.number(tab.count)].filter(Boolean).join(" ");
 }
 
-/** A tab's flag, name (semibold on the chosen one), "hidden" in words under it, and its count. */
-function TabBody({ tab, chosen, data, i18n }: { tab: LanguageTab; chosen: boolean; data: ReviewPageData; i18n: I18n }) {
-  return (
-    <s-stack direction="inline" gap="small-200" alignItems="center">
-      {tab.locale ? <Flag country={localeCountry(tab.locale, data.marketCountries)} fallback={tab.locale} size={20} /> : null}
-      <s-stack direction="block">
-        <span style={NO_WRAP}>{chosen ? <Strong>{tab.name}</Strong> : <s-text>{tab.name}</s-text>}</span>
-        {tab.hidden ? (
-          <s-stack direction="inline" gap="small-400" alignItems="center">
-            <s-icon type="hide" color="subdued" size="small" />
-            <span style={NO_WRAP}>
-              <s-text color="subdued">{i18n.t("review.lang.hidden")}</s-text>
-            </span>
-          </s-stack>
-        ) : null}
-      </s-stack>
-      <s-text color="subdued">
-        <span style={COUNT}>{i18n.number(tab.count)}</span>
-      </s-text>
-    </s-stack>
-  );
+/** The tabs as the shared picker draws them: each with its flag, "hidden" under a hidden one's name, its count, the same page in it. */
+function pickerTabs(tabs: readonly LanguageTab[], query: ReviewQuery, data: ReviewPageData, i18n: I18n): PickerLanguage[] {
+  return tabs.map((tab) => ({
+    value: tab.locale ?? ALL,
+    locale: tab.locale,
+    country: tab.locale ? localeCountry(tab.locale, data.marketCountries) : null,
+    name: tab.name,
+    hidden: tab.hidden,
+    figure: i18n.number(tab.count),
+    label: tabLabel(tab, i18n),
+    // The select's option names its count, and a hidden language says so.
+    option: i18n.t(tab.hidden ? "review.lang.optionHidden" : "review.lang.option", { language: tab.name, count: tab.count }),
+    href: reviewHref(query, { locale: tab.locale }),
+  }));
 }
 
 /** A swiped row starts at its chosen item, so the filter in use is in view (no page scroll; nothing where the row isn't shown). */
@@ -100,63 +92,9 @@ function revealChosen(row: HTMLElement | null) {
   const chosen = row?.querySelector<HTMLElement>('[aria-current="true"]');
   if (!row || !chosen) return;
   const from = row.getBoundingClientRect();
-  const box = chosen.getBoundingClientRect().width ? chosen.getBoundingClientRect() : (chosen.firstElementChild?.getBoundingClientRect() ?? null);
-  if (!box || !from.width) return;
+  const box = chosen.getBoundingClientRect();
+  if (!box.width || !from.width) return;
   if (box.left < from.left || box.right > from.right) row.scrollLeft += box.left - from.left - 16;
-}
-
-/**
- * The languages as tabs, 44 px high like the Jobs page's: they wrap on a wide card; on a phone (`swipe`) they are
- * one row that swipes sideways and starts at the chosen tab. A link's words are read once, from a label of their
- * own (WCAG 2.5.3: the visible words, in order).
- */
-function LanguageTabs({ tabs, query, data, i18n, swipe }: { tabs: LanguageTab[]; query: ReviewQuery; data: ReviewPageData; i18n: I18n; swipe: boolean }) {
-  const list = useRef<HTMLUListElement>(null);
-  useEffect(() => {
-    if (swipe) revealChosen(list.current);
-  }, [swipe, query.locale]);
-  return (
-    <nav aria-label={i18n.t("review.lang.label")}>
-      <ul ref={list} className={swipe ? "lv-review-tabs lv-review-tabs--swipe" : "lv-review-tabs"}>
-        {tabs.map((tab) => (
-          <li key={tab.locale ?? "all"}>
-            {/* The tabs of a row are equally high (a hidden language's tab has two lines). */}
-            {query.locale === tab.locale ? (
-              <span aria-current="true" style={{ display: "grid" }}>
-                <s-stack
-                  direction="block"
-                  justifyContent="center"
-                  background="strong"
-                  borderRadius="base"
-                  paddingInline="small-100"
-                  paddingBlock="small-300"
-                  minBlockSize="44px"
-                  blockSize="100%"
-                >
-                  <TabBody tab={tab} chosen data={data} i18n={i18n} />
-                </s-stack>
-              </span>
-            ) : (
-              <s-clickable href={reviewHref(query, { locale: tab.locale })} borderRadius="base" blockSize="100%">
-                <s-text accessibilityVisibility="exclusive">{tabLabel(tab, i18n)}</s-text>
-                <s-stack
-                  direction="block"
-                  justifyContent="center"
-                  paddingInline="small-100"
-                  paddingBlock="small-300"
-                  minBlockSize="44px"
-                  blockSize="100%"
-                  accessibilityVisibility="hidden"
-                >
-                  <TabBody tab={tab} chosen={false} data={data} i18n={i18n} />
-                </s-stack>
-              </s-clickable>
-            )}
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
 }
 
 /** The filters a form keeps when it changes one of them (`omit`): the page's address without it. */
@@ -173,86 +111,19 @@ function KeptFilters({ query, omit }: { query: ReviewQuery; omit: "locale" | "se
   );
 }
 
-/**
- * More than six languages on a wide card: one select with "Show", as the Content page has it (nothing changes
- * until it is pressed). Each option names its count, and a hidden language says so.
- */
-function LanguageSelect({ tabs, query, i18n }: { tabs: LanguageTab[]; query: ReviewQuery; i18n: I18n }) {
-  const { t } = i18n;
-  return (
-    <nav aria-label={t("review.lang.label")}>
-      <Form method="get">
-        <KeptFilters query={query} omit="locale" />
-        <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="small-200" alignItems="end">
-          <s-select name="lang" label={t("review.lang.select")} value={query.locale ?? ALL}>
-            {tabs.map((tab) => (
-              <s-option key={tab.locale ?? ALL} value={tab.locale ?? ALL}>
-                {t(tab.hidden ? "review.lang.optionHidden" : "review.lang.option", { language: tab.name, count: tab.count })}
-              </s-option>
-            ))}
-          </s-select>
-          <Button type="submit">{t("review.lang.show")}</Button>
-        </s-grid>
-      </Form>
-    </nav>
-  );
-}
-
-/**
- * The search was being typed in when it last ran: the page is drawn afresh
- * for the new results, and the field takes the focus back (caret at the
- * end), so typing goes on where it was.
- */
-let searchHadFocus = false;
-
-/** The search: runs while typing (after a pause, from two characters on) and at once on Enter. */
+/** The search: runs while typing (after a pause, from two characters on) and at once on Enter (SearchField). */
 function Search({ query, i18n }: { query: ReviewQuery; i18n: I18n }) {
   const { t } = i18n;
-  const submit = useSubmit();
-  const form = useRef<HTMLFormElement>(null);
-  const field = useRef<HTMLElementTagNameMap["s-search-field"]>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
-  useEffect(() => {
-    if (!searchHadFocus) return;
-    searchHadFocus = false;
-    focusSoon(() => field.current);
-    requestAnimationFrame(() => {
-      const input = field.current?.shadowRoot?.querySelector("input");
-      if (input) input.setSelectionRange(input.value.length, input.value.length);
-    });
-  }, []);
-  const run = () => {
-    searchHadFocus = Boolean(form.current?.contains(document.activeElement));
-  };
-  const onInput = (event: Event) => {
-    const text = (event.currentTarget as HTMLInputElement).value.trim();
-    if (timer.current) clearTimeout(timer.current);
-    if (text.length === 1) return;
-    timer.current = setTimeout(() => {
-      if (!form.current) return;
-      run();
-      void submit(form.current, { replace: true });
-    }, SEARCH_DELAY_MS);
-  };
   return (
-    <Form method="get" ref={form} role="search" onSubmit={run}>
+    <SearchForm label={t("common.action.search")} placeholder={t("review.filter.searchPlaceholder")} value={query.search ?? ""}>
       <KeptFilters query={query} omit="search" />
-      <s-search-field
-        ref={field}
-        name="q"
-        label={t("common.action.search")}
-        labelAccessibilityVisibility="exclusive"
-        placeholder={t("review.filter.searchPlaceholder")}
-        value={query.search ?? ""}
-        onInput={onInput}
-      />
-    </Form>
+    </SearchForm>
   );
 }
 
 /**
- * The areas (each text in its own area: they add up to "All areas") and "With notes". A wide card shows every chip
+ * The areas (each text in its own area: they add up to "All areas") and "With notes", as an area list's filters
+ * (ui.css .lv-filter: pills with their icon, the chosen one in the app's chosen look). A wide card shows every chip
  * (the areas wrap, "With notes" stays at the end of the first line); a phone has one row that swipes sideways. The
  * copy for the other width is display:none, so it is neither focusable nor read.
  */
@@ -273,24 +144,22 @@ function Chips({ data, facets, query, i18n }: { data: ReviewPageData; facets: Fa
       {showAreas ? (
         // A wide card: it takes the room left beside "With notes" and wraps in it. A phone: its natural width, swiped.
         <nav aria-label={t("review.filter.areaLabel")} style={wrap ? { flex: "0 1 auto", minWidth: 0 } : { flex: "none" }}>
-          <ul style={{ ...PLAIN_LIST, display: "flex", flexWrap: wrap ? "wrap" : "nowrap", gap: 8 }}>
+          <ul className="lv-filters" style={wrap ? undefined : NO_WRAP}>
             {[{ area: null, count: all }, ...facets.areas].map((option) => {
               const text = `${option.area ? areaName(i18n, option.area) : t("review.filter.allAreas")} ${i18n.number(option.count)}`;
-              const icon = option.area ? <s-icon slot="graphic" type={areaIcon(option.area)} /> : null;
+              const icon = option.area ? <s-icon type={areaIcon(option.area)} size="small" /> : null;
               return (
                 <li key={option.area ?? "all"} style={{ flex: "none" }}>
                   {query.area === option.area ? (
-                    <span aria-current="true">
-                      <s-chip color="strong">
-                        {icon}
-                        {text}
-                      </s-chip>
-                    </span>
-                  ) : (
-                    <s-clickable-chip href={reviewHref(query, { area: option.area })}>
+                    <span className="lv-filter" aria-current="true">
                       {icon}
                       {text}
-                    </s-clickable-chip>
+                    </span>
+                  ) : (
+                    <Link className="lv-filter" to={reviewHref(query, { area: option.area })}>
+                      {icon}
+                      {text}
+                    </Link>
                   )}
                 </li>
               );
@@ -305,18 +174,17 @@ function Chips({ data, facets, query, i18n }: { data: ReviewPageData; facets: Fa
       ) : null}
       {showHints ? (
         <div style={{ flex: "none" }}>
+          {/* Chosen, it is the way back to all texts: a link in the chosen look, named for what it does. */}
           {query.flagged ? (
-            <span aria-current="true">
-              <s-clickable-chip color="strong" href={reviewHref(query, { flagged: false })} accessibilityLabel={t("review.filter.remove", { name: hints })}>
-                <s-icon slot="graphic" type="alert-triangle" />
-                {hints}
-              </s-clickable-chip>
-            </span>
-          ) : (
-            <s-clickable-chip href={reviewHref(query, { flagged: true })}>
-              <s-icon slot="graphic" type="alert-triangle" />
+            <Link className="lv-filter" aria-current="true" to={reviewHref(query, { flagged: false })} aria-label={t("review.filter.remove", { name: hints })}>
+              <s-icon type="alert-triangle" size="small" />
               {hints}
-            </s-clickable-chip>
+            </Link>
+          ) : (
+            <Link className="lv-filter" to={reviewHref(query, { flagged: true })}>
+              <s-icon type="alert-triangle" size="small" />
+              {hints}
+            </Link>
           )}
         </div>
       ) : null}
@@ -442,7 +310,21 @@ export function ReviewControls({
   const summary = stripSummary(data, actions, i18n);
   const progress = pageProgress(actions.total, actions.undecided);
   const note = pageNote(actions, i18n);
-  const tabs = languageTabs(data, facets, i18n);
+  const tabs = pickerTabs(languageTabs(data, facets, i18n), query, data, i18n);
+  // Chips up to six languages ("All" isn't one), else the select that opens a language as soon as it is picked.
+  const kind = switcherKind(tabs.length - 1);
+  const picker = (swipe: boolean) => (
+    <LanguagePicker
+      languages={tabs}
+      current={query.locale ?? ALL}
+      i18n={i18n}
+      label={t("review.lang.select")}
+      navLabel={t("review.lang.label")}
+      swipe={swipe}
+      kind={kind}
+      fallback={{ keep: <KeptFilters query={query} omit="locale" /> }}
+    />
+  );
   return (
     <s-section padding="none">
       <s-query-container>
@@ -450,20 +332,12 @@ export function ReviewControls({
           <s-stack direction="block" gap="base">
             {data.facets.languages.length > 1 ? (
               <>
-                {/* A phone: the tabs' row that swipes, then the search (the row sits in this stack, not in a grid
-                    track, so its width never widens the card). */}
-                <s-box display={NARROW}>
-                  <LanguageTabs tabs={tabs} query={query} data={data} i18n={i18n} swipe />
-                </s-box>
-                {/* A wide card: the search beside the first line of tabs (they may wrap), or beside the select. */}
+                {/* A phone: the languages' row that swipes (or the select), then the search (the row sits in this
+                    stack, not in a grid track, so its width never widens the card). */}
+                <s-box display={NARROW}>{picker(true)}</s-box>
+                {/* A wide card: the search beside the first line of languages (they may wrap), or beside the select. */}
                 <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 280px, 1fr" gap="base" alignItems="start">
-                  <s-box display={WIDE}>
-                    {switcherKind(tabs.length - 1) === "select" ? (
-                      <LanguageSelect tabs={tabs} query={query} i18n={i18n} />
-                    ) : (
-                      <LanguageTabs tabs={tabs} query={query} data={data} i18n={i18n} swipe={false} />
-                    )}
-                  </s-box>
+                  <s-box display={WIDE}>{picker(false)}</s-box>
                   <Search query={query} i18n={i18n} />
                 </s-grid>
               </>

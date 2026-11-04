@@ -38,8 +38,8 @@ import { Flag } from "../components/Flag";
 import { IconSquare } from "../components/IconSquare";
 import { GroupIcon, groupSegments, Legend, OriginBadges, StateBadge, useJobWords, type JobWords } from "../components/jobs/JobLooks";
 import { TintMark } from "../components/jobs/TintMark";
-import { Breadcrumbs, NumberedSteps, type StepView } from "../components/LanguageLayout";
-import { HeaderRow } from "../components/PageHeader";
+import { NumberedSteps, type StepView } from "../components/LanguageLayout";
+import { PageHeader } from "../components/PageHeader";
 import { InlineNotice, More } from "../components/SettingsParts";
 import { Strong } from "../components/Type";
 import { itemOutcome, jobErrorMessage } from "../i18n/labels";
@@ -218,35 +218,30 @@ async function downloadReport(jobId: string, locale: string): Promise<boolean> {
 const LIVE_DOT = { display: "inline-block", width: 8, height: 8, borderRadius: 4, background: STATE_COLOURS.complete, flex: "none" } as const;
 const THUMB = { width: 40, height: 40, borderRadius: 8, objectFit: "cover", flex: "none", display: "block" } as const;
 
+/** Every page's header (PageHeader): the language's flag as the sign, the job's state beside its name, when and by whom it started under it. */
 function Header({ data, words, name }: { data: Data; words: JobWords; name: string }) {
   const { t } = words.i18n;
   const { job } = data;
   const origin = jobOrigin(job, data.actorId);
   const by = origin === "you" ? t("jobs.meta.byYou") : origin === "team" ? t("jobs.meta.byTeam") : null;
   return (
-    <s-query-container>
-      <s-stack direction="block" gap="small-200">
-        <Breadcrumbs i18n={words.i18n} trail={[{ href: "/app/jobs", label: t("jobs.detail.breadcrumb") }]} current={name} touch />
-        {/* The language's flag in the header's square (Review's language tiles), as the Jobs list's row shows the job; placed as every page's sign. */}
-        <HeaderRow
-          sign={
-            <span className="lv-icon-square" data-tint="grey" aria-hidden="true">
-              <Flag country={localeCountry(job.targetLocale, data.marketCountries)} fallback={job.targetLocale} size={28} />
-            </span>
-          }
-          lead
-        >
-          <s-stack direction="block" gap="small-500">
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <h1 className="lv-h1">{name}</h1>
-              <StateBadge state={heroState(data)} words={words} />
-              <OriginBadges job={job} words={words} />
-            </s-stack>
-            <s-text color="subdued">{[words.say(startedText(job)), by].filter(Boolean).join(" · ")}</s-text>
-          </s-stack>
-        </HeaderRow>
-      </s-stack>
-    </s-query-container>
+    <PageHeader
+      // The language's flag in the header's square (Review's language tiles), as the Jobs list's row shows the job.
+      sign={
+        <span className="lv-icon-square" data-tint="grey" aria-hidden="true">
+          <Flag country={localeCountry(job.targetLocale, data.marketCountries)} fallback={job.targetLocale} size={28} />
+        </span>
+      }
+      title={name}
+      badges={
+        <>
+          <StateBadge state={heroState(data)} words={words} />
+          <OriginBadges job={job} words={words} />
+        </>
+      }
+      lead={[words.say(startedText(job)), by].filter(Boolean).join(" · ")}
+      trail={{ i18n: words.i18n, links: [{ href: "/app/jobs", label: t("jobs.detail.breadcrumb") }] }}
+    />
   );
 }
 

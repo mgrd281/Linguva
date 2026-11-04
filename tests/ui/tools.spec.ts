@@ -2,11 +2,12 @@
  * The pages in Settings › Tools: glossary, translation memory, coverage and
  * Countries & markets. Each starts with its heading and the way back to
  * Settings › Tools, its cards named by their headings. Content,
- * accessibility, phone layout, the glossary's rules as tiles (side by side
- * on a phone), its plan gate before the form, a problem shown on its field,
- * replacing every term only after a question, a search that ends with its
- * field, languages chosen by name, an empty memory that leads on, and the
- * markets' permission asked as on the Content page.
+ * accessibility, phone layout, the glossary's rules as the app's option
+ * cards (one chosen, the others buttons), its plan gate before the form, a
+ * problem shown on its field, replacing every term only after a question, a
+ * search that ends with its field, languages chosen by name, the memory
+ * searched as you type, an empty memory that leads on, and the markets'
+ * permission asked as on the Content page.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, expectToast, openApp } from "./helpers";
@@ -28,33 +29,18 @@ test("glossary: a term for one language, chosen by name @responsive", async ({ p
   const form = card(page, "Add a term");
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
+  await expect(form.locator("h2")).toHaveCSS("font-size", "17px");
 
-  // The card's heading a step above the rule's label, which reads as the other fields' labels do.
-  const type = await form.evaluate((section) => ({
-    heading: getComputedStyle(section.querySelector("h2")!).fontSize,
-    legend: Number(getComputedStyle(section.querySelector("legend")!).fontWeight),
-  }));
-  expect(type.heading).toBe("17px");
-  expect(type.legend).toBeLessThan(600);
-  // On a phone the three rules stand side by side, the chosen one's sentence under them, so the term and its
-  // button are on the first screen; on a wide page each tile says its own.
-  const tiles = await form.locator("label.lv-tools-rule").evaluateAll((labels) => labels.map((l) => Math.round(l.getBoundingClientRect().top)));
-  expect(new Set(tiles).size).toBe(1);
-  const help = form.locator(".lv-tools-rules__help");
-  if (info.project.name === "mobile") {
-    await expect(help).toBeVisible();
-    await expect(help).toHaveText("Brand and product names, SKUs: they stay exactly as they are.");
-    const add = (await form.getByRole("button", { name: "Add term" }).boundingBox())!;
-    expect(add.y + add.height).toBeLessThanOrEqual(page.viewportSize()!.height);
-  } else {
-    await expect(help).toBeHidden();
-  }
+  // The three rules are Settings' option cards, each with what it means: side by side on a wide page, one
+  // under the other on a phone. "Never translate" is the first choice, marked as chosen; the others are buttons.
+  const rules = form.getByRole("group", { name: "Rule" });
+  const tiles = await rules.locator(".lv-option").evaluateAll((cards) => cards.map((c) => Math.round(c.getBoundingClientRect().top)));
+  expect(new Set(tiles).size).toBe(info.project.name === "mobile" ? 3 : 1);
+  await expect(rules.getByRole("group", { name: "Never translate", exact: true })).toContainText("Chosen");
+  await expect(rules.getByRole("group", { name: "Never translate", exact: true })).toContainText("Brand and product names, SKUs: they stay exactly as they are.");
+  await expect(rules.getByRole("button")).toHaveCount(2);
 
   const term = `Merino-${info.project.name}`;
-  // The three rules are tiles, one radio each; "Never translate" is the first choice.
-  const rules = form.getByRole("group", { name: "Rule" });
-  await expect(rules.getByRole("radio")).toHaveCount(3);
-  await expect(rules.getByRole("radio", { name: "Never translate" })).toBeChecked();
   // Only "Always translate as" has a translation of its own.
   await expect(form.locator('s-text-field[name="translation"]')).toHaveCount(0);
   await form.getByRole("textbox", { name: "Term" }).fill(term);
@@ -77,8 +63,12 @@ test("glossary: a term for one language, chosen by name @responsive", async ({ p
 test("glossary: “Always translate as” is for one language and asks for its word on the field; nothing is added", async ({ page }) => {
   await openApp(page, "full", "/app/glossary");
   const form = card(page, "Add a term");
-  await form.getByRole("radio", { name: "Always translate as" }).check();
-  await expect(form.getByRole("radio", { name: "Always translate as" })).toBeChecked();
+  await form.getByRole("button", { name: /^Always translate as/ }).click();
+  // Chosen: marked, no button any more, and the focus on its name (not lost to the page's start).
+  const chosen = form.getByRole("group", { name: "Always translate as", exact: true });
+  await expect(chosen).toContainText("Chosen");
+  await expect(form.getByRole("button", { name: /^Always translate as/ })).toHaveCount(0);
+  await expect(chosen.locator(".lv-option__title")).toBeFocused();
   // One language: no "All languages" then, and the word to use gets its own field.
   await expect(form.locator('s-select[name="targetLocale"] s-option[value="all"]')).toHaveCount(0);
   await expect(form.locator('s-text-field[name="translation"]')).toHaveCount(1);
@@ -95,7 +85,9 @@ test("glossary: a plan without the glossary says so before the form, and the for
   await expect(form.locator("s-badge", { hasText: "Pro" })).toBeVisible();
   await expect(form.getByText("The glossary is part of the Pro and Business plans.")).toBeVisible();
   await expect(form.getByRole("link", { name: "See plans" })).toHaveAttribute("href", "/app/plan");
-  await expect(form.getByRole("radio", { name: "Never translate" })).toBeDisabled();
+  // No rule can be chosen: the chosen one stays marked, the others are no buttons.
+  await expect(form.getByRole("group", { name: "Rule" }).getByRole("button")).toHaveCount(0);
+  await expect(form.getByRole("group", { name: "Never translate", exact: true })).toContainText("Chosen");
   await expect(form.getByRole("button", { name: "Add term" })).toBeDisabled();
   await expect(card(page, "As a CSV file").getByRole("button", { name: "Import", exact: true })).toBeDisabled();
   await expectAccessible(page);
@@ -158,32 +150,30 @@ test("glossary: a search ends with its field, so a shorter list shows every term
   }
 });
 
-test("translation memory: a language chosen by name applies at once; Search is for the words, on the fields' line @responsive", async ({ page }, info) => {
+test("translation memory: a language chosen by name applies at once; the words are searched as you type @responsive", async ({ page }, info) => {
   // Opened on a language: the search shows whatever this shared store's memory holds by now.
   await openApp(page, "full", "/app/memory?lang=de");
   await expectToolHeader(page, "Translation memory");
   // The lead is one line on what the page is for.
-  await expect(page.getByText("Every translation you publish is saved sentence by sentence and reused for the same text without AI, at no cost.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Linguva reuses every translation you publish for the same text, without AI.", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Language" }).selectOption({ label: "French" });
   await expect(page).toHaveURL(/[?&]lang=fr/);
+  // No button to press: the search runs as you type, in the language chosen, and the field keeps the focus.
+  await expect(page.getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
   const search = page.getByRole("searchbox", { name: "Search" });
-  await search.fill("jacket");
-  const button = page.getByRole("button", { name: "Search", exact: true });
-  await button.click();
+  await search.pressSequentially("jacket", { delay: 30 });
   await expect(page).toHaveURL(/[?&]q=jacket/);
   await expect(page).toHaveURL(/[?&]lang=fr/);
-  const [field, pressed] = [(await search.boundingBox())!, (await button.boundingBox())!];
+  await expect(search).toBeFocused();
   if (info.project.name === "mobile") {
-    // Under the fields at its own width, as the app's other buttons on a phone.
-    expect(pressed.y).toBeGreaterThan(field.y + field.height);
-    expect(pressed.width).toBeLessThan(page.viewportSize()!.width / 2);
     // The tool's sign level with the heading, not beside the lead's lines.
     const sign = (await page.locator(".lv-page-head .lv-icon-square").boundingBox())!;
     const heading = (await page.getByRole("heading", { level: 1, name: "Translation memory" }).boundingBox())!;
     expect(Math.abs(sign.y - heading.y)).toBeLessThanOrEqual(2);
   } else {
-    // Beside the fields, on their line, not on their labels' (24 px higher before; the input sits inside its frame).
-    expect(Math.abs(pressed.y + pressed.height - (field.y + field.height))).toBeLessThanOrEqual(8);
+    // The search and the language on one line, their fields level.
+    const [field, language] = [(await search.boundingBox())!, (await page.getByRole("combobox", { name: "Language" }).boundingBox())!];
+    expect(Math.abs(field.y + field.height - (language.y + language.height))).toBeLessThanOrEqual(8);
   }
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -230,7 +220,7 @@ test("Countries & markets: the checks first, each with its fix, in the interface
   await expect(page.getByRole("heading", { level: 1, name: "Länder & Märkte" })).toBeVisible();
   const checks = card(page, "Hinweise");
   // German's own name, never Shopify's English one; the fix beside it.
-  await expect(checks.getByText(/^Deutsch ist veröffentlicht, wird aber von keinem aktiven Markt angeboten/)).toBeVisible();
+  await expect(checks.getByText(/^Deutsch ist sichtbar, wird aber von keinem aktiven Markt angeboten/)).toBeVisible();
   await expect(checks.getByRole("link", { name: "Märkte in Shopify öffnen" }).first()).toHaveAttribute("href", "shopify://admin/settings/markets");
   await expect(card(page, "Länder und ihre Sprachen").locator("s-table").getByText("Spanisch (versteckt)")).toBeVisible();
   // The markets themselves are folded under the countries.
@@ -238,6 +228,11 @@ test("Countries & markets: the checks first, each with its fix, in the interface
   await expect(details).not.toHaveAttribute("open");
   await details.locator("summary").click();
   await expect(details.getByRole("heading", { name: "North America" })).toBeVisible();
+  // One market after the other, a line between them (no box in the card), each language visible or hidden in
+  // the language page's words.
+  await expect(details.locator("s-box[border]")).toHaveCount(0);
+  await expect(details.locator("s-divider")).toHaveCount(2);
+  await expect(details.locator("s-badge", { hasText: /^(Sichtbar|Versteckt)$/ }).first()).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

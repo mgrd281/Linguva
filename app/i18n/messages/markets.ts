@@ -13,12 +13,12 @@ export const en = {
 
   "markets.checks.heading": "Checks",
   "markets.checks.none": "No problems found",
-  "markets.checks.allOffered": "Every published language is offered in a market.",
-  "markets.checks.coverageBefore": "How complete each language is: see",
+  "markets.checks.allOffered": "Every visible language is offered in a market.",
+  "markets.checks.coverageBefore": "How far each language is translated: see",
   "markets.checks.coverageAfter": ".",
 
   "markets.finding.UNPUBLISHED_LOCALE": "{market} offers {language}, but the language is hidden, so customers there see the default language.",
-  "markets.finding.LOCALE_IN_NO_MARKET": "{language} is published, but no active market offers it, so no address of your store shows it.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "{language} is visible, but no active market offers it, so no address of your store shows it.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "{language} is offered in a market, but your plan doesn't include AI translation into it.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} has no domain or subfolder of its own; customers reach it through your primary domain and the country selector.",
@@ -31,10 +31,8 @@ export const en = {
   "markets.market.primaryDomain": "Uses your primary domain.",
   "markets.market.address": "Address",
   "markets.market.default": "default",
-  "markets.market.hidden": "Hidden",
 
   "markets.countries.heading": "Countries and their languages",
-  "markets.countries.intro": "Every country in your active markets: the languages customers there read, whether your store offers them there, and how much is translated.",
   "markets.countries.country": "Country",
   "markets.countries.languages": "Their languages",
   "markets.countries.translated": "Translated",
@@ -62,12 +60,12 @@ export const de: Translation<typeof en> = {
 
   "markets.checks.heading": "Hinweise",
   "markets.checks.none": "Keine Probleme gefunden",
-  "markets.checks.allOffered": "Jede veröffentlichte Sprache wird in einem Markt angeboten.",
-  "markets.checks.coverageBefore": "Wie vollständig jede Sprache ist, siehst du unter",
+  "markets.checks.allOffered": "Jede sichtbare Sprache wird in einem Markt angeboten.",
+  "markets.checks.coverageBefore": "Wie weit jede Sprache übersetzt ist, siehst du unter",
   "markets.checks.coverageAfter": ".",
 
   "markets.finding.UNPUBLISHED_LOCALE": "{market} bietet {language} an, aber die Sprache ist versteckt, daher sehen Kunden dort die Standardsprache.",
-  "markets.finding.LOCALE_IN_NO_MARKET": "{language} ist veröffentlicht, wird aber von keinem aktiven Markt angeboten und ist daher unter keiner Adresse deines Shops zu sehen.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "{language} ist sichtbar, wird aber von keinem aktiven Markt angeboten und ist daher unter keiner Adresse deines Shops zu sehen.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "{language} wird in einem Markt angeboten, aber dein Tarif enthält keine KI-Übersetzung in diese Sprache.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} hat keine eigene Domain und keinen eigenen Unterordner; Kunden erreichen den Markt über deine Hauptdomain und die Länderauswahl.",
@@ -80,10 +78,8 @@ export const de: Translation<typeof en> = {
   "markets.market.primaryDomain": "Verwendet deine Hauptdomain.",
   "markets.market.address": "Adresse",
   "markets.market.default": "Standard",
-  "markets.market.hidden": "Versteckt",
 
   "markets.countries.heading": "Länder und ihre Sprachen",
-  "markets.countries.intro": "Jedes Land deiner aktiven Märkte: die Sprachen, die Kunden dort lesen, ob dein Shop sie dort anbietet und wie viel übersetzt ist.",
   "markets.countries.country": "Land",
   "markets.countries.languages": "Ihre Sprachen",
   "markets.countries.translated": "Übersetzt",
@@ -111,12 +107,12 @@ export const fr: Translation<typeof en> = {
 
   "markets.checks.heading": "Vérifications",
   "markets.checks.none": "Aucun problème détecté",
-  "markets.checks.allOffered": "Chaque langue publiée est proposée dans un marché.",
+  "markets.checks.allOffered": "Chaque langue visible est proposée dans un marché.",
   "markets.checks.coverageBefore": "Consultez l'avancement de chaque langue sur la page",
   "markets.checks.coverageAfter": ".",
 
   "markets.finding.UNPUBLISHED_LOCALE": "{market} propose la langue {language}, mais elle est masquée : les clients de ce marché voient donc la langue par défaut.",
-  "markets.finding.LOCALE_IN_NO_MARKET": "La langue {language} est publiée, mais aucun marché actif ne la propose : aucune adresse de votre boutique ne l'affiche.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "La langue {language} est visible, mais aucun marché actif ne la propose : aucune adresse de votre boutique ne l'affiche.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "La langue {language} est proposée dans un marché, mais votre forfait n'inclut pas la traduction IA vers cette langue.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} n'a ni domaine ni sous-dossier propre ; les clients y accèdent via votre domaine principal et le sélecteur de pays.",
@@ -129,10 +125,8 @@ export const fr: Translation<typeof en> = {
   "markets.market.primaryDomain": "Utilise votre domaine principal.",
   "markets.market.address": "Adresse",
   "markets.market.default": "par défaut",
-  "markets.market.hidden": "Masquée",
 
   "markets.countries.heading": "Pays et leurs langues",
-  "markets.countries.intro": "Chaque pays de vos marchés actifs : les langues que les clients y lisent, si votre boutique les y propose et quelle part est traduite.",
   "markets.countries.country": "Pays",
   "markets.countries.languages": "Leurs langues",
   "markets.countries.translated": "Traduit",
@@ -160,12 +154,12 @@ export const es: Translation<typeof en> = {
 
   "markets.checks.heading": "Verificaciones",
   "markets.checks.none": "No se encontraron problemas",
-  "markets.checks.allOffered": "Cada idioma publicado se ofrece en un mercado.",
+  "markets.checks.allOffered": "Cada idioma visible se ofrece en un mercado.",
   "markets.checks.coverageBefore": "Consulta el avance de cada idioma en la página",
   "markets.checks.coverageAfter": ".",
 
   "markets.finding.UNPUBLISHED_LOCALE": "{market} ofrece el idioma {language}, pero está oculto, por lo que los clientes de ese mercado ven el idioma predeterminado.",
-  "markets.finding.LOCALE_IN_NO_MARKET": "El idioma {language} está publicado, pero ningún mercado activo lo ofrece, así que ninguna dirección de tu tienda lo muestra.",
+  "markets.finding.LOCALE_IN_NO_MARKET": "El idioma {language} está visible, pero ningún mercado activo lo ofrece, así que ninguna dirección de tu tienda lo muestra.",
   "markets.finding.LOCALE_NOT_IN_PLAN": "El idioma {language} se ofrece en un mercado, pero tu plan no incluye la traducción con IA a este idioma.",
   "markets.finding.NO_WEB_PRESENCE":
     "{market} no tiene dominio ni subcarpeta propios; los clientes acceden a él a través de tu dominio principal y el selector de país.",
@@ -178,10 +172,8 @@ export const es: Translation<typeof en> = {
   "markets.market.primaryDomain": "Usa tu dominio principal.",
   "markets.market.address": "Dirección",
   "markets.market.default": "predeterminado",
-  "markets.market.hidden": "Oculto",
 
   "markets.countries.heading": "Países y sus idiomas",
-  "markets.countries.intro": "Cada país de tus mercados activos: los idiomas que leen allí los clientes, si tu tienda los ofrece allí y cuánto está traducido.",
   "markets.countries.country": "País",
   "markets.countries.languages": "Sus idiomas",
   "markets.countries.translated": "Traducido",

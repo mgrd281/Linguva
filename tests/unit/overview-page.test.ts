@@ -134,7 +134,7 @@ describe("the Overview page", () => {
 
   it("keeps the store's figure in a card with its count and the button that counts again, without repeating what approving brings", async () => {
     const store = section(await render(demo()), 'aria-label="Your store"');
-    expect(store).toContain('<s-box background="base" border="base" borderRadius="large-100" padding="base" blockSize="100%">');
+    expect(store).toContain('<s-box background="base" border="base" borderRadius="large-100" padding="base">');
     expect(store).toContain('<h2 class="lv-h2">Your store in 1 other language</h2>');
     expect(store).not.toContain("Once you approve");
     expect(store).toContain("Last counted: Oct 30, 2026, 12:53 AM UTC. New translations count right away.");
@@ -143,15 +143,21 @@ describe("the Overview page", () => {
     expect(store).toContain('<div role="status" tabindex="-1" class="lv-ov-status">');
   });
 
-  it("keeps the other pages' width, its top row's two cards ending on one line", async () => {
+  it("keeps the other pages' width, its top row's two cards each as tall as its content, the step in its card without a box", async () => {
     const html = await render(demo());
     // Not "large": Content and the language pages are as wide.
     expect(html).toMatch(/<s-page heading="Overview">/);
-    expect(html).toContain('<s-grid gridTemplateColumns="@container (inline-size &gt; 760px) 1fr 1fr, 1fr" gap="base" alignItems="stretch">');
-    // Each stretched section is a grid, so its card fills it: no gap under the shorter card.
+    expect(html).toContain('<s-grid gridTemplateColumns="@container (inline-size &gt; 760px) 1fr 1fr, 1fr" gap="base" alignItems="start">');
+    // No card stretched to the other's height (a half-empty card).
+    expect(html).not.toContain('alignItems="stretch"');
     for (const attribute of ['id="overview-next"', 'aria-label="Your store"']) {
-      expect(section(html, attribute), attribute).toMatch(/^<section [^>]*style="display:grid"><s-box background="base" border="base" borderRadius="large-100" padding="base" blockSize="100%">/);
+      expect(section(html, attribute), attribute).toMatch(/^<section [^>]*><s-box background="base" border="base" borderRadius="large-100" padding="base">/);
+      expect(section(html, attribute), attribute).not.toMatch(/^<section [^>]*style=/);
     }
+    // The next step sits in its card itself, not in a grey box inside it; a line divides it from the rows under it.
+    const next = section(html, 'id="overview-next"');
+    expect(next).not.toContain('background="subdued"');
+    expect(next.indexOf("<s-divider>")).toBeGreaterThan(next.indexOf("Approve now"));
   });
 
   it("shows what approving brings under the figure when approving isn't the next step", async () => {
@@ -176,10 +182,12 @@ describe("the Overview page", () => {
     expect(html).toContain('<s-icon type="gauge" color="subdued" size="small"></s-icon></span><s-text color="subdued">AI translation this month: 0 of 1,200,000 characters</s-text>');
   });
 
-  it("says in the languages view what choosing a card opens, as the countries view does", async () => {
+  it("says in the languages view how the cards are sorted in one line, as the countries view does", async () => {
     const html = await render(demo({ countries: { access: false } }));
     expect(html).toContain('<h2 id="overview-places-heading" class="lv-h2">Your languages</h2>');
-    expect(html).toContain("A translation counts for every country where customers read that language – the least translated first. Choose one to see every area with pictures and percentages.");
+    expect(html).toContain("A translation counts for every country where customers read that language – the least translated first.</s-text>");
+    // The cards are links: no sentence saying so.
+    expect(html).not.toContain("Choose one to see");
   });
 
   it("marks the running jobs' section with its state's icon", async () => {
@@ -212,7 +220,7 @@ describe("the Overview page", () => {
     expect(await square({ id: "consent" })).toBe("teal shield-check-mark");
     expect(await square({ id: "own-key" })).toBe("slate key");
     expect(await square({ id: "translate", locale: "de", name: "German", complete: 16, total: 94 })).toBe("blue language-translate");
-    expect(await square({ id: "first-translation", href: "/app/products?lang=de" })).toBe("blue language-translate");
+    expect(await square({ id: "first-translation", href: "/app/languages/de/products" })).toBe("blue language-translate");
     expect(await square({ id: "publish-language" })).toBe("blue language");
     expect(await square({ id: "measure" }, { measurement: { state: "never", done: 0, total: 0, since: null } })).toBe("green chart-donut");
     expect(await square({ id: "unread", locale: "de" })).toBe("green chart-donut");
@@ -239,7 +247,7 @@ describe("the Overview page", () => {
     expect(html).toContain("1 Text auf Deutsch ist veraltet");
     expect(html).toContain('<span class="lv-btn__label">Deutsch öffnen</span>');
     expect(html).toContain('<h2 id="overview-next-heading" class="lv-h2">Als Nächstes</h2>');
-    expect(html).toContain("Fertig und live: 16 von 94 Texten – in allen Sprachen, die Kunden wählen können.");
+    expect(html).toContain("Fertig: 16 von 94 Texten – in allen Sprachen, die Kunden wählen können.");
   });
 
   it("names the language a row opens in French and Spanish, and the store's figure reads right for 1 done text", async () => {
@@ -248,9 +256,9 @@ describe("the Overview page", () => {
     const fr = await render(demo(one), "fr");
     // The page it opens, not a display language ("Voir en allemand").
     expect(section(fr, 'id="overview-next"')).toMatch(linkButton("/app/languages/de", "secondary", "Ouvrir la langue \\(allemand\\)"));
-    expect(fr).toContain("Terminés et en ligne : 1 sur 94 textes – dans toutes les langues que les clients peuvent choisir.");
+    expect(fr).toContain("Terminés : 1 sur 94 textes – dans toutes les langues que les clients peuvent choisir.");
     const es = await render(demo(one), "es");
     expect(section(es, 'id="overview-next"')).toMatch(linkButton("/app/languages/de", "secondary", "Abrir alemán"));
-    expect(es).toContain("Listos y publicados: 1 de 94 textos – en todos los idiomas que los clientes pueden elegir.");
+    expect(es).toContain("Listos: 1 de 94 textos – en todos los idiomas que los clientes pueden elegir.");
   });
 });

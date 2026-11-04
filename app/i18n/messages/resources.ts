@@ -17,7 +17,7 @@ export const en = {
   "resources.consent.after": " first.",
 
   "resources.bulkError.heading": "Bulk translation couldn't start",
-  "resources.bulkError.JOBS_UNAVAILABLE": "Linguva's background service isn't set up for this app yet.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "Translating many texts at once isn't set up for this app yet.",
   "resources.bulkError.plan": "Your plan doesn't include this. See the plans under Settings → Plan & usage.",
   "resources.bulkError.generic": "Please reload the page and try again.",
 
@@ -35,12 +35,12 @@ export const en = {
   "resources.hiddenLanguage": "{language} (hidden)",
 
   "resources.bulk.heading": "Translate all {plural}",
-  "resources.bulk.intro": "Fills in missing and outdated fields with AI, using your glossary and translation memory.",
+  "resources.bulk.intro": "Fills in missing and outdated texts with AI, using your glossary and translation memory.",
   "resources.bulk.autoPublish":
     "Automatic publishing is on: results that pass the quality checks go live immediately; results with warnings wait in Review.",
   "resources.bulk.review": "Results wait in Review until you approve them.",
   "resources.bulk.scopeLabel": "What to translate",
-  "resources.bulk.scopeAll": "All fields",
+  "resources.bulk.scopeAll": "All texts",
   "resources.bulk.scopeSeo": "Only texts for Google (Google title and Google description)",
   "resources.bulk.overwrite": "Also replace outdated translations that a person wrote or approved",
   "resources.bulk.attachedDetails": 'Reads every {singular} one by one, so the job takes longer. Not used for "Only texts for Google".',
@@ -67,7 +67,7 @@ export const de: Translation<typeof en> = {
   "resources.consent.after": ".",
 
   "resources.bulkError.heading": "Die Massenübersetzung konnte nicht gestartet werden",
-  "resources.bulkError.JOBS_UNAVAILABLE": "Linguvas Hintergrunddienst ist für diese App noch nicht eingerichtet.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "Das Übersetzen vieler Texte auf einmal ist für diese App noch nicht eingerichtet.",
   "resources.bulkError.plan": "Dein Tarif enthält das nicht. Die Tarife findest du unter „Einstellungen“ → „Tarif & Nutzung“.",
   "resources.bulkError.generic": "Bitte lade die Seite neu und versuche es noch einmal.",
 
@@ -85,12 +85,12 @@ export const de: Translation<typeof en> = {
   "resources.hiddenLanguage": "{language} (versteckt)",
 
   "resources.bulk.heading": "Alle {plural} übersetzen",
-  "resources.bulk.intro": "Füllt fehlende und veraltete Felder mit KI aus und nutzt dabei dein Glossar und deinen Übersetzungsspeicher.",
+  "resources.bulk.intro": "Füllt fehlende und veraltete Texte mit KI aus und nutzt dabei dein Glossar und deinen Übersetzungsspeicher.",
   "resources.bulk.autoPublish":
     "Automatisches Veröffentlichen ist an: Ergebnisse, die die Qualitätsprüfungen bestehen, gehen sofort live; Ergebnisse mit Warnungen warten unter „Prüfen“.",
   "resources.bulk.review": "Die Ergebnisse warten unter „Prüfen“, bis du sie freigibst.",
   "resources.bulk.scopeLabel": "Was übersetzt wird",
-  "resources.bulk.scopeAll": "Alle Felder",
+  "resources.bulk.scopeAll": "Alle Texte",
   "resources.bulk.scopeSeo": "Nur Texte für Google (Google-Titel und Google-Beschreibung)",
   "resources.bulk.overwrite": "Auch veraltete Übersetzungen ersetzen, die eine Person geschrieben oder freigegeben hat",
   "resources.bulk.attachedDetails":
@@ -118,7 +118,7 @@ export const fr: Translation<typeof en> = {
   "resources.consent.after": ".",
 
   "resources.bulkError.heading": "Impossible de lancer la traduction groupée",
-  "resources.bulkError.JOBS_UNAVAILABLE": "Le service d'arrière-plan de Linguva n'est pas encore configuré pour cette application.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "La traduction de nombreux textes à la fois n'est pas encore configurée pour cette application.",
   "resources.bulkError.plan": "Votre forfait n'inclut pas cette fonctionnalité. Consultez les forfaits sous Paramètres → Forfait et utilisation.",
   "resources.bulkError.generic": "Veuillez actualiser la page et réessayer.",
 
@@ -136,12 +136,12 @@ export const fr: Translation<typeof en> = {
   "resources.hiddenLanguage": "{language} (masquée)",
 
   "resources.bulk.heading": "Traduire l'ensemble des {plural}",
-  "resources.bulk.intro": "Complète les champs manquants et obsolètes avec l'IA, à l'aide de votre glossaire et de votre mémoire de traduction.",
+  "resources.bulk.intro": "Complète les textes manquants et obsolètes avec l'IA, à l'aide de votre glossaire et de votre mémoire de traduction.",
   "resources.bulk.autoPublish":
     "La publication automatique est activée : les résultats qui passent les contrôles qualité sont mis en ligne immédiatement ; les résultats avec des avertissements restent en attente dans Révision.",
   "resources.bulk.review": "Les résultats restent en attente dans Révision jusqu'à ce que vous les approuviez.",
-  "resources.bulk.scopeLabel": "Champs à traduire",
-  "resources.bulk.scopeAll": "Tous les champs",
+  "resources.bulk.scopeLabel": "Ce qu'il faut traduire",
+  "resources.bulk.scopeAll": "Tous les textes",
   "resources.bulk.scopeSeo": "Uniquement les textes pour Google (titre et description pour Google)",
   "resources.bulk.overwrite": "Remplacer aussi les traductions obsolètes rédigées ou approuvées par une personne",
   "resources.bulk.attachedDetails":
@@ -169,7 +169,7 @@ export const es: Translation<typeof en> = {
   "resources.consent.after": ".",
 
   "resources.bulkError.heading": "No se pudo iniciar la traducción masiva",
-  "resources.bulkError.JOBS_UNAVAILABLE": "El servicio en segundo plano de Linguva aún no está configurado para esta aplicación.",
+  "resources.bulkError.JOBS_UNAVAILABLE": "La traducción de muchos textos a la vez aún no está configurada para esta aplicación.",
   "resources.bulkError.plan": "Tu plan no incluye esta función. Consulta los planes en Configuración → Plan y uso.",
   "resources.bulkError.generic": "Vuelve a cargar la página e inténtalo de nuevo.",
 
@@ -188,12 +188,12 @@ export const es: Translation<typeof en> = {
   "resources.hiddenLanguage": "{language} (oculto)",
 
   "resources.bulk.heading": "Traducción masiva de {plural}",
-  "resources.bulk.intro": "Completa con IA los campos que faltan y los desactualizados, usando tu glosario y tu memoria de traducción.",
+  "resources.bulk.intro": "Completa con IA los textos que faltan y los desactualizados, usando tu glosario y tu memoria de traducción.",
   "resources.bulk.autoPublish":
     "La publicación automática está activada: los resultados que superan los controles de calidad se publican de inmediato; los resultados con advertencias esperan en Revisión.",
   "resources.bulk.review": "Los resultados esperan en Revisión hasta que los apruebes.",
   "resources.bulk.scopeLabel": "Qué traducir",
-  "resources.bulk.scopeAll": "Todos los campos",
+  "resources.bulk.scopeAll": "Todos los textos",
   "resources.bulk.scopeSeo": "Solo textos para Google (título y descripción para Google)",
   "resources.bulk.overwrite": "Reemplazar también las traducciones desactualizadas que una persona escribió o aprobó",
   "resources.bulk.attachedDetails":

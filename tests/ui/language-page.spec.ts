@@ -3,7 +3,8 @@
  * do next (the page's only primary button), the three steps to live, each
  * area in the order customers meet it with real pictures from the store,
  * what the percentage leaves out, and the question before translating an
- * area. Also its not-counted, hidden, no-access and not-found states.
+ * area ("Translate" once per area: the next step's; the cards lead to their
+ * lists). Also its not-counted, hidden, no-access and not-found states.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
@@ -47,16 +48,17 @@ test("how far a language is, one next step, and each area with pictures @respons
   await expect(back).toHaveAttribute("href", "/app");
   if (info.project.name === "mobile") expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(page.getByRole("heading", { level: 1, name: "German" })).toBeVisible();
-  await expect(page.locator("s-badge", { hasText: "Visible to customers" })).toBeVisible();
+  // Visible / Hidden, in the badge every page gives a language.
+  await expect(page.locator('s-badge[tone="success"][icon="check-circle"]', { hasText: "Visible" })).toBeVisible();
   await expect(page.getByText(/^For customers in these countries: .*Germany/)).toBeVisible();
   await expect(page.getByText(/Last counted /)).toBeVisible();
 
-  // The figure with its ring, in words, and what customers see where nothing is translated.
+  // The figure with its ring, in words, and each state (what customers see where nothing is translated is in the words at the end).
   const hero = region(page, "How far German is");
-  await expect(hero.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts are done and live$/ })).toBeVisible();
+  await expect(hero.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts done$/ })).toBeVisible();
   // The figure and Next are the hero's two headings, in the type scale of the Overview's.
-  await expect(hero.getByRole("heading", { level: 2, name: /^\d+ of \d+ texts are done and live$/ })).toBeVisible();
-  await expect(hero.getByText("Where nothing is translated yet, customers see English.")).toBeVisible();
+  await expect(hero.getByRole("heading", { level: 2, name: /^\d+ of \d+ texts done$/ })).toBeVisible();
+  await expect(hero.getByText("Where nothing is translated yet, customers see English.")).toHaveCount(0);
   // Up to three steps, each with its icon square (no numbers: those are the steps to live); the first one's button is the page's only primary button.
   await expect(hero.getByRole("heading", { level: 2, name: "Next", exact: true })).toBeVisible();
   await expect(hero.locator("ol > li")).not.toHaveCount(0);
@@ -86,17 +88,18 @@ test("how far a language is, one next step, and each area with pictures @respons
   await expect(products.locator('.lv-icon-square[data-tint="blue"] s-icon[type="product"]')).toHaveCount(1);
   await expect(products.getByText(/^\d+% ?$|^<1%$/).first()).toBeVisible();
   await expect(products.getByText(/^\d+ of \d+ texts$/)).toBeVisible();
-  // The way to every item stays visible on a phone too.
+  // The way to every item stays visible on a phone too; translating is the next step's (no button on the card).
   const all = products.getByRole("link", { name: "View all 8: Products" });
   await expect(all).toBeVisible();
   await expect(all).toHaveAttribute("href", "/app/languages/de/products");
+  await expect(products.locator("[data-button]")).toHaveCount(0);
   // Real pictures, loaded after the page.
   await expectPictures(products, info.project.name === "mobile" ? 3 : 6);
   await expectPictures(region(page, "Collections"), info.project.name === "mobile" ? 0 : 2);
 
   // What the percentage leaves out comes last, as "More texts" (Content's name for them too).
   await expect(page.getByRole("heading", { name: "More texts" })).toBeVisible();
-  await expect(page.getByText(/^They don't count toward the \d+%: /)).toBeVisible();
+  await expect(page.getByText(/^They don't count toward the \d+%\.$/)).toBeVisible();
   await expect(page.getByRole("link", { name: /^Web addresses/ })).toHaveAttribute("href", /^\/app\/coverage\/items\?/);
 
   await expectAccessible(page);
@@ -139,8 +142,11 @@ test("why the percentage rises only after approving: the steps to live, while te
   await expect(first.locator('s-icon[type="eye-check-mark"]')).toHaveCount(1);
 });
 
-test("a step's Translate ticks the image descriptions and extra details it names; a card's starts without them", async ({ page }) => {
+test("Translate is there once per area, in its step, which ticks the image descriptions and extra details it names", async ({ page }) => {
   await openApp(page, "demo", "/app/languages/de");
+  // One Translate for Products on the whole page: the step's (the area's card leads to its list).
+  await expect(page.getByRole("button", { name: "Translate: Products" })).toHaveCount(1);
+  await expect(region(page, "Products").getByRole("button", { name: "Translate: Products" })).toHaveCount(0);
   const dialog = page.locator("s-modal#language-translate");
   const attached = dialog.getByRole("checkbox", { name: "Also translate image descriptions and extra details" });
   await region(page, "How far German is").locator("ol > li").first().getByRole("button", { name: "Translate: Products" }).click();
@@ -148,15 +154,11 @@ test("a step's Translate ticks the image descriptions and extra details it names
   await expect(attached).toBeChecked();
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  await region(page, "Products").getByRole("button", { name: "Translate: Products" }).click();
-  await expect(attached).not.toBeChecked();
 });
 
 test("translating an area asks first, says what happens, and Cancel starts nothing @responsive", async ({ page }) => {
   await openApp(page, "demo", "/app/languages/de");
-  const products = region(page, "Products");
-  await products.getByRole("button", { name: "Translate: Products" }).click();
+  await region(page, "How far German is").getByRole("button", { name: "Translate: Products" }).click();
   await expect(page.getByRole("dialog", { name: /^Translate \d+ products? into German\?$/ })).toBeVisible();
   // The dialog's content is the modal's own (Polaris slots it into the dialog).
   const dialog = page.locator("s-modal#language-translate");
@@ -165,8 +167,11 @@ test("translating an area asks first, says what happens, and Cancel starts nothi
   await expect(dialog.getByText("You approve them", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Your own translations stay", { exact: true })).toBeVisible();
   await expect(dialog.getByText(/^Up to [\d,]+ characters\. [\d,]+ are still free this month\.$/)).toBeVisible();
-  // Image descriptions and extra details only when asked for.
-  await expect(dialog.getByRole("checkbox", { name: "Also translate image descriptions and extra details" })).not.toBeChecked();
+  // Image descriptions and extra details: ticked, as the step names them (the merchant can untick them).
+  const attached = dialog.getByRole("checkbox", { name: "Also translate image descriptions and extra details" });
+  await expect(attached).toBeChecked();
+  await attached.uncheck();
+  await expect(attached).not.toBeChecked();
   await expectAccessible(page);
 
   const jobs: string[] = [];
@@ -182,19 +187,19 @@ test("confirming starts the area's translation and opens its job", async ({ page
   test.skip(info.project.name !== "desktop", "Starts a job: once");
   // French in the catalog store is only translated by this test.
   await openApp(page, "catalog", "/app/languages/fr");
-  await region(page, "Products").getByRole("button", { name: "Translate: Products" }).click();
+  await region(page, "How far French is").getByRole("button", { name: "Translate: Products" }).click();
   await expect(page.getByRole("dialog", { name: "Translate 55 products into French?" })).toBeVisible();
   await page.locator("s-modal#language-translate").getByRole("button", { name: "Translate 55 products" }).click();
   await expect(page).toHaveURL(/\/app\/jobs\/[0-9a-f-]{36}(\?|$)/);
   // Queued: no worker runs in these tests, so it starts with a delay (or shortly).
   await expect(page.getByRole("heading", { level: 2, name: /^(Starts with a delay|Starts shortly)$/ })).toBeVisible();
 
-  // Back on the language page, the area shows its job instead of the button.
+  // Back on the language page, the area's card shows its job (finding its texts first, as the Jobs page says it), and its step leads to the job.
   await openApp(page, "catalog", "/app/languages/fr");
   const products = region(page, "Products");
-  await expect(products.getByText(/^Translating now/)).toBeVisible();
+  await expect(products.getByText(/^(Finding texts|Translating · \d+ of \d+)$/)).toBeVisible();
   await expect(products.getByRole("link", { name: "View job" })).toHaveAttribute("href", /^\/app\/jobs\/[0-9a-f-]{36}$/);
-  await expect(products.getByRole("button", { name: "Translate: Products" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Translate: Products" })).toHaveCount(0);
 });
 
 test("a language not counted yet offers counting and shows no areas @responsive", async ({ page }) => {

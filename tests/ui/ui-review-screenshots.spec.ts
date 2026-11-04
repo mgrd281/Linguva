@@ -23,7 +23,6 @@ const SCREENS: Array<{ name: string; shop: UiShopKey; path: string; phone?: bool
   { name: "coverage", shop: "full", path: "/app/coverage", phone: true },
   { name: "coverage-language", shop: "full", path: "/app/coverage?lang=de" },
   { name: "coverage-items", shop: "full", path: "/app/coverage/items?lang=de&type=PRODUCT" },
-  { name: "products", shop: "demo", path: "/app/products?lang=de" },
   { name: "editor", shop: "demo", path: "/app/products/2?lang=de", phone: true },
   { name: "review", shop: "demo", path: "/app/review", phone: true },
   // Review, redesigned (UI_REVIEW_SCREENSHOTS=docs/ui-review/redesign2): nothing waiting.

@@ -1,19 +1,18 @@
 /**
  * The store's languages (`/app/languages`, Settings › Tools): one row per
  * language, as the Content page's chips show them. The main language comes
- * first (the originals, no figure); every other language shows its flag,
- * name, whether customers see it (an icon and words), how far it is (bar and
- * percentage, once counted) and whether the AI translates into it, and the
- * whole row opens its page. Shopify decides which languages are added and
- * published; the page's own button leads there.
+ * first (the originals); every other language shows its flag, name, whether
+ * customers see it (Visible / Hidden, as on its page) and whether the AI
+ * translates into it, and the whole row opens its page, which says how far
+ * it is (a language's figure is on the Overview, its page and Coverage).
+ * Shopify decides which languages are added and published; the page's own
+ * button leads there.
  */
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
-import { loadCoverageState } from "../.server/coverage/summary";
-import { COVERAGE_TYPES } from "../.server/coverage/coverage";
 import { MAX_ENABLED_LOCALES } from "../lib/locale-limits";
 import { languagePath } from "../lib/language-categories";
 import { shopBilling } from "../.server/billing/billing";
@@ -23,14 +22,10 @@ import { aiLanguageCoverage } from "../.server/providers/language-support";
 import { getShopSettings, textConsentTokens } from "../.server/settings/shop-settings";
 import { ENGINE_NAMES, engineOfToken, type EngineId } from "../lib/engines";
 import { chipName, chipOrder } from "../lib/content-language";
-import { emptyCounts } from "../lib/coverage-rules";
-import { headlineByLocale, measuredLocales, tally } from "../lib/coverage-view";
 import { localeCountry } from "../lib/flags";
 import { languageList } from "../lib/name-lists";
-import { percentLabel } from "../components/Coverage";
 import { Flag } from "../components/Flag";
-import { TextStateBar } from "../components/ItemStates";
-import { PLAIN_LIST } from "../components/LanguageLayout";
+import { PLAIN_LIST, VisibilityBadge } from "../components/LanguageLayout";
 import { ToolHeader, TOOLS_HREF } from "../components/ToolHeader";
 import { Strong } from "../components/Type";
 import { useI18n } from "../i18n/react";
@@ -38,7 +33,7 @@ import type { I18n } from "../i18n/i18n";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop } = await requireShop(request);
-  const [summary, coverage] = await Promise.all([fetchAndSyncShopLocales(admin, shop.id), loadCoverageState(shop.id)]);
+  const summary = await fetchAndSyncShopLocales(admin, shop.id);
   // The operator's engines, or the shop's own keys on the Own key plan (each key's own language
   // list). Only the coverage below goes into the page's data, never the provider.
   const billing = await shopBilling(admin, shop);
@@ -52,19 +47,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const coverageByLocale = await aiLanguageCoverage(provider, summary.locales.filter((l) => !l.primary).map((l) => l.locale), allowed);
   const ai = Object.fromEntries(Object.entries(coverageByLocale).map(([locale, c]) => [locale, c.state]));
   const aiEngine = Object.fromEntries(Object.entries(coverageByLocale).map(([locale, c]) => [locale, c.engine]));
-  // How far each language is: the Overview's figure, for a fully counted language only (COVERAGE_RULES §3).
-  const measured = measuredLocales(coverage.lastCompleted, coverage.segments, COVERAGE_TYPES);
-  const headline = headlineByLocale(coverage.counts);
-  const figures = Object.fromEntries(
-    summary.locales
-      .filter((l) => !l.primary && measured.has(l.locale))
-      .map((l) => {
-        // A counted language without texts has no rows: its figure is empty ("Nothing to translate", as on its page), never "not counted".
-        const figure = headline.get(l.locale) ?? tally(emptyCounts());
-        return [l.locale, { complete: figure.complete, total: figure.total, counts: figure.counts }];
-      }),
-  );
-  return { ...summary, ai, aiEngine, figures, showEngine: router, singleEngine: router ? null : (provider?.id ?? null) };
+  return { ...summary, ai, aiEngine, showEngine: router, singleEngine: router ? null : (provider?.id ?? null) };
 };
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
@@ -93,8 +76,8 @@ function aiLine(data: Data, i18n: I18n, locale: string): string {
   return `${t("languages.ai.label")}: ${value}`;
 }
 
-/** The row's grid: flag, name and lines, bar, percentage, chevron (no bar on a narrow page; no comma inside a track: Polaris splits values at commas). */
-const ROW = "@container (inline-size > 640px) auto 1fr 160px 56px auto, auto 1fr auto auto";
+/** The row's grid: flag, name and lines, chevron. */
+const ROW = "auto minmax(0, 1fr) auto";
 
 function PrimaryRow({ language, i18n }: { language: Locale; i18n: I18n }) {
   return (
@@ -116,7 +99,6 @@ function PrimaryRow({ language, i18n }: { language: Locale; i18n: I18n }) {
 function LanguageRow({ language, data, i18n }: { language: Locale; data: Data; i18n: I18n }) {
   const { t } = i18n;
   const name = chipName(i18n, language);
-  const figure = data.figures[language.locale] ?? null;
   const detail = [aiLine(data, i18n, language.locale), language.rtl ? t("languages.rtl.short") : null].filter(Boolean).join(" · ");
   return (
     <s-clickable href={languagePath(language.locale)} padding="small-200 base" minBlockSize="64px">
@@ -125,28 +107,10 @@ function LanguageRow({ language, data, i18n }: { language: Locale; data: Data; i
         <s-stack direction="block" gap="small-500">
           <s-stack direction="inline" gap="small-200" alignItems="center">
             <Strong>{name}</Strong>
-            {language.published ? (
-              <s-badge tone="success" icon="check-circle">
-                {t("language.published")}
-              </s-badge>
-            ) : (
-              <s-badge icon="hide">{t("language.hidden")}</s-badge>
-            )}
+            <VisibilityBadge published={language.published} i18n={i18n} />
           </s-stack>
           <s-text color="subdued">{detail}</s-text>
         </s-stack>
-        <s-box display="@container (inline-size > 640px) auto, none">
-          {figure && figure.total > 0 ? (
-            <div aria-hidden="true">
-              <TextStateBar counts={figure.counts} label={name} i18n={i18n} />
-            </div>
-          ) : (
-            <s-text color="subdued">{figure ? t("language.hero.nothing") : t("language.hero.notCounted")}</s-text>
-          )}
-        </s-box>
-        <span className="lv-figure-row" style={{ textAlign: "end" }}>
-          {figure && figure.total > 0 ? percentLabel(i18n, figure.complete, figure.total) : "—"}
-        </span>
         <s-icon type="chevron-right" color="subdued" />
       </s-grid>
     </s-clickable>
@@ -225,7 +189,6 @@ export default function Languages() {
             published: data.publishedCount,
           })}
         </s-paragraph>
-        <s-paragraph>{t("languages.usage.source")}</s-paragraph>
       </s-section>
     </s-page>
   );

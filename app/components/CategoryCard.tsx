@@ -1,9 +1,9 @@
 /**
  * One area of a language (Products, Menus & filters, …) on the language
  * page: its icon in its tinted square, its name, figure and states, a few
- * real examples from the store, and what to do there. One link opens the
- * area's list ("View all 8 ›"); translating is a separate button that opens
- * the confirm dialog (no nested controls).
+ * real examples from the store, and where to go on. One link opens the
+ * area's list ("View all 8 ›"); translating is the page's next step, once
+ * per area (the card has no button of its own), and the area's list.
  *
  * Examples come later than the card (a separate request): pictures with
  * their names for products, collections, blog posts and images, a list of
@@ -22,7 +22,6 @@ import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
 import { CARD } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
-import { Button } from "./Button";
 import { IconSquare, type Tint } from "./IconSquare";
 import { Strong } from "./Type";
 
@@ -270,19 +269,21 @@ function Preview({ category, preview, featured, i18n, locale, primaryName }: { c
   );
 }
 
-/** A running translation in this area, in items, in place of the translate button. */
+/**
+ * A running translation in this area, in items: while it still finds its texts, the Jobs page's sign for
+ * that phase (search-list) and its word; then "Translating · 3 of 12" with its bar.
+ */
 function JobProgress({ job, name, i18n }: { job: NonNullable<LanguageCategory["job"]>; name: string; i18n: I18n }) {
   const { t } = i18n;
+  const counted = job.discoveryDone && job.total > 0;
   return (
-    <s-box padding="small-100 base" background="subdued" borderRadius="base">
-      <s-stack direction="block" gap="small-200">
-        <s-stack direction="inline" gap="small-200" alignItems="center">
-          <s-icon type="in-progress" tone="info" size="small" />
-          <Strong>{job.discoveryDone && job.total > 0 ? t("language.card.job", { done: job.done, total: job.total }) : t("language.card.jobFinding")}</Strong>
-        </s-stack>
-        {job.discoveryDone && job.total > 0 ? <ProgressBar value={(job.done / job.total) * 100} label={t("language.card.jobLabel", { category: name })} /> : null}
+    <s-stack direction="block" gap="small-200">
+      <s-stack direction="inline" gap="small-200" alignItems="center">
+        <s-icon type={counted ? "in-progress" : "search-list"} tone="info" size="small" />
+        <Strong>{counted ? t("language.card.job", { done: job.done, total: job.total }) : t("language.card.jobFinding")}</Strong>
       </s-stack>
-    </s-box>
+      {counted ? <ProgressBar value={(job.done / job.total) * 100} label={t("language.card.jobLabel", { category: name })} /> : null}
+    </s-stack>
   );
 }
 
@@ -296,13 +297,11 @@ export interface CategoryCardProps {
   preview: CategoryPreview | null;
   /** The first, wide card: more pictures, and examples on a phone too. */
   featured: boolean;
-  /** Translating can start here: the confirm dialog's id, what to do before it opens, and whether it is starting. */
-  translate: { modalId: string; onOpen: () => void; loading: boolean } | null;
   /** Where the language page was opened from: its links keep it (the lists' trail). */
   origin?: Origin;
 }
 
-export function CategoryCard({ category, i18n, locale, primaryName, preview, featured, translate, origin = null }: CategoryCardProps) {
+export function CategoryCard({ category, i18n, locale, primaryName, preview, featured, origin = null }: CategoryCardProps) {
   const { t } = i18n;
   const name = categoryName(i18n, category.id);
   const { tally, state } = category;
@@ -364,34 +363,20 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
           {category.job ? <JobProgress job={category.job} name={name} i18n={i18n} /> : null}
 
           <s-divider />
-          <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
-            <s-stack direction="inline" gap="small-100 base" alignItems="center">
-              <s-link href={href} accessibilityLabel={`${all}: ${name}`}>
-                {all}
-                <span style={INLINE_ICON}>
-                  <s-icon type="chevron-right" size="small" />
-                </span>
+          <s-stack direction="inline" gap="small-100 base" alignItems="center">
+            <s-link href={href} accessibilityLabel={`${all}: ${name}`}>
+              {all}
+              <span style={INLINE_ICON}>
+                <s-icon type="chevron-right" size="small" />
+              </span>
+            </s-link>
+            {category.review ? (
+              <s-link href={category.review.href} accessibilityLabel={`${t("language.card.review", { count: category.review.count })}: ${name}`}>
+                {t("language.card.review", { count: category.review.count })}
               </s-link>
-              {category.review ? (
-                <s-link href={category.review.href} accessibilityLabel={`${t("language.card.review", { count: category.review.count })}: ${name}`}>
-                  {t("language.card.review", { count: category.review.count })}
-                </s-link>
-              ) : null}
-              {category.job ? <s-link href={category.job.href}>{t("language.card.jobOpen")}</s-link> : null}
-            </s-stack>
-            {translate && !category.job ? (
-              <Button
-                icon="wand"
-                commandFor={translate.modalId}
-                command="--show"
-                onClick={translate.onOpen}
-                accessibilityLabel={`${t("language.action.translate")}: ${name}`}
-                {...(translate.loading ? { loading: true } : {})}
-              >
-                {t("language.action.translate")}
-              </Button>
             ) : null}
-          </s-grid>
+            {category.job ? <s-link href={category.job.href}>{t("language.card.jobOpen")}</s-link> : null}
+          </s-stack>
         </s-stack>
       </s-box>
     </section>

@@ -1195,7 +1195,8 @@ function finishedHero(job: HeroJob, groups: JobGroups, review: StepDraft | null,
     return {
       title,
       mark: ringMark(groups, title, autoPublish),
-      lines: [line({ key: "jobs.hero.nothingText", vars: { items: { items: groups.total, type: job.resourceType } } })],
+      // The title says it all ("all 23 were already up to date").
+      lines: [],
       panel: null,
       strip: { ...OVER, action: settings },
     };
@@ -1203,15 +1204,16 @@ function finishedHero(job: HeroJob, groups: JobGroups, review: StepDraft | null,
   if (ok === groups.total) {
     const title: JobText = { key: "jobs.hero.allDone", vars: { kind, total: groups.total } };
     const mark = ringMark(groups, title, autoPublish);
-    if (review) return { title, mark, lines: [line({ key: "jobs.hero.draftsText" })], ...panelOf("language.next.heading", withPrimary([review])) };
-    const live: HeroStrip = { kind: "nothing", icon: "done", title: { key: "jobs.next.allLive.title" }, text: { key: "jobs.next.allLive.text" }, action: viewLanguage(job) };
-    return { title, mark, lines: [line({ key: "jobs.hero.liveText" })], panel: null, strip: live };
+    // The review step says that customers see them once approved.
+    if (review) return { title, mark, lines: [], ...panelOf("language.next.heading", withPrimary([review])) };
+    const live: HeroStrip = { kind: "nothing", icon: "done", title: NOTHING, text: { key: "jobs.hero.liveText" }, action: viewLanguage(job) };
+    return { title, mark, lines: [], panel: null, strip: live };
   }
   const title: JobText = { key: "jobs.hero.title", vars: { kind, ok, total: groups.total } };
   // The items only the editor finishes: incomplete ones, and failed ones a new try doesn't help (a smart job's changed originals are its schedule's).
   const finish = groups.counts.look + groups.counts.failed - groups.retryable;
   const steps = withPrimary([review, groups.retryable > 0 ? retryStep(job, groups) : null, finish > 0 ? finishStep(job, finish, finishHref) : null]);
-  const lines = [line(...(review ? [{ key: "jobs.hero.draftsText" } as const] : []), { key: "jobs.hero.missingBelow" })];
+  const lines = [line({ key: "jobs.hero.missingBelow" })];
   return { title, mark: ringMark(groups, title, autoPublish), lines, ...(steps.length ? panelOf("language.next.heading", steps) : { panel: null, strip: OVER }) };
 }
 
@@ -1238,7 +1240,7 @@ function cancelledHero(job: HeroJob, groups: JobGroups, review: StepDraft | null
   // Items still settle after the cancel: the figures move, nothing to do yet.
   if (settling) return { lines: [line({ key: "jobs.hero.cancelling" })], panel: null, strip: { ...OVER, icon: "active" } };
   const reason = cancelReason(job.errorCode);
-  const kept: JobText = { key: "jobs.hero.cancelledText" };
+  const kept: JobText = { key: "jobs.hero.kept" };
   const lines = [reason ? line({ key: `jobs.hero.cancelledBy.${reason}`, vars: { language: { language: job.targetLocale } } }, kept) : line(kept)];
   let next: StepDraft | null = null;
   if (reason === "AUTO_OFF") {
@@ -1519,7 +1521,6 @@ function featuredStop(stop: AttentionStop): FeaturedStop {
   ];
   let primary: FeaturedAction | null = null;
   if (hasFix(group)) {
-    text.push({ key: "jobs.attention.thenResume" });
     const href = stopFixHref(group, job.id);
     const label: JobText = { key: `jobs.stop.${group}.action`, vars: stopVars(job, facts) };
     primary = href ? { kind: "link", href, label } : { kind: "reload", label };
@@ -1571,10 +1572,9 @@ export function attentionVerdict(input: AttentionInput): AttentionModel | null {
         }
       : null;
   const failed = input.failed.count > 0 ? failedRow(input.failed) : null;
+  // What else runs, when something does (nothing running needs no sentence).
   const others: JobText[] =
-    input.active > 0
-      ? [{ key: "jobs.attention.others", vars: { count: input.active, running: { key: "jobs.cluster.count", vars: { count: input.active } } } }]
-      : [{ key: "jobs.attention.idle" }];
+    input.active > 0 ? [{ key: "jobs.attention.others", vars: { count: input.active, running: { key: "jobs.cluster.count", vars: { count: input.active } } } }] : [];
   const rows = (...candidates: Array<QuietRow | null>) => candidates.filter((row): row is QuietRow => row !== null).slice(0, 2);
 
   if (stops.length) {
@@ -1632,7 +1632,7 @@ export function attentionVerdict(input: AttentionInput): AttentionModel | null {
       verdict: "review",
       mark: { icon: "clock", tone: "info" },
       heading: { key: "jobs.attention.review", vars: { count: input.drafts } },
-      text: [{ key: "jobs.attention.reviewText" }, { key: "jobs.attention.reviewOnly" }],
+      text: [{ key: "jobs.attention.reviewText" }],
       headAction: { kind: "link", href: "/app/review", label: { key: "language.next.review.action" } },
       featured: null,
       rows: [],

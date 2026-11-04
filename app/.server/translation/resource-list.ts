@@ -1,6 +1,9 @@
 /**
- * Server side of the resource list pages (products, collections): coverage
- * per language and the "translate all" bulk action.
+ * Server side of the per-type lists of other content (`/app/content/<type>`):
+ * coverage per language and the "translate all" bulk action. The old lists
+ * of products, collections, pages, blog posts and blogs (`/app/products` …)
+ * lead to their area's list in the language they would have opened in
+ * (`redirectToAreaList`).
  */
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
@@ -28,6 +31,8 @@ import {
   type TranslatableKind,
 } from "../../lib/resource-kinds";
 import { ATTACHED_BULK_TYPES, isBulkResourceType } from "../jobs/bulk-jobs";
+import { listLanguage } from "../../lib/content-language";
+import { categoryPath, type CategoryId } from "../../lib/language-categories";
 
 export async function loadResourceList(request: Request, kind: TranslatableKind) {
   const { admin, shop, scopes } = await requireShop(request);
@@ -37,6 +42,32 @@ export async function loadResourceList(request: Request, kind: TranslatableKind)
     after: url.searchParams.get("after"),
     granted: async () => (await scopes.query()).granted,
   });
+}
+
+/**
+ * Where an old list of products, collections, pages, blog posts or blogs
+ * leads: its area's list in the language it would have opened in; Content
+ * (with its card for adding a language) when the store has none.
+ */
+export async function areaListPath(
+  admin: Pick<AdminApiContext, "graphql">,
+  shopId: string,
+  category: CategoryId,
+  lang: string | null,
+  client: PrismaClient = defaultClient,
+): Promise<string> {
+  const locales = await fetchAndSyncShopLocales(admin, shopId, client);
+  const target = listLanguage(
+    locales.locales.filter((l) => !l.primary),
+    lang,
+  );
+  return target ? categoryPath(target.locale, category) : "/app/content";
+}
+
+/** The old list's loader: one product list, the area's (Shopify's redirect keeps the embedded app's parameters). */
+export async function redirectToAreaList(request: Request, category: CategoryId) {
+  const { admin, shop, redirect } = await requireShop(request);
+  return redirect(await areaListPath(admin, shop.id, category, new URL(request.url).searchParams.get("lang")), { target: "_self" });
 }
 
 export interface ResourceListInput {
@@ -68,7 +99,7 @@ export async function resourceListPage(
   // English names as before; the page names the type by `type` in its language.
   const kindInfo = { type: kind, label: meta.label, singular: meta.singular, plural: meta.plural, path: meta.path, caution, bulk: isBulkResourceType(kind) };
 
-  const target = targets.find((l) => l.locale === input.lang) ?? targets.find((l) => l.published) ?? targets[0];
+  const target = listLanguage(targets, input.lang);
   if (!target) {
     return { kind: kindInfo, targets: [], target: null, marketCountries: null, items: [], nextCursor: null, isFirstPage: true, bulk: null, denied: null };
   }

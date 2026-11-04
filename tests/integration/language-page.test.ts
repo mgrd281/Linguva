@@ -5,7 +5,8 @@
  * read live, survive Shopify failing, and translating a category starts one
  * job per type behind the plan, consent, provider and queue gates. The
  * languages list (its loader called as a function, the session stood in)
- * tells a counted language without texts from one not counted yet.
+ * lists the languages without figures (their pages have them); an area's
+ * list offers the store's other languages.
  */
 import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -31,7 +32,6 @@ import { saveDrafts } from "../../app/.server/review/drafts";
 import { setAiConsent } from "../../app/.server/settings/shop-settings";
 import { upsertInstalledShop } from "../../app/.server/tenancy/shop-service";
 import { withTenant } from "../../app/.server/tenancy/with-tenant";
-import { emptyCounts } from "../../app/lib/coverage-rules";
 import { headlineByLocale } from "../../app/lib/coverage-view";
 import { CATEGORY_IDS, ITEM_STATES, type CategoryId } from "../../app/lib/language-categories";
 import { loader as languagesLoader } from "../../app/routes/app.languages";
@@ -321,29 +321,15 @@ describe("the language page", () => {
 describe("the languages list", () => {
   const list = () => languagesLoader({ request: new Request("https://linguva.test/app/languages"), params: {}, context: {} } as LoaderFunctionArgs);
 
-  it("gives a counted language without texts an empty figure (nothing to translate), and one not counted yet none", async () => {
-    // Every type read and none has a text: the count leaves no rows for German.
-    const store = new FakeShopifyStore(0);
-    store.locales = [...LOCALES];
-    const { shop } = await upsertInstalledShop({ shopDomain: `empty-${++n}.myshopify.com`, name: "Empty store" }, app);
-    await measure(store, shop.id, ["de"]);
-    Object.assign(session, { admin: store.asAdmin(), shop });
-    const data = await list();
-    // French and Arabic weren't counted: no figure, so their rows say so.
-    expect(data.figures).toEqual({ de: { complete: 0, total: 0, counts: emptyCounts() } });
-    // As the language's own page says it.
-    expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, available)).headline).toMatchObject({ complete: 0, total: 0 });
-  });
-
-  it("gives a counted language with texts the Overview's figure", async () => {
+  it("lists the store's languages without figures: a language's figure is on the Overview, its page and Coverage", async () => {
     const { shop, store } = await outdoorShop();
     Object.assign(session, { admin: store.asAdmin(), shop });
+    const data = await list();
+    expect(data.locales.map((l) => l.locale).sort()).toEqual(LOCALES.map((l) => l.locale).sort());
+    expect(data).not.toHaveProperty("figures");
+    // Its page still has the Overview's figure.
     const german = headlineByLocale((await loadCoverageSummary(shop.id, app)).counts).get("de")!;
-    expect(german.total).toBeGreaterThan(0);
-    const { figures } = await list();
-    expect(figures.de).toEqual({ complete: german.complete, total: german.total, counts: german.counts });
-    // Arabic (hidden) was counted too; French wasn't.
-    expect(Object.keys(figures).sort()).toEqual(["ar", "de"]);
+    expect((await loadLanguagePage(store.asAdmin(), shop, "de", app, available)).headline).toMatchObject({ complete: german.complete, total: german.total });
   });
 });
 
@@ -437,6 +423,9 @@ describe("a category's list", () => {
   it("counts its items per state so they add up, and pages through them in state order", async () => {
     const { shop, store } = await outdoorShop({ products: 60 });
     const first = await loadCategoryItems(store.asAdmin(), shop, "de", "products", {}, app, available);
+    // The store's other languages for its language switch (the hidden one too), never the original.
+    const byLocale = (a: { locale: string }, b: { locale: string }) => a.locale.localeCompare(b.locale);
+    expect([...first.languages].sort(byLocale)).toEqual(LOCALES.filter((l) => !l.primary).map(({ locale, name, published }) => ({ locale, name, published })).sort(byLocale));
     expect(first.counts).toEqual({ all: 60, failed: 1, outdated: 1, missing: 54, waiting: 0, complete: 4 });
     expect(first.rows).toHaveLength(CATEGORY_PAGE_SIZE);
     expect(first.page).toMatchObject({ from: 1, to: 50, total: 60, number: 1 });

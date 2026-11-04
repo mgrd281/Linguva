@@ -347,6 +347,8 @@ type SmartResult = { ok: boolean; done?: string; count?: number; error?: string 
 
 const STYLE_SAVE_BAR = "settings-style-save-bar";
 const REVOKE_MODAL = "settings-revoke";
+/** The permission's part for services added after it was given (its heading's id adds "-heading"). */
+const EXTRA_SERVICES = "settings-ai-extra";
 /** Automatic translation's pause reasons with their own long text (any other reads as the AI service's). */
 const AUTO_PAUSE_REASONS = ["DAILY_LIMIT", "PLATFORM_LIMIT", "QUOTA_EXCEEDED"];
 /** A pause's reason in a few words, for automatic translation's and the smart schedule's reasons. */
@@ -374,7 +376,10 @@ const TOOLS = [
 /** The panel with "Shortly after saving"'s languages (focused when the choice opens it). */
 const BASIC_PANEL = "settings-changes-basic-panel";
 
-/** Each section's icon and the colour of its square, the same on its tile and wherever it is named. */
+/**
+ * Each section's icon and the colour of its square, the same on its tile and wherever it is named. Plan & usage is
+ * the Plan page's credit card (PageHeader's PAGE_LOOK): gauge stands for AI characters only.
+ */
 const SECTION_LOOK: Record<SectionKey, { icon: IconName; tint: Tint }> = {
   changes: { icon: "automation", tint: "blue" },
   publish: { icon: "send", tint: "green" },
@@ -382,7 +387,7 @@ const SECTION_LOOK: Record<SectionKey, { icon: IconName; tint: Tint }> = {
   memory: { icon: "database", tint: "amber" },
   keys: { icon: "key", tint: "slate" },
   ai: { icon: "shield-check-mark", tint: "teal" },
-  plan: { icon: "gauge", tint: "rose" },
+  plan: { icon: "credit-card", tint: "rose" },
   tools: { icon: "wrench", tint: "grey" },
 };
 
@@ -635,7 +640,7 @@ interface SectionText {
 
 /**
  * The form of address in a few words: the usual one, formal, informal, per language, or no language yet.
- * The tile has no hint beside it, so it names the setting, not the choice's label ("DeepL decides").
+ * The tile has no hint beside it, so it names the setting, not the choice's label ("Automatic").
  */
 function addressSummary(data: Data, i18n: I18n): string {
   const { t } = i18n;
@@ -794,7 +799,7 @@ function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
         ? { label: t("settings.usage.high"), icon: "alert-triangle", tone: "warning" }
         : null;
   return (
-    <SettingSection id="settings-plan" {...SECTION_LOOK.plan} heading={t("settings.section.plan")} lead={own ? t("settings.plan.lead.ownKey") : t("settings.plan.lead")}>
+    <SettingSection id="settings-plan" {...SECTION_LOOK.plan} heading={t("settings.section.plan")}>
       <s-stack direction="block" gap="small-500">
         <s-text color="subdued">{t("common.nav.plan")}</s-text>
         <strong style={STAT}>{planLabel(data, i18n)}</strong>
@@ -824,7 +829,7 @@ function PlanCard({ data, i18n }: { data: Data; i18n: I18n }) {
 function ToolsCard({ i18n }: { i18n: I18n }) {
   const { t } = i18n;
   return (
-    <SettingSection id="settings-tools" {...SECTION_LOOK.tools} heading={t("settings.tools.heading")} lead={t("settings.tools.lead")}>
+    <SettingSection id="settings-tools" {...SECTION_LOOK.tools} heading={t("settings.tools.heading")}>
       <LinkTiles label={t("settings.tools.heading")} links={TOOLS.map((tool) => ({ href: tool.href, icon: tool.icon, tint: tool.tint, name: t(tool.label), detail: t(tool.detail) }))} />
     </SettingSection>
   );
@@ -1036,9 +1041,7 @@ function ChangesCard({
       state = ownKeyMissing(data) ? (
         <NoKeyLine i18n={i18n} />
       ) : (
-        <InlineNotice icon="disabled" heading={t("settings.auto.unavailable.heading")}>
-          {t("settings.auto.unavailable.body")}
-        </InlineNotice>
+        <InlineNotice icon="disabled" heading={t("settings.auto.unavailable.heading")} />
       );
     } else if (basic === "consent") {
       state = (
@@ -1203,12 +1206,11 @@ function ChangesCard({
                   : undefined
           }
         >
-          {/* Its summary and actions are in the panel below once it is the current way. Locked: the one plan with it, by its badge alone (a line would only repeat it). */}
+          {/* Its summary and actions are in the panel below once it is the current way. Locked: the one plan with it, by its badge alone (a line would only repeat it).
+              Not set up yet: its chevron says choosing it opens its page. */}
           {mode === "smart" && smartSummary ? null : !entitled ? (
             <LockLine plan="Business" {...(lockLink ? { link: lockLink } : {})} />
-          ) : !smartConfig ? (
-            <StateLine icon="info">{t("settings.changes.smart.setUp")}</StateLine>
-          ) : !data.consent ? (
+          ) : !smartConfig ? null : !data.consent ? (
             needsConsent
           ) : !data.auto.available ? (
             <StateLine icon="disabled">{t("settings.changes.line.unavailable")}</StateLine>
@@ -1259,7 +1261,6 @@ function ChangesCard({
             facts={[
               { icon: "check", text: t("settings.auto.how.missing") },
               { icon: "eye-check-mark", text: t("settings.auto.how.publishing") },
-              { icon: "clock", text: t("settings.auto.how.later") },
               // Own key plan: no AI characters of Linguva's (the cost note above says who bills).
               ...(data.ownKeys?.plan ? [] : [{ icon: "gauge" as const, text: t("settings.auto.how.allowance") }]),
             ]}
@@ -1359,7 +1360,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
   // No DeepL at all (Azure, Google or both): no service in use reads the store context.
   const contextUnused = !data.engines.text.includes("deepl");
   return (
-    <SettingSection id="settings-style" {...SECTION_LOOK.style} heading={t("settings.section.style")} lead={t("settings.style.lead")}>
+    <SettingSection id="settings-style" {...SECTION_LOOK.style} heading={t("settings.section.style")}>
       <ui-save-bar id={STYLE_SAVE_BAR}>
         <button variant="primary" onClick={() => formRef.current?.requestSubmit()} {...(fetcher.state !== "idle" ? { loading: "" } : {})}>
           {t("automatic.action.save")}
@@ -1377,7 +1378,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
           )}
           {/* DeepL is always first when it is used, so "if DeepL can't translate" stays true. Only a
               chosen form (formal or informal) is dropped by the other services and raises
-              FORMALITY_NOT_APPLIED; "DeepL decides" sends none. */}
+              FORMALITY_NOT_APPLIED; "Automatic" sends none. */}
           {withFallback && data.style.languages.some((l) => hasFormalityChoice(data, l.locale) && l.formality !== "default") ? (
             <s-text color="subdued">{t("settings.style.fallbackNote")}</s-text>
           ) : null}
@@ -1411,7 +1412,7 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
 
 /**
  * The form of address, language by language: a row with the segmented
- * choice ("DeepL entscheidet" · "Sie" · "Du") for each language that has
+ * choice ("Automatisch" · "Sie" · "Du") for each language that has
  * one, then one line naming the languages without a choice, with their
  * flags. Their stored value goes along unchanged (hidden inputs).
  */
@@ -1431,7 +1432,7 @@ function AddressChoices({ data, i18n }: { data: Data; i18n: I18n }) {
   const options = (locale: string) => {
     const pronouns = formalityPronouns(locale);
     return [
-      { value: "default", label: t("settings.style.deeplDecides") },
+      { value: "default", label: t("settings.style.automatic") },
       pronouns
         ? { value: "more", label: upperFirst(pronouns.formal), accessibilityLabel: t("settings.style.formalWith", { pronoun: pronouns.formal }) }
         : { value: "more", label: t("settings.style.formal") },
@@ -1587,30 +1588,36 @@ function PermissionCard({
         </s-banner>
       ) : null}
       {data.consent && data.engines.missing.length ? (
-        // Engines added after the shop's consent: used only once the merchant allows them too.
-        <s-box padding="base" border="base" borderRadius="large-100">
-          <s-stack direction="block" gap="small-200">
-            <s-heading>{t("settings.ai.extra.heading")}</s-heading>
-            <s-paragraph>
-              {own
-                ? t("settings.ai.extra.body.ownKey", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })
-                : t("settings.ai.extra.body", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })}
-            </s-paragraph>
-            {/* The notice the stored version stands for: every service in use, their order and the failover. */}
-            <s-paragraph>{lead(data.engines.configured)}</s-paragraph>
-            <s-paragraph>{t("settings.ai.personal.multi")}</s-paragraph>
-            <s-stack direction="inline">
-              <fetcher.Form method="post">
-                <input type="hidden" name="intent" value="grant-consent" />
-                <input type="hidden" name="extend" value="true" />
-                <ConsentTokensInput data={data} />
-                <Button type="submit" {...(busy ? { loading: true } : {})}>
-                  {t("settings.ai.extra.action")}
-                </Button>
-              </fetcher.Form>
+        // Engines added after the shop's consent: used only once the merchant allows them too. A topic of the
+        // card under its own heading (as How AI writes heads its two), set apart from the rest by a line.
+        <>
+          <div id={EXTRA_SERVICES} role="group" aria-labelledby={`${EXTRA_SERVICES}-heading`}>
+            <s-stack direction="block" gap="small-200">
+              <h3 id={`${EXTRA_SERVICES}-heading`} style={SUB_HEADING}>
+                {t("settings.ai.extra.heading")}
+              </h3>
+              <s-paragraph>
+                {own
+                  ? t("settings.ai.extra.body.ownKey", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })
+                  : t("settings.ai.extra.body", { processors: processorsText(i18n, data.engines.missing), consented: enginesText(i18n, tokens) })}
+              </s-paragraph>
+              {/* The notice the stored version stands for: every service in use, their order and the failover. */}
+              <s-paragraph>{lead(data.engines.configured)}</s-paragraph>
+              <s-paragraph>{t("settings.ai.personal.multi")}</s-paragraph>
+              <s-stack direction="inline">
+                <fetcher.Form method="post">
+                  <input type="hidden" name="intent" value="grant-consent" />
+                  <input type="hidden" name="extend" value="true" />
+                  <ConsentTokensInput data={data} />
+                  <Button type="submit" {...(busy ? { loading: true } : {})}>
+                    {t("settings.ai.extra.action")}
+                  </Button>
+                </fetcher.Form>
+              </s-stack>
             </s-stack>
-          </s-stack>
-        </s-box>
+          </div>
+          <s-divider />
+        </>
       ) : null}
       <More summary={t("settings.ai.detailsSummary")}>
         <s-paragraph>{deeplOnly ? t("settings.ai.personal") : t("settings.ai.personal.multi")}</s-paragraph>

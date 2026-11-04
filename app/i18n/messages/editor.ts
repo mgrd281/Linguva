@@ -2,7 +2,7 @@
 import type { Message, Translation } from "./define";
 
 export const en = {
-  "editor.saveError.UNKNOWN_FIELD": "Unknown field",
+  "editor.saveError.UNKNOWN_FIELD": "Unknown text",
   "editor.saveError.EMPTY_TRANSLATION": "Translation is empty",
   "editor.saveError.STRUCTURE_CHANGED": "This value no longer has the original's structure (formatting, list items or link addresses). Translate it again.",
   "editor.saveError.SHOPIFY_REJECTED": "{detail}",
@@ -66,11 +66,7 @@ export const en = {
   "editor.toolbar.leftToday": "{remaining} AI characters left today ({monthRemaining} of {limit} this month)",
   "editor.toolbar.notConfigured": "AI translation isn't configured",
   "editor.toolbar.countLabel": { one: "{action}: {count} open text", other: "{action}: {count} open texts" },
-  "editor.toolbar.open": {
-    one: "{count} text is missing or outdated: only it gets a draft. Texts you've already translated stay as they are.",
-    other: "{count} texts are missing or outdated: only these get drafts. Texts you've already translated stay as they are.",
-  },
-  "editor.toolbar.allDone": "Nothing is missing or outdated: every text is translated.",
+  "editor.toolbar.open": { one: "Only the missing or outdated text gets a draft.", other: "Only the {count} missing or outdated texts get drafts." },
   "editor.toolbar.manualOpen": {
     one: "{count} text is missing or outdated and can only be translated by hand: it's marked “Manual only” below.",
     other: "{count} texts are missing or outdated and can only be translated by hand: they're marked “Manual only” below.",
@@ -87,13 +83,13 @@ export const en = {
   },
   "editor.again.confirm": "Translate again",
   "editor.header.open": { one: "In {language} · {open} of {count} text to translate", other: "In {language} · {open} of {count} texts to translate" },
-  "editor.header.done": { one: "In {language} · its text is translated", other: "In {language} · all {count} texts are translated" },
+  "editor.header.done": { one: "In {language} · done", other: "In {language} · all {count} texts done" },
   "editor.header.paged": { one: "In {language} · {count} text", other: "In {language} · {count} texts" },
   "editor.header.language": "In {language}",
   "editor.tiles.label": "Texts",
   "editor.tiles.open": { one: "{count} to translate", other: "{count} to translate" },
   "editor.smart.exclude": "Leave out of the smart schedule",
-  "editor.smart.excludeDetails": "The smart schedule leaves this item and its extra details alone, in every language. You can still translate it here.",
+  "editor.smart.excludeDetails": "The smart schedule leaves this item and its extra details alone, in every language.",
   "editor.smart.excluded": "Left out of the smart schedule.",
   "editor.smart.included": "Back in the smart schedule.",
   "editor.fill.memory": "Similar translations from your memory are filled in below. Check them carefully, then publish.",
@@ -166,7 +162,7 @@ export const en = {
 
   "editor.attached.heading": "Image descriptions and extra details",
   "editor.attached.unavailable": "Image descriptions and extra details couldn't be loaded. Reload the page to try again.",
-  "editor.attached.intro": "Image descriptions (alt text) help screen readers and Google's image search. Extra details are custom fields (metafields) that Shopify lets you translate.",
+  "editor.attached.intro": "Image descriptions are the images' alt text; extra details are metafields.",
   "editor.attached.noAlt": { one: "{count} image has no description", other: "{count} images have no description" },
   "editor.attached.noAltBody": "Add a description to the image in Shopify first; then you can translate it here.",
   "editor.attached.unsupported": {
@@ -191,7 +187,7 @@ export const en = {
   "editor.structured.item": "{language}, item {n}",
   "editor.structured.linksTo": "Links to {url}",
   "editor.structured.itemRequired": "Translate this item too, or leave every item empty.",
-  "editor.structured.notTranslated": "Not translated yet",
+  "editor.structured.notTranslated": "Missing",
 
   "editor.preview.empty": "The preview appears here once there is a translation.",
   "editor.preview.emptyEditor": "Nothing in {language} yet – translate it with AI above, or write it here.",
@@ -209,7 +205,7 @@ export const en = {
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
-  "editor.saveError.UNKNOWN_FIELD": "Unbekanntes Feld",
+  "editor.saveError.UNKNOWN_FIELD": "Unbekannter Text",
   "editor.saveError.EMPTY_TRANSLATION": "Die Übersetzung ist leer",
   "editor.saveError.STRUCTURE_CHANGED": "Dieser Wert hat nicht mehr den Aufbau des Originals (Formatierung, Listeneinträge oder Linkadressen). Übersetze ihn erneut.",
   "editor.saveError.SHOPIFY_REJECTED": "Shopify hat die Übersetzung abgelehnt: {detail}",
@@ -273,11 +269,7 @@ export const de: Translation<typeof en> = {
   "editor.toolbar.leftToday": "Heute noch {remaining} KI\u2011Zeichen ({monthRemaining} von {limit} in diesem Monat)",
   "editor.toolbar.notConfigured": "KI\u2011Übersetzung ist nicht eingerichtet",
   "editor.toolbar.countLabel": { one: "{action}: {count} offener Text", other: "{action}: {count} offene Texte" },
-  "editor.toolbar.open": {
-    one: "{count} Text fehlt oder ist veraltet: Nur er bekommt einen Entwurf. Texte, die du schon übersetzt hast, bleiben, wie sie sind.",
-    other: "{count} Texte fehlen oder sind veraltet: Nur diese bekommen Entwürfe. Texte, die du schon übersetzt hast, bleiben, wie sie sind.",
-  },
-  "editor.toolbar.allDone": "Nichts fehlt, nichts ist veraltet: Jeder Text ist übersetzt.",
+  "editor.toolbar.open": { one: "Nur der fehlende oder veraltete Text bekommt einen Entwurf.", other: "Nur die {count} fehlenden oder veralteten Texte bekommen Entwürfe." },
   "editor.toolbar.manualOpen": {
     one: "{count} Text fehlt oder ist veraltet und lässt sich nur von Hand übersetzen: Er ist unten mit „Nur manuell“ markiert.",
     other: "{count} Texte fehlen oder sind veraltet und lassen sich nur von Hand übersetzen: Sie sind unten mit „Nur manuell“ markiert.",
@@ -294,13 +286,13 @@ export const de: Translation<typeof en> = {
   },
   "editor.again.confirm": "Neu übersetzen",
   "editor.header.open": { one: "Auf {language} · {open} von {count} Text offen", other: "Auf {language} · {open} von {count} Texten offen" },
-  "editor.header.done": { one: "Auf {language} · der Text ist übersetzt", other: "Auf {language} · alle {count} Texte sind übersetzt" },
+  "editor.header.done": { one: "Auf {language} · fertig", other: "Auf {language} · alle {count} Texte fertig" },
   "editor.header.paged": { one: "Auf {language} · {count} Text", other: "Auf {language} · {count} Texte" },
   "editor.header.language": "Auf {language}",
   "editor.tiles.label": "Texte",
   "editor.tiles.open": { one: "{count} offen", other: "{count} offen" },
   "editor.smart.exclude": "Aus dem intelligenten Zeitplan ausnehmen",
-  "editor.smart.excludeDetails": "Der intelligente Zeitplan lässt diesen Eintrag und seine Zusatzinfos in allen Sprachen aus. Hier kannst du ihn weiterhin übersetzen.",
+  "editor.smart.excludeDetails": "Der intelligente Zeitplan lässt diesen Eintrag und seine Zusatzinfos in allen Sprachen aus.",
   "editor.smart.excluded": "Aus dem intelligenten Zeitplan ausgenommen.",
   "editor.smart.included": "Wieder im intelligenten Zeitplan.",
   "editor.fill.memory":
@@ -375,7 +367,7 @@ export const de: Translation<typeof en> = {
 
   "editor.attached.heading": "Bildbeschreibungen und Zusatzinfos",
   "editor.attached.unavailable": "Bildbeschreibungen und Zusatzinfos konnten nicht geladen werden. Lade die Seite neu, um es noch einmal zu versuchen.",
-  "editor.attached.intro": "Bildbeschreibungen (Alt-Texte) helfen Screenreadern und der Google-Bildersuche. Zusatzinfos sind eigene Felder (Metafelder), die Shopify übersetzen lässt.",
+  "editor.attached.intro": "Bildbeschreibungen sind die Alt-Texte der Bilder, Zusatzinfos sind Metafelder.",
   "editor.attached.noAlt": { one: "{count} Bild hat keine Beschreibung", other: "{count} Bilder haben keine Beschreibung" },
   "editor.attached.noAltBody": "Füge dem Bild zuerst in Shopify eine Beschreibung hinzu; dann kannst du sie hier übersetzen.",
   "editor.attached.unsupported": {
@@ -401,7 +393,7 @@ export const de: Translation<typeof en> = {
   "editor.structured.item": "{language}, Eintrag {n}",
   "editor.structured.linksTo": "Verweist auf {url}",
   "editor.structured.itemRequired": "Übersetze auch diesen Eintrag oder lass alle Einträge leer.",
-  "editor.structured.notTranslated": "Noch nicht übersetzt",
+  "editor.structured.notTranslated": "Fehlt noch",
 
   "editor.preview.empty": "Die Vorschau erscheint hier, sobald es eine Übersetzung gibt.",
   "editor.preview.emptyEditor": "Noch nichts auf {language} – übersetze es oben mit KI oder schreib es hier.",
@@ -418,7 +410,7 @@ export const de: Translation<typeof en> = {
 };
 
 export const fr: Translation<typeof en> = {
-  "editor.saveError.UNKNOWN_FIELD": "Champ inconnu",
+  "editor.saveError.UNKNOWN_FIELD": "Texte inconnu",
   "editor.saveError.EMPTY_TRANSLATION": "La traduction est vide",
   "editor.saveError.STRUCTURE_CHANGED":
     "Cette valeur n'a plus la structure de l'original (mise en forme, éléments de liste ou adresses de lien). Traduisez-la à nouveau.",
@@ -484,11 +476,7 @@ export const fr: Translation<typeof en> = {
   "editor.toolbar.leftToday": "Il reste {remaining} caractères d'IA aujourd'hui ({monthRemaining} sur {limit} ce mois-ci)",
   "editor.toolbar.notConfigured": "La traduction par IA n'est pas configurée",
   "editor.toolbar.countLabel": { one: "{action} : {count} texte à traduire", other: "{action} : {count} textes à traduire" },
-  "editor.toolbar.open": {
-    one: "{count} texte manque ou est obsolète : seul celui-ci reçoit un brouillon. Les textes que vous avez déjà traduits restent tels quels.",
-    other: "{count} textes manquent ou sont obsolètes : seuls ceux-ci reçoivent des brouillons. Les textes que vous avez déjà traduits restent tels quels.",
-  },
-  "editor.toolbar.allDone": "Rien ne manque, rien n'est obsolète : chaque texte est traduit.",
+  "editor.toolbar.open": { one: "Seul le texte manquant ou obsolète reçoit un brouillon.", other: "Seuls les {count} textes manquants ou obsolètes reçoivent des brouillons." },
   "editor.toolbar.manualOpen": {
     one: "{count} texte manque ou est obsolète et ne se traduit qu'à la main : il est marqué « Manuel uniquement » ci-dessous.",
     other: "{count} textes manquent ou sont obsolètes et ne se traduisent qu'à la main : ils sont marqués « Manuel uniquement » ci-dessous.",
@@ -505,13 +493,13 @@ export const fr: Translation<typeof en> = {
   },
   "editor.again.confirm": "Retraduire",
   "editor.header.open": { one: "En {language} · {open} sur {count} texte à traduire", other: "En {language} · {open} sur {count} textes à traduire" },
-  "editor.header.done": { one: "En {language} · le texte est traduit", other: "En {language} · les {count} textes sont traduits" },
+  "editor.header.done": { one: "En {language} · terminé", other: "En {language} · les {count} textes sont terminés" },
   "editor.header.paged": { one: "En {language} · {count} texte", other: "En {language} · {count} textes" },
   "editor.header.language": "En {language}",
   "editor.tiles.label": "Textes",
   "editor.tiles.open": { one: "{count} à traduire", other: "{count} à traduire" },
   "editor.smart.exclude": "Exclure de la planification intelligente",
-  "editor.smart.excludeDetails": "La planification intelligente laisse cet élément et ses informations complémentaires tels quels, dans toutes les langues. Vous pouvez toujours le traduire ici.",
+  "editor.smart.excludeDetails": "La planification intelligente laisse cet élément et ses informations complémentaires tels quels, dans toutes les langues.",
   "editor.smart.excluded": "Exclu de la planification intelligente.",
   "editor.smart.included": "De nouveau dans la planification intelligente.",
   "editor.fill.memory":
@@ -587,8 +575,7 @@ export const fr: Translation<typeof en> = {
 
   "editor.attached.heading": "Descriptions d'images et informations complémentaires",
   "editor.attached.unavailable": "Impossible de charger les descriptions d'images et les informations complémentaires. Rechargez la page pour réessayer.",
-  "editor.attached.intro":
-    "Les descriptions d'images (texte alternatif) aident les lecteurs d'écran et la recherche d'images de Google. Les informations complémentaires sont des champs personnalisés (métachamps) que Shopify permet de traduire.",
+  "editor.attached.intro": "Les descriptions d'images sont leurs textes alternatifs ; les informations complémentaires sont des métachamps.",
   "editor.attached.noAlt": { one: "{count} image n'a pas de description", other: "{count} images n'ont pas de description" },
   "editor.attached.noAltBody": "Ajoutez d'abord une description à l'image dans Shopify ; vous pourrez ensuite la traduire ici.",
   "editor.attached.unsupported": {
@@ -614,7 +601,7 @@ export const fr: Translation<typeof en> = {
   "editor.structured.item": "{language}, élément {n}",
   "editor.structured.linksTo": "Renvoie vers {url}",
   "editor.structured.itemRequired": "Traduisez aussi cet élément ou laissez tous les éléments vides.",
-  "editor.structured.notTranslated": "Pas encore traduit",
+  "editor.structured.notTranslated": "Manquant",
 
   "editor.preview.empty": "L'aperçu s'affiche ici dès qu'une traduction existe.",
   "editor.preview.emptyEditor": "Rien en {language} pour l'instant – traduisez-le avec l'IA ci-dessus, ou rédigez-le ici.",
@@ -631,7 +618,7 @@ export const fr: Translation<typeof en> = {
 };
 
 export const es: Translation<typeof en> = {
-  "editor.saveError.UNKNOWN_FIELD": "Campo desconocido",
+  "editor.saveError.UNKNOWN_FIELD": "Texto desconocido",
   "editor.saveError.EMPTY_TRANSLATION": "La traducción está vacía",
   "editor.saveError.STRUCTURE_CHANGED":
     "Este valor ya no tiene la estructura del original (formato, elementos de lista o direcciones de enlace). Vuelve a traducirlo.",
@@ -696,11 +683,7 @@ export const es: Translation<typeof en> = {
   "editor.toolbar.leftToday": "Quedan {remaining} caracteres de IA hoy ({monthRemaining} de {limit} este mes)",
   "editor.toolbar.notConfigured": "La traducción con IA no está configurada",
   "editor.toolbar.countLabel": { one: "{action}: {count} texto por traducir", other: "{action}: {count} textos por traducir" },
-  "editor.toolbar.open": {
-    one: "Falta {count} texto o está desactualizado: solo ese recibe un borrador. Los textos que ya tradujiste se quedan como están.",
-    other: "Faltan {count} textos o están desactualizados: solo esos reciben borradores. Los textos que ya tradujiste se quedan como están.",
-  },
-  "editor.toolbar.allDone": "No falta nada ni hay nada desactualizado: cada texto está traducido.",
+  "editor.toolbar.open": { one: "Solo el texto que falta o está desactualizado recibe un borrador.", other: "Solo los {count} textos que faltan o están desactualizados reciben borradores." },
   "editor.toolbar.manualOpen": {
     one: "Falta {count} texto o está desactualizado, y solo se traduce a mano: abajo está marcado como «Solo manual».",
     other: "Faltan {count} textos o están desactualizados, y solo se traducen a mano: abajo están marcados como «Solo manual».",
@@ -717,13 +700,13 @@ export const es: Translation<typeof en> = {
   },
   "editor.again.confirm": "Volver a traducir",
   "editor.header.open": { one: "En {language} · {open} de {count} texto por traducir", other: "En {language} · {open} de {count} textos por traducir" },
-  "editor.header.done": { one: "En {language} · el texto está traducido", other: "En {language} · los {count} textos están traducidos" },
+  "editor.header.done": { one: "En {language} · listo", other: "En {language} · los {count} textos están listos" },
   "editor.header.paged": { one: "En {language} · {count} texto", other: "En {language} · {count} textos" },
   "editor.header.language": "En {language}",
   "editor.tiles.label": "Textos",
   "editor.tiles.open": { one: "{count} por traducir", other: "{count} por traducir" },
   "editor.smart.exclude": "Excluir de la programación inteligente",
-  "editor.smart.excludeDetails": "La programación inteligente deja este elemento y su información adicional como están, en todos los idiomas. Aquí puedes seguir traduciéndolo.",
+  "editor.smart.excludeDetails": "La programación inteligente deja este elemento y su información adicional como están, en todos los idiomas.",
   "editor.smart.excluded": "Excluido de la programación inteligente.",
   "editor.smart.included": "De nuevo en la programación inteligente.",
   "editor.fill.memory": "Abajo se rellenaron traducciones similares de tu memoria. Revísalas con atención y luego publícalas.",
@@ -796,8 +779,7 @@ export const es: Translation<typeof en> = {
 
   "editor.attached.heading": "Descripciones de imágenes e información adicional",
   "editor.attached.unavailable": "No se pudieron cargar las descripciones de imágenes ni la información adicional. Recarga la página para volver a intentarlo.",
-  "editor.attached.intro":
-    "Las descripciones de imágenes (texto alternativo) ayudan a los lectores de pantalla y a la búsqueda de imágenes de Google. La información adicional son campos personalizados (metacampos) que Shopify permite traducir.",
+  "editor.attached.intro": "Las descripciones de imágenes son su texto alternativo; la información adicional son metacampos.",
   "editor.attached.noAlt": { one: "{count} imagen no tiene descripción", other: "{count} imágenes no tienen descripción" },
   "editor.attached.noAltBody": "Primero agrega una descripción a la imagen en Shopify; después podrás traducirla aquí.",
   "editor.attached.unsupported": {
@@ -823,7 +805,7 @@ export const es: Translation<typeof en> = {
   "editor.structured.item": "{language}, elemento {n}",
   "editor.structured.linksTo": "Enlaza a {url}",
   "editor.structured.itemRequired": "Traduce también este elemento o deja todos los elementos vacíos.",
-  "editor.structured.notTranslated": "Aún sin traducir",
+  "editor.structured.notTranslated": "Falta",
 
   "editor.preview.empty": "La vista previa aparecerá aquí cuando haya una traducción.",
   "editor.preview.emptyEditor": "Todavía nada en {language}: tradúcelo con IA arriba o escríbelo aquí.",

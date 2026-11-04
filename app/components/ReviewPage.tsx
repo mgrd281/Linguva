@@ -35,7 +35,6 @@ import { showToast } from "./app-bridge";
 import { ConfirmModal } from "./ConfirmModal";
 import { Flag } from "./Flag";
 import { PageHeader } from "./PageHeader";
-import { ProgressBar } from "./ProgressBar";
 import { ReviewApproveConfirm, type ApproveSummary } from "./ReviewApproveConfirm";
 import { firstSight, focusSoon, languageLabel, outcomeText, ReviewCardView, textLabel, visible, type CardContext } from "./ReviewCard";
 import { FloatingBar, ReviewControls, type PageActions } from "./ReviewControls";
@@ -559,11 +558,12 @@ interface ReviewedLanguage {
   percent: number | null | undefined;
 }
 
-/** A language of "Your languages" as a link tile (Settings' tools): its flag, name, how far it is with its bar. */
+/**
+ * A language of "Your languages" as a link tile (Settings' tools): its flag and name, "hidden" while customers
+ * don't see it. How far it is stays on its own page (the tile leads there), the Overview and Coverage.
+ */
 function LanguageTile({ language, data, i18n }: { language: ReviewedLanguage; data: ReviewPageData; i18n: I18n }) {
   const { t } = i18n;
-  const figure =
-    language.percent === undefined ? null : language.percent === null ? t("language.hero.notCounted") : t("review.empty.percent", { percent: i18n.percent(language.percent) });
   return (
     <li className="lv-links__item">
       <Link to={languagePath(language.locale)} className="lv-link-tile">
@@ -580,13 +580,6 @@ function LanguageTile({ language, data, i18n }: { language: ReviewedLanguage; da
               </span>
             ) : null}
           </div>
-          {figure ? <span className="lv-link-tile__detail">{figure}</span> : null}
-          {/* The language page's figure as a bar (decorative: the words say it). */}
-          {typeof language.percent === "number" ? (
-            <div className="lv-review-tile__bar" aria-hidden="true">
-              <ProgressBar value={language.percent} label={figure ?? language.name} />
-            </div>
-          ) : null}
         </div>
         <s-icon type="chevron-right" color="subdued" />
       </Link>

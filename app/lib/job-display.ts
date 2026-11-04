@@ -5,9 +5,9 @@ type Tone = "info" | "success" | "warning" | "critical" | "neutral";
 
 export const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   PENDING: { label: "Queued", tone: "info" },
-  DISCOVERING: { label: "Finding content", tone: "info" },
+  DISCOVERING: { label: "Finding texts", tone: "info" },
   RUNNING: { label: "Translating", tone: "info" },
-  COMPLETED: { label: "Completed", tone: "success" },
+  COMPLETED: { label: "Done", tone: "success" },
   CANCELLED: { label: "Cancelled", tone: "neutral" },
   FAILED: { label: "Stopped", tone: "critical" },
 };

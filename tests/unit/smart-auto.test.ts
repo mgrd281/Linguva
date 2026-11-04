@@ -7,7 +7,7 @@ import { createElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { normaliseSmartSettings, type SmartSettingsContext, type SmartSettingsInput } from "../../app/.server/smart/validate";
-import { BudgetMeter, budgetMeter, ChoiceTiles, DayToggles, failedAction, sameScope, shortWeekday, SmartPreview, SmartStateBanner, whenIn } from "../../app/components/SmartAutoCard";
+import { BudgetMeter, budgetMeter, DayToggles, failedAction, sameScope, shortWeekday, SmartPreview, SmartStateBanner, whenIn } from "../../app/components/SmartAutoCard";
 import { APP_LOCALES, translator, type AppLocale } from "../../app/i18n/i18n";
 import { I18nProvider } from "../../app/i18n/react";
 import { PLANS } from "../../app/lib/plans";
@@ -280,39 +280,7 @@ describe("a budget's meter", () => {
 });
 
 describe("the smart page's choices", () => {
-  const options = [
-    { value: "daily", name: "Every day", line: "One full check a day", icon: "calendar-time" as const, tint: "violet" as const },
-    { value: "manual", name: "Only on demand", line: "When you press “Check now”" },
-  ];
-
-  it("are native radio buttons in a fieldset named by its legend, each named by its tile and described by its line", () => {
-    const markup = html(createElement(ChoiceTiles, { name: "mode", legend: "How often", options, defaultValue: "daily" }));
-    expect(tags(markup, "fieldset")).toHaveLength(1);
-    expect(markup).toContain('<legend class="lv-smart-choice__legend">How often</legend>');
-    const radios = tags(markup, "input");
-    expect(radios).toHaveLength(2);
-    for (const radio of radios) {
-      expect(radio).toContain('type="radio"');
-      expect(radio).toContain('name="mode"');
-    }
-    expect(radios[0]).toContain('value="daily"');
-    expect(radios[0]).toContain("checked");
-    expect(radios[1]).not.toContain("checked");
-    // The line is the description, kept out of the name (never "Every dayOne full check a day").
-    const describedBy = radios[0]!.match(/aria-describedby="([^"]+)"/)?.[1];
-    expect(markup).toContain(`<span id="${describedBy}" class="lv-smart-tile__line" aria-hidden="true">One full check a day</span>`);
-    // A tile with an icon has it in its tinted square; one without shows its radio mark beside the name.
-    expect(markup).toContain('data-tint="violet"');
-    expect(markup).toContain("lv-smart-tile__face--plain");
-  });
-
-  it("are all disabled when read-only, and a legend a heading already says is for screen readers only", () => {
-    const markup = html(createElement(ChoiceTiles, { name: "outdated", legend: "Outdated translations", legendHidden: true, options, defaultValue: "manual", disabled: true }));
-    expect(tags(markup, "fieldset")[0]).toContain("disabled");
-    for (const radio of tags(markup, "input")) expect(radio).toContain("disabled");
-    expect(markup).toContain('<legend class="lv-sr">Outdated translations</legend>');
-  });
-
+  // How often, the texts and outdated translations are Settings' option cards (tests/unit/smart-page-render.test.ts).
   it("show the weekdays as seven toggles: native checkboxes named by the whole day, the chosen ones checked", () => {
     const markup = html(createElement(DayToggles, { name: "weekday", legend: "Tage", checked: [1, 4] }), "de");
     const boxes = tags(markup, "input");
@@ -325,7 +293,7 @@ describe("the smart page's choices", () => {
     expect(markup).toContain('<legend class="lv-smart-days__legend">Tage</legend>');
   });
 
-  it("for outdated translations never end a line in “KI-” in German: a narrow tile keeps the compound whole", () => {
+  it("for outdated translations never end a line in “KI-” in German: a narrow card keeps the compound whole", () => {
     const { t } = translator("de");
     const lines = [t("automatic.outdated.replace.details"), t("automatic.outdated.keep.details", { outdated: t("coverage.state.outdated") })];
     for (const line of lines) expect(line).not.toContain("KI-");
@@ -367,10 +335,19 @@ describe("the smart schedule's state row", () => {
     expect(markup).toContain('<s-link href="#smart-scope">Sprachen wählen</s-link>');
   });
 
-  it("names a stopped background service once: the title, then what happens next", () => {
+  it("says what happens while jobs can't run, never a “background service”: paused, and Linguva continues by itself", () => {
     const markup = html(createElement(SmartStateBanner, { status: { state: "waiting", reason: "WORKER" }, zone: "Europe/Berlin" }));
-    expect(row(markup)).toEqual({ title: "Linguva's background service isn't running", detail: "Checks start again by themselves once it's back." });
-    expect(markup.match(/background service/g)).toHaveLength(1);
+    expect(row(markup)).toEqual({ title: "Translating paused", detail: "Linguva continues by itself as soon as it can." });
+    for (const locale of APP_LOCALES) {
+      expect(html(createElement(SmartStateBanner, { status: { state: "waiting", reason: "WORKER" }, zone: "UTC" }), locale), locale).not.toMatch(
+        /background|worker|Hintergrund|arrière-plan|segundo plano/i,
+      );
+    }
+  });
+
+  it("not set up on this installation: its title alone (there is nothing the merchant can do)", () => {
+    const markup = html(createElement(SmartStateBanner, { status: { state: "waiting", reason: "UNAVAILABLE" }, zone: "UTC" }));
+    expect(row(markup)).toEqual({ title: "Not set up on this installation", detail: null });
   });
 
   it("waiting for the permission: the grant button beside it in place of a line; without one, the way to Settings", () => {
@@ -410,6 +387,8 @@ describe("the smart schedule's state row", () => {
       for (const status of statuses) {
         const { title, detail } = row(html(createElement(SmartStateBanner, { status, zone: "Europe/Berlin" }), locale));
         expect(title, `${locale} ${status.state} ${status.reason}`).toBeTruthy();
+        // Not set up on this installation: the title alone (the test before).
+        if (status.reason === "UNAVAILABLE") continue;
         expect(detail, `${locale} ${status.state} ${status.reason}`).toBeTruthy();
         expect(detail!.toLocaleLowerCase(), `${locale} ${status.state} ${status.reason}`).not.toContain(title!.toLocaleLowerCase());
       }
@@ -489,8 +468,9 @@ describe("the summary before setup", () => {
     // Set up: the last complete check, what it found, publishing and the next check's characters, two by two.
     expect(columns(shown(0))).toBe("@container (inline-size &gt; 520px) 1fr 1fr, 1fr");
     expect(shown(0).match(/<s-icon type=/g)).toHaveLength(4);
-    // Translating too: five, three in a row where there is room.
+    // Translating too: five, three in a row where there is room; work running now in the app's one look (in-progress, info).
     expect(columns(shown(4))).toBe("@container (inline-size &gt; 520px) 1fr 1fr, (inline-size &gt; 860px) 1fr 1fr 1fr, 1fr");
+    expect(shown(4)).toContain('<s-icon type="in-progress" tone="info"></s-icon>');
     // The next check's figure in words that aren't the state's ("Waiting").
     expect(shown(0)).toContain(">For the next check</s-text>");
   });

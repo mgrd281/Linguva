@@ -21,6 +21,7 @@ import { Card } from "../components/Card";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Flag } from "../components/Flag";
 import { IconSquare } from "../components/IconSquare";
+import { SearchField } from "../components/SearchField";
 import { TOOL_LOOK, ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
 import type { I18n } from "../i18n/i18n";
 import { useI18n } from "../i18n/react";
@@ -149,8 +150,8 @@ export default function Memory() {
   const filtered = Boolean(data.search || data.targetLocale);
   // Nothing remembered yet, and no search that found nothing: the page says what fills the memory.
   const empty = data.entriesTotal === 0 && !filtered;
-  // A language applies at once, as Jobs' filters do; "Search" stays for the words. React 18 sends no
-  // onChange for a web component, so its input event goes there (and React 19's change event, once).
+  // A language applies at once, as Jobs' filters do, and the words are searched as they are typed. React 18
+  // sends no onChange for a web component, so its input event goes there (and React 19's change event, once).
   const picked = useRef<string | null>(null);
   useEffect(() => {
     picked.current = null;
@@ -188,8 +189,9 @@ export default function Memory() {
             <Card>
               <Form method="get" role="search" aria-label={t("common.nav.memory")}>
                 <s-query-container>
-                  <s-grid gridTemplateColumns="@container (inline-size > 560px) 2fr 1fr auto, 1fr" gap="base" alignItems="end">
-                    <s-search-field name="q" label={t("common.action.search")} placeholder={t("memory.search.placeholder")} value={data.search} />
+                  <s-grid gridTemplateColumns="@container (inline-size > 560px) 2fr 1fr, 1fr" gap="base" alignItems="end">
+                    {/* Searches as you type (from two characters, at once on Enter), in the language chosen beside it. */}
+                    <SearchField name="q" label={t("common.action.search")} labelHidden={false} placeholder={t("memory.search.placeholder")} value={data.search} />
                     <s-select
                       name="lang"
                       label={t("common.language")}
@@ -204,11 +206,6 @@ export default function Memory() {
                         </s-option>
                       ))}
                     </s-select>
-                    {/* In a stack of its own: the button's align-self (its width in a block stack) would win over
-                        the row's end alignment and lift it to the fields' labels. */}
-                    <s-stack direction="inline">
-                      <Button type="submit">{t("common.action.search")}</Button>
-                    </s-stack>
                   </s-grid>
                 </s-query-container>
               </Form>

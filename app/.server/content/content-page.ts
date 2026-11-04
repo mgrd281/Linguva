@@ -28,7 +28,7 @@ import { MARKETS_SCOPE } from "../markets/markets";
 import { shopBilling } from "../billing/billing";
 import { allowedTargetLocales } from "../billing/subscription";
 import { getQueues } from "../queue/client";
-import { activeJobs, categoryJob } from "../jobs/active-jobs";
+import { activeJobs, categoryJob, type CategoryJob } from "../jobs/active-jobs";
 import { loadContentHub, requestableScopes, type HubStatus } from "../translation/content-hub";
 import { itemsHref } from "../../components/Coverage";
 import { countsInHeadline } from "../../lib/coverage-rules";
@@ -87,8 +87,11 @@ export interface ContentArea {
   /** Types refused live: the card above unlocks the first, nothing unlocks the second. */
   locked: HubType[];
   unavailable: HubType[];
-  /** A translation of its types into the chosen language runs now. */
-  translating: boolean;
+  /**
+   * A translation of its types into the chosen language runs now: still finding its texts ("finding",
+   * the Jobs page's first phase), or translating them; null while none runs.
+   */
+  translating: "finding" | "translating" | null;
   /** Image descriptions and custom fields with texts: translated with this area's items. */
   attached: AttachedPart[];
   /** Pictures of its items can be shown (products, collections and blog posts of a counted language). */
@@ -127,6 +130,12 @@ export async function contentItemCounts(shopId: string, locale: string, client: 
 function marketCountriesOf(markets: MarketCountriesResult): string[] {
   if (!markets.access || "error" in markets) return [];
   return [...new Set(markets.markets.filter((m) => m.status === "ACTIVE").flatMap((m) => m.countries.map((c) => c.code.toUpperCase())))];
+}
+
+/** A running translation's phase as an area's tile says it: finding its texts (until every job found them all), then translating. */
+function translatingOf(job: CategoryJob | null): ContentArea["translating"] {
+  if (!job) return null;
+  return job.discoveryDone && job.total > 0 ? "translating" : "finding";
 }
 
 /**
@@ -231,7 +240,7 @@ export async function loadContentPage(admin: Admin, shop: ShopRef, input: Conten
         state: kind,
         locked,
         unavailable,
-        translating: locale !== null && categoryJob(jobs, id) !== null,
+        translating: translatingOf(locale === null ? null : categoryJob(jobs, id)),
         attached: [...attached],
         pictures: measured && PICTURE_AREAS.has(id),
       },

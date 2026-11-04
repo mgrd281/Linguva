@@ -9,6 +9,7 @@ import { hasMessage } from "../i18n/labels";
 import { Card } from "../components/Card";
 import { CoverageConfirm } from "../components/CoverageConfirm";
 import { FieldStateIcon } from "../components/CoverageStates";
+import { SearchField } from "../components/SearchField";
 import { ToolHeader, ToolsBreadcrumbSlot, toolsTrail } from "../components/ToolHeader";
 import { contentTypeName } from "../lib/content-type-names";
 import { FIELD_GROUPS, FIELD_STATES, isFieldState, type FieldState } from "../lib/coverage-rules";
@@ -67,8 +68,8 @@ export default function CoverageItems() {
   const title = t("coverage.items.heading");
   const coverageHref = `/app/coverage${f.locale ? `?lang=${encodeURIComponent(f.locale)}` : ""}`;
   const coverageName = t("settings.tools.coverage.label");
-  // A choice applies at once (as on Review and the area lists): no button to press after it. After the
-  // select's own events, so the form sends the value just chosen.
+  // A choice applies at once (as on Review and the area lists), and the title search runs as you type: no
+  // button to press after either. After the select's own events, so the form sends the value just chosen.
   const apply = () => window.setTimeout(() => filters.current?.requestSubmit(), 0);
   const confirm =
     data.target && data.confirm
@@ -124,11 +125,11 @@ export default function CoverageItems() {
               </s-query-container>
               <s-query-container>
                 <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="small-200 base" alignItems="end">
-                  <s-search-field name="q" label={t("coverage.items.search")} placeholder={t("coverage.items.searchPlaceholder")} value={f.search} />
-                  {/* In a stack of their own: a button's align-self (its width in a block stack) would win over the
+                  {/* Searches as you type (from two characters, at once on Enter), keeping the filters above. */}
+                  <SearchField name="q" label={t("coverage.items.search")} labelHidden={false} placeholder={t("coverage.items.searchPlaceholder")} value={f.search} />
+                  {/* In a stack of its own: a button's align-self (its width in a block stack) would win over the
                       row's end alignment and lift it to the field's label. */}
-                  <s-stack direction="inline" gap="small-200 base" alignItems="center">
-                    <Button type="submit">{t("common.action.search")}</Button>
+                  <s-stack direction="inline" alignItems="center">
                     <Button variant="tertiary" href={f.locale ? `/app/coverage/items?lang=${encodeURIComponent(f.locale)}` : "/app/coverage/items"}>
                       {t("coverage.items.clear")}
                     </Button>

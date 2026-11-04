@@ -214,7 +214,7 @@ describe("the Overview's next step", () => {
   const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
     targets: [{ locale: "fr", name: "French", published: true }],
     consent: false,
-    firstTranslation: { done: false, href: "/app/products?lang=fr" },
+    firstTranslation: { done: false, href: "/app/languages/fr/products" },
     pendingDrafts: 0,
     aiAvailable: false,
     jobsAvailable: true,
@@ -229,7 +229,7 @@ describe("the Overview's next step", () => {
     expect(nextStep(input({ ownKeyMissing: true }))).toEqual({ id: "own-key" });
     expect(nextStep(input({ ownKeyMissing: true, aiAvailable: true }))).toEqual({ id: "own-key" });
     expect(nextStep(input({ aiAvailable: true }))).toEqual({ id: "consent" });
-    expect(nextStep(input())).toEqual({ id: "first-translation", href: "/app/products?lang=fr" });
+    expect(nextStep(input())).toEqual({ id: "first-translation", href: "/app/languages/fr/products" });
     // Drafts to review still come first.
     expect(nextStep(input({ ownKeyMissing: true, pendingDrafts: 3 }))).toEqual({ id: "review", count: 3 });
   });

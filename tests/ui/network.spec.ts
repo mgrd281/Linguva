@@ -8,7 +8,8 @@ import { openApp } from "./helpers";
 
 test("a Shopify that doesn't answer ends in a clear page within the time limit @responsive", async ({ page }) => {
   const started = Date.now();
-  const response = await openApp(page, "slow", "/app/products?lang=de");
+  // A page that waits for Shopify's translations (here a product's editor).
+  const response = await openApp(page, "slow", "/app/products/1?lang=de");
   // The app's limit in the UI tests is 3 s; Shopify would take 20 s.
   expect(Date.now() - started).toBeLessThan(10_000);
   expect(response?.status()).toBe(504);

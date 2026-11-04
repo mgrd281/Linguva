@@ -2,7 +2,8 @@
  * What a language's page and its area lists share: the breadcrumb drawn in
  * the page (the admin's title bar shows only the page's heading), the card's
  * look, the numbered "Next" steps whose first button is the page's one
- * primary button, and an action's error in words.
+ * primary button, a language's Visible / Hidden badge, and an action's
+ * error in words.
  */
 import type { ReactNode } from "react";
 import type { I18n } from "../i18n/i18n";
@@ -32,6 +33,21 @@ export function settingsLinkFor(code: string): string | null {
   if (code === "CONSENT_REQUIRED" || code === "ENGINE_CONSENT") return "/app/settings?section=ai";
   if (code === "OWN_KEY_MISSING" || code === "OWN_KEY_REFUSED") return "/app/settings?section=keys";
   return null;
+}
+
+/**
+ * Whether customers can choose a language in the store, in one look wherever a language says it (its
+ * page, the Languages tool, Coverage): "Visible" with a tick in the success tone, "Hidden" with the hide
+ * icon and no tone (nothing is wrong with a language not published yet).
+ */
+export function VisibilityBadge({ published, i18n }: { published: boolean; i18n: I18n }) {
+  return published ? (
+    <s-badge tone="success" icon="check-circle">
+      {i18n.t("language.published")}
+    </s-badge>
+  ) : (
+    <s-badge icon="hide">{i18n.t("language.hidden")}</s-badge>
+  );
 }
 
 /** The trail on a wide container, the back row on a narrow one (Breadcrumbs `touch`). */

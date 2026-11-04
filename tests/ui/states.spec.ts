@@ -12,16 +12,20 @@ test.describe("empty states", () => {
     await expect(page.getByRole("region", { name: "Next", exact: true }).getByText("Add a language")).toBeVisible();
     await expect(page.locator('[data-button][data-variant="primary"]', { hasText: "Open language settings" })).toHaveAttribute("href", "shopify://admin/settings/languages");
     await expect(page.getByText("Your store only has its original language (English).")).toBeVisible();
+    // The old list of products leads to Content, which says where to add a language.
     await openApp(page, "empty", "/app/products");
-    await expect(page.getByText("No languages to translate into")).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/content(\?|$)/);
+    await expect(page.getByRole("heading", { name: "No language to translate into yet" })).toBeVisible();
     await expect(page.locator("[data-button]", { hasText: "Open language settings" })).toBeVisible();
     await expectAccessible(page);
   });
 
   test("an empty catalog, no jobs and nothing to review @responsive", async ({ page }) => {
+    // The products' one list (the area's), not counted yet: it says so instead of an empty table.
     await openApp(page, "emptyCatalog", "/app/products?lang=de");
-    await expect(page.getByText("No products yet")).toBeVisible();
-    await expect(page.getByText(/appear here, ready to translate into German/)).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/languages\/de\/products(\?|$)/);
+    await expect(page.getByRole("region", { name: "Progress: Products", exact: true }).getByRole("heading", { level: 2, name: "Not counted yet" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Item by item" })).toHaveCount(0);
     await expectNoHorizontalScroll(page);
 
     await openApp(page, "emptyCatalog", "/app/jobs");
@@ -37,7 +41,8 @@ test.describe("empty states", () => {
 
 test.describe("error states", () => {
   test("a Shopify outage shows a clear message, keeps the app usable and leaks nothing @responsive", async ({ page }) => {
-    const response = await openApp(page, "failing", "/app/products?lang=de");
+    // A page that reads Shopify's translations (here a product's editor).
+    const response = await openApp(page, "failing", "/app/products/1?lang=de");
     expect(response?.status()).toBe(503);
     const banner = page.locator(`s-banner[heading="Shopify didn't respond"]`);
     await expect(banner).toBeVisible();

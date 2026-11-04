@@ -1,29 +1,28 @@
 /**
- * List of translatable resources (products, collections) with coverage
- * per language and bulk translation. See .server/translation/resource-list.
- * It opens as every page does: the way back (a 44 px back row on a phone),
- * the area's sign and the list's name, then the languages as Content's
- * chips. Titled as the Content page names the type ("Buttons & fixed
+ * The list of one other content type (`/app/content/<type>`: menus, legal
+ * texts, the theme's parts …) with coverage per language and bulk
+ * translation. See .server/translation/resource-list. Products,
+ * collections, pages and blog posts have their area's list only. It opens
+ * as every page does (PageHeader): the way back (a 44 px back row on a
+ * phone), the area's sign and the list's name, then the languages as
+ * Content picks them. Titled as the Content page names the type ("Buttons & fixed
  * texts"), each item's state as the area lists show it (an icon and the
  * same word), the whole row opening the item.
  */
-import { Form, Link, useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import type { loadResourceList, runResourceListAction } from "../.server/translation/resource-list";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { kindLabel, kindPlural, kindSingular } from "../i18n/labels";
 import { isHubType } from "../lib/content-areas";
-import { chipName, chipOrder, switcherKind } from "../lib/content-language";
-import { LIST_ORIGIN } from "../lib/editor-view";
 import { localeCountry } from "../lib/flags";
 import { categoryOf, EXTRAS, isCategoryId, type ItemState } from "../lib/language-categories";
 import { AreaIcon } from "./CategoryCard";
-import { Flag } from "./Flag";
 import { IconSquare } from "./IconSquare";
 import { ITEM_STATE_LOOK } from "./ItemStates";
-import { Breadcrumbs } from "./LanguageLayout";
+import { LanguagePicker, pickerLanguages } from "./LanguagePicker";
+import { PageHeader } from "./PageHeader";
 import { Button } from "./Button";
-import { Strong } from "./Type";
 
 type ListLoader = () => ReturnType<typeof loadResourceList>;
 type ListAction = () => ReturnType<typeof runResourceListAction>;
@@ -46,72 +45,25 @@ function ListIcon({ type }: { type: string }) {
 type ListData = ReturnType<typeof useLoaderData<ListLoader>>;
 
 /**
- * The languages to translate into as Content's chips (ui.css .lv-lang): visible ones first, each with its
- * flag, the current one not a link and in the chosen look; a hidden one says so. More than six: one
- * select with "Show", as on Content.
+ * The languages to translate into, as Content picks them (LanguagePicker): visible ones first, each with
+ * its flag, the current one not a link and in the chosen look; a hidden one says so. More than six: one
+ * select that opens the chosen language at once.
  */
 function TargetChips({ data, current, i18n }: { data: ListData; current: string; i18n: I18n }) {
   const { t } = i18n;
-  const ordered = chipOrder(i18n, data.targets);
-  const href = (locale: string) => `${data.kind.path}?lang=${encodeURIComponent(locale)}`;
-  // A hidden language says so: customers can't choose it yet.
-  const label = (l: (typeof ordered)[number]) => (l.published ? chipName(i18n, l) : t("resources.hiddenLanguage", { language: chipName(i18n, l) }));
-  if (switcherKind(ordered.length) === "select") {
-    return (
-      <nav aria-label={t("resources.translateInto")}>
-        <Form method="get" action={data.kind.path}>
-          <s-grid gridTemplateColumns="@container (inline-size > 640px) 360px auto 1fr, 1fr auto" gap="small-200" alignItems="end">
-            <s-select name="lang" label={t("resources.translateInto")} value={current}>
-              {ordered.map((l) => (
-                <s-option key={l.locale} value={l.locale}>
-                  {label(l)}
-                </s-option>
-              ))}
-            </s-select>
-            <Button type="submit">{t("content.language.show")}</Button>
-          </s-grid>
-        </Form>
-      </nav>
-    );
-  }
-  const body = (l: (typeof ordered)[number], chosen: boolean) => (
-    <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
-      <Flag country={localeCountry(l.locale, data.marketCountries)} fallback={l.locale} size={20} />
-      <s-stack direction="block">
-        {chosen ? <Strong>{chipName(i18n, l)}</Strong> : <s-text>{chipName(i18n, l)}</s-text>}
-        {l.published ? null : (
-          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-400" alignItems="center">
-            <s-icon type="hide" size="small" color="subdued" />
-            <s-text color="subdued">{t("content.language.hidden")}</s-text>
-          </s-grid>
-        )}
-      </s-stack>
-    </s-grid>
-  );
   return (
-    <nav aria-label={t("resources.translateInto")}>
-      <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr, 1fr" gap="small-200 base" alignItems="center">
-        <Strong>{t("resources.translateInto")}</Strong>
-        <ul className="lv-langs">
-          {ordered.map((l) => (
-            <li key={l.locale} className="lv-langs__item">
-              {l.locale === current ? (
-                <span className="lv-lang" aria-current="page">
-                  <span className="lv-sr">{label(l)}</span>
-                  <span aria-hidden="true">{body(l, true)}</span>
-                </span>
-              ) : (
-                // The link's own text is its name for screen readers; the words inside are hidden from them (nothing read twice).
-                <Link className="lv-lang" to={href(l.locale)}>
-                  <span className="lv-sr">{label(l)}</span>
-                  <span aria-hidden="true">{body(l, false)}</span>
-                </Link>
-              )}
-            </li>
-          ))}
-        </ul>
-      </s-grid>
-    </nav>
+    <LanguagePicker
+      languages={pickerLanguages(i18n, data.targets, {
+        href: (l) => `${data.kind.path}?lang=${encodeURIComponent(l.locale)}`,
+        country: (l) => localeCountry(l.locale, data.marketCountries),
+      })}
+      current={current}
+      i18n={i18n}
+      label={t("resources.translateInto")}
+      navLabel={t("resources.translateInto")}
+      lead
+      fallback={{ action: data.kind.path }}
+    />
   );
 }
 
@@ -187,14 +139,8 @@ export function ResourceList() {
       <s-stack direction="block" gap="base">
         <s-query-container>
           <s-stack direction="block" gap="base">
-            <s-stack direction="block" gap="small-200">
-              {/* On a phone the trail is one 44 px back row ("‹ Content"), as on the editor and the area lists. */}
-              <Breadcrumbs i18n={i18n} trail={[{ href: back, label: t("common.nav.content") }]} current={label} touch />
-              <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-                <ListIcon type={data.kind.type} />
-                <h1 className="lv-h1">{label}</h1>
-              </s-grid>
-            </s-stack>
+            {/* On a phone the trail is one 44 px back row ("‹ Content"), as on the editor and the area lists. */}
+            <PageHeader sign={<ListIcon type={data.kind.type} />} title={label} trail={{ i18n, links: [{ href: back, label: t("common.nav.content") }] }} />
             <TargetChips data={data} current={locale} i18n={i18n} />
           </s-stack>
         </s-query-container>
@@ -312,8 +258,7 @@ export function ResourceList() {
                   return (
                     <s-table-row key={p.id} clickDelegate={linkId}>
                       <s-table-cell>
-                        {/* The editor leads back here (not to the area list, which has no rows before the language is counted). */}
-                        <s-link id={linkId} href={`${data.kind.path}/${p.id}?lang=${encodeURIComponent(locale)}&from=${LIST_ORIGIN}`}>
+                        <s-link id={linkId} href={`${data.kind.path}/${p.id}?lang=${encodeURIComponent(locale)}`}>
                           {p.title}
                         </s-link>
                       </s-table-cell>

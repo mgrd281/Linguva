@@ -1,6 +1,6 @@
 /**
- * The editor shows each text's state beside its name: translated, outdated
- * or not translated (a web address nobody wrote yet is optional), so a
+ * The editor shows each text's state beside its name, in the language pages'
+ * words: done, outdated or missing (a web address nobody wrote yet is optional), so a
  * merchant sees what needs work without reading every input; one square tile
  * per text says the same and leads to it. The texts come in Review's order,
  * and the original description shows in full.
@@ -14,9 +14,9 @@ test("each text starts with its state, in Review's order, and its tile leads to 
   // Demo catalog: the jacket's German name is translated, its description outdated, its Google description missing.
   await openApp(page, "demo", "/app/products/2?lang=de");
   const text = (name: string) => page.locator(`s-section[data-text="${name}"]`);
-  await expect(text("Name").locator("s-badge").first()).toHaveText("Translated");
+  await expect(text("Name").locator("s-badge").first()).toHaveText("Done");
   await expect(text("Description").locator("s-badge").first()).toHaveText("Outdated");
-  await expect(text("Google description").locator("s-badge").first()).toHaveText("Not translated");
+  await expect(text("Google description").locator("s-badge").first()).toHaveText("Missing");
   // The web address is never machine-translated: said next to its state.
   await expect(text("Web address").locator("s-badge", { hasText: "Manual only" })).toBeVisible();
   // Name, description, the Google preview and texts, the web address last; then the image descriptions.
@@ -32,14 +32,14 @@ test("each text starts with its state, in Review's order, and its tile leads to 
   // One tile per text, in the same order, each moving to its text.
   const tiles = page.getByRole("navigation", { name: "Texts" }).getByRole("link");
   await expect(tiles.locator(".lv-sr")).toHaveText([
-    "Name: Translated",
+    "Name: Done",
     "Description: Outdated",
-    "Google title: Translated",
-    "Google description: Not translated",
-    "Web address: Translated",
+    "Google title: Done",
+    "Google description: Missing",
+    "Web address: Done",
     "Images and details: 1 to translate",
   ]);
-  await page.getByRole("link", { name: "Google description: Not translated" }).click();
+  await page.getByRole("link", { name: "Google description: Missing" }).click();
   await expect(page.locator("#editor-text-meta_description-heading")).toBeFocused();
   await expect(page.locator("#editor-text-meta_description-heading")).toBeInViewport();
 
@@ -57,11 +57,11 @@ test("a new item: its web address is optional, both columns are labelled alike, 
   await openApp(page, "visual", "/app/products/2?lang=de");
   const text = (name: string) => page.locator(`s-section[data-text="${name}"]`);
   await expect(page.getByText("In German · 2 of 2 texts to translate")).toBeVisible();
-  // The count leaves the web address out, so it never says "Not translated" beside the two texts it counts.
+  // The count leaves the web address out, so it never says "Missing" beside the two texts it counts.
   await expect(text("Web address").locator("s-badge").first()).toHaveText("Optional");
   await expect(text("Web address").locator("s-badge", { hasText: "Manual only" })).toBeVisible();
   const tiles = page.getByRole("navigation", { name: "Texts" }).getByRole("link");
-  await expect(tiles.locator(".lv-sr")).toHaveText(["Name: Not translated", "Description: Not translated", "Web address: Optional"]);
+  await expect(tiles.locator(".lv-sr")).toHaveText(["Name: Missing", "Description: Missing", "Web address: Optional"]);
 
   // The language above the field, as above the original (not Polaris' label inside the empty field on a phone); the field keeps it as its name.
   const name = text("Name");
@@ -85,7 +85,8 @@ test("the item's picture is beside its name, as its area list shows it: a collec
   // Demo catalog: the Hiking collection's image (its description is an image description of its own, without a picture).
   await openApp(page, "demo", "/app/collections/1?lang=de");
   await expect(page.getByRole("heading", { level: 1, name: "Hiking" })).toBeVisible();
-  const picture = page.locator(".lv-ed-header .lv-ed-picture img");
+  // In the header's sign (PageHeader), beside the h1.
+  const picture = page.locator(".lv-page-head .lv-ed-picture img");
   await expect(picture).toHaveAttribute("src", /\/mountains\.svg\?width=96$/);
   // Decorative: the name is written beside it.
   await expect(picture).toHaveAttribute("alt", "");
@@ -94,6 +95,9 @@ test("the item's picture is beside its name, as its area list shows it: a collec
 
 test("the way back leads to the area list the item is opened from", async ({ page }) => {
   await openApp(page, "demo", "/app/products/2?lang=de");
+  await expect(page.locator('s-link[slot="breadcrumb-actions"]')).toHaveAttribute("href", "/app/languages/de/products");
+  // One list per area: an item opened from the old list (?from=list) leads back to its area list all the same.
+  await openApp(page, "demo", "/app/products/2?lang=de&from=list");
   await expect(page.locator('s-link[slot="breadcrumb-actions"]')).toHaveAttribute("href", "/app/languages/de/products");
   await expect(page.locator('s-link[slot="breadcrumb-actions"]')).toHaveText("Products in German");
   const trail = page.getByRole("navigation", { name: "Breadcrumb" });

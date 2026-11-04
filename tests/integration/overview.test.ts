@@ -61,7 +61,8 @@ describe("getting started", () => {
     await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
     overview = await loadOverview(store.asAdmin(), shop, app);
     expect(steps(overview)).toMatchObject({ language: true, consent: true, "first-translation": false });
-    expect(overview.checklist.find((s) => s.id === "first-translation")?.href).toBe("/app/products?lang=de");
+    // Not counted yet: still the language's own list of products (it offers counting first), never an old per-type list.
+    expect(overview.checklist.find((s) => s.id === "first-translation")?.href).toBe("/app/languages/de/products");
 
     // A bulk job in review mode: drafts to review, nothing published yet.
     const deps: JobDependencies = { prisma: app, adminFor: async () => store.asAdmin(), provider: new MockTranslationProvider(), monthlyLimit: 1_000_000, keyPrefix: "lv:test:overview" };

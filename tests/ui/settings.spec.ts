@@ -67,11 +67,11 @@ test("the status row and the tiles: every section with its icon and state; a sec
   const expected: Array<[string, string, RegExp]> = [
     ["Translating changes", "automation", /^Translating changes\s*Start it yourself$/],
     ["Publishing", "send", /^Publishing\s*Review first$/],
-    // The setting in its own words: "DeepL decides" is the choice's label, explained only beside the choice.
+    // The setting in its own words: "Automatic" is the choice's label, explained only beside the choice.
     ["How AI writes", "text-quote", /^How AI writes\s*Usual form of address$/],
     ["Translation memory", "database", /^Translation memory\s*Also AI translations$/],
     ["AI permission", "shield-check-mark", /^AI permission\s*Allowed$/],
-    ["Plan & usage", "gauge", /^Plan & usage\s*Pro · (<1%|\d+%) used$/],
+    ["Plan & usage", "credit-card", /^Plan & usage\s*Pro · (<1%|\d+%) used$/],
     ["Tools", "wrench", /^Tools\s*Glossary & more$/],
   ];
   for (const [name, icon, text] of expected) {
@@ -267,15 +267,17 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await expect(style.getByRole("heading", { level: 2 })).toHaveText("How AI writes");
   // Its two topics, each under its own heading.
   await expect(style.getByRole("heading", { level: 3 })).toHaveText(["Form of address", "About your store"]);
-  await expect(style.getByText("How AI addresses your customers and what it knows about your store.")).toBeVisible();
+  // No lead that only names the two headings; the usual form is "Automatic", explained in one line beside the choices.
+  await expect(style.getByText("How AI addresses your customers and what it knows about your store.")).toHaveCount(0);
+  await expect(style.getByText("Automatic: each language's usual form.")).toBeVisible();
   // One row per language with a choice: the pronouns as the options' words, read with what they mean;
   // no choice where DeepL has none (Arabic): named in one line instead.
   const address = (language: string) => style.getByRole("group", { name: language, exact: true });
-  await expect(address("German").locator(".lv-seg__text")).toHaveText(["DeepL decides", "Sie", "Du"]);
+  await expect(address("German").locator(".lv-seg__text")).toHaveText(["Automatic", "Sie", "Du"]);
   await expect(address("German").getByRole("radio")).toHaveCount(3);
   await expect(address("German").getByRole("radio", { name: "Formal (Sie)" })).toBeAttached();
   await expect(address("German").getByRole("radio", { name: "Informal (du)" })).toBeAttached();
-  await expect(address("French").locator(".lv-seg__text")).toHaveText(["DeepL decides", "Vous", "Tu"]);
+  await expect(address("French").locator(".lv-seg__text")).toHaveText(["Automatic", "Vous", "Tu"]);
   await expect(address("Arabic")).toHaveCount(0);
   // Its flag is the code box "AR" (no single country): part of the line's text.
   await expect(style.getByText(/^No choice needed for/)).toBeVisible();
@@ -283,7 +285,7 @@ test("how AI writes: the form of address per language, saved under the admin's s
   // Named by its label, which the heading above shows; an empty field's example says it is one.
   const context = style.getByRole("textbox", { name: "About your store" });
   await expect(context).toHaveAttribute("placeholder", "e.g. outdoor clothing for families, friendly and simple");
-  await expect(style.getByText("What you sell and how you speak. Helps AI choose its words; not translated.")).toBeVisible();
+  await expect(style.getByText("Helps AI choose its words; not translated.")).toBeVisible();
   await expect(style.getByText("Fixed terms in the glossary: 0")).toBeVisible();
   await expect(style.getByRole("link", { name: "Edit glossary" })).toHaveAttribute("href", "/app/glossary");
   // A link, drawn as one: not inside the sentence's s-text, which draws it in the text's colour.
@@ -311,7 +313,7 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await openApp(page, "full", "/app/settings?section=style");
   await expect(address("German").getByRole("radio", { name: "Informal (du)" })).toBeChecked();
   await expect(context).toHaveValue("Outdoor clothing for families, friendly and simple.");
-  // German informal, French as DeepL decides: chosen per language.
+  // German informal, French automatic: chosen per language.
   if (info.project.name === "desktop") await expect(navEntry(page, "How AI writes")).toHaveText(/^How AI writes\s*Per language$/, { useInnerText: true });
 
   // Discard: back to what is saved, nothing written.
@@ -319,13 +321,13 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(true);
   await clickSaveBarButton(page, "settings-style-save-bar", 1);
   await expect.poll(() => saveBarShown(page, "settings-style-save-bar")).toBe(false);
-  await expect(address("French").getByRole("radio", { name: "DeepL decides" })).toBeChecked();
+  await expect(address("French").getByRole("radio", { name: "Automatic" })).toBeChecked();
   // Opened again from the admin (a reload after a switch inside the app would lose its launch parameters).
   await openApp(page, "full", "/app/settings?section=style");
-  await expect(address("French").getByRole("radio", { name: "DeepL decides" })).toBeChecked();
+  await expect(address("French").getByRole("radio", { name: "Automatic" })).toBeChecked();
 
   // As it was (other tests use this store).
-  await address("German").getByRole("radio", { name: "DeepL decides" }).check();
+  await address("German").getByRole("radio", { name: "Automatic" }).check();
   await context.fill("");
   await clickSaveBarButton(page, "settings-style-save-bar", 0);
   await expectToast(page, "Saved. New AI translations use this form of address.");
@@ -341,7 +343,7 @@ test("publishing: choosing automatic asks first in a dialog; Cancel changes noth
   await expect(option(page, card, "Publish automatically").locator("s-icon[type='send']")).toHaveCount(1);
   await expect(option(page, card, "Publish automatically").locator(".lv-option__radio")).toHaveCount(1);
   await expect(option(page, card, "Review first").locator(".lv-option__radio")).toHaveCount(0);
-  await expect(page.locator(card).getByText("Applies when Linguva translates many texts at once (for example all products) and to automatic translation. The smart schedule has its own setting.")).toBeVisible();
+  await expect(page.locator(card).getByText("Applies to whole areas and automatic translation, not to the smart schedule.")).toBeVisible();
   await expect(page.locator(card).getByRole("link", { name: "Go to Review" })).toHaveAttribute("href", "/app/review");
 
   const dialog = page.getByRole("dialog", { name: "Publish automatically?" });
@@ -551,7 +553,7 @@ test("translating shortly after saving: chosen with the plan's languages ticked,
   await expect(basic.locator('s-banner[heading="Choose at least one language"]')).toBeVisible();
   for (const name of ["German", "French"]) await basic.getByRole("checkbox", { name, exact: true }).check();
   await basic.getByRole("button", { name: "Turn on", exact: true }).click();
-  await expectToast(page, /translated about a minute later/);
+  await expectToast(page, "Automatic translation is on.");
   await isCurrent(page, "#settings-changes", "Shortly after saving");
   await expect(page.locator("#settings-changes-basic")).toBeFocused();
   await expect(card.locator("s-badge").first()).toHaveText("On");
@@ -628,7 +630,8 @@ test("after a move to Free, translating shortly after saving is stopped, says wh
   await expect(card.locator("s-badge").first()).toHaveText("Stopped");
   await expect(navEntry(page, "Translating changes")).toHaveText(/^Translating changes\s*Stopped$/, { useInnerText: true });
   await expect(navEntry(page, "Translating changes").locator('[data-tone="critical"] .lv-tile__dot')).toHaveCount(1);
-  await expect(card.getByText("Your plan no longer includes automatic translation. Since the change, changes aren't translated. Your language choice stays saved.")).toBeVisible();
+  // The notice's heading says it isn't in the plan; its line says what that means, once.
+  await expect(card.getByText("Changes aren't translated anymore. Your language choice stays saved.")).toBeVisible();
   await expect(card.getByRole("link", { name: "See plans" }).or(card.getByRole("button", { name: "See plans" })).first()).toBeVisible();
   // Locked features show the one lock (the one plan with it by its badge alone), and nothing explains how a locked feature works.
   await expect(option(page, "#settings-changes", "On a schedule").locator("s-badge[icon='lock']")).toHaveText("Business");

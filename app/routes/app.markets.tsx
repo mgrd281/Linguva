@@ -12,7 +12,7 @@ import { Card } from "../components/Card";
 import { CountryStatusBar } from "../components/CountryStatus";
 import { Disclosure } from "../components/Disclosure";
 import { Flag } from "../components/Flag";
-import { PLAIN_LIST } from "../components/LanguageLayout";
+import { PLAIN_LIST, VisibilityBadge } from "../components/LanguageLayout";
 import { PermissionCard } from "../components/PermissionCard";
 import { StatusRow } from "../components/SettingsNav";
 import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
@@ -205,7 +205,6 @@ export default function Markets() {
 
         <Card heading={t("markets.countries.heading")}>
           <s-stack direction="block" gap="base">
-            <s-text color="subdued">{t("markets.countries.intro")}</s-text>
             {!data.countries ? (
               <s-banner tone="warning">{t("markets.countries.error")}</s-banner>
             ) : !data.countries.length ? (
@@ -256,9 +255,11 @@ export default function Markets() {
         {data.markets.length ? (
           <Card>
             <Disclosure summary={t("markets.details.summary", { count: data.markets.length })}>
+              {/* One market after the other, a line between them: no box of its own inside the card. */}
               <s-stack direction="block" gap="base">
-                {data.markets.map((market) => (
-                  <s-box key={market.id} border="base" borderRadius="large-100" padding="base">
+                {data.markets.map((market, index) => (
+                  <s-stack key={market.id} direction="block" gap="base">
+                    {index > 0 ? <s-divider /> : null}
                     <s-stack direction="block" gap="small-200">
                       <s-stack direction="inline" gap="small-200" alignItems="center">
                         <h3 className="lv-h3">{market.name}</h3>
@@ -287,13 +288,8 @@ export default function Markets() {
                                   </s-table-cell>
                                   <s-table-cell>{wp.rootUrls.find((u) => u.locale === l.locale)?.url ?? (wp.host ?? "—")}</s-table-cell>
                                   <s-table-cell>
-                                    {l.published ? (
-                                      <s-badge tone="success">{t("common.state.published")}</s-badge>
-                                    ) : (
-                                      <s-badge tone="warning" icon="hide">
-                                        {t("markets.market.hidden")}
-                                      </s-badge>
-                                    )}
+                                    {/* A language's visibility in the language page's words and look. */}
+                                    <VisibilityBadge published={l.published} i18n={i18n} />
                                   </s-table-cell>
                                 </s-table-row>
                               )),
@@ -302,7 +298,7 @@ export default function Markets() {
                         </s-table>
                       )}
                     </s-stack>
-                  </s-box>
+                  </s-stack>
                 ))}
               </s-stack>
             </Disclosure>

@@ -85,7 +85,8 @@ test("translate everything again by keyboard: focus comes back to the button onc
   await page.getByRole("button", { name: "Publish translations" }).click();
   await expectToast(page, /translations? published$/);
   await openApp(page, "full", "/app/products/17?lang=de");
-  await expect(page.getByText("Nothing is missing or outdated: every text is translated.")).toBeVisible();
+  // Nothing is open: the header says every text is done.
+  await expect(page.getByText(/^In German · (done|all \d+ texts done)$/)).toBeVisible();
   await page.locator("body").focus();
 
   await tabTo(page, (f) => f.button && f.text === "Translate everything again");
@@ -147,18 +148,23 @@ test("Plan: the plan links and both lists of details are reached by keyboard, En
   await expect(page.getByText(/^Every character of your original text that the AI translates/)).toBeVisible();
 });
 
-test("Glossary: the rule is one choice of tiles; Tab reaches it with a visible focus, the arrow keys change it", async ({ page }) => {
+test("Glossary: the rule is one choice of option cards; Tab reaches the others with a visible focus, Enter and Space choose", async ({ page }) => {
   await openApp(page, "full", "/app/glossary");
   await page.locator("body").focus();
-  const rule = await tabTo(page, (f) => f.tag === "input" && f.name === "rule", 40);
-  expect(rule.visible).toBe(true);
+  // "Never translate" is the chosen rule (no button); Tab reaches the next one, a button with a visible focus.
+  const other = await tabTo(page, (f) => f.tag === "button" && f.text.startsWith("Always translate as"), 40);
+  expect(other.visible).toBe(true);
   const rules = page.getByRole("group", { name: "Rule" });
-  await expect(rules.getByRole("radio", { name: "Never translate" })).toBeFocused();
-  // A radio group: the arrow keys move to the next rule and choose it; only "Always translate as" asks for a translation.
-  await page.keyboard.press("ArrowRight");
-  await expect(rules.getByRole("radio", { name: "Always translate as" })).toBeChecked();
+  const rule = (name: string) => rules.getByRole("group", { name, exact: true });
+  // Enter chooses it, and the focus stays on the chosen rule's name; only "Always translate as" asks for a translation.
+  await page.keyboard.press("Enter");
+  await expect(rule("Always translate as")).toContainText("Chosen");
+  await expect(rule("Always translate as").locator(".lv-option__title")).toBeFocused();
   await expect(page.locator('s-text-field[name="translation"]')).toHaveCount(1);
-  await page.keyboard.press("ArrowRight");
-  await expect(rules.getByRole("radio", { name: "Never use" })).toBeChecked();
+  // The next Tab goes on to the next rule; Space chooses it.
+  const next = await tabTo(page, (f) => f.tag === "button" && f.text.startsWith("Never use"), 3);
+  expect(next.visible).toBe(true);
+  await page.keyboard.press("Space");
+  await expect(rule("Never use")).toContainText("Chosen");
   await expect(page.locator('s-text-field[name="translation"]')).toHaveCount(0);
 });

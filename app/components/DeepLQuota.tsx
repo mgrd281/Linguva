@@ -67,11 +67,15 @@ const STATE_TEXT = {
   unreachable: "overview.deepl.state.unreachable",
 } as const;
 
+/**
+ * Each state's badge. alert-circle is the critical one's alone (a key refused); a service that didn't answer
+ * is no alarm: neutral, with the connection's icon.
+ */
 export const STATE_BADGE = {
   ok: { tone: "success", icon: "check-circle" },
   resting: { tone: "warning", icon: "clock" },
   refused: { tone: "critical", icon: "alert-circle" },
-  unreachable: { tone: "neutral", icon: "alert-circle" },
+  unreachable: { tone: "neutral", icon: "connect" },
 } as const;
 
 /** One key's tile: its ring, plan, hint, usage and state when it isn't ok. */

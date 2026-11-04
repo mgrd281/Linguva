@@ -62,7 +62,8 @@ describe("parseGlossaryCsv", () => {
   it("requires the rule and term columns", () => {
     expect(text(parseGlossaryCsv("foo,bar\n1,2").errors[0])).toMatch(/rule, term/);
     expect(text(parseGlossaryCsv("").errors[0])).toBe("The file is empty");
-    expect(text(parseGlossaryCsv('rule,term\nPREFERRED,"open').errors[0])).toMatch(/Unterminated/);
+    // A quote left open, in the merchant's words (a CSV "field" is a value to them).
+    expect(text(parseGlossaryCsv('rule,term\nPREFERRED,"open').errors[0])).toBe("A value in quotes isn't closed");
   });
 
   it("caps the number of rows", () => {

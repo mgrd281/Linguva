@@ -4,14 +4,14 @@
  * line's link outside its sentence's s-text (which would draw it in the
  * text's colour), after a middle dot or, after a full sentence, a space; the
  * one lock without a line where its badge says it all; a section's heading
- * with its tile's icon at every width; and a tertiary button without its
- * side room. (tests/ui/settings.spec.ts checks them with Polaris drawn.)
+ * with its tile's icon at every width; an option card whose name says it
+ * all, without a line under it; and a tertiary button without its side room. (tests/ui/settings.spec.ts checks them with Polaris drawn.)
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Button } from "../../app/components/Button";
-import { LockLine, SettingSection, StateLine } from "../../app/components/SettingsParts";
+import { LockLine, OptionCard, SettingSection, StateLine } from "../../app/components/SettingsParts";
 
 const link = (label: string, href = "/app/glossary") => createElement("s-link", { href }, label);
 
@@ -51,13 +51,34 @@ describe("the one lock", () => {
 
 describe("a Settings section's heading", () => {
   it("carries its tile's icon at every width (no box hiding it on a phone) and takes its size from the app's styles", () => {
-    const markup = renderToStaticMarkup(createElement(SettingSection, { id: "settings-style", icon: "text-quote", tint: "violet", heading: "How AI writes", lead: "How AI addresses your customers." }));
+    const markup = renderToStaticMarkup(
+      createElement(SettingSection, { id: "settings-memory", icon: "database", tint: "amber", heading: "Translation memory", lead: "Approved translations are always reused for identical text, for free." }),
+    );
     expect(markup).toContain('<div class="lv-section-head lv-page-head"><s-grid gridTemplateColumns="auto minmax(0, 1fr)"');
-    expect(markup).toMatch(/<span class="lv-icon-square" data-tint="violet" aria-hidden="true"><s-icon type="text-quote"[^>]*><\/s-icon><\/span>/);
+    expect(markup).toMatch(/<span class="lv-icon-square" data-tint="amber" aria-hidden="true"><s-icon type="database"[^>]*><\/s-icon><\/span>/);
     expect(markup).not.toContain("@container (inline-size &gt; 520px)");
-    expect(markup).toContain('<h2 id="settings-style-heading" tabindex="-1" class="lv-section-heading" style="outline:none">How AI writes</h2>');
+    expect(markup).toContain('<h2 id="settings-memory-heading" tabindex="-1" class="lv-section-heading" style="outline:none">Translation memory</h2>');
+    // Without a lead (How AI writes, Plan & usage, Tools): the heading row alone, centred on its sign.
+    const bare = renderToStaticMarkup(createElement(SettingSection, { id: "settings-style", icon: "text-quote", tint: "violet", heading: "How AI writes" }));
+    expect(bare).toContain('<div class="lv-section-head"><s-grid');
+    expect(bare).not.toContain('<s-text color="subdued">');
     // Without an icon, the heading alone.
     expect(renderToStaticMarkup(createElement(SettingSection, { id: "settings-x", heading: "X" }))).toContain('gridTemplateColumns="1fr"');
+  });
+});
+
+describe("an option card", () => {
+  it("leaves out the line under its name where the name says it all (the smart page's texts: all, or only certain ones)", () => {
+    const card = (body?: string) =>
+      renderToStaticMarkup(
+        createElement(OptionCard, { id: "smart-fields-all", icon: "text-block", tint: "blue", title: "All texts (except web addresses)", current: false, currentLabel: "Current setting", select: { onClick: () => undefined }, ...(body ? { body } : {}) }),
+      );
+    expect(card()).not.toContain("lv-option__body");
+    expect(card()).toContain('<span id="smart-fields-all" class="lv-option__title">All texts (except web addresses)</span>');
+    // Can be chosen: one button as a whole, with its empty radio mark.
+    expect(card()).toContain('<button type="button" class="lv-option__choose">');
+    expect(card()).toContain('<span class="lv-option__radio"></span>');
+    expect(card("Only Linguva's unreviewed AI translations.")).toContain('<span class="lv-option__body">Only Linguva&#x27;s unreviewed AI translations.</span>');
   });
 });
 

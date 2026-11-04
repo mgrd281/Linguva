@@ -164,9 +164,11 @@ describe("the language chips and the area tiles", () => {
     expect([...html.matchAll(/<li class="lv-langs__item">/g)]).toHaveLength(3);
     expect(html.indexOf("Deutsch")).toBeLessThan(html.indexOf("Französisch"));
     expect(html.indexOf("Französisch")).toBeLessThan(html.indexOf("Arabisch"));
-    expect(html).toMatch(/<a class="lv-lang" href="\/app\/content\?lang=fr"[^>]*><span class="lv-sr">Französisch: noch nicht gezählt<\/span><span aria-hidden="true">/);
-    expect(html).toContain('<span class="lv-sr">Arabisch (versteckt): noch nicht gezählt</span>');
+    expect(html).toMatch(/<a class="lv-lang" href="\/app\/content\?lang=fr"[^>]*><span class="lv-sr">Französisch<\/span><span aria-hidden="true">/);
+    expect(html).toContain('<span class="lv-sr">Arabisch (versteckt)</span>');
     expect(html).not.toContain('href="/app/content?lang=de"');
+    // A language's figure is on its tiles and its own page, not on its chip (German is counted: 25 %).
+    expect(html.replace(/<[^>]+>/g, " ")).not.toMatch(/%|—/);
   });
 
   it("open their area's list saying they come from Content, with the area's own icon square", () => {
@@ -180,7 +182,7 @@ describe("the language chips and the area tiles", () => {
       state: "figure",
       locked: [],
       unavailable: [],
-      translating: false,
+      translating: null,
       attached: ["images"],
       pictures: false,
     };
@@ -190,6 +192,11 @@ describe("the language chips and the area tiles", () => {
     // The note on what goes with the products: alt text's own picture.
     expect(html).toContain('type="image-alt"');
     expect(html).toContain("3 von 12 Texten");
+    // A running translation in the Jobs page's signs: finding its texts first, then translating them.
+    const finding = renderToStaticMarkup(createElement(AreaTile, { area: { ...area, translating: "finding" }, i18n: de, pictures: undefined }));
+    expect(finding).toContain('<s-icon type="search-list" tone="info" size="small"></s-icon><s-text>Texte werden gesucht</s-text>');
+    const translating = renderToStaticMarkup(createElement(AreaTile, { area: { ...area, translating: "translating" }, i18n: de, pictures: undefined }));
+    expect(translating).toContain('<s-icon type="in-progress" tone="info" size="small"></s-icon><s-text>Wird übersetzt</s-text>');
   });
 });
 
@@ -236,21 +243,25 @@ describe("a tile's words", () => {
 
   it("reads the figure with every state that has texts, not only the two the tile shows", () => {
     const figure = tally(counts({ complete: 74, draft: 18, outdated: 4, failed: 2, missing: 58 }));
-    expect(tileLabel(de, { id: "products", state: "figure", tally: figure, locked: [], unavailable: [], translating: false })).toBe(
+    expect(tileLabel(de, { id: "products", state: "figure", tally: figure, locked: [], unavailable: [], translating: null })).toBe(
       `Produkte: ${percentLabel(de, 74, 156)} übersetzt. 74 fertig, 18 warten auf Freigabe, 4 veraltet, 2 fehlgeschlagen, 58 fehlen noch.`,
     );
   });
 
   it("reads the area and its lines without a figure, and a running translation in every state", () => {
-    expect(tileLabel(de, { id: "checkout", state: "refused", tally: null, locked: ["SHOP_POLICY"], unavailable: ["PAYMENT_GATEWAY"], translating: false })).toBe(
+    expect(tileLabel(de, { id: "checkout", state: "refused", tally: null, locked: ["SHOP_POLICY"], unavailable: ["PAYMENT_GATEWAY"], translating: null })).toBe(
       "Shop & Kasse. Kein Zugriff: Rechtstexte. Für Apps nicht verfügbar: Zahlungsarten.",
     );
     for (const state of ["refused", "recount", "notCounted", "counting", "incomplete", "new", "nothing", "figure"] as const) {
-      const label = tileLabel(de, { id: "options", state, tally: state === "figure" || state === "incomplete" ? tally(counts({ missing: 3 })) : null, locked: [], unavailable: [], translating: true });
-      expect(label, state).toMatch(/^Größen & Farben.*Wird gerade übersetzt\.$/);
+      const label = tileLabel(de, { id: "options", state, tally: state === "figure" || state === "incomplete" ? tally(counts({ missing: 3 })) : null, locked: [], unavailable: [], translating: "translating" });
+      expect(label, state).toMatch(/^Größen & Farben.*Wird übersetzt\.$/);
     }
-    expect(tileLabel(de, { id: "options", state: "notCounted", tally: null, locked: [], unavailable: [], translating: true })).toBe(
-      "Größen & Farben. Noch nicht gezählt. Wird gerade übersetzt.",
+    expect(tileLabel(de, { id: "options", state: "notCounted", tally: null, locked: [], unavailable: [], translating: "translating" })).toBe(
+      "Größen & Farben. Noch nicht gezählt. Wird übersetzt.",
+    );
+    // While the translation still finds its texts, the Jobs page's word for it.
+    expect(tileLabel(de, { id: "options", state: "notCounted", tally: null, locked: [], unavailable: [], translating: "finding" })).toBe(
+      "Größen & Farben. Noch nicht gezählt. Texte werden gesucht.",
     );
   });
 });

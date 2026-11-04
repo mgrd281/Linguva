@@ -85,7 +85,7 @@ Not measured: real Shopify and DeepL latency and limits, several worker processe
 | Page | Server response |
 |---|---|
 | Overview | 39 ms |
-| Products list | 31 ms |
+| Products' list (the area's, `/app/languages/de/products`) | Not recorded here yet (the spec prints it in CI); the 31 ms measured before were the old `/app/products` list, which now redirects here |
 | Product editor | 43 ms |
 | Review | 54 ms |
 | Jobs | 22 ms |

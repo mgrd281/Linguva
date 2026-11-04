@@ -15,7 +15,7 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - Spanish: "tú", as Shopify's Spanish admin; neutral Latin American vocabulary (agregar, costo, configuración).
 - Language names: lower case in French and Spanish ("allemand", "alemán"), capitalised in German (`languageName()`).
 - German on the Plan page: "KI-" compounds ("KI-Zeichen", "KI-Übersetzung") are written with a non-breaking hyphen (`\u2011`, drawn like "-"), so a narrow card or a phone never ends a line in "KI-". Keep it when editing those texts (`app/i18n/messages/plan.ts`).
-- Shared terms: Révision / Revisión (Review), Tâches / Tareas (Jobs), Mémoire de traduction / Memoria de traducción, Forfait / Plan, quota d'IA / cuota de IA, champ personnalisé / campo personalizado, texte alternatif / texto alternativo (shown as description d'image / descripción de imagen since Redesign 4), textes pour Google / textos para Google (formerly référencement / listado en buscadores).
+- Shared terms: Révision / Revisión (Review), Tâches / Tareas (Jobs), Mémoire de traduction / Memoria de traducción, Forfait / Plan, quota d'IA / cuota de IA, informations complémentaires / información adicional for metafields ("extra details", formerly champ personnalisé / campo personalizado), texte alternatif / texto alternativo (shown as description d'image / descripción de imagen since Redesign 4), textes pour Google / textos para Google (formerly référencement / listado en buscadores).
 
 ## Points to check first
 
@@ -92,10 +92,30 @@ Automated checks for every language (`tests/unit/i18n.test.ts`, `tests/ui/i18n.s
 - Spanish: these texts follow the spec's Spain-style verbs ("Añade", "costes"); the rest of the catalogue prefers Latin American vocabulary (agregar, costo). Align both in the native review.
 - "Own key" is the plan's brand name in every language ("le forfait Own key", "el plan Own key", "der Tarif Own key"); "Clé API" / "Clave de API" and the Azure portal's own labels ("Clés et point de terminaison", «Claves y punto de conexión») should match the portals' French and Spanish UI.
 
+**UI items 2–4: one word per concept (2026-11-04, docs/UI_REVIEW.md §3i)**
+- One word per concept, the same in all four languages:
+  - A text that is translated and live: "Done" / "Fertig" / "Terminé" / "Listo" (`common.translationStatus.translated`, `language.state.complete`, `coverage.state.complete`, `common.jobStatus.COMPLETED`). It was "Complete", "Translated", "done and live" or "Abgeschlossen".
+  - "Missing" / "Fehlt noch" / "Manquant" / "Falta".
+  - "Waiting for approval" / "Wartet auf Freigabe" / "En attente d'approbation" / "Espera aprobación", Coverage's drafts included.
+  - The discovery phase: "Finding texts" / "Texte werden gesucht" / "Recherche des textes" / "Buscando textos".
+  - Jobs' tab: "Done" / "Fertig" / "Terminées" / "Listas".
+  - A language: "Visible" / "Sichtbar" / "Visible" / "Visible"; Coverage's "Published" is gone.
+  - The form of address: "Automatic" / "Automatisch" / "Automatique" / "Automático" (`settings.style.automatic`, formerly "DeepL decides" / "DeepL entscheidet").
+  - "texts" / "Texte" / "textes" / "textos", never "fields".
+  - Metafields: "extra details" / "Zusatzinfos" / "informations complémentaires" / "información adicional".
+  - No language mentions a background service ("Hintergrunddienst") any more.
+- 50 keys are deleted in every language and 3 are new (`settings.style.automatic`, `language.card.translating`, `glossary.ruleChosen`). About 130 texts per language changed, written by the implementers: German in the app's words, French and Spanish from the English. The list: `git diff 64959f6 4d39112 -- app/i18n/messages`. `tests/unit/i18n.test.ts` now counts "Visible" among the French and Spanish words that are the same as English.
+- For a native speaker first:
+  - Spanish "Listo" / "Lista" / "Listos" agrees with what is done: a text, a job, or a count ("{kind}: {ok} de {total} listos").
+  - The Spanish metafield labels say "Información adicional de productos", but their plurals say "datos adicionales de productos".
+  - French "Terminés : {complete} sur {total} texte" puts the plural word before a count of one.
+  - French `resources.bulk.scopeLabel` is now "Ce qu'il faut traduire" (it was "Champs à traduire").
+- Kept on purpose: the CSV columns `field` and `complete` (a machine format) and "Metafelder" / "métachamps" / "metacampos" in `editor.attached.intro` (Shopify's term).
+
 **Redesign 4: square buttons, every page (2026-11-03)**
 - 179 new keys, written by the implementers (German in the app's existing words; French and Spanish from the English): glossary 38, automatic 25, editor 24, language 21, transfer 12, settings 9, jobs 9, review 8, memory 8, coverage 8, languages 6, markets 5, overview 4, plan 2. The list: `git diff 2408af1..HEAD -- app/i18n/messages`.
 - For a native speaker first: the square tiles' short states in French and Spanish (`settings.tile.*`, `settings.tile.publish.auto` as noun phrases so they fit a tile); Spanish times take their article from the time ("Cada día a la 1:00", `formatClockRef`), the texts say "a {time}"; French counts put the noun after the total ("120 sur 350 textes sont terminés", `language.hero.*`); "zählen" for counting and "prüfen" only for approving in German; "Bildbeschreibungen" and "Zusatzinfos" everywhere for alt text and custom fields.
 
 **Settings in sections (Redesign 3, 2026-11)**
 - New, written by the implementer (German from the owner's approved screens; French and Spanish from the English): the section names `settings.section.style` ("So schreibt die KI"), `settings.section.keys`, `settings.section.plan` ("Tarif & Nutzung") and the nav's label `settings.section.nav`; the status row `settings.status.*` ("Alles ist eingerichtet"); `settings.summary.publish.review`, `settings.summary.plan.used`, `settings.summary.tools`; `settings.plan.lead*`, `settings.tools.lead`, `settings.tools.glossary.detail`, `settings.tools.memory.detail`; `settings.style.lead` now also names what AI knows about the store.
-- The glance tiles' lines became the sections' summaries (`settings.glance.*` → `settings.summary.*`, same texts). `settings.summary.style.withContext` / `withoutContext` start in lower case: they follow "DeepL entscheidet · …" on a phone.
+- The glance tiles' lines became the sections' summaries (`settings.glance.*` → `settings.summary.*`, same texts). `settings.summary.style.withContext` / `withoutContext` start in lower case: they follow "Automatisch · …" on a phone ("DeepL entscheidet" until 2026-11-04).

@@ -405,6 +405,28 @@ test.describe("Review", () => {
     await expect(primary(page)).toHaveCount(0);
   });
 
+  test("nothing to review: the green row's one way on, its words true for every store, the languages in full rows @responsive", async ({ page }) => {
+    // The reviewed screen (the visual store, only read here): nothing waits, German and French (hidden) at 0 %.
+    await openApp(page, "visual", "/app/review");
+    const title = page.getByRole("heading", { level: 2, name: "All reviewed" });
+    await expect(title).toBeVisible();
+    // Imports never publish by themselves: they wait here in every publishing mode.
+    await expect(page.getByText("No translation is waiting for you right now. Imports and AI translations that aren't published automatically wait here until you approve them.")).toBeVisible();
+    await expect(page.locator('[data-button][data-variant="primary"]')).toHaveText("Continue translating German");
+    // The round mark beside the title, not centred on the four lines a phone wraps the words into.
+    const mark = (await page.locator(".lv-review-done .lv-status__mark").boundingBox())!;
+    const heading = (await title.boundingBox())!;
+    expect(Math.abs(mark.y + mark.height / 2 - (heading.y + heading.height / 2))).toBeLessThanOrEqual(4);
+
+    // The language page's word for its figure ("done"), and rows always full: two tiles share the row, a phone stacks them.
+    const tiles = page.getByRole("region", { name: "Your languages" }).getByRole("link");
+    await expect(tiles).toHaveCount(2);
+    await expect(tiles.first()).toContainText("0% done");
+    const list = (await page.locator("ul.lv-links").boundingBox())!;
+    const last = (await page.locator(".lv-links__item").last().boundingBox())!;
+    expect(Math.abs(last.x + last.width - (list.x + list.width))).toBeLessThanOrEqual(1);
+  });
+
   test("is accessible and never scrolls sideways, also at 390 px @responsive", async ({ page }) => {
     await open(page);
     await expectAccessible(page);

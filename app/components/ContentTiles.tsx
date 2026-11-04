@@ -18,6 +18,7 @@ import type { I18n, MessageKey } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
 import { hasAttached, PART_ICON, SCOPE_ICON, showsFigure, TILE_AREAS, type AttachedArea, type AttachedPart, type GroupId, type HubType } from "../lib/content-areas";
 import { chipName, chipOrder, switcherKind } from "../lib/content-language";
+import { addCounts, emptyCounts } from "../lib/coverage-rules";
 import type { IconName } from "../lib/icons";
 import { categoryOf, languagePath, TIERS, withOrigin } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
@@ -26,7 +27,7 @@ import { percentLabel, SURFACE_COLOUR, TRACK_COLOUR } from "./Coverage";
 import { Flag } from "./Flag";
 import { IconSquare, type Tint } from "./IconSquare";
 import { OpenWorkLine, stateSummary, StateKey, TextStateBar } from "./ItemStates";
-import { BIG_HEADING, PLAIN_LIST } from "./LanguageLayout";
+import { BIG_HEADING, CARD, PLAIN_LIST } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
 import { Button } from "./Button";
 import { Strong } from "./Type";
@@ -48,9 +49,8 @@ const PRETTY = { display: "block", textWrap: "pretty" } as const;
 const INLINE_ICON = { display: "inline-flex", verticalAlign: "middle", marginInlineStart: 2 } as const;
 /** A native disclosure's summary as a plain block (no triangle; the browser's focus ring stays). */
 const SUMMARY = { display: "block", cursor: "pointer", listStyle: "none" } as const;
-/** A card: on a phone too (Polaris draws sections flat there). */
-export const CARD = { background: "base", border: "base", borderRadius: "large-100" } as const;
-/** Semibold at the body size: s-text type="strong" keeps the body weight (450) in Polaris, so names wouldn't stand out. */
+/** A card: on a phone too (Polaris draws sections flat there). LanguageLayout's, passed on to the pages that take it from here. */
+export { CARD };
 
 /** "Products", "Legal texts": a content type in the merchant's words. */
 export function partName(i18n: I18n, type: HubType): string {
@@ -572,7 +572,8 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
           <s-grid gridTemplateColumns={linked ? "auto minmax(0, 1fr) auto auto" : "auto minmax(0, 1fr)"} gap="base" alignItems="start">
             <AreaIcon id={area.id} />
             <s-stack direction="block" gap="small-500">
-              <Strong>{name}</Strong>
+              {/* The same name and size as the area's card on the language page, one click on. */}
+              <span className="lv-h3">{name}</span>
               {wideDetail ? (
                 <s-box display="@container (inline-size > 420px) auto, none">
                   <span style={PRETTY}>
@@ -667,10 +668,14 @@ export function AreaTile({ area, i18n, pictures }: { area: ContentArea; i18n: I1
  * are for the steps to live). Its tiles fill their rows (cardGrid): one
  * tile the full width, two or three side by side, four as two by two.
  */
-export function Areas({ areas, i18n, picturesOf, withKey }: { areas: ContentArea[]; i18n: I18n; picturesOf: (area: ContentArea) => TilePictures; withKey: boolean }) {
+export function Areas({ areas, i18n, picturesOf, withKey, extras }: { areas: ContentArea[]; i18n: I18n; picturesOf: (area: ContentArea) => TilePictures; withKey: boolean; extras?: ContentPage["extras"] }) {
   const { t } = i18n;
   const tiers = TIERS.map((tier) => ({ id: tier.id, areas: areas.filter((a) => a.tier === tier.id && TILE_AREAS.includes(a.id)) })).filter((tier) => tier.areas.length);
   if (!tiers.length) return null;
+  // The key names only the states the page's bars draw: the tiles' (a tile has a tally only where it shows its figure) and More texts' below.
+  const drawn = emptyCounts();
+  for (const tier of tiers) for (const area of tier.areas) if (area.tally) addCounts(drawn, area.tally.counts);
+  for (const extra of [extras?.theme, extras?.notifications, extras?.urls]) if (extra?.tally) addCounts(drawn, extra.tally.counts);
   return (
     <s-stack direction="block" gap="base">
       <s-grid gridTemplateColumns="@container (inline-size > 760px) 1fr auto, 1fr" gap="small-200 base" alignItems="end">
@@ -678,7 +683,7 @@ export function Areas({ areas, i18n, picturesOf, withKey }: { areas: ContentArea
           <h2 className="lv-h2">{t("language.areas.heading")}</h2>
           <s-text color="subdued">{t("language.areas.introNoPercent")}</s-text>
         </s-stack>
-        {withKey ? <StateKey i18n={i18n} /> : null}
+        {withKey ? <StateKey i18n={i18n} counts={drawn} /> : null}
       </s-grid>
       {tiers.map((tier) => (
         <section key={tier.id} aria-labelledby={`tier-${tier.id}`}>

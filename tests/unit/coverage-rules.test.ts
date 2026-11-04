@@ -11,7 +11,7 @@ import {
   fieldState,
   percentText,
 } from "../../app/lib/coverage-rules";
-import { byFieldGroup, byType, headlineByLocale, storeWide, type CountInput } from "../../app/lib/coverage-view";
+import { byFieldGroup, byType, byTypeCounted, headlineByLocale, storeWide, urlsByType, type CountInput } from "../../app/lib/coverage-view";
 import { baseFromShopify, currentOverlay, deriveStates, digestTag, seoTitleHash } from "../../app/.server/coverage/items";
 import { reliableEta } from "../../app/lib/eta";
 
@@ -150,6 +150,19 @@ describe("aggregations", () => {
     expect(de).toMatchObject({ total: 20, complete: 8, percent: 40 });
     expect(byType(rows, "de").get("ONLINE_STORE_THEME_LOCALE_CONTENT")).toMatchObject({ total: 5000, percent: 0 });
     expect(byType(rows, "de").get("PRODUCT")).toMatchObject({ total: 30, complete: 8 });
+  });
+
+  it("counts a type's row as the figures do: its web addresses apart, its theme and notification rows kept", () => {
+    // Products: 20 counted texts (as the headline, the next step and Translate count them) and 10 web addresses.
+    expect(byTypeCounted(rows, "de").get("PRODUCT")).toMatchObject({ total: 20, complete: 8, percent: 40 });
+    expect(urlsByType(rows, "de").get("PRODUCT")).toMatchObject({ total: 10, complete: 0 });
+    expect(byTypeCounted(rows, "de").get("PRODUCT")!.total + urlsByType(rows, "de").get("PRODUCT")!.total).toBe(byType(rows, "de").get("PRODUCT")!.total);
+    // Theme texts keep their own row ("Not in the totals"); a type without web addresses has none.
+    expect(byTypeCounted(rows, "de").get("ONLINE_STORE_THEME_LOCALE_CONTENT")).toMatchObject({ total: 5000 });
+    expect(urlsByType(rows, "de").has("ONLINE_STORE_THEME_LOCALE_CONTENT")).toBe(false);
+    // One language at a time.
+    expect(byTypeCounted(rows, "fr").get("PRODUCT")).toMatchObject({ total: 10, complete: 10 });
+    expect(urlsByType(rows, "fr").size).toBe(0);
   });
 
   it("groups fields across types, without theme content", () => {

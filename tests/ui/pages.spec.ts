@@ -50,8 +50,16 @@ const PAGES: Array<{ name: string; path: string; check: (page: Page) => Promise<
     name: "Products",
     path: "/app/products?lang=de",
     check: async (page) => {
+      // It opens as every page does (the list's name as the h1), the languages as Content's chips: visible ones first.
+      await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+      const chips = page.getByRole("navigation", { name: "Translate into" });
+      await expect(chips.locator('.lv-lang[aria-current="page"]')).toContainText("German");
+      await expect(chips.getByRole("link", { name: "Arabic (hidden)" })).toHaveAttribute("href", "/app/products?lang=ar");
       await expect(page.getByRole("link", { name: "Product 1 jacket" })).toBeVisible();
       await expect(page.getByText("Outdated").first()).toBeVisible();
+      // The figure in words, without the web address (as in the editor): name and description.
+      await expect(page.getByText("1 of 2 texts", { exact: true }).first()).toBeAttached();
+      await expect(page.getByText(/^\d+ \/ \d+$/)).toHaveCount(0);
       await expect(page.getByText("Translate all into German")).toBeVisible();
     },
   },

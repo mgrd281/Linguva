@@ -30,9 +30,10 @@ export interface RingSegment {
 
 /**
  * The figure's size by its length in characters (a no-break space counts: "62 %" has 4), so a longer figure
- * stays inside the ring: 28 px up to 3 characters ("34%", "—"), 24 px for 4 ("62 %", "100%"), 22 px from 5
- * ("100 %") in a ring of 112 px or more; 22, 20 and 18 px in a smaller one. One rule, in the Jobs view logic
- * (app/lib/job-view.ts), so a job's hero model (ringFigure) and the drawn ring always agree.
+ * keeps clear of the ring where the caption lifts it: 28 px up to 2 characters ("0%", "—"), 24 px for 3
+ * ("34%"), 20 px for 4 ("62 %", "100%"), 18 px from 5 ("100 %") in a ring of 112 px or more; 22, 20, 17
+ * and 15 px in a smaller one. One rule, in the Jobs view logic (app/lib/job-view.ts), so a job's hero model
+ * (ringFigure) and the drawn ring always agree.
  */
 export { ringFigureSize };
 

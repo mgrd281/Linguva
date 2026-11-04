@@ -53,7 +53,7 @@ test("the app works under the policy and nothing is blocked", async ({ page }) =
 
   // A language's page loads its examples and the store's pictures after the page; flags come from the app.
   await openApp(page, "demo", "/app/languages/de");
-  const products = page.locator('s-section[accessibilitylabel="Products"]');
+  const products = page.getByRole("region", { name: "Products", exact: true });
   await expect.poll(() => products.locator("img").evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.complete && img.naturalWidth > 0))).toBe(true);
   await expect.poll(() => page.locator('img[src^="/flags/"]').evaluateAll((imgs) => imgs.length > 0 && (imgs as HTMLImageElement[]).every((img) => img.naturalWidth > 0))).toBe(true);
   await openApp(page, "catalog", "/app/languages/de/products");

@@ -4,7 +4,7 @@
  * or by language (every card opens that language's page); counting without
  * fake progress; and the welcome after a plan is chosen.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
 /** A card or section by its name: native sections named by their label or heading. */
@@ -107,8 +107,9 @@ test("names the content Linguva can't read beside the figure, with the way to al
   await expect(store.getByText(/Not in these figures: 1 content type Linguva can't read yet\./)).toBeVisible();
   await expect(store.locator('.lv-ov-note s-icon[type="lock"]')).toHaveCount(1);
   await expect(store.getByRole("link", { name: "Allow access" })).toHaveAttribute("href", "/app/content/policies");
-  // No markets access: languages only, and the offer to show countries.
+  // No markets access: languages only, and the offer to show countries. The intro says what a card opens, as the countries' does.
   await expect(page.getByRole("heading", { name: "Your languages" })).toBeVisible();
+  await expect(page.getByText(/ – the least translated first\. Choose one to see every area with pictures and percentages\.$/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Allow access to markets" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Countries" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /^Arabic Hidden/ })).toHaveAttribute("href", "/app/languages/ar");
@@ -122,9 +123,30 @@ test("names the content Linguva can't read beside the figure, with the way to al
   await expectNoHorizontalScroll(page);
 });
 
+test("the first translation opens the products' list of the visible language; the cards line up in full rows @responsive", async ({ page }, info) => {
+  // The visual store: German visible and counted, French hidden, nothing translated yet.
+  await openApp(page, "visual", "/app");
+  const next = region(page, "Next");
+  await expect(next.getByText("Publish your first translation")).toBeVisible();
+  // The area's list, whose Translate asks first (never the old Products list).
+  await expect(next.locator('[data-button][data-variant="primary"]')).toHaveAttribute("href", "/app/languages/de/products");
+  if (info.project.name === "desktop") {
+    const box = async (locator: Locator) => (await locator.boundingBox())!;
+    const [nextBox, storeBox] = [await box(next), await box(region(page, "Your store"))];
+    // The top row's two cards end on one line (no gap under the shorter one).
+    expect(Math.abs(nextBox.y + nextBox.height - (storeBox.y + storeBox.height))).toBeLessThanOrEqual(2);
+    // Two languages fill their row, right under the two cards (never beside an empty third column).
+    const [german, french] = [await box(page.getByRole("link", { name: /^German/ })), await box(page.getByRole("link", { name: /^French Hidden/ }))];
+    expect(Math.abs(german.x - nextBox.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(french.x + french.width - (storeBox.x + storeBox.width))).toBeLessThanOrEqual(2);
+  }
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test("the Markets page lists every country with its languages @responsive", async ({ page }) => {
   await openApp(page, "demo", "/app/markets");
-  const table = page.locator('s-section[heading="Countries and their languages"] s-table');
+  const table = page.getByRole("region", { name: "Countries and their languages", exact: true }).locator("s-table");
   await expect(table.getByText("Czechia")).toBeVisible();
   await expect(table.getByText("Czech (not added)")).toBeVisible();
   await expect(table.getByText("Spanish (hidden)")).toBeVisible();
@@ -245,7 +267,7 @@ test("the Coverage page lets a stuck measurement be started again, without follo
   await openApp(page, "stalled", "/app/coverage", { locale: "de" });
   // Counting is "zählen" there too ("prüfen" means approving).
   await expect(page.getByText(/^Das Zählen kommt seit .+ nicht voran$/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Shop (neu )?zählen$/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Übersetzungen (neu )?zählen$/ })).toBeEnabled();
   await expect(page.getByRole("progressbar", { name: /Zählen|Prüfung|Messung|Scan/ })).toHaveCount(0);
   await page.waitForTimeout(4_000);
   expect(requests).toEqual([]);

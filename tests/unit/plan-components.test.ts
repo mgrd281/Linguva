@@ -279,9 +279,28 @@ describe("the full comparison", () => {
 });
 
 describe("the hero for screen readers", () => {
-  it("names the plan once: no hidden section label before the heading 'Your plan: …'", () => {
+  it("names the plan once: its card is named by the heading 'Your plan: …', never by a hidden section label", () => {
     // Polaris turns a section's accessibilityLabel into a hidden heading ("Your plan" before "Your plan: Pro").
-    expect(hero("de")).not.toMatch(/<s-section[^>]*accessibilityLabel/i);
+    const markup = hero("de");
+    expect(markup).not.toContain("<s-section");
+    expect(markup).toMatch(/^<section aria-labelledby="plan-hero-heading"><s-box background="base" border="base" borderRadius="large-100" padding="base">/);
+    expect(markup).toContain('<h2 id="plan-hero-heading" class="lv-plan-name"><s-text accessibilityVisibility="exclusive">Dein Tarif: </s-text>');
+    expect(markup.match(/<h2\b/g)).toHaveLength(1);
+  });
+});
+
+describe("the page's cards", () => {
+  it("keep their edge on a phone, as the plan cards do: the hero, 'In every plan', the comparison and the questions", () => {
+    const de = translator("de");
+    const compare = cards("de", STATES[0]!);
+    const table = renderToStaticMarkup(createElement(PlanFeatureTable, { i18n: de, current: "pro" }));
+    const faq = renderToStaticMarkup(createElement(PlanFaq, { i18n: de, canChange: true }));
+    for (const markup of [hero("de"), compare, table, faq]) expect(markup).not.toContain("<s-section");
+    expect(compare).toContain('<section aria-labelledby="plan-every"><s-box background="base" border="base" borderRadius="large-100" padding="base">');
+    expect(table).toMatch(/^<section><s-box background="base" border="base" borderRadius="large-100" padding="none" overflow="hidden"><div class="lv-plan-fold lv-plan-fold--table">/);
+    // The questions' heading in the type scale, as "Compare plans" above them.
+    expect(faq).toMatch(new RegExp(`^<section aria-labelledby="([^"]+)"><s-box [^>]*><s-stack direction="block" gap="base"><h2 id="\\1" class="lv-h2">${de.t("plan.faq.heading")}</h2>`));
+    expect(compare).toContain(`<h2 id="tarife" class="lv-h2">${de.t("plan.compare.heading")}</h2>`);
   });
 });
 

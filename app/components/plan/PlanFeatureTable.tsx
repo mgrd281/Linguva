@@ -12,6 +12,7 @@ import { FEATURE_ICON, PLAN_FEATURE_ROWS, PRICE_ROW, type FeatureRow } from "../
 import { formatUsd, monthsFree, priceLabel, yearlyHandles } from "../../lib/plan-prices";
 import { PLAN_ORDER, planName, type OwnKeyPlanView } from "../../lib/plan-view";
 import { PLANS, type KnownPlanHandle, type PlanHandle } from "../../lib/plans";
+import { Card } from "../Card";
 import { Disclosure } from "../Disclosure";
 
 /** Short figures, so four columns fit a phone: "300.000", "1,2 Mio." (a message, the same text on server and browser). */
@@ -69,7 +70,7 @@ export function PlanFeatureTable({ i18n, current, ownKeyPlan }: { i18n: I18n; cu
     </>
   );
   return (
-    <s-section padding="none">
+    <Card padding="none">
       <div className="lv-plan-fold lv-plan-fold--table">
         <Disclosure summary={summary}>
           <table className="lv-plan-table">
@@ -135,6 +136,6 @@ export function PlanFeatureTable({ i18n, current, ownKeyPlan }: { i18n: I18n; cu
           ) : null}
         </Disclosure>
       </div>
-    </s-section>
+    </Card>
   );
 }

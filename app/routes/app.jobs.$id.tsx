@@ -1,8 +1,11 @@
 /**
- * A job's page (Redesign 3, Redesign 4): the hero by state (the ring with
+ * A job's page (Redesign 3, Redesign 4): the header with the language's
+ * flag, as the Jobs list shows the job; the hero by state (the ring with
  * what ended well, or a queued job's clock), its title and lines, the
- * legend, and the Next panel with at most three numbered steps
- * (app/lib/job-view.ts heroModel); then the items that need the merchant
+ * legend with each arc's colour, and the Next panel with at most three
+ * steps, numbered only when there are several (app/lib/job-view.ts
+ * heroModel); every card keeps its edge on a phone too (CARD), as on the
+ * language pages; then the items that need the merchant
  * (the hero's "listed below" and its button lead there), the stats with
  * their icons, and the results in detail: the table folded, the CSV report
  * and the support reference always in view. While the job runs (or a
@@ -19,6 +22,7 @@ import { cancelJob, getJobForShop, jobOutcomes, jobPendingDrafts, listProblemIte
 import { BackgroundJobsUnavailableError, retryBulkJob } from "../.server/jobs/start-job";
 import { stopFix, stopFixContext, stopResumesAt } from "../.server/jobs/stop-fix";
 import { storedLocaleNames } from "../.server/locales/shop-locales";
+import { peekMarketCountries } from "../.server/markets/countries";
 import { backgroundJobsRunning } from "../.server/queue/client";
 import { settle } from "../.server/shopify/preview-images";
 import { PREVIEW_NODE_TYPES, readPreviewNodes } from "../.server/shopify/preview-nodes";
@@ -27,16 +31,20 @@ import { nextCheck } from "../.server/smart/config";
 import { showToast } from "../components/app-bridge";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { CARD } from "../components/ContentTiles";
 import { STATE_COLOURS } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
+import { Flag } from "../components/Flag";
 import { IconSquare } from "../components/IconSquare";
 import { GroupIcon, groupSegments, Legend, OriginBadges, StateBadge, useJobWords, type JobWords } from "../components/jobs/JobLooks";
 import { TintMark } from "../components/jobs/TintMark";
-import { Breadcrumbs, NumberedSteps } from "../components/LanguageLayout";
+import { Breadcrumbs, NumberedSteps, type StepView } from "../components/LanguageLayout";
+import { HeaderRow } from "../components/PageHeader";
 import { InlineNotice, More } from "../components/SettingsParts";
 import { Strong } from "../components/Type";
 import { itemOutcome, jobErrorMessage } from "../i18n/labels";
 import { reliableEta } from "../lib/eta";
+import { localeCountry } from "../lib/flags";
 import {
   cancelBody,
   finishTarget,
@@ -113,6 +121,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     now: now.toISOString(),
     actorId,
     names,
+    // The header's flag, as the Jobs list draws it (cached markets only, never a Shopify read).
+    marketCountries: peekMarketCountries(shop.id),
     job: {
       id: job.id,
       resourceType: job.resourceType,
@@ -217,14 +227,24 @@ function Header({ data, words, name }: { data: Data; words: JobWords; name: stri
     <s-query-container>
       <s-stack direction="block" gap="small-200">
         <Breadcrumbs i18n={words.i18n} trail={[{ href: "/app/jobs", label: t("jobs.detail.breadcrumb") }]} current={name} touch />
-        <s-stack direction="block" gap="small-500">
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <h1 className="lv-h1">{name}</h1>
-            <StateBadge state={heroState(data)} words={words} />
-            <OriginBadges job={job} words={words} />
+        {/* The language's flag in the header's square (Review's language tiles), as the Jobs list's row shows the job; placed as every page's sign. */}
+        <HeaderRow
+          sign={
+            <span className="lv-icon-square" data-tint="grey" aria-hidden="true">
+              <Flag country={localeCountry(job.targetLocale, data.marketCountries)} fallback={job.targetLocale} size={28} />
+            </span>
+          }
+          lead
+        >
+          <s-stack direction="block" gap="small-500">
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <h1 className="lv-h1">{name}</h1>
+              <StateBadge state={heroState(data)} words={words} />
+              <OriginBadges job={job} words={words} />
+            </s-stack>
+            <s-text color="subdued">{[words.say(startedText(job)), by].filter(Boolean).join(" · ")}</s-text>
           </s-stack>
-          <s-text color="subdued">{[words.say(startedText(job)), by].filter(Boolean).join(" · ")}</s-text>
-        </s-stack>
+        </HeaderRow>
       </s-stack>
     </s-query-container>
   );
@@ -365,12 +385,31 @@ function Foot({ foot, words }: { foot: PanelFoot; words: JobWords }) {
   );
 }
 
+/**
+ * The panel's steps: numbered when there are two or three (their order matters), a lone step without a
+ * number at the panel's edge (numbers only where order matters), with the steps' title, why and button.
+ */
+function Steps({ steps }: { steps: StepView[] }) {
+  const [only, ...more] = steps;
+  if (!only || more.length) return <NumberedSteps steps={steps} />;
+  return (
+    <s-stack direction="block" gap="small-200">
+      <s-stack direction="block" gap="small-500">
+        {typeof only.title === "string" ? <strong className="lv-h3">{only.title}</strong> : only.title}
+        {only.detail ? <s-text color="subdued">{only.detail}</s-text> : null}
+      </s-stack>
+      {only.action ? <s-stack direction="inline">{only.action}</s-stack> : null}
+    </s-stack>
+  );
+}
+
 function Panel({ panel, words, fetcher }: { panel: NextPanel; words: JobWords; fetcher: Fetcher }) {
   const { t } = words.i18n;
   return (
     <s-stack direction="block" gap="base">
-      <s-heading>{t(panel.heading)}</s-heading>
-      <NumberedSteps
+      {/* The type scale's section heading, as the hero's own title beside it and the Overview's Next. */}
+      <h2 className="lv-h2">{t(panel.heading)}</h2>
+      <Steps
         steps={panel.steps.map((step) => ({ key: step.id, title: words.say(step.title), detail: step.text.map(words.say).join(" ") || undefined, action: stepAction(step, words, fetcher) }))}
       />
       {panel.fold ? <More summary={t(panel.fold.summary)}>{<s-text color="subdued">{jobErrorMessage(words.i18n, panel.fold.code) ?? t("jobs.stop.UNKNOWN.help")}</s-text>}</More> : null}
@@ -409,20 +448,22 @@ function Stats({ data, words }: { data: Data; words: JobWords }) {
   const stats = visibleStats(data.job, { now: data.now, ownKeyPlan: data.ownKeyPlan });
   if (!stats) return null;
   return (
-    <s-section accessibilityLabel={words.i18n.t("jobs.stats.label")}>
-      <div className="lv-jobstats">
-        {stats.map((stat) => (
-          <div key={stat.name.key} className="lv-jobstats__item">
-            <IconSquare icon={stat.icon} size={36} />
-            <s-stack direction="block" gap="small-500">
-              <s-text color="subdued">{words.say(stat.name)}</s-text>
-              <span className="lv-jobstats__value">{words.value(stat.value)}</span>
-              {stat.note ? <span className="lv-caption">{words.say(stat.note)}</span> : null}
-            </s-stack>
-          </div>
-        ))}
-      </div>
-    </s-section>
+    <section aria-label={words.i18n.t("jobs.stats.label")}>
+      <s-box {...CARD} padding="base">
+        <div className="lv-jobstats">
+          {stats.map((stat) => (
+            <div key={stat.name.key} className="lv-jobstats__item">
+              <IconSquare icon={stat.icon} size={36} />
+              <s-stack direction="block" gap="small-500">
+                <s-text color="subdued">{words.say(stat.name)}</s-text>
+                <span className="lv-jobstats__value">{words.value(stat.value)}</span>
+                {stat.note ? <span className="lv-caption">{words.say(stat.note)}</span> : null}
+              </s-stack>
+            </div>
+          ))}
+        </div>
+      </s-box>
+    </section>
   );
 }
 
@@ -432,46 +473,49 @@ function Problems({ data, groups, words }: { data: Data; groups: JobGroups; word
   const head = problemsHeading(data.job, groups);
   if (!head || !data.problems.length) return null;
   return (
-    <s-section>
-      <s-stack direction="block" gap="base">
-        <s-stack direction="block" gap="small-500">
-          <h2 id="problems-heading" tabIndex={-1} className="lv-h2 lv-jobs-anchor">
-            {words.say(head.heading)}
-          </h2>
-          <s-text color="subdued">{head.text.map(words.say).join(" ")}</s-text>
+    // A card named by its heading, as every card of a page (Card).
+    <section aria-labelledby="problems-heading">
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-stack direction="block" gap="small-500">
+            <h2 id="problems-heading" tabIndex={-1} className="lv-h2 lv-jobs-anchor">
+              {words.say(head.heading)}
+            </h2>
+            <s-text color="subdued">{head.text.map(words.say).join(" ")}</s-text>
+          </s-stack>
+          <ul aria-labelledby="problems-heading" className="lv-jobs-rows">
+            {data.problems.map((p) => {
+              const name = p.name ?? itemName(words.i18n, data.job.resourceType, p.number);
+              const outcome = itemOutcome(words.i18n, p.status, p.errorCode) || t("jobs.detail.failed.unknown");
+              const failed = p.status === "FAILED" || p.status === "DEAD";
+              const row = (
+                <s-grid gridTemplateColumns={p.image ? "auto auto minmax(0, 1fr) auto" : "auto minmax(0, 1fr) auto"} gap="small-200" alignItems="center">
+                  <GroupIcon group={failed ? "failed" : "look"} />
+                  {p.image ? <img src={p.image} alt="" style={THUMB} loading="lazy" /> : null}
+                  <s-stack direction="block" gap="small-500">
+                    <span className="lv-strong lv-jobs-name">{name}</span>
+                    <s-text color="subdued">{[outcome, p.attempts > 1 ? t("jobs.problems.attempts", { count: p.attempts }) : null].filter(Boolean).join(" · ")}</s-text>
+                  </s-stack>
+                  {p.href ? <s-icon type="chevron-right" color="subdued" size="small" /> : <span />}
+                </s-grid>
+              );
+              return (
+                <li key={p.id}>
+                  {p.href ? (
+                    <s-clickable href={p.href} padding="small-200" borderRadius="base">
+                      {row}
+                    </s-clickable>
+                  ) : (
+                    <s-box padding="small-200">{row}</s-box>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {data.problems.length >= 50 ? <s-text color="subdued">{t("jobs.problems.first", { count: data.problems.length })}</s-text> : null}
         </s-stack>
-        <ul aria-labelledby="problems-heading" className="lv-jobs-rows">
-          {data.problems.map((p) => {
-            const name = p.name ?? itemName(words.i18n, data.job.resourceType, p.number);
-            const outcome = itemOutcome(words.i18n, p.status, p.errorCode) || t("jobs.detail.failed.unknown");
-            const failed = p.status === "FAILED" || p.status === "DEAD";
-            const row = (
-              <s-grid gridTemplateColumns={p.image ? "auto auto minmax(0, 1fr) auto" : "auto minmax(0, 1fr) auto"} gap="small-200" alignItems="center">
-                <GroupIcon group={failed ? "failed" : "look"} />
-                {p.image ? <img src={p.image} alt="" style={THUMB} loading="lazy" /> : null}
-                <s-stack direction="block" gap="small-500">
-                  <span className="lv-strong lv-jobs-name">{name}</span>
-                  <s-text color="subdued">{[outcome, p.attempts > 1 ? t("jobs.problems.attempts", { count: p.attempts }) : null].filter(Boolean).join(" · ")}</s-text>
-                </s-stack>
-                {p.href ? <s-icon type="chevron-right" color="subdued" size="small" /> : <span />}
-              </s-grid>
-            );
-            return (
-              <li key={p.id}>
-                {p.href ? (
-                  <s-clickable href={p.href} padding="small-200" borderRadius="base">
-                    {row}
-                  </s-clickable>
-                ) : (
-                  <s-box padding="small-200">{row}</s-box>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        {data.problems.length >= 50 ? <s-text color="subdued">{t("jobs.problems.first", { count: data.problems.length })}</s-text> : null}
-      </s-stack>
-    </s-section>
+      </s-box>
+    </section>
   );
 }
 
@@ -535,7 +579,7 @@ function Details({ data, words }: { data: Data; words: JobWords }) {
   const kind = jobKindLabel(words.i18n, data.job.resourceType);
   const [open, setOpen] = useState(false);
   return (
-    <s-section>
+    <s-box {...CARD} padding="base">
       <s-stack direction="block" gap="small-200">
         <More summary={t("jobs.detail.outcomes.heading")} onToggle={setOpen}>
           {!open ? null : data.outcomes.length ? (
@@ -562,7 +606,7 @@ function Details({ data, words }: { data: Data; words: JobWords }) {
           <Reference data={data} words={words} />
         </div>
       </s-stack>
-    </s-section>
+    </s-box>
   );
 }
 
@@ -664,18 +708,21 @@ export default function JobDetail() {
         <Header data={data} words={words} name={name} />
         <ActionNotice result={fetcher.data} data={data} words={words} />
 
-        <s-section padding="none" accessibilityLabel={t("jobs.hero.label", { name })}>
-          <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr">
-              <s-box padding="large">
-                <Figure hero={hero} groups={groups} words={words} />
-              </s-box>
-              <s-box padding="large" background="subdued">
-                {hero.panel ? <Panel panel={hero.panel} words={words} fetcher={fetcher} /> : hero.strip ? <Strip strip={hero.strip} words={words} /> : null}
-              </s-box>
-            </s-grid>
-          </s-query-container>
-        </s-section>
+        {/* One card on a phone too (Polaris draws sections flat there): the grey Next half takes its corners, as on the language pages. */}
+        <section aria-label={t("jobs.hero.label", { name })}>
+          <s-box {...CARD} padding="none" overflow="hidden">
+            <s-query-container>
+              <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr">
+                <s-box padding="large">
+                  <Figure hero={hero} groups={groups} words={words} />
+                </s-box>
+                <s-box padding="large" background="subdued">
+                  {hero.panel ? <Panel panel={hero.panel} words={words} fetcher={fetcher} /> : hero.strip ? <Strip strip={hero.strip} words={words} /> : null}
+                </s-box>
+              </s-grid>
+            </s-query-container>
+          </s-box>
+        </section>
 
         {/* What the hero says is "listed below" comes right after it. */}
         <Problems data={data} groups={groups} words={words} />

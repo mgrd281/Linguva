@@ -6,8 +6,8 @@
  *   Google texts, other texts, web address last), Shopify's order among equals;
  * - which texts are open (missing, or outdated because the original changed): the only ones AI and
  *   the translation memory fill, as the image descriptions and bulk jobs already do;
- * - each text's one state, where "back" leads (the area list a merchant opens items from) and the
- *   storefront path of the Google preview.
+ * - each text's one state, where "back" leads (the area list a merchant opens items from, or the type's
+ *   own list) and the storefront path of the Google preview.
  */
 import { categoryOf, isCategoryId, type CategoryId } from "./language-categories";
 import { fieldRank } from "./review-order";
@@ -88,6 +88,12 @@ export function pickDrafts<T extends { drafts: Record<string, string>; scores?: 
   const pick = <V>(values: Record<string, V> | undefined) => (values ? Object.fromEntries(Object.entries(values).filter(([key]) => keys.has(key))) : values);
   return { ...result, drafts: pick(result.drafts) ?? {}, ...(result.scores ? { scores: pick(result.scores) } : {}) };
 }
+
+/**
+ * `?from=` of an item opened from its type's own list (/app/products, /app/content/<type>): its way back
+ * leads there, not to the area list, which has no rows before the language is counted.
+ */
+export const LIST_ORIGIN = "list";
 
 /**
  * The area list an item is opened from (/app/languages/<locale>/<area>): products, collections, pages,

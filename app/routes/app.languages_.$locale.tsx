@@ -20,12 +20,13 @@ import { loadMarketCountries } from "../.server/markets/countries";
 import { MARKETS_SCOPE } from "../.server/markets/markets";
 import type { clientLoader as previewsLoader } from "./app.languages_.$locale_.previews";
 import { AreaIcon, cardGrid, CategoryCard, categoryInSentence, categoryName, IconTile, type LanguageCategory } from "../components/CategoryCard";
+import { H2 } from "../components/ContentTiles";
 import { itemsHref, percentLabel } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
 import { Disclosure } from "../components/Disclosure";
 import { Flag } from "../components/Flag";
 import { SHOWN_STATES, StateIcon, StateKey, StateLines, TextStateBar } from "../components/ItemStates";
-import { Breadcrumbs, languageErrorText, NumberedSteps, PLAIN_LIST, type StepView } from "../components/LanguageLayout";
+import { Breadcrumbs, CARD, languageErrorText, NumberedSteps, PLAIN_LIST, type StepView } from "../components/LanguageLayout";
 import { accessTitle, attachedTexts, STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
 import { ProgressBar } from "../components/ProgressBar";
 import { StepStrip } from "../components/StepStrip";
@@ -33,7 +34,7 @@ import { TranslateConfirm } from "../components/TranslateConfirm";
 import { Strong } from "../components/Type";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
-import { emptyCounts } from "../lib/coverage-rules";
+import { addCounts, emptyCounts } from "../lib/coverage-rules";
 import { localeCountry } from "../lib/flags";
 import { EXTRAS, isUnlockGate, originOf, tierOf, TIERS, withOrigin, type CategoryId, type ExtraId, type LanguageStep, type Origin } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
@@ -99,33 +100,36 @@ function Header({ data, i18n, title, origin }: { data: Data; i18n: I18n; title: 
     .filter(Boolean)
     .join(" · ");
   return (
-    <s-stack direction="block" gap="small-200">
-      <Breadcrumbs i18n={i18n} trail={[backLink(i18n, data.language.locale, origin)]} current={title} />
-      <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-        <Flag country={localeCountry(data.language.locale, data.marketCountries)} fallback={data.language.locale} size={40} />
-        <s-stack direction="block" gap="small-500">
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <h1 className="lv-h1">{title}</h1>
-            {data.language.published ? (
-              <s-badge tone="success" icon="check-circle">
-                {t("language.published")}
-              </s-badge>
-            ) : (
-              <s-badge icon="hide">{t("language.hidden")}</s-badge>
+    // On a phone the trail is one 44 px back row ("‹ Overview"), as on the job, Plan, tool and editor pages.
+    <s-query-container>
+      <s-stack direction="block" gap="small-200">
+        <Breadcrumbs i18n={i18n} trail={[backLink(i18n, data.language.locale, origin)]} current={title} touch />
+        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
+          <Flag country={localeCountry(data.language.locale, data.marketCountries)} fallback={data.language.locale} size={40} />
+          <s-stack direction="block" gap="small-500">
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <h1 className="lv-h1">{title}</h1>
+              {data.language.published ? (
+                <s-badge tone="success" icon="check-circle">
+                  {t("language.published")}
+                </s-badge>
+              ) : (
+                <s-badge icon="hide">{t("language.hidden")}</s-badge>
+              )}
+            </s-stack>
+            {line ? <s-text color="subdued">{line}</s-text> : null}
+            {data.language.published ? null : (
+              <s-text color="subdued">
+                {t("language.hiddenHelp")}{" "}
+                <s-link href={LANGUAGE_SETTINGS} target="_top">
+                  {t("language.publishInShopify")}
+                </s-link>
+              </s-text>
             )}
           </s-stack>
-          {line ? <s-text color="subdued">{line}</s-text> : null}
-          {data.language.published ? null : (
-            <s-text color="subdued">
-              {t("language.hiddenHelp")}{" "}
-              <s-link href={LANGUAGE_SETTINGS} target="_top">
-                {t("language.publishInShopify")}
-              </s-link>
-            </s-text>
-          )}
-        </s-stack>
-      </s-grid>
-    </s-stack>
+        </s-grid>
+      </s-stack>
+    </s-query-container>
   );
 }
 
@@ -140,7 +144,7 @@ function Figure({ data, i18n, names }: { data: Data; i18n: I18n; names: Names })
       <s-grid gridTemplateColumns="auto 1fr" gap="large" alignItems="center">
         <CoverageRing counts={emptyCounts()} figure="—" caption={t("language.hero.translated")} label={title} size={112} />
         <s-stack direction="block" gap="small-200">
-          <s-heading>{title}</s-heading>
+          <h2 className="lv-h2">{title}</h2>
           <s-text color="subdued">
             {data.headline
               ? t("language.hero.nothingHelp")
@@ -176,7 +180,7 @@ function Figure({ data, i18n, names }: { data: Data; i18n: I18n; names: Names })
           size={112}
         />
         <s-stack direction="block" gap="small-300">
-          <s-heading>{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</s-heading>
+          <h2 className="lv-h2">{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</h2>
           <s-text color="subdued">{t("language.hero.fallback", { primary: names.primary })}</s-text>
         </s-stack>
       </s-grid>
@@ -325,7 +329,7 @@ function NextSteps(ctx: StepContext) {
     : t("language.next.empty");
   return (
     <s-stack direction="block" gap="base">
-      <s-heading>{t("language.next.heading")}</s-heading>
+      <h2 className="lv-h2">{t("language.next.heading")}</h2>
       {data.next.length ? (
         <NumberedSteps steps={data.next.map((step, i) => ({ key: step.kind === "category" ? step.category : step.kind, ...stepView(step, i === 0, ctx) }))} />
       ) : (
@@ -379,7 +383,9 @@ function Areas({
             <h2 className="lv-h2">{t("language.areas.heading")}</h2>
             <s-text color="subdued">{percent ? t("language.areas.intro", { percent }) : t("language.areas.introNoPercent")}</s-text>
           </s-stack>
-          <StateKey i18n={i18n} />
+          {/* The states the page's bars draw (the cards' and More texts', whose theme texts often come translated), not
+              all five: the fold at the page's end explains every word. */}
+          <StateKey i18n={i18n} counts={data.headline ? data.extras.reduce((all, extra) => addCounts(all, extra.tally.counts), addCounts(emptyCounts(), data.headline.counts)) : null} />
         </s-grid>
         {tiers.map((tier) => {
           // The first tier's products lead, wide, with more pictures.
@@ -416,40 +422,48 @@ function Extras({ data, i18n }: { data: Data; i18n: I18n }) {
   if (!rows.length) return null;
   const percent = data.headline && data.headline.total ? percentLabel(i18n, data.headline.complete, data.headline.total) : null;
   return (
-    <s-section heading={t("language.extras.heading")} padding="none">
-      <s-box padding="none base base">
-        <s-text color="subdued">{percent ? t("language.extras.intro", { percent }) : t("language.extras.introNoPercent")}</s-text>
+    // The same card as Content's "More texts" (MoreTexts): its edge on a phone too, its heading a card's.
+    <section aria-labelledby="language-more">
+      <s-box {...CARD} padding="none">
+        <s-box padding="base">
+          <s-stack direction="block" gap="small-500">
+            <h2 id="language-more" style={H2}>
+              {t("language.extras.heading")}
+            </h2>
+            <s-text color="subdued">{percent ? t("language.extras.intro", { percent }) : t("language.extras.introNoPercent")}</s-text>
+          </s-stack>
+        </s-box>
+        <s-query-container>
+          <ul style={PLAIN_LIST}>
+            {rows.map((extra) => {
+              const name = t(`language.extra.${extra.id}.name`);
+              const denied = extra.state?.kind === "no-access";
+              return (
+                <li key={extra.id}>
+                  <s-divider />
+                  <s-clickable href={EXTRA_HREF[extra.id](data.language.locale)} padding="small-100 base" minBlockSize="44px">
+                    <s-grid gridTemplateColumns="@container (inline-size > 560px) auto 1fr 140px 48px auto, auto 1fr auto auto" gap="base" alignItems="center">
+                      <IconTile icon={EXTRAS[extra.id].icon} />
+                      <s-stack direction="block" gap="small-500">
+                        <Strong>{name}</Strong>
+                        <s-text color="subdued">{denied ? t("language.card.noAccess") : t(`language.extra.${extra.id}.detail`)}</s-text>
+                      </s-stack>
+                      <s-box display="@container (inline-size > 560px) auto, none">
+                        <div aria-hidden="true">{denied ? null : <TextStateBar counts={extra.tally.counts} label={name} i18n={i18n} />}</div>
+                      </s-box>
+                      <span className="lv-figure-row" style={{ textAlign: "end" }}>
+                        {denied ? "—" : percentLabel(i18n, extra.tally.complete, extra.tally.total)}
+                      </span>
+                      <s-icon type="chevron-right" color="subdued" />
+                    </s-grid>
+                  </s-clickable>
+                </li>
+              );
+            })}
+          </ul>
+        </s-query-container>
       </s-box>
-      <s-query-container>
-        <ul style={PLAIN_LIST}>
-          {rows.map((extra) => {
-            const name = t(`language.extra.${extra.id}.name`);
-            const denied = extra.state?.kind === "no-access";
-            return (
-              <li key={extra.id}>
-                <s-divider />
-                <s-clickable href={EXTRA_HREF[extra.id](data.language.locale)} padding="small-100 base" minBlockSize="44px">
-                  <s-grid gridTemplateColumns="@container (inline-size > 560px) auto 1fr 140px 48px auto, auto 1fr auto auto" gap="base" alignItems="center">
-                    <IconTile icon={EXTRAS[extra.id].icon} />
-                    <s-stack direction="block" gap="small-500">
-                      <Strong>{name}</Strong>
-                      <s-text color="subdued">{denied ? t("language.card.noAccess") : t(`language.extra.${extra.id}.detail`)}</s-text>
-                    </s-stack>
-                    <s-box display="@container (inline-size > 560px) auto, none">
-                      <div aria-hidden="true">{denied ? null : <TextStateBar counts={extra.tally.counts} label={name} i18n={i18n} />}</div>
-                    </s-box>
-                    <span className="lv-figure-row" style={{ textAlign: "end" }}>
-                      {denied ? "—" : percentLabel(i18n, extra.tally.complete, extra.tally.total)}
-                    </span>
-                    <s-icon type="chevron-right" color="subdued" />
-                  </s-grid>
-                </s-clickable>
-              </li>
-            );
-          })}
-        </ul>
-      </s-query-container>
-    </s-section>
+    </section>
   );
 }
 
@@ -464,7 +478,7 @@ function Words({ i18n, names }: { i18n: I18n; names: Names }) {
     missing: t("language.words.missing", { primary: names.primary }),
   };
   return (
-    <s-section>
+    <s-box {...CARD} padding="base">
       <Disclosure summary={t("language.words.heading")}>
         <s-query-container>
           <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr 1fr, 1fr" gap="base">
@@ -485,7 +499,7 @@ function Words({ i18n, names }: { i18n: I18n; names: Names }) {
           </s-grid>
         </s-query-container>
       </Disclosure>
-    </s-section>
+    </s-box>
   );
 }
 
@@ -543,18 +557,21 @@ export default function LanguagePage() {
           </s-banner>
         ) : null}
 
-        <s-section padding="none" accessibilityLabel={t("language.hero.label", { language: languageNames.title })}>
-          <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr">
-              <s-box padding="large">
-                <Figure data={data} i18n={i18n} names={languageNames} />
-              </s-box>
-              <s-box padding="large" background="subdued">
-                <NextSteps data={data} i18n={i18n} names={languageNames} origin={origin} confirm={(category, attached) => setChosen({ category, attached })} counter={counter} />
-              </s-box>
-            </s-grid>
-          </s-query-container>
-        </s-section>
+        {/* One card on a phone too (Polaris draws sections flat there): the grey Next half takes its corners. */}
+        <section aria-label={t("language.hero.label", { language: languageNames.title })}>
+          <s-box {...CARD} padding="none" overflow="hidden">
+            <s-query-container>
+              <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr">
+                <s-box padding="large">
+                  <Figure data={data} i18n={i18n} names={languageNames} />
+                </s-box>
+                <s-box padding="large" background="subdued">
+                  <NextSteps data={data} i18n={i18n} names={languageNames} origin={origin} confirm={(category, attached) => setChosen({ category, attached })} counter={counter} />
+                </s-box>
+              </s-grid>
+            </s-query-container>
+          </s-box>
+        </section>
 
         {/* Why the percentage rises only after approving: said while texts wait for it. */}
         {data.steps && data.steps.waiting > 0 && data.headline?.total ? (

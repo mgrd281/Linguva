@@ -1,9 +1,10 @@
 /**
  * The translation editor's pieces (ResourceTranslationEditor, AttachedResourcesPanel): a text's name in
  * the merchant's words (Review's: Name, Beschreibung, Google-Titel, Webadresse), its one state as a
- * badge with its icon, the notes beside it, a section's heading row with its badges and action, the
- * square tiles that jump to each text, and the count inside a button. Styles in app/styles/ui.css
- * (the editor's section, .lv-ed-*), the tiles on Settings' .lv-tile.
+ * badge with its icon (a web address nobody wrote yet: optional), the notes beside it, a section's
+ * heading row with its badges and action, the square tiles that jump to each text, and the count
+ * inside a button. Styles in app/styles/ui.css (the editor's section, .lv-ed-*), the tiles on
+ * Settings' .lv-tile.
  */
 import type { MouseEvent, ReactNode } from "react";
 import type { I18n } from "../i18n/i18n";
@@ -74,6 +75,14 @@ export function StateBadge({ i18n, state, score }: { i18n: I18n; state: TextStat
   );
 }
 
+/**
+ * A web address nobody has written yet: optional, so it never says "Not translated" beside the texts the
+ * item's count includes (the count leaves web addresses out). Its state once written is a text's own.
+ */
+export function OptionalBadge({ i18n }: { i18n: I18n }) {
+  return <s-badge icon="minus-circle">{i18n.t("editor.badge.optional")}</s-badge>;
+}
+
 /** The notes after the state: what AI's result should be checked for, and that a text is written by hand only. */
 export function NoteBadges({ i18n, warnings, machine }: { i18n: I18n; warnings?: readonly string[] | null; machine: boolean }) {
   const { t } = i18n;
@@ -112,8 +121,9 @@ export interface TextTile {
   /** The heading row's id it jumps to. */
   target: string;
   name: string;
-  state: TextState | "open" | "done";
-  /** The state in words ("Outdated", "2 open"). */
+  /** "optional": a web address nobody has written yet (OptionalBadge). */
+  state: TextState | "open" | "done" | "optional";
+  /** The state in words ("Outdated", "2 open", "Optional"). */
   word: string;
 }
 
@@ -127,6 +137,8 @@ const TILE_ICON: Record<TextTile["state"], { icon: IconName; tone?: "success" | 
   missing: { icon: "circle-dashed" },
   open: { icon: "circle-dashed" },
   done: { icon: "check-circle-filled", tone: "success" },
+  // No tone (drawn subdued): nothing is missing.
+  optional: { icon: "minus-circle" },
 };
 
 /**

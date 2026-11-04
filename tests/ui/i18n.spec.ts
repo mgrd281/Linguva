@@ -86,7 +86,7 @@ test("navigation, product list and editor are German; merchant content stays as 
   await expect(page.locator("s-app-nav s-link")).toHaveText(["Übersicht", "Inhalte", "Prüfen", "Aufträge", "Einstellungen"]);
   await expect(page.getByText("Product 1 jacket").first()).toBeVisible();
   // Language names in German, not Shopify's English names.
-  await expect(page.locator("s-badge", { hasText: "Französisch" })).toBeVisible();
+  await expect(page.locator('.lv-lang[aria-current="page"]', { hasText: "Französisch" })).toBeVisible();
   await expect(page.locator("[data-button]", { hasText: "Alle in Französisch übersetzen" })).toBeVisible();
   await page.getByText("Product 1 jacket").first().click();
   await expect(page).toHaveURL(/\/app\/products\/1\?lang=fr/);

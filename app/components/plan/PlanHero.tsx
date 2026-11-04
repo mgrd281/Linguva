@@ -28,6 +28,7 @@ import {
 import { estimatedCostUsd, isOwnKeyHandle, type Entitlements } from "../../lib/plans";
 import { wallClock } from "../../lib/schedule";
 import { usageLevel } from "../../lib/usage";
+import { Card } from "../Card";
 import { STATE_COLOURS, TRACK_COLOUR } from "../Coverage";
 import { Flag } from "../Flag";
 import { IconSquare } from "../IconSquare";
@@ -64,6 +65,9 @@ export function wordsText(i18n: I18n, words: Words, now: string): string {
   return i18n.t(words.key, vars);
 }
 
+/** The hero's heading, which names its card. */
+const HERO_HEADING = "plan-hero-heading";
+
 export interface PlanLanguagesData {
   primary: string | null;
   primaryName: string | null;
@@ -91,10 +95,10 @@ export interface PlanHeroProps {
 export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limits, aiAvailable, languages, costPerMillion, actions, ownKeys }: PlanHeroProps) {
   const { t } = i18n;
   const name = "handle" in hero.name ? planName(hero.name.handle) : t(hero.name.key);
-  // The section has no accessibilityLabel: Polaris would add a hidden "Your plan" heading right before the
-  // visible "Your plan: Pro", and screen readers would hear the plan's heading twice.
+  // Named by its one heading ("Your plan: Pro"), never by a second, hidden one (a Polaris section's label
+  // would be read right before it); framed on a phone too, as the plan cards below it.
   return (
-    <s-section>
+    <Card labelledBy={HERO_HEADING}>
       <s-stack direction="block" gap="large">
         <s-query-container>
           <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr auto, 1fr" gap="base" alignItems="start">
@@ -107,7 +111,7 @@ export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limit
                   <s-text color="subdued">{t("plan.hero.label")}</s-text>
                 </span>
                 <s-stack direction="inline" gap="small-200" alignItems="center">
-                  <h2 className="lv-plan-name">
+                  <h2 id={HERO_HEADING} className="lv-plan-name">
                     <s-text accessibilityVisibility="exclusive">{`${t("plan.hero.label")}: `}</s-text>
                     {name}
                   </h2>
@@ -154,7 +158,7 @@ export function PlanHero({ i18n, hero, now, resetsOn, entitlements, usage, limit
           </s-box>
         ) : null}
       </s-stack>
-    </s-section>
+    </Card>
   );
 }
 

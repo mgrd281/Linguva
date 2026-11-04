@@ -9,7 +9,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CountryCards, LanguageCards, type PlaceLanguage } from "../../app/components/CountryCards";
+import { cardGrid } from "../../app/components/CategoryCard";
+import { CountryCards, LanguageCards, placeGrid, type PlaceLanguage } from "../../app/components/CountryCards";
 import { SegmentedButtons } from "../../app/components/Segmented";
 import { APP_LOCALES, translator, type AppLocale } from "../../app/i18n/i18n";
 import type { CountryCoverage, CountryLanguage } from "../../app/lib/country-coverage";
@@ -126,6 +127,24 @@ describe("LanguageCards", () => {
     );
     expect(badges(html)).toEqual(["hide:Hidden"]);
     expect(html).toContain('<strong class="lv-strong">French</strong>');
+  });
+
+  it("fills its rows as Content's and a language's cards do: one the full width, two side by side, three in a row", () => {
+    const columns = (languages: PlaceLanguage[]) =>
+      /^<s-grid gridTemplateColumns="([^"]*)"/.exec(
+        renderToStaticMarkup(createElement(LanguageCards, { i18n: translator("en"), languages, running: new Map(), primary: "English", countriesOf: new Map(), marketCountries: [] })),
+      )?.[1];
+    expect(columns(LANGUAGES.slice(0, 1))).toBe("1fr");
+    // Never two cards beside an empty third column.
+    expect(columns(LANGUAGES.slice(0, 2))).toBe("@container (inline-size &gt; 560px) 1fr 1fr, 1fr");
+    expect(columns(LANGUAGES)).toBe("@container (inline-size &gt; 860px) 1fr 1fr 1fr, 1fr");
+    // The countries' cards too: Switzerland, Canada and Germany.
+    expect(countryCards()).toContain('<s-grid gridTemplateColumns="@container (inline-size &gt; 860px) 1fr 1fr 1fr, 1fr"');
+  });
+
+  it("keeps three in a row on a wide page from five cards, so many countries don't make the page half as long again", () => {
+    for (const count of [1, 2, 3, 4]) expect(placeGrid(count), String(count)).toBe(cardGrid(count));
+    for (const count of [5, 8, 28]) expect(placeGrid(count), String(count)).toBe("@container (inline-size > 560px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr");
   });
 });
 

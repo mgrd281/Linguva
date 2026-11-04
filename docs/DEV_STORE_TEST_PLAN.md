@@ -88,7 +88,7 @@ Each case: **steps → expected result**. Record pass/fail, date and notes in §
 - **I6** An image without alt text → "has no alt text" notice.
 
 ### J. Markets
-- **J1** Open Markets → permission screen; "Allow reading markets" → Shopify's grant screen → back in the app with the overview.
+- **J1** Open Markets → permission screen; "Allow access to markets" → Shopify's grant screen → back in the app with the overview.
 - **J2** Each market shows its languages, addresses and published state, matching Settings → Markets.
 - **J3** Arabic offered in a market while unpublished → warning "isn't published".
 - **J4** Revoke the optional scope (uninstall-free: via `scopes.revoke` or the app's settings in Shopify) → page returns to the permission screen, rest of the app works.

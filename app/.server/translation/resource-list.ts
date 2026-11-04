@@ -8,6 +8,7 @@ import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { redirect } from "react-router";
 import { prisma as defaultClient } from "../lib/db";
 import { fetchAndSyncShopLocales } from "../locales/shop-locales";
+import { peekMarketCountries } from "../markets/countries";
 import { requireShop } from "../shopify/require-shop";
 import { AccessDeniedError, isAccessDenied, listTranslatableResources } from "../shopify/translations-api";
 import { shopTranslationFacts } from "../providers/shop-translation";
@@ -69,7 +70,7 @@ export async function resourceListPage(
 
   const target = targets.find((l) => l.locale === input.lang) ?? targets.find((l) => l.published) ?? targets[0];
   if (!target) {
-    return { kind: kindInfo, targets: [], target: null, items: [], nextCursor: null, isFirstPage: true, bulk: null, denied: null };
+    return { kind: kindInfo, targets: [], target: null, marketCountries: null, items: [], nextCursor: null, isFirstPage: true, bulk: null, denied: null };
   }
   const languages = targets.map((l) => ({ locale: l.locale, name: l.name, published: l.published }));
 
@@ -86,6 +87,7 @@ export async function resourceListPage(
       kind: kindInfo,
       targets: languages,
       target: { locale: target.locale, name: target.name },
+      marketCountries: null,
       items: [],
       nextCursor: null,
       isFirstPage: true,
@@ -104,6 +106,8 @@ export async function resourceListPage(
     kind: kindInfo,
     targets: languages,
     target: { locale: target.locale, name: target.name },
+    // The language chips' flags, as Content's (cached markets only, never a Shopify read).
+    marketCountries: peekMarketCountries(shop.id),
     items: resources.map((r) => ({
       // Content types (theme resources included) are addressed by an encoded GID.
       id: isContentType(kind) ? contentRef(r.resourceId) : numericId(r.resourceId),

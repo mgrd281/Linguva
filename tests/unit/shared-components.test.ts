@@ -35,13 +35,13 @@ const figureSize = (markup: string) => Number(markup.match(/<span style="font-si
 
 describe("unchanged for the pages that already use them", () => {
   it("CoverageRing: counts and a figure of up to 3 characters (Overview, language and area pages)", () => {
-    expect(html(createElement(CoverageRing, { counts: COUNTS, figure: "34%", caption: "translated", label: "34% translated", size: 112 }))).toMatchInlineSnapshot(`"<div style="position:relative;width:112px;height:112px;flex:none"><svg width="112" height="112" viewBox="0 0 120 120" role="img" aria-label="34% translated"><circle cx="60" cy="60" r="48" fill="none" stroke="#ebebeb" stroke-width="12"></circle><g transform="rotate(-90 60 60)" fill="none" stroke-width="12"><circle cx="60" cy="60" r="48" stroke="#29845a" stroke-dasharray="102.54158421317085 199.0513105314493" stroke-dashoffset="0"></circle><circle cx="60" cy="60" r="48" stroke="#0094d5" stroke-dasharray="54.286721054031624 247.3061736905885" stroke-dashoffset="-102.54158421317085"></circle><circle cx="60" cy="60" r="48" stroke="#b98900" stroke-dasharray="18.09557368467721 283.4973210599429" stroke-dashoffset="-156.82830526720247"></circle><circle cx="60" cy="60" r="48" stroke="#c70a24" stroke-dasharray="6.031857894892403 295.5610368497277" stroke-dashoffset="-174.9238789518797"></circle></g></svg><div aria-hidden="true" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:28px;line-height:1.15;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em">34%</span><s-text color="subdued">translated</s-text></div></div>"`);
+    expect(html(createElement(CoverageRing, { counts: COUNTS, figure: "34%", caption: "translated", label: "34% translated", size: 112 }))).toMatchInlineSnapshot(`"<div style="position:relative;width:112px;height:112px;flex:none"><svg width="112" height="112" viewBox="0 0 120 120" role="img" aria-label="34% translated"><circle cx="60" cy="60" r="48" fill="none" stroke="#ebebeb" stroke-width="12"></circle><g transform="rotate(-90 60 60)" fill="none" stroke-width="12"><circle cx="60" cy="60" r="48" stroke="#29845a" stroke-dasharray="102.54158421317085 199.0513105314493" stroke-dashoffset="0"></circle><circle cx="60" cy="60" r="48" stroke="#0094d5" stroke-dasharray="54.286721054031624 247.3061736905885" stroke-dashoffset="-102.54158421317085"></circle><circle cx="60" cy="60" r="48" stroke="#b98900" stroke-dasharray="18.09557368467721 283.4973210599429" stroke-dashoffset="-156.82830526720247"></circle><circle cx="60" cy="60" r="48" stroke="#c70a24" stroke-dasharray="6.031857894892403 295.5610368497277" stroke-dashoffset="-174.9238789518797"></circle></g></svg><div aria-hidden="true" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:24px;line-height:1.15;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em">34%</span><s-text color="subdued">translated</s-text></div></div>"`);
     expect(html(createElement(CoverageRing, { counts: EMPTY, figure: "—", caption: "translated", label: "Not counted yet", size: 112 }))).toMatchInlineSnapshot(`"<div style="position:relative;width:112px;height:112px;flex:none"><svg width="112" height="112" viewBox="0 0 120 120" role="img" aria-label="Not counted yet"><circle cx="60" cy="60" r="48" fill="none" stroke="#ebebeb" stroke-width="12"></circle><g transform="rotate(-90 60 60)" fill="none" stroke-width="12"></g></svg><div aria-hidden="true" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:28px;line-height:1.15;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em">—</span><s-text color="subdued">translated</s-text></div></div>"`);
-    expect(html(createElement(CoverageRing, { counts: { ...EMPTY, complete: 1, missing: 400 }, figure: "<1%", caption: "translated", label: "Under 1%" }))).toMatchInlineSnapshot(`"<div style="position:relative;width:120px;height:120px;flex:none"><svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Under 1%"><circle cx="60" cy="60" r="48" fill="none" stroke="#ebebeb" stroke-width="12"></circle><g transform="rotate(-90 60 60)" fill="none" stroke-width="12"><circle cx="60" cy="60" r="48" stroke="#29845a" stroke-dasharray="2 299.59289474462014" stroke-dashoffset="0"></circle></g></svg><div aria-hidden="true" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:28px;line-height:1.15;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em">&lt;1%</span><s-text color="subdued">translated</s-text></div></div>"`);
-    expect(html(createElement(CoverageRing, { counts: COUNTS, figure: "34%", caption: "translated", label: "34% translated", size: 96 }))).toMatchInlineSnapshot(`"<div style="position:relative;width:96px;height:96px;flex:none"><svg width="96" height="96" viewBox="0 0 120 120" role="img" aria-label="34% translated"><circle cx="60" cy="60" r="48" fill="none" stroke="#ebebeb" stroke-width="12"></circle><g transform="rotate(-90 60 60)" fill="none" stroke-width="12"><circle cx="60" cy="60" r="48" stroke="#29845a" stroke-dasharray="102.54158421317085 199.0513105314493" stroke-dashoffset="0"></circle><circle cx="60" cy="60" r="48" stroke="#0094d5" stroke-dasharray="54.286721054031624 247.3061736905885" stroke-dashoffset="-102.54158421317085"></circle><circle cx="60" cy="60" r="48" stroke="#b98900" stroke-dasharray="18.09557368467721 283.4973210599429" stroke-dashoffset="-156.82830526720247"></circle><circle cx="60" cy="60" r="48" stroke="#c70a24" stroke-dasharray="6.031857894892403 295.5610368497277" stroke-dashoffset="-174.9238789518797"></circle></g></svg><div aria-hidden="true" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:22px;line-height:1.15;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em">34%</span><s-text color="subdued">translated</s-text></div></div>"`);
+    expect(html(createElement(CoverageRing, { counts: { ...EMPTY, complete: 1, missing: 400 }, figure: "<1%", caption: "translated", label: "Under 1%" }))).toMatchInlineSnapshot(`"<div style="position:relative;width:120px;height:120px;flex:none"><svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Under 1%"><circle cx="60" cy="60" r="48" fill="none" stroke="#ebebeb" stroke-width="12"></circle><g transform="rotate(-90 60 60)" fill="none" stroke-width="12"><circle cx="60" cy="60" r="48" stroke="#29845a" stroke-dasharray="2 299.59289474462014" stroke-dashoffset="0"></circle></g></svg><div aria-hidden="true" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:24px;line-height:1.15;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em">&lt;1%</span><s-text color="subdued">translated</s-text></div></div>"`);
+    expect(html(createElement(CoverageRing, { counts: COUNTS, figure: "34%", caption: "translated", label: "34% translated", size: 96 }))).toMatchInlineSnapshot(`"<div style="position:relative;width:96px;height:96px;flex:none"><svg width="96" height="96" viewBox="0 0 120 120" role="img" aria-label="34% translated"><circle cx="60" cy="60" r="48" fill="none" stroke="#ebebeb" stroke-width="12"></circle><g transform="rotate(-90 60 60)" fill="none" stroke-width="12"><circle cx="60" cy="60" r="48" stroke="#29845a" stroke-dasharray="102.54158421317085 199.0513105314493" stroke-dashoffset="0"></circle><circle cx="60" cy="60" r="48" stroke="#0094d5" stroke-dasharray="54.286721054031624 247.3061736905885" stroke-dashoffset="-102.54158421317085"></circle><circle cx="60" cy="60" r="48" stroke="#b98900" stroke-dasharray="18.09557368467721 283.4973210599429" stroke-dashoffset="-156.82830526720247"></circle><circle cx="60" cy="60" r="48" stroke="#c70a24" stroke-dasharray="6.031857894892403 295.5610368497277" stroke-dashoffset="-174.9238789518797"></circle></g></svg><div aria-hidden="true" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:20px;line-height:1.15;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em">34%</span><s-text color="subdued">translated</s-text></div></div>"`);
   });
 
-  it("Breadcrumbs without touch (language, area, Review, Plan, smart schedule, content lists)", () => {
+  it("Breadcrumbs without touch: the plain trail, the wide half of every page's touch trail", () => {
     const i18n = translator("de");
     const flag = createElement("span", { "aria-hidden": "true" }, "DE");
     expect(
@@ -89,13 +89,13 @@ describe("CoverageRing (Jobs SPEC §3.4)", () => {
   const ring = (props: Partial<Parameters<typeof CoverageRing>[0]>) => html(createElement(CoverageRing, { figure: "60%", caption: "done", label: "60% done.", size: 112, ...props }));
 
   it("sizes the figure by its length in characters and the ring's size", () => {
-    expect(ringFigureSize("62%", 112)).toBe(28);
-    expect(ringFigureSize("62%", 96)).toBe(22);
-    expect(ringFigureSize("62 %", 112)).toBe(24);
-    expect(ringFigureSize("62 %", 96)).toBe(20);
-    expect(ringFigureSize("100 %", 112)).toBe(22);
-    expect(ringFigureSize("100 %", 96)).toBe(18);
-    expect(ringFigureSize("100%", 120)).toBe(24);
+    expect(ringFigureSize("62%", 112)).toBe(24);
+    expect(ringFigureSize("62%", 96)).toBe(20);
+    expect(ringFigureSize("62 %", 112)).toBe(20);
+    expect(ringFigureSize("62 %", 96)).toBe(17);
+    expect(ringFigureSize("100 %", 112)).toBe(18);
+    expect(ringFigureSize("100 %", 96)).toBe(15);
+    expect(ringFigureSize("100%", 120)).toBe(20);
     expect(ringFigureSize("—", 112)).toBe(28);
     expect(ringFigureSize("18", 96)).toBe(22);
     // The figures the app really writes, through percentLabel, in every interface language.
@@ -103,15 +103,19 @@ describe("CoverageRing (Jobs SPEC §3.4)", () => {
       const i18n = translator(locale);
       const sixtyTwo = percentLabel(i18n, 62, 100);
       const hundred = percentLabel(i18n, 100, 100);
-      expect([figureSize(ring({ figure: sixtyTwo })), figureSize(ring({ figure: sixtyTwo, size: 96 }))], `${locale} ${sixtyTwo}`).toEqual(locale === "en" ? [28, 22] : [24, 20]);
-      expect([figureSize(ring({ figure: hundred })), figureSize(ring({ figure: hundred, size: 96 }))], `${locale} ${hundred}`).toEqual(locale === "en" ? [24, 20] : [22, 18]);
+      expect([figureSize(ring({ figure: sixtyTwo })), figureSize(ring({ figure: sixtyTwo, size: 96 }))], `${locale} ${sixtyTwo}`).toEqual(locale === "en" ? [24, 20] : [20, 17]);
+      expect([figureSize(ring({ figure: hundred })), figureSize(ring({ figure: hundred, size: 96 }))], `${locale} ${hundred}`).toEqual(locale === "en" ? [20, 17] : [18, 15]);
     }
   });
 
-  it("keeps 28 px for a figure of up to 3 characters, as on the Overview and the language page ('34%')", () => {
-    for (const figure of ["34%", "0%", "<1%", "—"]) {
+  it("keeps 28 px for a figure of up to 2 characters; 3 ('34%') get 24 px, clear of the ring where the caption lifts the figure", () => {
+    for (const figure of ["0%", "—"]) {
       expect(figureSize(ring({ counts: COUNTS, figure })), figure).toBe(28);
       expect(figureSize(ring({ counts: COUNTS, figure, size: 120 })), figure).toBe(28);
+    }
+    for (const figure of ["34%", "<1%"]) {
+      expect(figureSize(ring({ counts: COUNTS, figure })), figure).toBe(24);
+      expect(figureSize(ring({ counts: COUNTS, figure, size: 120 })), figure).toBe(24);
     }
   });
 
@@ -218,10 +222,10 @@ describe("Breadcrumbs touch (Jobs SPEC §5.2)", () => {
 });
 
 describe("NumberedSteps titles (Jobs SPEC §5.2)", () => {
-  it("sets a title given as text in semibold, since s-text type=\"strong\" draws at the body weight", () => {
+  it("sets a title given as text as the type scale's step title (.lv-h3), since s-text type=\"strong\" draws at the body weight", () => {
     const markup = html(createElement(NumberedSteps, { steps: [{ key: "review", title: "Approve 452 translations", detail: "For 176 products." }, { key: "retry", title: "Try 1 product again" }] }));
-    expect(markup).toContain('<strong style="font-weight:600">Approve 452 translations</strong>');
-    expect(markup).toContain('<strong style="font-weight:600">Try 1 product again</strong>');
+    expect(markup).toContain('<strong class="lv-h3">Approve 452 translations</strong>');
+    expect(markup).toContain('<strong class="lv-h3">Try 1 product again</strong>');
     // Only the step numbers still use s-text type="strong".
     expect(markup.match(/<s-text type="strong">([^<]*)<\/s-text>/g)).toEqual(['<s-text type="strong">1</s-text>', '<s-text type="strong">2</s-text>']);
   });

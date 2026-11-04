@@ -126,8 +126,20 @@ test("lower plans see the schedule's lock with the way to Business, not an adver
   await openApp(page, "full", "/app/settings");
   const smart = option(page, "#settings-changes", "On a schedule");
   await expect(smart.getByText("Business", { exact: true })).toBeVisible();
-  await expect(smart.getByText("In the Business plan.")).toBeVisible();
+  // The one plan with it: its badge says it (no line repeating it), and the plans link stays beside the badge.
+  const badge = smart.locator("s-badge[icon='lock']");
+  await expect(badge).toHaveText("Business");
+  await expect(smart.locator(".lv-option__foot s-text")).toHaveCount(0);
   await expect(smart.getByRole("link", { name: "See plans" })).toBeVisible();
+  // A Polaris host draws no box of its own (display: contents): the badge by where its word is.
+  const lock = await badge.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const box = range.getBoundingClientRect();
+    return box.y + box.height / 2;
+  });
+  const plans = (await smart.getByRole("link", { name: "See plans" }).boundingBox())!;
+  expect(Math.abs(lock - (plans.y + plans.height / 2))).toBeLessThan(4);
   await expect(smart.getByRole("button")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Check now" })).toHaveCount(0);
 });
@@ -244,11 +256,15 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   await expect(status.locator('[data-button][data-tone="critical"]')).toHaveAttribute("data-variant", "tertiary");
   await expect(status.getByText("Pause stops it and keeps everything. Turn off switches to “Start it yourself”.")).toBeVisible();
   const activity = page.locator("#smart-activity");
-  await expect(activity.getByText("64 items checked · 3 needed translation (fields: 12, about 1,840 characters)", { exact: false })).toBeVisible();
-  await expect(activity.getByText("1,200 characters sent to AI, 640 from earlier translations", { exact: false })).toBeVisible();
+  // A check's figures, each with its name in the app's words; sent and reused, no estimate beside them.
+  const check = activity.getByRole("listitem").first();
+  await expect(check).toContainText(/Checked\s*64\s*Needed translation\s*3\s*\(12 fields\)\s*AI characters\s*1,200\s*From translation memory\s*640/, { useInnerText: true });
+  await expect(check).not.toContainText("1,840");
+  await expect(check.locator(".lv-figure-row")).toHaveText(["64", "3", "1,200", "640"]);
   await expect(activity.getByText("On schedule").first()).toBeVisible();
   await expect(activity.getByText("The schedule was paused.")).toBeVisible();
-  await expect(activity.getByRole("link", { name: "Products · French" })).toBeVisible();
+  // A job by its one name, as Jobs and the job's page say it.
+  await expect(activity.getByRole("link", { name: "French · Products" })).toBeVisible();
   // Two checks: no fold for earlier ones.
   await expect(activity.locator("details")).toHaveCount(0);
   await expect(page.locator("#smart-exclusions").getByText("No exclusions")).toBeVisible();
@@ -258,9 +274,16 @@ test("the smart page: summary, recent checks and exclusions first, then the sche
   await expect(page.getByRole("radio", { name: /^Every day/ })).toBeChecked();
   await expect(often.getByRole("radio", { name: "Only on demand", exact: true })).toHaveAccessibleDescription("When you press “Check now”");
   await expect(page.getByRole("combobox", { name: "Time", exact: true })).toHaveValue("23:00");
-  await expect(page.locator("s-ordered-list s-list-item")).toHaveCount(3);
-  // The zone in one line; its list only after "Change".
   const schedule = page.locator("#smart-schedule");
+  // The chosen way's title leads its panel; the next checks are named like the Time field and don't repeat the store's own zone.
+  await expect(schedule.getByRole("heading", { level: 3, name: "Every day" })).toBeVisible();
+  await expect(schedule.getByRole("heading", { level: 4, name: "Next checks" })).toBeVisible();
+  const next = schedule.getByRole("list", { name: "Next checks" }).getByRole("listitem");
+  await expect(next).toHaveCount(3);
+  for (const text of await next.allInnerTexts()) expect(text).not.toContain("Europe/Berlin");
+  // No lead under the card's heading that only says it again: "How often" says what the card adds.
+  await expect(schedule.getByText("When Linguva checks your store.")).toHaveCount(0);
+  // The zone in one line; its list only after "Change".
   await expect(schedule.getByText("Time zone: Europe/Berlin (your store's time zone)")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Time zone" })).toHaveCount(0);
   await schedule.getByRole("button", { name: "Change: Time zone" }).click();
@@ -309,7 +332,7 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   // Read by the form (its save bar shows), and still said.
   await expect.poll(() => saveBarShown(page, "smart-auto-save-bar")).toBe(true);
   await expect(status.getByText("At the first check")).toBeVisible();
-  await expect(status.getByRole("link", { name: "Count store" })).toBeVisible();
+  await expect(status.getByRole("link", { name: "Count translations" })).toBeVisible();
   await menus.uncheck();
   // "Adjust" goes to the form's first card.
   await status.getByRole("button", { name: "Adjust", exact: true }).click();
@@ -326,9 +349,10 @@ test("setting it up in one trip: the suggestions, then saved and turned on toget
   await expect(page.getByRole("group", { name: "Days", exact: true }).getByRole("checkbox")).toHaveCount(7);
   for (const day of ["Tuesday", "Wednesday", "Friday", "Saturday", "Sunday"]) await page.getByRole("checkbox", { name: day, exact: true }).uncheck();
   await page.getByRole("combobox", { name: "Time", exact: true }).selectOption("09:00");
-  const next = page.locator("s-ordered-list s-list-item");
+  const next = page.getByRole("list", { name: "Next checks" }).getByRole("listitem");
   await expect(next).toHaveCount(3);
-  for (const text of await next.allInnerTexts()) expect(text).toMatch(/^(Mon|Thu), .*9:00\s?AM \(Europe\/Berlin\)$/);
+  // The store's own zone isn't named (every other time in the admin is the store's).
+  for (const text of await next.allInnerTexts()) expect(text).toMatch(/^(Mon|Thu), .*9:00\s?AM$/);
   // The summary's suggestion follows the form.
   await expect(status.getByText(/^Every Monday and Thursday at 9:00\sAM$/)).toBeVisible();
   // The save bar saves and turns on in this state too.
@@ -365,7 +389,7 @@ test("a refused save is shown at the top and focused; Discard brings back what i
   await page.getByRole("combobox", { name: "Check 2", exact: true }).selectOption("09:30");
   // Said live where the next checks would be, before saving.
   await expect(schedule.getByText("Checks need to be at least an hour apart.")).toBeVisible();
-  await expect(page.locator("s-ordered-list")).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Next checks" })).toHaveCount(0);
   await clickSaveBarButton(page, "smart-auto-save-bar", 0);
   const banner = page.locator('s-banner[heading="Not saved"]');
   await expect(banner).toContainText("Checks need to be at least an hour apart.");
@@ -374,7 +398,7 @@ test("a refused save is shown at the top and focused; Discard brings back what i
   await expect(top).toBeInViewport();
   // A time taken away: the problem is gone and the next checks are back.
   await schedule.getByRole("button", { name: "Remove check 2" }).click();
-  await expect(page.locator("s-ordered-list s-list-item")).toHaveCount(3);
+  await expect(page.getByRole("list", { name: "Next checks" }).getByRole("listitem")).toHaveCount(3);
   await clickSaveBarButton(page, "smart-auto-save-bar", 1);
   await expect(page.getByRole("radio", { name: /^On chosen weekdays/ })).toBeChecked();
 });
@@ -424,13 +448,53 @@ test("pause, resume and Check now", async ({ page }) => {
   const status = page.locator("#smart-status");
   await status.getByRole("button", { name: "Pause" }).click();
   await expectToast(page, "Paused. Nothing is translated until you resume.");
-  await expect(status.locator('s-banner[heading="Smart schedule is paused"]')).toContainText("You paused it.");
+  // Settings' status row: the reason as its title (the badge says "Paused"), what happens next under it.
+  const row = status.locator(".lv-status[data-tone='warning']");
+  await expect(row.locator(".lv-status__title")).toHaveText("Paused by you");
+  await expect(row).toContainText("Nothing is checked or translated until you resume.");
+  await expect(status.locator("s-banner")).toHaveCount(0);
   await status.getByRole("button", { name: "Resume" }).click();
   await expectToast(page, "Resumed.");
   await status.getByRole("button", { name: "Check now" }).click();
   await expectToast(page, /^Check (started|queued)/);
   // The check shows in the activity (no worker runs in the UI tests: it stays queued or running).
   await expect(page.locator("#smart-activity").getByText("Started by you")).toBeVisible();
+});
+
+test("waiting for the background service: Settings' status row says why once, and Turn off stays the quiet word @responsive", async ({ page }, info) => {
+  await setWorkerRunning(false);
+  try {
+    await openApp(page, "business", "/app/settings/automatic");
+    const status = page.locator("#smart-status");
+    await expect(status.locator("s-badge").first()).toHaveText("Waiting");
+    // The app's status row, not a banner: the reason as its title (the badge says "Waiting"), what happens next under it.
+    const row = status.locator(".lv-status[data-tone='warning']");
+    await expect(row.locator(".lv-status__title")).toHaveText("Linguva's background service isn't running");
+    await expect(row).toContainText("Checks start again by themselves once it's back.");
+    await expect(status.locator("s-banner")).toHaveCount(0);
+    await expect(status.getByText("Smart schedule is waiting")).toHaveCount(0);
+    // Turn off, the one action while it waits: the quiet red word at the card's edge, never the main action's full-width place.
+    const turnOff = status.locator('[data-button][data-tone="critical"]');
+    await expect(turnOff).toHaveText("Turn off");
+    await expect(turnOff).toHaveAttribute("data-variant", "tertiary");
+    if (info.project.name === "mobile") {
+      const [button, heading] = await Promise.all([turnOff.boundingBox(), page.locator("#smart-status-heading").boundingBox()]);
+      expect(Math.abs(button!.x - heading!.x)).toBeLessThanOrEqual(1);
+      expect(button!.width).toBeLessThan(heading!.width / 2);
+    }
+    // The next check's figure in words that aren't the state's, its link set apart.
+    await expect(status.getByText("For the next check")).toBeVisible();
+    await expect(status).toContainText("Not counted yet · Count translations");
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+    // Settings' section says it in the same look.
+    await openApp(page, "business", "/app/settings?section=changes");
+    const changes = page.locator("#settings-changes");
+    await expect(changes.locator(".lv-status .lv-status__title")).toHaveText("Linguva's background service isn't running");
+    await expect(changes.locator("s-banner")).toHaveCount(0);
+  } finally {
+    await setWorkerRunning(true);
+  }
 });
 
 test("earlier checks fold behind one line that says what it does; the list it opens is named by what it holds", async ({ page }) => {
@@ -581,6 +645,17 @@ test("the smart page groups content by the Content page's areas, under four labe
   for (const name of ["Menus", "Menu links", "Storefront filters"]) await expect(menus.getByRole("checkbox", { name, exact: true })).toBeVisible();
   // An area with one kind of content is that checkbox alone (named like the Content page's area); the saved choice is kept.
   await expect(scope.getByRole("checkbox", { name: "Products", exact: true })).toBeChecked();
+  // The languages as rows like the content's: a flag where an area has its icon, so every checkbox starts at one edge.
+  const languages = scope.getByRole("list", { name: "Languages" });
+  await expect(languages.getByRole("listitem")).toHaveCount(2);
+  await expect(languages.locator("img[src='/flags/FR.svg']")).toHaveCount(1);
+  for (const name of ["German", "French"]) await expect(languages.getByRole("checkbox", { name, exact: true })).toBeChecked();
+  const [french, products] = await Promise.all([languages.getByRole("checkbox", { name: "French", exact: true }).boundingBox(), scope.getByRole("checkbox", { name: "Products", exact: true }).boundingBox()]);
+  expect(Math.abs(french!.x - products!.x)).toBeLessThanOrEqual(1);
+  // Each area's picture in its own tint, as on the Content page (Products blue, Collections violet).
+  const areas = scope.getByRole("list", { name: "Content" });
+  await expect(areas.getByRole("listitem").first().locator(".lv-icon-square")).toHaveAttribute("data-tint", "blue");
+  await expect(areas.getByRole("listitem").nth(1).locator(".lv-icon-square")).toHaveAttribute("data-tint", "violet");
   await expect(scope.getByRole("checkbox", { name: "Size charts & more (Metaobjects)" })).not.toBeChecked();
   await expect(scope.getByRole("checkbox", { name: "Menus", exact: true })).not.toBeChecked();
   await expect(scope.getByRole("radio", { name: "All fields (except web addresses)" })).toBeChecked();

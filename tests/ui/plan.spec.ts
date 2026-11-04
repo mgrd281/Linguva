@@ -238,6 +238,25 @@ test("the way back leads to Settings' plan & usage; on a phone a 44 px back row 
   await expect(page.getByRole("heading", { level: 2, name: "Plan & usage" })).toBeVisible();
 });
 
+test("the page opens as a tools page does, and the hero's main button ends at the card's edge on a wide page @responsive", async ({ page }, info) => {
+  // From the trail (or the phone's back row) to the heading: the same room as on a tools page.
+  const room = async (heading: string) => {
+    const trail = (await page.getByRole("navigation", { name: "Breadcrumb" }).boundingBox())!;
+    const title = (await page.getByRole("heading", { level: 1, name: heading, exact: true }).boundingBox())!;
+    return Math.round(title.y - (trail.y + trail.height));
+  };
+  await openApp(page, "full", "/app/glossary");
+  const tool = await room("Glossary");
+  await openApp(page, "full", "/app/plan");
+  expect(await room("Plan")).toBe(tool);
+
+  const change = (await page.locator("[data-button]", { hasText: "Change plan" }).boundingBox())!;
+  const refresh = (await page.locator("[data-button]", { hasText: "Refresh" }).boundingBox())!;
+  // Beside the plan, one above the other at the card's right edge; on a phone below it, at the left.
+  if (info.project.name === "mobile") expect(change.x).toBeLessThan(refresh.x);
+  else expect(Math.abs(change.x + change.width - (refresh.x + refresh.width))).toBeLessThanOrEqual(2);
+});
+
 test.describe("fits your store, from the store's own use", () => {
   test("four languages on Starter: Pro, and the language outside the plan is named", async ({ page }) => {
     await openApp(page, "planLanguages", "/app/plan", { locale: "de" });

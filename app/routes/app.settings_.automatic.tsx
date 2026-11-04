@@ -37,14 +37,15 @@ import { loadSmartPanel, smartContext } from "../.server/smart/panel";
 import { requestSmartRun, retrySmartRun } from "../.server/smart/runs";
 import { normaliseSmartSettings, type SmartSettingsProblem } from "../.server/smart/validate";
 import { useResultToast, useSaveBar } from "../components/app-bridge";
-import { categoryName, IconTile } from "../components/CategoryCard";
+import { categoryName } from "../components/CategoryCard";
 import { BackToJob } from "../components/jobs/BackToJob";
 import { CARD } from "../components/ContentTiles";
-import { Breadcrumbs, PLAIN_LIST } from "../components/LanguageLayout";
+import { PLAIN_LIST } from "../components/LanguageLayout";
 import { PageHeader } from "../components/PageHeader";
 import { SUB_HEADING } from "../components/plan/styles";
 import { PublishingChoice, type PublishMode } from "../components/PublishingChoice";
 import { Disclosure } from "../components/Disclosure";
+import { Flag } from "../components/Flag";
 import { IconSquare, type Tint } from "../components/IconSquare";
 import { FactList, focusById, focusSection, InlineNotice, SETTING_NAME, SettingCard, StateLine, useFreshResult, type SettingState } from "../components/SettingsParts";
 import {
@@ -70,6 +71,7 @@ import type { ConsentToken } from "../lib/engines";
 import type { IconName } from "../lib/icons";
 import { CATEGORIES, categoryOf, isCategoryId, TIERS, type CategoryId } from "../lib/language-categories";
 import { jobKindLabel, jobName } from "../lib/job-view";
+import { localeCountry } from "../lib/flags";
 import { languageList } from "../lib/name-lists";
 import { entitlementsFor } from "../lib/plans";
 import { CONTENT_TYPES, isContentType, stillWithoutAccess } from "../lib/resource-kinds";
@@ -99,6 +101,10 @@ const SETTINGS_CHANGES = "/app/settings?section=changes";
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => ({ value: formatTime(i * 15), minute: i * 15 }));
 /** The summary card's schedule ("Every day at 11:00 PM"): smaller than the Plan page's plan name, as it can be a sentence. */
 const HERO_NAME = { margin: 0, fontSize: 20, lineHeight: "26px", fontWeight: 700, letterSpacing: "-0.01em" } as const;
+/** A name in a field label's type (Polaris' 13/20, regular): the next checks beside the Time field, below the panel's title. */
+const FIELD_LABEL = { margin: 0, fontSize: 13, lineHeight: "20px", fontWeight: 450 } as const;
+/** A flag in an area icon's 28 px square, so a language's row lines up with an area's. */
+const PICTURE_BOX = { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28 } as const;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, scopes } = await requireShop(request);
@@ -307,11 +313,11 @@ export default function SmartAutomatic() {
   const config = panel.config;
   const shopZone = data.shopTimeZone;
   const languageNames = new Map(data.languages.map((l) => [l.locale, i18n.language(l.locale, l.name)]));
+  // Shopify's names, for a job's one name everywhere ("French · Products", jobName).
+  const shopNames = Object.fromEntries(data.languages.map((l) => [l.locale, l.name]));
   // A job the schedule stopped for a budget or the main language, its cause fixed: the way back to it at
   // the top of the card that fixed it (`?job=…#smart-budgets`, `#smart-scope`), as the page's one primary button.
-  const back = data.backToJob ? (
-    <BackToJob jobId={data.backToJob.id} name={jobName(i18n, data.backToJob, Object.fromEntries(data.languages.map((l) => [l.locale, l.name])))} />
-  ) : null;
+  const back = data.backToJob ? <BackToJob jobId={data.backToJob.id} name={jobName(i18n, data.backToJob, shopNames)} /> : null;
   const backIn = (card: "smart-scope" | "smart-budgets") => (back && (data.backToJob?.group === "PRIMARY_LANGUAGE" ? "smart-scope" : "smart-budgets") === card ? back : null);
   const heroVariant = back ? ("secondary" as const) : ("primary" as const);
   // Where the page came from: Settings' section of the ways changes are translated (a phone shows its back row).
@@ -538,6 +544,7 @@ export default function SmartAutomatic() {
   const accessType = panel.noAccess.find(isContentType);
   const accessHref = accessType ? `/app/content/${CONTENT_TYPES[accessType].slug}` : null;
 
+  const inPlan = data.languages.filter((l) => l.inPlan);
   const outside = data.languages.filter((l) => !l.inPlan);
   const chosenTypes = new Set<string>(initial.types);
   const publishing = effectivePublishMode({ mode: publishMode, inPlan: data.autoPublishInPlan });
@@ -566,7 +573,7 @@ export default function SmartAutomatic() {
         )}
       </s-stack>
     );
-  // A form: in the summary's actions it fills its place like the other buttons; elsewhere it sits in an inline stack.
+  // A form: in the summary's actions it fills its place like the other buttons; in the state row it sits beside the reason.
   const grantButton = (variant: "primary" | "secondary") => (
     <consentFetcher.Form method="post" action="/app/settings">
       <input type="hidden" name="intent" value="grant-consent" />
@@ -590,15 +597,17 @@ export default function SmartAutomatic() {
           ? { label: t("automatic.state.waiting"), icon: "clock", tone: "warning" }
           : { label: t("automatic.state.off"), icon: "minus-circle", tone: "neutral" };
   // Turning off is the quiet, red one: it isn't undone by Resume (it switches to "Start it yourself").
-  const turnOff = (
-    <Button variant="tertiary" tone="critical" onClick={() => act("turn-off")} {...loading("turn-off")}>
+  // Alone (while it waits) it is flush, its word at the card's edge (ui.css .lv-smart-actions): on a phone
+  // it is the first control under the summary, and never in the main action's place.
+  const turnOff = (flush = false) => (
+    <Button variant="tertiary" tone="critical" flush={flush} onClick={() => act("turn-off")} {...loading("turn-off")}>
       {t("automatic.action.turnOff")}
     </Button>
   );
   const heroActions = readOnly ? (
     <>
       <Button href="/app/plan">{t("automatic.upsell.cta")}</Button>
-      {panel.status.state !== "off" ? turnOff : null}
+      {panel.status.state !== "off" ? turnOff() : null}
     </>
   ) : panel.status.state === "off" ? (
     canTurnOn ? (
@@ -629,7 +638,7 @@ export default function SmartAutomatic() {
           {t("automatic.action.resume")}
         </Button>
       )}
-      {turnOff}
+      {turnOff()}
     </>
   ) : panel.status.state === "on" ? (
     <>
@@ -639,11 +648,11 @@ export default function SmartAutomatic() {
       <Button icon="pause-circle" onClick={() => act("pause")} {...loading("pause")}>
         {t("automatic.action.pause")}
       </Button>
-      {turnOff}
+      {turnOff()}
     </>
   ) : (
     // Waiting: the reason says what to do; turning off stays possible.
-    turnOff
+    turnOff(true)
   );
   // Pause and Turn off side by side: how they differ, in one line under them.
   const actionsNote = !readOnly && panel.status.state === "on" ? t("automatic.hero.pauseOrOff", { manual: t("settings.changes.manual.title") }) : null;
@@ -658,9 +667,8 @@ export default function SmartAutomatic() {
         </s-link>
         <s-query-container>
           <s-stack direction="block" gap="base">
-            <Breadcrumbs i18n={i18n} trail={trail} current={t("automatic.page.heading")} touch />
-            {/* No lead: the card says what it would do. */}
-            <PageHeader page="smart" title={t("automatic.page.heading")} />
+            {/* No lead: the card says what it would do. The trail sits as close as on a tools page. */}
+            <PageHeader page="smart" title={t("automatic.page.heading")} trail={{ i18n, links: trail }} />
             <SettingCard id="smart-status" icon="calendar-time" heading={t("automatic.locked.heading")} extra={<s-badge icon="lock">{t("automatic.business")}</s-badge>} lead={t("automatic.locked.body")}>
               <FactList
                 label={t("automatic.page.heading")}
@@ -700,6 +708,8 @@ export default function SmartAutomatic() {
     const when = whenIn(i18n, run.createdAt, panel.zone, data.now, shopZone);
     const status = RUN_STATUS[run.status] ?? RUN_STATUS.QUEUED!;
     const failed = failedAction(run);
+    // Translated: what went to AI and what came from the memory; before that, what it may use.
+    const translated = run.billed > 0 || run.fromMemory > 0;
     return (
       <li key={run.id}>
         {index > 0 ? <s-divider /> : null}
@@ -716,16 +726,22 @@ export default function SmartAutomatic() {
             {run.status === "SKIPPED" ? (
               <s-text color="subdued">{runReason(i18n, run.errorCode)}</s-text>
             ) : (
-              <s-text>
-                {[
-                  t("automatic.activity.checked", { count: run.resourcesChecked }),
-                  t("automatic.activity.changed", { count: run.resourcesChanged, fields: number(run.fieldsDetected), chars: number(run.charsEstimated) }),
-                  run.excludedSkipped ? t("automatic.activity.excluded", { count: run.excludedSkipped }) : null,
-                  run.billed || run.fromMemory ? t("automatic.activity.billed", { billed: number(run.billed), memory: number(run.fromMemory) }) : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </s-text>
+              // Its figures, each with its name in the app's words (the Plan page's AI characters, Settings' translation memory).
+              <s-stack direction="inline" gap="small-200 base">
+                <RunFigure label={t("automatic.activity.figure.checked")} value={number(run.resourcesChecked)} />
+                <RunFigure
+                  label={t("automatic.activity.figure.changed")}
+                  value={number(run.resourcesChanged)}
+                  {...(run.fieldsDetected ? { extra: `(${t("automatic.activity.figure.fields", { count: run.fieldsDetected })})` } : {})}
+                />
+                {run.excludedSkipped ? <RunFigure label={t("automatic.activity.figure.excluded")} value={number(run.excludedSkipped)} /> : null}
+                {translated ? (
+                  <RunFigure label={t("automatic.activity.figure.billed")} value={number(run.billed)} />
+                ) : run.charsEstimated ? (
+                  <RunFigure label={t("automatic.activity.figure.billed")} value={t("automatic.activity.figure.about", { chars: number(run.charsEstimated) })} />
+                ) : null}
+                {run.fromMemory ? <RunFigure label={t("automatic.activity.figure.memory")} value={number(run.fromMemory)} /> : null}
+              </s-stack>
             )}
             {/* Why it didn't finish, or why its translation stopped (a budget, the plan's allowance). */}
             {run.status !== "SKIPPED" && run.errorCode ? (
@@ -754,10 +770,10 @@ export default function SmartAutomatic() {
                 ) : null}
                 {/* The rest is fixed in the editor: its job lists them. */}
                 {failed.job ? <s-link href={`/app/jobs/${failed.job}`}>{t("automatic.activity.seeJob")}</s-link> : null}
-                {/* A run's image and custom-field jobs by the Jobs page's words ("Extra details (products)"), which the link opens. */}
+                {/* A run's jobs by their one name, as Jobs and a job's page say it ("French · Products", "German · Extra details (products)"). */}
                 {run.jobs.slice(0, 3).map((job) => (
                   <s-link key={job.id} href={`/app/jobs/${job.id}`}>
-                    {`${jobKindLabel(i18n, job.resourceType)} · ${languageNames.get(job.locale) ?? job.locale}`}
+                    {jobName(i18n, { targetLocale: job.locale, resourceType: job.resourceType }, shopNames)}
                   </s-link>
                 ))}
               </s-stack>
@@ -778,8 +794,7 @@ export default function SmartAutomatic() {
 
       <s-query-container>
         <s-stack direction="block" gap="base">
-          <Breadcrumbs i18n={i18n} trail={trail} current={t("automatic.page.heading")} touch />
-          <PageHeader page="smart" title={t("automatic.page.heading")} lead={t("automatic.page.subtitle")} />
+          <PageHeader page="smart" title={t("automatic.page.heading")} lead={t("automatic.page.subtitle")} trail={{ i18n, links: trail }} />
 
           {/* The form's refusal, at the top, where focus moves when it appears. */}
           {error ? (
@@ -835,29 +850,17 @@ export default function SmartAutomatic() {
                       {stoppedByPlan ? t("automatic.page.notInPlan") : t("automatic.page.keptOff")}
                     </InlineNotice>
                   ) : (
-                    <SmartStateBanner
-                      status={panel.status}
-                      zone={panel.zone}
-                      onChooseLanguages={() => focusSection("smart-scope")}
-                      consentAction={
-                        consentNote ? (
-                          <s-stack direction="block" gap="small-200">
-                            {consentNote}
-                            <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
-                          </s-stack>
-                        ) : (
-                          <s-stack direction="inline">{grantButton(heroVariant)}</s-stack>
-                        )
-                      }
-                    />
+                    // Paused or waiting: the reason as Settings' status row, its way on beside it (the grant button while it
+                    // waits for the permission, whose notice follows under the row).
+                    <SmartStateBanner status={panel.status} zone={panel.zone} onChooseLanguages={() => focusSection("smart-scope")} consentAction={grantButton(heroVariant)} />
                   )}
                   {!readOnly && notConfigured ? <StateLine icon="info">{canTurnOn ? t("automatic.hero.setUpHint") : !data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine> : null}
                   {!readOnly && panel.status.state === "off" && data.basicOn && canTurnOn ? <StateLine icon="info">{t("settings.changes.replacesBasic")}</StateLine> : null}
                   {!readOnly && !notConfigured && panel.status.state === "off" && !canTurnOn ? (
                     <StateLine icon="info">{!data.consent ? t("automatic.blocked.CONSENT") : t("automatic.blocked.UNAVAILABLE")}</StateLine>
                   ) : null}
-                  {/* Next to the summary's grant button: what it agrees to. */}
-                  {!readOnly && panel.status.state === "off" && !data.consent ? consentNote : null}
+                  {/* Under the grant button (the summary's while off, the state row's while it waits): what it agrees to. */}
+                  {!readOnly && !data.consent ? consentNote : null}
                   {panel.noAccess.length ? (
                     <InlineNotice icon="lock" heading={t("automatic.noAccess.heading")} actions={accessHref ? <Button href={accessHref}>{t("coverage.types.allowAccess")}</Button> : undefined}>
                       {t("automatic.noAccess.body", { types: languageList(i18n, panel.noAccess.map((type) => jobKindLabel(i18n, type)), 4) })}
@@ -977,15 +980,17 @@ export default function SmartAutomatic() {
             <input type="hidden" name="publishMode" value={publishMode} />
             {publishConfirmed ? <input type="hidden" name="confirmPublish" value="on" /> : null}
             <s-stack direction="block" gap="base">
-              {/* When: how often as square tiles; under them the chosen way's time, days and zone with its next checks. */}
-              <SettingCard id="smart-schedule" icon="calendar-time" heading={t("automatic.section.schedule")} lead={t("automatic.section.schedule.lead")}>
+              {/* When: how often as square tiles; under them the chosen way's time, days and zone with its next checks.
+                  No lead: "How often", the choice's own name, says what the card adds to its heading. */}
+              <SettingCard id="smart-schedule" icon="calendar-time" heading={t("automatic.section.schedule")}>
                 <ChoiceTiles name="mode" legend={t("automatic.mode.label")} options={modeTiles} defaultValue={initial.mode} disabled={readOnly} />
                 <div className="lv-option-panel">
                   <s-stack direction="block" gap="base">
                     <s-stack direction="block" gap="small-300">
+                      {/* The panel's title leads it: a heading above the field labels and the next checks' name. */}
                       <s-stack direction="inline" gap="small-200" alignItems="center">
                         <IconSquare icon={MODE_LOOK[modeKey].icon} tint={MODE_LOOK[modeKey].tint} size={28} />
-                        <Strong>{t(`automatic.mode.${modeKey}` as "automatic.mode.daily")}</Strong>
+                        <h3 className="lv-h3">{t(`automatic.mode.${modeKey}` as "automatic.mode.daily")}</h3>
                       </s-stack>
                       <s-text color="subdued">{t(`automatic.mode.${modeKey}.details` as "automatic.mode.realtime.details", { basic: t("settings.changes.basic.title"), checkNow })}</s-text>
                     </s-stack>
@@ -1077,8 +1082,9 @@ export default function SmartAutomatic() {
                               <s-stack direction="inline" gap="small-200" alignItems="center">
                                 <input type="hidden" name="timeZone" value={zone} />
                                 <s-text>{t("automatic.zone.line", { zone: zone === data.shopTimeZone ? t("automatic.zone.shop", { zone }) : zone })}</s-text>
+                                {/* Flush: wrapped under its line on a phone, its word starts where the line does. */}
                                 {readOnly ? null : (
-                                  <Button variant="tertiary" accessibilityLabel={`${t("automatic.zone.change")}: ${t("automatic.zone.label")}`} onClick={openZone}>
+                                  <Button variant="tertiary" flush accessibilityLabel={`${t("automatic.zone.change")}: ${t("automatic.zone.label")}`} onClick={openZone}>
                                     {t("automatic.zone.change")}
                                   </Button>
                                 )}
@@ -1086,17 +1092,17 @@ export default function SmartAutomatic() {
                             )}
                           </s-stack>
                         )}
+                        {/* The next checks, named like the Time field beside them; the zone only where it isn't the store's (whenIn's rule). */}
                         <s-stack direction="block" gap="small-200">
-                          <s-stack direction="inline" gap="small-200" alignItems="center">
-                            <s-icon type="calendar-list" color="subdued" />
-                            <h3 style={SUB_HEADING}>{t("automatic.next.label")}</h3>
-                          </s-stack>
+                          <h4 id="smart-next-heading" style={FIELD_LABEL}>
+                            {t("automatic.next.label")}
+                          </h4>
                           {upcoming.length ? (
-                            <s-ordered-list>
+                            <ul aria-labelledby="smart-next-heading" style={{ ...PLAIN_LIST, display: "grid", gap: 4 }}>
                               {upcoming.map((at) => (
-                                <s-list-item key={at}>{t("automatic.schedule.zone", { time: i18n.dateTimeIn(at, zone), zone })}</s-list-item>
+                                <li key={at}>{zone === shopZone ? i18n.dateTimeIn(at, zone) : t("automatic.schedule.zone", { time: i18n.dateTimeIn(at, zone), zone })}</li>
                               ))}
-                            </s-ordered-list>
+                            </ul>
                           ) : liveProblem ? (
                             <StateLine icon="alert-triangle" tone="caution">
                               {smartErrorText(i18n, liveProblem)}
@@ -1115,30 +1121,49 @@ export default function SmartAutomatic() {
               <SettingCard id="smart-scope" icon="language-translate" heading={t("automatic.section.scope")} lead={t("automatic.section.scope.lead")}>
                 {backIn("smart-scope")}
                 <s-stack direction="block" gap="small-200">
-                  <h3 style={SUB_HEADING}>{t("automatic.languages.label")}</h3>
-                  <s-choice-list
-                    name="locale"
-                    label={t("automatic.languages.label")}
-                    labelAccessibilityVisibility="exclusive"
-                    multiple
-                    disabled={readOnly}
-                    {...(languagesError ? { error: languagesError } : {})}
-                  >
-                    {data.languages
-                      .filter((l) => l.inPlan)
-                      .map((l) => (
-                        <s-choice key={l.locale} value={l.locale} defaultSelected={initial.locales.includes(l.locale)}>
-                          {languageNames.get(l.locale)}
-                        </s-choice>
-                      ))}
-                  </s-choice-list>
+                  <h3 id="smart-languages" style={SUB_HEADING}>
+                    {t("automatic.languages.label")}
+                  </h3>
+                  {/* One row per language like the content's below: its flag where an area has its icon, so every checkbox
+                      shares one edge. Each checked box posts its own "locale" (the action reads them all). */}
+                  {inPlan.length ? (
+                    <s-box border="base" borderRadius="large-100" paddingInline="base">
+                      <ul aria-labelledby="smart-languages" style={PLAIN_LIST}>
+                        {inPlan.map((l, index) => (
+                          <li key={l.locale}>
+                            {index > 0 ? <s-divider /> : null}
+                            <s-box paddingBlock="small-100">
+                              <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
+                                <span style={PICTURE_BOX}>
+                                  <Flag country={localeCountry(l.locale)} fallback={l.locale} size={28} />
+                                </span>
+                                <div style={{ paddingTop: 4 }}>
+                                  <s-checkbox
+                                    name="locale"
+                                    value={l.locale}
+                                    label={languageNames.get(l.locale) ?? l.locale}
+                                    disabled={readOnly}
+                                    {...(initial.locales.includes(l.locale) ? { defaultChecked: true } : {})}
+                                  />
+                                </div>
+                              </s-grid>
+                            </s-box>
+                          </li>
+                        ))}
+                      </ul>
+                    </s-box>
+                  ) : null}
+                  {languagesError ? (
+                    <StateLine icon="alert-circle" tone="critical">
+                      {languagesError}
+                    </StateLine>
+                  ) : null}
                   {outside.length ? (
-                    <StateLine icon="lock">
+                    <StateLine icon="lock" action={<s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link>}>
                       {t("settings.auto.outsidePlan", {
                         languages: languageList(i18n, outside.map((l) => languageNames.get(l.locale) ?? l.locale), Infinity),
                         count: outside.length,
-                      })}{" "}
-                      <s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link>
+                      })}
                     </StateLine>
                   ) : null}
                 </s-stack>
@@ -1147,15 +1172,15 @@ export default function SmartAutomatic() {
                   <h3 id="smart-types" style={SUB_HEADING}>
                     {t("automatic.types.label")}
                   </h3>
-                  {/* One row per area of the Content page: its icon, its name, and its kinds of content side by side. */}
+                  {/* One row per area of the Content page: its icon in its own tint (the same picture and colour everywhere), its name, and its kinds of content side by side. */}
                   <s-box border="base" borderRadius="large-100" paddingInline="base">
                     <ul aria-labelledby="smart-types" style={PLAIN_LIST}>
-                      {TYPE_AREAS.map(({ area, icon, types }, index) => (
+                      {TYPE_AREAS.map(({ area, icon, tint, types }, index) => (
                         <li key={area}>
                           {index > 0 ? <s-divider /> : null}
                           <s-box paddingBlock="small-100">
                             <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-100" alignItems="start">
-                              <IconTile icon={icon} size={28} color="base" iconSize="base" />
+                              <IconSquare icon={icon} tint={tint} size={28} iconSize="base" />
                               {types.length === 1 ? (
                                 <div style={{ paddingTop: 4 }}>
                                   <TypeCheckbox
@@ -1394,6 +1419,16 @@ function TypeCheckbox({
   );
 }
 
+/** One figure of a check: its name (subdued), its number in the figures' weight, and what it covers ("(12 fields)"). */
+function RunFigure({ label, value, extra }: { label: string; value: string; extra?: string }) {
+  return (
+    <span>
+      <s-text color="subdued">{label}</s-text> <span className="lv-figure-row">{value}</span>
+      {extra ? <s-text color="subdued">{` ${extra}`}</s-text> : null}
+    </span>
+  );
+}
+
 /** A check's state in words with its icon. */
 const RUN_STATUS: Record<string, { tone?: "success" | "critical" | "info" | "warning"; icon: IconName }> = {
   QUEUED: { icon: "clock" },
@@ -1405,8 +1440,8 @@ const RUN_STATUS: Record<string, { tone?: "success" | "critical" | "info" | "war
   SKIPPED: { icon: "minus-circle" },
 };
 
-/** The smart schedule's content types by the Content page's areas, in its order; any other type last. */
-const TYPE_AREAS: Array<{ area: CategoryId | "other"; icon: IconName; types: SmartType[] }> = (() => {
+/** The smart schedule's content types by the Content page's areas, in its order, with each area's icon and tint; any other type last (grey). */
+const TYPE_AREAS: Array<{ area: CategoryId | "other"; icon: IconName; tint: Tint; types: SmartType[] }> = (() => {
   const byArea = new Map<CategoryId | "other", SmartType[]>();
   for (const type of SMART_TYPES) {
     const found = categoryOf(type);
@@ -1416,7 +1451,12 @@ const TYPE_AREAS: Array<{ area: CategoryId | "other"; icon: IconName; types: Sma
   const order: Array<CategoryId | "other"> = [...TIERS.flatMap((tier) => tier.categories), "other"];
   return order
     .filter((area) => byArea.has(area))
-    .map((area) => ({ area, icon: area === "other" ? ("content" as const) : CATEGORIES[area].icon, types: byArea.get(area)! }));
+    .map((area) => ({
+      area,
+      icon: area === "other" ? ("content" as const) : CATEGORIES[area].icon,
+      tint: area === "other" ? ("grey" as const) : CATEGORIES[area].tint,
+      types: byArea.get(area)!,
+    }));
 })();
 
 const RUN_REASONS = ["PAUSED", "COALESCED", "AI_NOT_CONFIGURED", "QUEUES_UNAVAILABLE", "NO_LANGUAGE", "SMART_OFF", "SCAN_FAILED", "STALLED", "PARTIAL"];

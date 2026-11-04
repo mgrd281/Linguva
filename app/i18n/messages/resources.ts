@@ -31,12 +31,11 @@ export const en = {
   "resources.caution.liquidHeading": "Templates with Liquid code",
   "resources.caution.liquidBody": "Only visible text is translated; Liquid code is kept as is. They are translated one by one, with review.",
 
-  "resources.translateInto": "Translate into:",
+  "resources.translateInto": "Translate into",
   "resources.hiddenLanguage": "{language} (hidden)",
 
   "resources.bulk.heading": "Translate all {plural}",
-  "resources.bulk.intro":
-    "Fills in missing and outdated fields with AI, using your glossary and translation memory. Up-to-date translations are never touched; outdated ones that a person wrote or approved are kept unless you allow replacing them.",
+  "resources.bulk.intro": "Fills in missing and outdated fields with AI, using your glossary and translation memory.",
   "resources.bulk.autoPublish":
     "Automatic publishing is on: results that pass the quality checks go live immediately; results with warnings wait in Review.",
   "resources.bulk.review": "Results wait in Review until you approve them.",
@@ -50,8 +49,6 @@ export const en = {
   "resources.empty.heading": "No {plural} yet",
   "resources.empty.body": "{label} you create in Shopify appear here, ready to translate into {language}.",
   "resources.empty.yourLanguages": "your languages",
-
-  "resources.table.translatedFields": "Translated fields",
 } as const satisfies Record<string, Message>;
 
 export const de: Translation<typeof en> = {
@@ -84,12 +81,11 @@ export const de: Translation<typeof en> = {
   "resources.caution.liquidHeading": "Vorlagen mit Liquid-Code",
   "resources.caution.liquidBody": "Nur sichtbarer Text wird übersetzt; Liquid-Code bleibt unverändert. Sie werden einzeln und mit Prüfung übersetzt.",
 
-  "resources.translateInto": "Übersetzen in:",
+  "resources.translateInto": "Übersetzen in",
   "resources.hiddenLanguage": "{language} (versteckt)",
 
   "resources.bulk.heading": "Alle {plural} übersetzen",
-  "resources.bulk.intro":
-    "Füllt fehlende und veraltete Felder mit KI aus und nutzt dabei dein Glossar und deinen Übersetzungsspeicher. Aktuelle Übersetzungen bleiben unangetastet; veraltete, die eine Person geschrieben oder freigegeben hat, bleiben erhalten, außer du erlaubst, sie zu ersetzen.",
+  "resources.bulk.intro": "Füllt fehlende und veraltete Felder mit KI aus und nutzt dabei dein Glossar und deinen Übersetzungsspeicher.",
   "resources.bulk.autoPublish":
     "Automatisches Veröffentlichen ist an: Ergebnisse, die die Qualitätsprüfungen bestehen, gehen sofort live; Ergebnisse mit Warnungen warten unter „Prüfen“.",
   "resources.bulk.review": "Die Ergebnisse warten unter „Prüfen“, bis du sie freigibst.",
@@ -104,8 +100,6 @@ export const de: Translation<typeof en> = {
   "resources.empty.heading": "Noch keine {plural}",
   "resources.empty.body": "{label}, die du in Shopify erstellst, erscheinen hier – bereit zur Übersetzung in {language}.",
   "resources.empty.yourLanguages": "deine Sprachen",
-
-  "resources.table.translatedFields": "Übersetzte Felder",
 };
 
 export const fr: Translation<typeof en> = {
@@ -138,12 +132,11 @@ export const fr: Translation<typeof en> = {
   "resources.caution.liquidHeading": "Modèles avec code Liquid",
   "resources.caution.liquidBody": "Seul le texte visible est traduit ; le code Liquid reste inchangé. Ces modèles sont traduits individuellement, avec révision.",
 
-  "resources.translateInto": "Traduire en :",
+  "resources.translateInto": "Traduire en",
   "resources.hiddenLanguage": "{language} (masquée)",
 
   "resources.bulk.heading": "Traduire l'ensemble des {plural}",
-  "resources.bulk.intro":
-    "Complète les champs manquants et obsolètes avec l'IA, à l'aide de votre glossaire et de votre mémoire de traduction. Les traductions à jour ne sont jamais modifiées ; les traductions obsolètes rédigées ou approuvées par une personne sont conservées, sauf si vous autorisez leur remplacement.",
+  "resources.bulk.intro": "Complète les champs manquants et obsolètes avec l'IA, à l'aide de votre glossaire et de votre mémoire de traduction.",
   "resources.bulk.autoPublish":
     "La publication automatique est activée : les résultats qui passent les contrôles qualité sont mis en ligne immédiatement ; les résultats avec des avertissements restent en attente dans Révision.",
   "resources.bulk.review": "Les résultats restent en attente dans Révision jusqu'à ce que vous les approuviez.",
@@ -158,8 +151,6 @@ export const fr: Translation<typeof en> = {
   "resources.empty.heading": "La liste des {plural} est encore vide",
   "resources.empty.body": "{label} : les éléments que vous créez dans Shopify s'affichent ici, prêts à être traduits ({language}).",
   "resources.empty.yourLanguages": "vos langues",
-
-  "resources.table.translatedFields": "Champs traduits",
 };
 
 export const es: Translation<typeof en> = {
@@ -193,12 +184,11 @@ export const es: Translation<typeof en> = {
   "resources.caution.liquidBody":
     "Solo se traduce el texto visible; el código Liquid se mantiene tal cual. Estas plantillas se traducen de forma individual y con revisión.",
 
-  "resources.translateInto": "Traducir a:",
+  "resources.translateInto": "Traducir a",
   "resources.hiddenLanguage": "{language} (oculto)",
 
   "resources.bulk.heading": "Traducción masiva de {plural}",
-  "resources.bulk.intro":
-    "Completa con IA los campos que faltan y los desactualizados, usando tu glosario y tu memoria de traducción. Las traducciones al día nunca se modifican; las desactualizadas que una persona escribió o aprobó se conservan, a menos que permitas reemplazarlas.",
+  "resources.bulk.intro": "Completa con IA los campos que faltan y los desactualizados, usando tu glosario y tu memoria de traducción.",
   "resources.bulk.autoPublish":
     "La publicación automática está activada: los resultados que superan los controles de calidad se publican de inmediato; los resultados con advertencias esperan en Revisión.",
   "resources.bulk.review": "Los resultados esperan en Revisión hasta que los apruebes.",
@@ -213,6 +203,4 @@ export const es: Translation<typeof en> = {
   "resources.empty.heading": "Todavía no hay {plural}",
   "resources.empty.body": "{label}: los elementos que agregues en Shopify aparecen aquí, listos para traducir ({language}).",
   "resources.empty.yourLanguages": "tus idiomas",
-
-  "resources.table.translatedFields": "Campos traducidos",
 };

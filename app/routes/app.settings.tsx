@@ -368,7 +368,7 @@ const TOOLS = [
   { href: "/app/markets", icon: "globe", tint: "teal", label: "settings.tools.markets.label", detail: "settings.tools.markets.detail" },
   { href: "/app/memory", icon: "database", tint: "amber", label: "common.nav.memory", detail: "settings.tools.memory.detail" },
   { href: "/app/coverage", icon: "chart-donut", tint: "green", label: "settings.tools.coverage.label", detail: "settings.tools.coverage.detail" },
-  { href: "/app/translations", icon: "transfer", tint: "slate", label: "transfer.page.heading", detail: "settings.tools.transfer.detail" },
+  { href: "/app/translations", icon: "data-table", tint: "slate", label: "transfer.page.heading", detail: "settings.tools.transfer.detail" },
 ] as const;
 
 /** The panel with "Shortly after saving"'s languages (focused when the choice opens it). */
@@ -633,14 +633,17 @@ interface SectionText {
   tone?: "warning" | "critical" | null;
 }
 
-/** The form of address in a few words: DeepL decides, formal, informal, per language, or no language yet. */
+/**
+ * The form of address in a few words: the usual one, formal, informal, per language, or no language yet.
+ * The tile has no hint beside it, so it names the setting, not the choice's label ("DeepL decides").
+ */
 function addressSummary(data: Data, i18n: I18n): string {
   const { t } = i18n;
   // With several engines, only languages DeepL serves have a choice.
   const formalities = data.style.languages.filter((l) => hasFormalityChoice(data, l.locale)).map((l) => l.formality);
   if (!data.style.languages.length) return t("settings.summary.style.noLanguage");
   if (data.engines.servedBy && formalities.length === 0) return t("settings.style.noChoice");
-  if (formalities.every((f) => f === "default")) return t("settings.style.deeplDecides");
+  if (formalities.every((f) => f === "default")) return t("settings.tile.style.default");
   if (formalities.every((f) => f === "more")) return t("settings.style.formal");
   if (formalities.every((f) => f === "less")) return t("settings.style.informal");
   return t("settings.summary.style.mixed");
@@ -840,13 +843,9 @@ function ownKeyMissing(data: Data): boolean {
   return Boolean(data.ownKeys?.plan) && !data.ownKeys!.keys.some(usableOwnKey);
 }
 
-/** "Add your translation key first.", leading to the keys section. */
+/** "Add your translation key first.", leading to the keys section (a link, so blue). */
 function NoKeyLine({ i18n }: { i18n: I18n }) {
-  return (
-    <StateLine icon="key">
-      <s-link href={sectionHref("keys")}>{i18n.t("settings.changes.line.noKey")}</s-link>
-    </StateLine>
-  );
+  return <StateLine icon="key" action={<s-link href={sectionHref("keys")}>{i18n.t("settings.changes.line.noKey")}</s-link>} />;
 }
 
 /** The card's state: its badge and the reason line the glance tile shows too. */
@@ -1110,7 +1109,8 @@ function ChangesCard({
         </StateLine>
       );
     } else {
-      state = <SmartStateBanner status={data.smart.status} zone={data.smart.zone} consentAction={<s-stack direction="inline">{grantButton()}</s-stack>} />;
+      // Paused or waiting: the reason in the page's status row look, its way on beside it.
+      state = <SmartStateBanner status={data.smart.status} zone={data.smart.zone} consentAction={grantButton()} />;
     }
   } else {
     // Off: the current option says it already.
@@ -1203,9 +1203,9 @@ function ChangesCard({
                   : undefined
           }
         >
-          {/* Its summary and actions are in the panel below once it is the current way. */}
+          {/* Its summary and actions are in the panel below once it is the current way. Locked: the one plan with it, by its badge alone (a line would only repeat it). */}
           {mode === "smart" && smartSummary ? null : !entitled ? (
-            <LockLine plan="Business" text={t("settings.changes.smart.plan")} {...(lockLink ? { link: lockLink } : {})} />
+            <LockLine plan="Business" {...(lockLink ? { link: lockLink } : {})} />
           ) : !smartConfig ? (
             <StateLine icon="info">{t("settings.changes.smart.setUp")}</StateLine>
           ) : !data.consent ? (
@@ -1381,9 +1381,13 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
           {withFallback && data.style.languages.some((l) => hasFormalityChoice(data, l.locale) && l.formality !== "default") ? (
             <s-text color="subdued">{t("settings.style.fallbackNote")}</s-text>
           ) : null}
+          {/* The section's second topic, headed like the first; its field's label stays for screen readers only. */}
+          <s-divider />
+          <h3 style={SUB_HEADING}>{t("settings.style.storeContext.label")}</h3>
           <s-text-area
             name="storeContext"
             label={t("settings.style.storeContext.label")}
+            labelAccessibilityVisibility="exclusive"
             placeholder={t("settings.style.storeContext.placeholder")}
             details={
               contextUnused
@@ -1396,8 +1400,8 @@ function StyleCard({ data, i18n, fetcher }: { data: Data; i18n: I18n; fetcher: R
             maxLength={data.style.maxContext}
             rows={2}
           />
-          <StateLine icon="book-open">
-            {t("settings.style.glossary", { count: data.glossaryTerms })} · <s-link href="/app/glossary">{t("settings.style.glossaryLink")}</s-link>
+          <StateLine icon="book-open" action={<s-link href="/app/glossary">{t("settings.style.glossaryLink")}</s-link>}>
+            {t("settings.style.glossary", { count: data.glossaryTerms })}
           </StateLine>
         </s-stack>
       </fetcher.Form>

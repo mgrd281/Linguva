@@ -6,6 +6,7 @@ import { prisma } from "../.server/lib/db";
 import { requireShop } from "../.server/shopify/require-shop";
 import { fetchAndSyncShopLocales } from "../.server/locales/shop-locales";
 import { importTranslations, MAX_IMPORT_BYTES, type ImportResult } from "../.server/translation/csv-transfer";
+import { Card } from "../components/Card";
 import { Disclosure } from "../components/Disclosure";
 import { StepNumber } from "../components/LanguageLayout";
 import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
@@ -67,15 +68,19 @@ async function download(params: URLSearchParams): Promise<{ rows: number; next: 
   }
 }
 
-/** A step's number beside its heading (the three steps: download, fill in, import). */
+/** A step's number beside its heading (the three steps: export, fill in, import); the heading names the step's card. */
 function StepHeading({ n, children }: { n: number; children: string }) {
   return (
     <div className="lv-tools-step">
       <StepNumber n={n} first={n === 1} />
-      <h2 className="lv-h2">{children}</h2>
+      <h2 id={stepId(n)} className="lv-h2">
+        {children}
+      </h2>
     </div>
   );
 }
+
+const stepId = (n: number) => `transfer-step-${n}`;
 
 export default function Translations() {
   const data = useLoaderData<typeof loader>();
@@ -100,6 +105,16 @@ export default function Translations() {
   // quietly start the new choice after the first part's last item.
   const next = exported && exported !== "failed" && exported.locale === lang && exported.type === type && exported.gaps === gaps ? exported.next : null;
 
+  // The file chosen for the import: its name under the zone, and the import is the step's main button once there is one.
+  const [file, setFile] = useState<string | null>(null);
+  // "Import" without a file: said on the zone at once, not after a trip to the server (its own check stays).
+  const [noFile, setNoFile] = useState(false);
+  const choose = (zone: { files?: readonly File[] }) => {
+    const name = zone.files?.[0]?.name ?? null;
+    setFile(name);
+    if (name) setNoFile(false);
+  };
+
   const imported = importer.data?.kind === "imported" ? importer.data.result : null;
   const importError = importer.data?.kind === "error" ? importer.data.code : null;
   const languageName = (locale: string) => i18n.language(locale, data.targets.find((l) => l.locale === locale)?.name);
@@ -111,9 +126,9 @@ export default function Translations() {
         <ToolsBreadcrumbSlot i18n={i18n} />
         <s-stack direction="block" gap="base">
           {header}
-          <s-section>
+          <Card>
             <s-paragraph>{t("transfer.noLanguages")}</s-paragraph>
-          </s-section>
+          </Card>
         </s-stack>
       </s-page>
     );
@@ -125,7 +140,7 @@ export default function Translations() {
       <s-stack direction="block" gap="base">
         {header}
 
-        <s-section>
+        <Card labelledBy={stepId(1)}>
           <s-stack direction="block" gap="base">
             <StepHeading n={1}>{t("transfer.step.export")}</StepHeading>
             <s-query-container>
@@ -181,9 +196,9 @@ export default function Translations() {
             {exported && exported !== "failed" ? <s-text>{t("transfer.export.done", { count: exported.rows, language: languageName(exported.locale) })}</s-text> : null}
             <s-text color="subdued">{t("transfer.export.parts")}</s-text>
           </s-stack>
-        </s-section>
+        </Card>
 
-        <s-section>
+        <Card labelledBy={stepId(2)}>
           <s-stack direction="block" gap="base">
             <StepHeading n={2}>{t("transfer.step.fill")}</StepHeading>
             <s-text>{t("transfer.fill.body")}</s-text>
@@ -198,16 +213,36 @@ export default function Translations() {
               </s-unordered-list>
             </Disclosure>
           </s-stack>
-        </s-section>
+        </Card>
 
-        <s-section>
-          <importer.Form method="post" encType="multipart/form-data">
+        <Card labelledBy={stepId(3)}>
+          <importer.Form
+            method="post"
+            encType="multipart/form-data"
+            onSubmit={(e) => {
+              // Only when the zone says it has no file: otherwise the server decides.
+              if (e.currentTarget.querySelector("s-drop-zone")?.files?.length !== 0) return;
+              e.preventDefault();
+              setNoFile(true);
+            }}
+          >
             <s-stack direction="block" gap="base">
               <StepHeading n={3}>{t("transfer.step.import")}</StepHeading>
               <s-text color="subdued">{t("transfer.import.safety")}</s-text>
-              <s-drop-zone name="file" accept=".csv,text/csv" label={t("transfer.import.file")} />
+              <s-stack direction="block" gap="small-200">
+                <s-drop-zone
+                  name="file"
+                  accept=".csv,text/csv"
+                  label={t("transfer.import.file")}
+                  {...(noFile ? { error: t("transfer.import.noFile") } : {})}
+                  // React 18 sends no onChange for a web component; its input event comes through.
+                  onInput={(e) => choose(e.currentTarget)}
+                  onChange={(e) => choose(e.currentTarget)}
+                />
+                {file ? <s-text color="subdued">{t("transfer.import.chosen", { name: file })}</s-text> : null}
+              </s-stack>
               <s-stack direction="inline">
-                <Button type="submit" icon="import" {...(importer.state !== "idle" ? { loading: true } : {})}>
+                <Button type="submit" variant={file ? "primary" : "secondary"} icon="import" {...(importer.state !== "idle" ? { loading: true } : {})}>
                   {t("transfer.import.submit")}
                 </Button>
               </s-stack>
@@ -229,10 +264,10 @@ export default function Translations() {
               ) : null}
             </s-stack>
           </importer.Form>
-        </s-section>
+        </Card>
 
         {imported && imported.problems.length ? (
-          <s-section heading={t("transfer.import.skippedHeading")} padding="none">
+          <Card heading={t("transfer.import.skippedHeading")} padding="none">
             <s-table>
               <s-table-header-row>
                 <s-table-header listSlot="primary">{t("transfer.import.line", { line: "" }).trim()}</s-table-header>
@@ -252,7 +287,7 @@ export default function Translations() {
                 <s-text color="subdued">{t("transfer.import.more")}</s-text>
               </s-box>
             ) : null}
-          </s-section>
+          </Card>
         ) : null}
       </s-stack>
     </s-page>

@@ -113,7 +113,7 @@ describe("tints", () => {
       send: "amber",
       database: "amber",
       globe: "teal",
-      transfer: "slate",
+      "data-table": "slate",
       language: "blue",
       gauge: "rose",
     };

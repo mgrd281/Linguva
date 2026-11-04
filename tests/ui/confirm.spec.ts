@@ -56,7 +56,7 @@ test("confirming Reject all rejects the page's texts and a toast says so", async
 
 test("deleting a glossary term asks first", async ({ page }) => {
   await openApp(page, "full", "/app/glossary");
-  const section = page.locator("s-section").filter({ has: page.locator("s-text-field[name='term']") }).first();
+  const section = page.getByRole("region", { name: "Add a term", exact: true });
   await section.locator("s-text-field[name='term'] input").fill("Linguva-Testbegriff");
   await section.getByRole("button", { name: /Add term/ }).click();
   const row = page.locator("s-table-row", { hasText: "Linguva-Testbegriff" });

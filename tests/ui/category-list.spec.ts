@@ -8,7 +8,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible, expectNoHorizontalScroll, openApp } from "./helpers";
 
-const labelled = (label: string) => `s-section[accessibilitylabel="${label}"]`;
+/** A card or section by its name: native sections named by their label or their heading. */
+const region = (page: Page, name: string) => page.getByRole("region", { name, exact: true });
 
 /** The filter links and the current filter, as "<label> <count>". */
 const filters = (page: Page) => page.getByRole("navigation", { name: "Show" });
@@ -23,20 +24,32 @@ async function filterCounts(page: Page) {
 /** Group headings (h3, one per item state on the page), top to bottom. */
 const groups = (page: Page) => page.locator("h3").allInnerTexts();
 
-test("an area's items: figure, filters that add up, groups by state, pictures and the editor @responsive", async ({ page }) => {
+test("an area's items: figure, filters that add up, groups by state, pictures and the editor @responsive", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await openApp(page, "catalog", "/app/languages/de/products");
 
+  // The trail on a wide page; on a phone one 44 px back row to the language (only one of them is shown).
   const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
-  await expect(crumbs.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/app");
-  await expect(crumbs.getByRole("link", { name: "German" })).toHaveAttribute("href", "/app/languages/de");
+  const language = crumbs.getByRole("link", { name: "German" });
+  await expect(language).toHaveCount(1);
+  await expect(language).toHaveAttribute("href", "/app/languages/de");
+  if (info.project.name === "mobile") {
+    expect((await language.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(crumbs.getByRole("link", { name: "Overview" })).toHaveCount(0);
+  } else {
+    await expect(crumbs.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/app");
+  }
   await expect(page.getByRole("heading", { level: 1, name: "Products in German" })).toBeVisible();
   await expect(page.getByText("55 products", { exact: true })).toBeVisible();
 
   // How far the area is: texts in the figure, products done beside it.
-  const hero = page.locator(labelled("Progress: Products"));
+  const hero = region(page, "Progress: Products");
   await expect(hero.getByRole("img", { name: /^\d+% translated: \d+ of \d+ texts are done and live$/ })).toBeVisible();
+  // The figure and Next are the hero's two headings, in the Overview's type scale; the list's heading too.
+  await expect(hero.getByRole("heading", { level: 2, name: /^\d+ of \d+ texts are done and live$/ })).toBeVisible();
+  await expect(hero.getByRole("heading", { level: 2, name: "Next", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Item by item" })).toBeVisible();
   await expect(hero.getByText("Fully done: 7 of 55 products")).toBeVisible();
   // One next step with the page's only primary button: translate what is open (asks first).
   await expect(hero.getByText("48 products to translate")).toBeVisible();
@@ -144,7 +157,7 @@ test("search by name keeps the filter and can be cleared @responsive", async ({ 
 
 test("translating the area asks first @responsive", async ({ page }) => {
   await openApp(page, "catalog", "/app/languages/de/products");
-  await page.locator(labelled("Progress: Products")).getByRole("button", { name: "Translate" }).click();
+  await region(page, "Progress: Products").getByRole("button", { name: "Translate" }).click();
   await expect(page.getByRole("dialog", { name: "Translate 48 products into German?" })).toBeVisible();
   const dialog = page.locator("s-modal#category-translate");
   // Counted honestly: products with open texts, and those texts by state.
@@ -158,7 +171,7 @@ test("translating the area asks first @responsive", async ({ page }) => {
 test("an area Linguva can't read says so, with the way to allow it (Content's card)", async ({ page }) => {
   await openApp(page, "full", "/app/languages/de/checkout");
   await expect(page.getByRole("heading", { level: 1, name: "Store & checkout in German" })).toBeVisible();
-  const hero = page.locator(labelled("Progress: Store & checkout"));
+  const hero = region(page, "Progress: Store & checkout");
   await expect(hero.getByRole("img", { name: "No access" })).toBeVisible();
   // Policies have a permission to ask for: the step says to allow it (without one it would name what no app may read).
   await expect(hero.getByText("Allow access to Store & checkout", { exact: true })).toBeVisible();
@@ -169,7 +182,7 @@ test("an area Linguva can't read says so, with the way to allow it (Content's ca
 test("image descriptions are translated with their products: their list offers that, ticked in the dialog @responsive", async ({ page }) => {
   await openApp(page, "demo", "/app/languages/de/images");
   await expect(page.getByRole("heading", { level: 1, name: "Image descriptions in German" })).toBeVisible();
-  const first = page.locator(labelled("Progress: Image descriptions")).locator("ol > li").first();
+  const first = region(page, "Progress: Image descriptions").locator("ol > li").first();
   await expect(first.getByText(/^\d+ image descriptions? to translate$/)).toBeVisible();
   await expect(first.getByText("You translate image descriptions together with your products.")).toBeVisible();
   // The page's one primary button.
@@ -187,10 +200,25 @@ test("image descriptions are translated with their products: their list offers t
 
 test("an area of a language not counted yet offers counting", async ({ page }) => {
   await openApp(page, "owner", "/app/languages/de/products");
-  const hero = page.locator(labelled("Progress: Products"));
+  const hero = region(page, "Progress: Products");
   await expect(hero.getByRole("img", { name: "Not counted yet" })).toBeVisible();
   await expect(hero.locator('[data-button][data-variant="primary"]')).toHaveText("Count now");
   await expect(page.getByRole("navigation", { name: "Show" })).toHaveCount(0);
+});
+
+test("while every item has one state, the list has no filters: its group heading says it @responsive", async ({ page }) => {
+  // The visual store's German products: nothing translated yet.
+  await openApp(page, "visual", "/app/languages/de/products");
+  // Each state as on the language page: its figure semibold, then what it means.
+  const hero = region(page, "Progress: Products");
+  await expect(hero.getByText(/^12 still missing$/)).toBeVisible();
+  await expect(hero.locator("strong.lv-strong")).toHaveText("12");
+  // "All 6" and "Missing 6" would show the same items.
+  await expect(filters(page)).toHaveCount(0);
+  expect(await groups(page)).toEqual(["Missing"]);
+  await expect(page.getByText("Customers still see English here.")).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
 });
 
 test("an unknown area or language is not found", async ({ page }) => {

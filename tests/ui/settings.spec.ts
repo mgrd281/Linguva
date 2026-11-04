@@ -67,7 +67,8 @@ test("the status row and the tiles: every section with its icon and state; a sec
   const expected: Array<[string, string, RegExp]> = [
     ["Translating changes", "automation", /^Translating changes\s*Start it yourself$/],
     ["Publishing", "send", /^Publishing\s*Review first$/],
-    ["How AI writes", "text-quote", /^How AI writes\s*DeepL decides$/],
+    // The setting in its own words: "DeepL decides" is the choice's label, explained only beside the choice.
+    ["How AI writes", "text-quote", /^How AI writes\s*Usual form of address$/],
     ["Translation memory", "database", /^Translation memory\s*Also AI translations$/],
     ["AI permission", "shield-check-mark", /^AI permission\s*Allowed$/],
     ["Plan & usage", "gauge", /^Plan & usage\s*Pro · (<1%|\d+%) used$/],
@@ -79,10 +80,27 @@ test("the status row and the tiles: every section with its icon and state; a sec
   }
   await expect(nav(page).locator(".lv-tile__dot")).toHaveCount(0);
   // Square buttons: as high as wide (a little higher where a name and its state both take two lines), well above the touch size.
-  for (const box of await nav(page).getByRole("link").evaluateAll((links) => links.map((l) => l.getBoundingClientRect()))) {
+  // On a phone the seventh takes the whole last row (the next test).
+  const boxes = await nav(page).getByRole("link").evaluateAll((links) => links.map((l) => l.getBoundingClientRect()));
+  for (const box of desktop ? boxes : boxes.slice(0, 6)) {
     expect(box.height - box.width).toBeGreaterThanOrEqual(-1);
     expect(box.height - box.width).toBeLessThanOrEqual(24);
     expect(box.height).toBeGreaterThanOrEqual(96);
+  }
+  // A row's icons and names start on the same lines whatever wraps ("Translating changes", "Translation memory"): the words start at the top.
+  const starts = await nav(page)
+    .locator(".lv-tile")
+    .evaluateAll((tiles) =>
+      tiles.map((tile) => {
+        const top = tile.getBoundingClientRect().top;
+        const from = (selector: string) => Math.round(tile.querySelector(selector)!.getBoundingClientRect().top - top);
+        return { row: Math.round(top), icon: from(".lv-icon-square"), name: from(".lv-tile__name") };
+      }),
+    );
+  for (const row of new Set(starts.map((s) => s.row))) {
+    const tiles = starts.filter((s) => s.row === row);
+    expect(new Set(tiles.map((s) => s.icon)).size, `icons in the row at ${row}`).toBe(1);
+    expect(new Set(tiles.map((s) => s.name)).size, `names in the row at ${row}`).toBe(1);
   }
   if (desktop) {
     // One row above the section.
@@ -143,6 +161,11 @@ test("a phone: the sections as a grid of squares, three in a row; a chosen one o
   const boxes = await tiles.evaluateAll((links) => links.map((l) => l.getBoundingClientRect()));
   expect(Math.round(boxes[0]!.top)).toBe(Math.round(boxes[2]!.top));
   expect(boxes[3]!.top).toBeGreaterThan(boxes[0]!.bottom);
+  // The seventh, alone in its row, takes all of it (never one tile beside two empty cells), as high as a square.
+  expect(Math.round(boxes[6]!.left)).toBe(Math.round(boxes[0]!.left));
+  expect(Math.round(boxes[6]!.right)).toBe(Math.round(boxes[2]!.right));
+  expect(Math.abs(boxes[6]!.height - boxes[0]!.width)).toBeLessThanOrEqual(1);
+  await expect(tiles.nth(6)).toHaveText(/^Tools\s*Glossary & more$/, { useInnerText: true });
   // Each tile: its icon, name and state, the whole square one tap target; none is the current one (no section is shown).
   await expect(nav(page).locator("li").first().locator("s-icon[type='automation']")).toHaveCount(1);
   await expect(nav(page).locator('[aria-current="page"]')).toHaveCount(0);
@@ -153,6 +176,9 @@ test("a phone: the sections as a grid of squares, three in a row; a chosen one o
   expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(page.locator("#settings-style-heading")).toBeFocused();
   await expect(page.locator("#settings-style-heading")).toHaveText("How AI writes");
+  // Alone, it opens like every screen reached from Settings: its tile's icon beside the heading, at the page heading's size.
+  await expect(section(page, "style").locator(".lv-section-head .lv-icon-square[data-tint='violet']")).toBeVisible();
+  expect(await page.locator("#settings-style-heading").evaluate((el) => getComputedStyle(el).fontSize)).toBe("22px");
   await expectNoHorizontalScroll(page);
   await back.click();
   await expect(page).not.toHaveURL(/section=/);
@@ -239,7 +265,8 @@ test("how AI writes: the form of address per language, saved under the admin's s
   await openApp(page, "full", "/app/settings?section=style");
   const style = section(page, "style");
   await expect(style.getByRole("heading", { level: 2 })).toHaveText("How AI writes");
-  await expect(style.getByRole("heading", { level: 3 })).toHaveText("Form of address");
+  // Its two topics, each under its own heading.
+  await expect(style.getByRole("heading", { level: 3 })).toHaveText(["Form of address", "About your store"]);
   await expect(style.getByText("How AI addresses your customers and what it knows about your store.")).toBeVisible();
   // One row per language with a choice: the pronouns as the options' words, read with what they mean;
   // no choice where DeepL has none (Arabic): named in one line instead.
@@ -253,11 +280,14 @@ test("how AI writes: the form of address per language, saved under the admin's s
   // Its flag is the code box "AR" (no single country): part of the line's text.
   await expect(style.getByText(/^No choice needed for/)).toBeVisible();
   await expect(style.getByText(/^No choice needed for/)).toContainText("Arabic");
+  // Named by its label, which the heading above shows; an empty field's example says it is one.
   const context = style.getByRole("textbox", { name: "About your store" });
-  await expect(context).toHaveAttribute("placeholder", "Outdoor clothing for families, friendly and simple");
+  await expect(context).toHaveAttribute("placeholder", "e.g. outdoor clothing for families, friendly and simple");
   await expect(style.getByText("What you sell and how you speak. Helps AI choose its words; not translated.")).toBeVisible();
   await expect(style.getByText("Fixed terms in the glossary: 0")).toBeVisible();
   await expect(style.getByRole("link", { name: "Edit glossary" })).toHaveAttribute("href", "/app/glossary");
+  // A link, drawn as one: not inside the sentence's s-text, which draws it in the text's colour.
+  await expect(style.locator("s-text s-link")).toHaveCount(0);
   // Saved by the admin's save bar only.
   await expect(style.getByRole("button", { name: /^Save/ })).toHaveCount(0);
   await expectAccessible(page);
@@ -600,8 +630,8 @@ test("after a move to Free, translating shortly after saving is stopped, says wh
   await expect(navEntry(page, "Translating changes").locator('[data-tone="critical"] .lv-tile__dot')).toHaveCount(1);
   await expect(card.getByText("Your plan no longer includes automatic translation. Since the change, changes aren't translated. Your language choice stays saved.")).toBeVisible();
   await expect(card.getByRole("link", { name: "See plans" }).or(card.getByRole("button", { name: "See plans" })).first()).toBeVisible();
-  // Locked features show the one lock, and nothing explains how a locked feature works.
-  await expect(option(page, "#settings-changes", "On a schedule").getByText("In the Business plan.")).toBeVisible();
+  // Locked features show the one lock (the one plan with it by its badge alone), and nothing explains how a locked feature works.
+  await expect(option(page, "#settings-changes", "On a schedule").locator("s-badge[icon='lock']")).toHaveText("Business");
   await expect(card.getByText("How it works")).toHaveCount(0);
 
   await card.getByRole("button", { name: "Turn off" }).click();
@@ -636,7 +666,7 @@ test("an empty store: the status row asks for a language with the page's only pr
   expect(await primaries(page)).toEqual(["Open language settings"]);
   // One lock per locked option, without a plans link each (the next step is a language).
   await expect(option(page, "#settings-changes", "Shortly after saving").getByText("In the Starter, Pro and Business plans.")).toBeVisible();
-  await expect(option(page, "#settings-changes", "On a schedule").getByText("In the Business plan.")).toBeVisible();
+  await expect(option(page, "#settings-changes", "On a schedule").locator("s-badge[icon='lock']")).toHaveText("Business");
   await expect(page.locator("#settings-changes, #settings-publish").getByRole("link", { name: "See plans", includeHidden: true })).toHaveCount(0);
   await nav(page).getByRole("link", { name: /^Publishing/ }).click();
   await expect(option(page, "#settings-publish", "Publish automatically").getByText("In the Pro and Business plans.")).toBeVisible();

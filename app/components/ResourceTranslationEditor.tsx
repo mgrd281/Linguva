@@ -4,15 +4,17 @@
  * (.server/translation/resource-editor). From the top:
  *
  * - the way back to the area list the item is opened from ("‹ Produkte"), keeping where that list was
- *   opened from (Content), the item's picture (or its area's icon), its name and how much is open in
- *   the language;
+ *   opened from (Content), or to the type's own list it came from (?from=list); the item's picture (or
+ *   its area's icon), its name and how much is open in the language;
  * - the page's banners (leave without publishing, the AI permission, results and errors);
  * - one square tile per text with its state, each moving to its text;
  * - the toolbar: AI and the translation memory fill only the open texts (missing or outdated), the
  *   count in their buttons, and what they leave: texts only a person translates, image descriptions
  *   past one AI request's; "Translate everything again" asks first;
  * - every text in Review's order (name, description, Google texts, other texts, web address last),
- *   its state beside its name, its HTML shown rendered with "Edit HTML";
+ *   its state beside its name (a web address nobody wrote yet is optional, as the count leaves it out),
+ *   the original and the translation under the same kind of label, its HTML shown rendered with "Edit
+ *   HTML" (an empty one as a box that says how to fill it);
  * - the image descriptions and extra details, and one "Publish translations" (also the admin's save
  *   bar) for all of it: their typed and AI texts count as unpublished too.
  */
@@ -24,8 +26,8 @@ import type { loadEditorData, runEditorAction } from "../.server/translation/res
 import { showToast, useResultToast, useSaveBar } from "./app-bridge";
 import { AttachedResourcesPanel } from "./AttachedResourcesPanel";
 import { categoryName } from "./CategoryCard";
-import { CountChip, HeadingRow, isTitled, NoteBadges, StateBadge, TextTiles, textName, textStateLabel, type TextTile } from "./EditorParts";
-import { HtmlPreview, previewHeight } from "./HtmlPreview";
+import { CountChip, HeadingRow, isTitled, NoteBadges, OptionalBadge, StateBadge, TextTiles, textName, textStateLabel, type TextTile } from "./EditorParts";
+import { HtmlPreview, isEmptyHtml, previewHeight } from "./HtmlPreview";
 import { IconSquare } from "./IconSquare";
 import { Breadcrumbs } from "./LanguageLayout";
 import { Actions, InlineNotice, StateLine } from "./SettingsParts";
@@ -39,7 +41,7 @@ import { ENGINE_NAMES, isEngineId } from "../lib/engines";
 import { parseOwnKeyCode } from "../lib/own-keys";
 import { isStructuredValueType } from "../lib/structured-preview";
 import { MAX_HANDLE_LENGTH, suggestHandle, validateHandle } from "../lib/handles";
-import { editorArea, googlePreviewIndex, openForAi, orderTexts, pickDrafts, storefrontSegment, textCounts, textState, type TextFacts } from "../lib/editor-view";
+import { editorArea, googlePreviewIndex, isWebAddress, LIST_ORIGIN, openForAi, orderTexts, pickDrafts, storefrontSegment, textCounts, textState, type TextFacts, type TextState } from "../lib/editor-view";
 import { CATEGORIES, categoryPath, categoryOf, EXTRAS, languagePath, originOf, withOrigin, type Origin } from "../lib/language-categories";
 import type { IconName } from "../lib/icons";
 import { upperFirst } from "../lib/name-lists";
@@ -118,11 +120,13 @@ function areaIcon(kind: string): IconName {
  * Where "back" leads: the area list the item is opened from (Produkte auf Deutsch), else (the theme's
  * texts, notifications) its list under Content. `label`: the admin's breadcrumb, the parent page's title.
  * A list opened from Content (`origin`) is led back to as it was, so its trail starts at Content again.
+ * Opened from the type's own list (`fromList`: the way in for a language not counted yet, whose area list
+ * has no rows), back to that list.
  */
-function backTarget(data: EditorData, i18n: I18n, language: string, origin: Origin) {
+function backTarget(data: EditorData, i18n: I18n, language: string, origin: Origin, fromList: boolean) {
   const { t } = i18n;
   const locale = data.target.locale;
-  const area = editorArea(data.kind.type);
+  const area = fromList ? null : editorArea(data.kind.type);
   if (area) {
     const name = categoryName(i18n, area);
     const list = withOrigin(categoryPath(locale, area), origin);
@@ -198,6 +202,9 @@ export function ResourceTranslationEditor() {
   // Opened from an area list that came from Content (?from=content): the way back and the pages keep it.
   const [searchParams] = useSearchParams();
   const origin = originOf(searchParams.get("from"));
+  const fromList = searchParams.get("from") === LIST_ORIGIN;
+  // What the page's own links keep of where it was opened from.
+  const from = origin ?? (fromList ? LIST_ORIGIN : null);
   const i18n = useI18n();
   const sourceName = i18n.language(data.sourceLocale, data.sourceName);
   const targetName = i18n.language(data.target.locale, data.target.name);
@@ -391,7 +398,7 @@ export function ResourceTranslationEditor() {
   const pageHref = (page: number) => {
     const params = new URLSearchParams({ lang: data.target.locale, page: String(page) });
     if (data.paging?.query) params.set("q", data.paging.query);
-    if (origin) params.set("from", origin);
+    if (from) params.set("from", from);
     return `?${params.toString()}`;
   };
   // Own key plan: no Linguva allowance (limit null), so no "left" figure.
@@ -448,7 +455,7 @@ export function ResourceTranslationEditor() {
   }, [translating]);
 
   const language = targetName;
-  const back = backTarget(data, i18n, language, origin);
+  const back = backTarget(data, i18n, language, origin, fromList);
   const counts = textCounts([...data.fields, ...attachedTexts]);
   const lead = data.paging
     ? t("editor.header.paged", { language, count: data.paging.total })
@@ -476,6 +483,8 @@ export function ResourceTranslationEditor() {
       published: saveStatus.get(field.key)?.status === "saved",
     });
   };
+  // A web address nobody wrote yet is optional (the count leaves it out), not "Not translated" beside the counted texts.
+  const optionalText = (field: (typeof data.fields)[number], state: TextState) => isWebAddress(field.key) && state === "missing";
   const attachedOpen = textCounts(attachedTexts).open;
   // No tiles for paged texts, or for the theme's and notifications' texts (named by their keys).
   const tiles: TextTile[] =
@@ -484,7 +493,13 @@ export function ResourceTranslationEditor() {
       : [
           ...ordered.map((field) => {
             const state = stateOf(field);
-            return { target: textId(field.key), name: textName(i18n, field.key, kind), state, word: textStateLabel(i18n, state, ai?.scores?.[field.key]) } satisfies TextTile;
+            const optional = optionalText(field, state);
+            return {
+              target: textId(field.key),
+              name: textName(i18n, field.key, kind),
+              state: optional ? "optional" : state,
+              word: optional ? t("editor.badge.optional") : textStateLabel(i18n, state, ai?.scores?.[field.key]),
+            } satisfies TextTile;
           }),
           // The image descriptions and extra details: one tile for their section, with what is open there.
           ...(data.attached.available && data.attached.items.length
@@ -781,9 +796,9 @@ export function ResourceTranslationEditor() {
               </InlineNotice>
             ) : null}
             {data.ai.ownKey && !data.ai.available ? (
-              // Own key plan without a usable key: what is missing, and where to add it.
-              <StateLine icon="key">
-                {ownKeyHint(i18n, data.ai.ownKey.unavailable)} <s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>
+              // Own key plan without a usable key: what is missing, and where to add it (a blue link, outside the sentence's text).
+              <StateLine icon="key" action={<s-link href="/app/settings?section=keys">{t("common.nav.settings")}</s-link>}>
+                {ownKeyHint(i18n, data.ai.ownKey.unavailable)}
               </StateLine>
             ) : charsLine ? (
               <StateLine icon="gauge">{charsLine}</StateLine>
@@ -815,10 +830,14 @@ export function ResourceTranslationEditor() {
             <s-stack direction="block" gap="small">
               <Form method="get">
                 <input type="hidden" name="lang" value={data.target.locale} />
-                {origin ? <input type="hidden" name="from" value={origin} /> : null}
+                {from ? <input type="hidden" name="from" value={from} /> : null}
                 <s-stack direction="inline" gap="small" alignItems="end">
                   <s-search-field name="q" label={t("editor.paging.findLabel")} placeholder={t("editor.paging.findPlaceholder")} value={data.paging.query} />
-                  <Button type="submit">{t("common.action.search")}</Button>
+                  {/* In a stack of its own: the button's align-self (its width in a block stack) would win over
+                      the row's end alignment and lift it to the field's label. */}
+                  <s-stack direction="inline">
+                    <Button type="submit">{t("common.action.search")}</Button>
+                  </s-stack>
                 </s-stack>
               </Form>
               <s-text color="subdued">
@@ -894,6 +913,7 @@ export function ResourceTranslationEditor() {
   );
 
   function renderField(field: (typeof data.fields)[number]) {
+    const state = stateOf(field);
     const draft = ai?.drafts[field.key];
     const value = draft ?? field.translation;
     const status = saveStatus.get(field.key);
@@ -953,7 +973,7 @@ export function ResourceTranslationEditor() {
         <s-stack direction="block" gap="base">
           {/* The text's name and its state first, where the eye lands; its one action at the end of the row. */}
           <HeadingRow id={textId(field.key)} title={label} end={remove}>
-            <StateBadge i18n={i18n} state={stateOf(field)} score={ai?.scores?.[field.key]} />
+            {optionalText(field, state) ? <OptionalBadge i18n={i18n} /> : <StateBadge i18n={i18n} state={state} score={ai?.scores?.[field.key]} />}
             <NoteBadges i18n={i18n} warnings={warnings} machine={field.machine} />
           </HeadingRow>
           <s-query-container>
@@ -972,7 +992,8 @@ export function ResourceTranslationEditor() {
                     </pre>
                   </s-box>
                 ) : (
-                  <s-box padding="base" background="subdued" borderRadius="base">
+                  // A one-line text sits as in the field beside it: its height and its line (the field's inner padding).
+                  <s-box padding={multiline ? "base" : "small-300 small"} background="subdued" borderRadius="base">
                     <s-paragraph>{field.source}</s-paragraph>
                   </s-box>
                 )}
@@ -997,32 +1018,45 @@ export function ResourceTranslationEditor() {
                     <s-text color="subdued">{targetName}</s-text>
                     {/* The text goes with the form as it is shown (typed, drafted or published). */}
                     <input type="hidden" name={`value:${field.key}`} value={currentValue(field.key)} />
-                    <HtmlPreview html={currentValue(field.key)} title={previewTitle} lang={data.target.locale} dir={data.target.rtl ? "rtl" : "auto"} textBox height={frameHeight} />
+                    {isEmptyHtml(currentValue(field.key)) ? (
+                      // Nothing to show yet: a box that says how to fill it, as high as the original, opening the code to write it.
+                      <button type="button" className="lv-ed-empty" style={{ minHeight: frameHeight }} onClick={() => toggleHtml(field.key)}>
+                        {canAi ? t("editor.preview.emptyEditor", { language: targetName }) : t("editor.preview.emptyManual", { language: targetName })}
+                      </button>
+                    ) : (
+                      <HtmlPreview html={currentValue(field.key)} title={previewTitle} lang={data.target.locale} dir={data.target.rtl ? "rtl" : "auto"} textBox height={frameHeight} />
+                    )}
                     {error ? <s-text tone="critical">{error}</s-text> : null}
                   </>
                 ) : (
-                  <div lang={data.target.locale} {...textDirection(field)}>
-                    {multiline ? (
-                      <s-text-area
-                        key={`${field.key}:${draft ?? "base"}:${resetCount}`}
-                        name={`value:${field.key}`}
-                        label={targetName}
-                        value={html ? currentValue(field.key) : value}
-                        rows={html ? 8 : 3}
-                        {...(error ? { error } : {})}
-                        {...(html ? { details: t("editor.field.htmlDetails") } : {})}
-                      />
-                    ) : (
-                      <s-text-field
-                        key={`${field.key}:${draft ?? "base"}:${resetCount}`}
-                        name={`value:${field.key}`}
-                        label={targetName}
-                        value={field.key === "handle" ? currentValue("handle") : value}
-                        {...(error ? { error } : {})}
-                        {...(field.key === "handle" ? { details: t("editor.field.handleDetails") } : {})}
-                      />
-                    )}
-                  </div>
+                  <>
+                    {/* The language above the field, as above the original: the field's own label is for screen readers only (Review's way). */}
+                    <s-text color="subdued">{targetName}</s-text>
+                    <div lang={data.target.locale} {...textDirection(field)}>
+                      {multiline ? (
+                        <s-text-area
+                          key={`${field.key}:${draft ?? "base"}:${resetCount}`}
+                          name={`value:${field.key}`}
+                          label={targetName}
+                          labelAccessibilityVisibility="exclusive"
+                          value={html ? currentValue(field.key) : value}
+                          rows={html ? 8 : 3}
+                          {...(error ? { error } : {})}
+                          {...(html ? { details: t("editor.field.htmlDetails") } : {})}
+                        />
+                      ) : (
+                        <s-text-field
+                          key={`${field.key}:${draft ?? "base"}:${resetCount}`}
+                          name={`value:${field.key}`}
+                          label={targetName}
+                          labelAccessibilityVisibility="exclusive"
+                          value={field.key === "handle" ? currentValue("handle") : value}
+                          {...(error ? { error } : {})}
+                          {...(field.key === "handle" ? { details: t("editor.field.handleDetails") } : {})}
+                        />
+                      )}
+                    </div>
+                  </>
                 )}
                 {editingHtml ? (
                   // What the merchant types, rendered live (sandboxed, nothing in it can run).

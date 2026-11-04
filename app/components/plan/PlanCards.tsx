@@ -18,6 +18,7 @@ import { formatUsd, monthsFree, priceLabel } from "../../lib/plan-prices";
 import { PLAN_ORDER, planName, recommendationKind, type FitReason, type HeroView, type OwnKeyPlanView, type ShopUse } from "../../lib/plan-view";
 import { PLAN_PRICES, PLANS, TRIAL_AI_CHARS, TRIAL_DAYS, type KnownPlanHandle, type PlanHandle } from "../../lib/plans";
 import { Button } from "../Button";
+import { Card } from "../Card";
 import { IconSquare } from "../IconSquare";
 import { PLAIN_LIST } from "../LanguageLayout";
 import { Strong } from "../Type";
@@ -132,12 +133,14 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
       {/* Not one of the ladder's columns: a card of its own under the four. */}
       {ownKeyPlan?.visible ? <OwnKeyPlanCard i18n={i18n} plan={{ ...ownKeyPlan, choosePlanUrl }} hero={hero} now={now} /> : null}
       <s-paragraph color="subdued">{t(choosePlanUrl ? "plan.price.footnote" : "plan.price.usd")}</s-paragraph>
-      <s-section>
+      <Card labelledBy="plan-every">
         <s-stack direction="block" gap="base">
           <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
             <s-icon type="check-circle" tone="success" />
             <s-stack direction="block" gap="small-500">
-              <h3 className="lv-h3">{t("plan.everyPlan.heading")}</h3>
+              <h3 id="plan-every" className="lv-h3">
+                {t("plan.everyPlan.heading")}
+              </h3>
               <s-text color="subdued">{t("plan.everyPlan.lead")}</s-text>
             </s-stack>
           </s-grid>
@@ -153,7 +156,7 @@ export function PlanCards({ i18n, hero, now, intro, choosePlanUrl, trial, recomm
             ))}
           </ul>
         </s-stack>
-      </s-section>
+      </Card>
     </s-stack>
   );
 }

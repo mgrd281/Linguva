@@ -9,16 +9,18 @@
  * row of square toggles, and a budget's meter.
  */
 import { useId, type ReactNode } from "react";
-import type { I18n, Instant } from "../i18n/i18n";
+import type { I18n, Instant, MessageKey } from "../i18n/i18n";
 import { kindLabel } from "../i18n/labels";
+import { cardColumns } from "../lib/content-areas";
 import type { IconName } from "../lib/icons";
 import { useI18n } from "../i18n/react";
 import { languageList, upperFirst } from "../lib/name-lists";
-import type { SmartStatus } from "../lib/smart-auto";
+import type { SmartPauseReason, SmartStatus } from "../lib/smart-auto";
 import { usagePercent } from "../lib/plan-view";
 import { usageLevel } from "../lib/usage";
 import { IconSquare, type Tint } from "./IconSquare";
 import { ProgressBar } from "./ProgressBar";
+import { StatusRow } from "./SettingsNav";
 
 export interface SmartCardData {
   status: SmartStatus;
@@ -97,25 +99,51 @@ export function budgetMeter(used: number, budget: number | null): { percent: num
   return { percent: usagePercent(used, budget).percent, tone: level === "exhausted" ? "critical" : level === "high" ? "warning" : "success" };
 }
 
-const PAUSE_TEXT = {
-  MANUAL: "automatic.paused.MANUAL",
-  BUDGET_DAILY: "automatic.paused.BUDGET_DAILY",
-  BUDGET_MONTHLY: "automatic.paused.BUDGET_MONTHLY",
-  PLAN_ALLOWANCE: "automatic.paused.PLAN_ALLOWANCE",
-  DAILY_CAP: "automatic.paused.DAILY_CAP",
-  PROVIDER: "automatic.paused.PROVIDER",
-  PLAN: "automatic.paused.PLAN",
-  CONSENT: "automatic.paused.CONSENT",
-  PRIMARY_LANGUAGE: "automatic.paused.PRIMARY_LANGUAGE",
-} as const;
+/** Why it is paused in a few words, as Settings says it ("Today's budget used up"): the state row's title. */
+const PAUSE_TITLE = {
+  MANUAL: "settings.changes.line.pausedByYou",
+  BUDGET_DAILY: "settings.changes.pause.BUDGET_DAILY",
+  BUDGET_MONTHLY: "settings.changes.pause.BUDGET_MONTHLY",
+  PLAN_ALLOWANCE: "settings.changes.pause.QUOTA_EXCEEDED",
+  DAILY_CAP: "settings.changes.pause.DAILY_LIMIT",
+  PROVIDER: "settings.changes.pause.PROVIDER",
+  PLAN: "settings.changes.waiting.PLAN",
+  CONSENT: "settings.changes.waiting.CONSENT",
+  PRIMARY_LANGUAGE: "settings.changes.pause.PRIMARY_LANGUAGE",
+} as const satisfies Record<SmartPauseReason, MessageKey>;
 
-const WAITING_TEXT = {
+/** What happens next, under the title (never the reason again). */
+const PAUSE_NEXT = {
+  MANUAL: "automatic.paused.next.MANUAL",
+  BUDGET_DAILY: "automatic.paused.next.continues",
+  BUDGET_MONTHLY: "automatic.paused.next.continues",
+  PLAN_ALLOWANCE: "automatic.paused.next.continues",
+  DAILY_CAP: "automatic.paused.next.continues",
+  PROVIDER: "automatic.paused.next.PROVIDER",
+  PLAN: "automatic.paused.next.PLAN",
+  CONSENT: "automatic.paused.next.CONSENT",
+  PRIMARY_LANGUAGE: "automatic.paused.next.PRIMARY_LANGUAGE",
+} as const satisfies Record<SmartPauseReason, MessageKey>;
+
+type WaitingReason = Extract<SmartStatus, { state: "waiting" }>["reason"];
+
+/** What it waits for, as Settings says it ("Linguva's background service isn't running"). */
+const WAITING_TITLE = {
+  PLAN: "settings.changes.waiting.PLAN",
+  CONSENT: "settings.changes.waiting.CONSENT",
+  UNAVAILABLE: "settings.changes.waiting.UNAVAILABLE",
+  WORKER: "settings.changes.waiting.WORKER",
+  NO_LANGUAGE: "settings.changes.waiting.NO_LANGUAGE",
+} as const satisfies Record<WaitingReason, MessageKey>;
+
+/** What the merchant does, or what happens next. */
+const WAITING_NEXT = {
   PLAN: "automatic.blocked.PLAN",
   CONSENT: "automatic.blocked.CONSENT",
-  UNAVAILABLE: "automatic.blocked.UNAVAILABLE",
-  WORKER: "automatic.blocked.WORKER",
-  NO_LANGUAGE: "automatic.blocked.NO_LANGUAGE",
-} as const;
+  UNAVAILABLE: "automatic.waiting.UNAVAILABLE",
+  WORKER: "automatic.waiting.WORKER",
+  NO_LANGUAGE: "automatic.waiting.NO_LANGUAGE",
+} as const satisfies Record<WaitingReason, MessageKey>;
 
 export function SmartStateBadge({ status }: { status: SmartStatus }) {
   const { t } = useI18n();
@@ -127,10 +155,14 @@ export function SmartStateBadge({ status }: { status: SmartStatus }) {
 
 /**
  * Why it is paused or waiting, and what happens next; nothing while on or
- * off. Waiting for the permission: `consentAction` grants it in place
- * (Settings); without it the banner links to Settings (the smart page). On
- * the smart page (`onChooseLanguages`), a missing or changed language leads
- * to the page's own language choice instead of Settings' button.
+ * off. The app's status row (Settings' and Jobs' look for the same state),
+ * not a banner: its reason as the title (the badge beside the schedule
+ * already says "Paused" or "Waiting"), what happens next under it, and the
+ * one way on beside it. Waiting for the permission: `consentAction` grants
+ * it in place (Settings, the smart page); without it the row links to
+ * Settings (Coverage). On the smart page (`onChooseLanguages`), a missing or
+ * changed language leads to the page's own language choice instead of
+ * Settings' button.
  */
 export function SmartStateBanner({
   status,
@@ -158,28 +190,29 @@ export function SmartStateBanner({
   ) : null;
   if (status.state === "paused") {
     const date = status.until ? t("automatic.schedule.zone", { time: i18n.dateTimeIn(status.until, zone), zone }) : "";
+    const next = [t(PAUSE_NEXT[status.reason], { date }), status.until ? t("automatic.paused.after") : null].filter(Boolean).join(" ");
     return (
-      <s-banner tone="warning" heading={t("automatic.paused.heading")}>
-        <s-paragraph>
-          {t(PAUSE_TEXT[status.reason], { date })} {status.until ? t("automatic.paused.after") : null}
-          {status.reason === "PRIMARY_LANGUAGE" && chooseLanguages ? <> {chooseLanguages}</> : null}
-        </s-paragraph>
-      </s-banner>
+      <StatusRow
+        status={{ tone: "warning", title: t(PAUSE_TITLE[status.reason]), detail: next }}
+        action={status.reason === "PRIMARY_LANGUAGE" ? chooseLanguages : null}
+      />
     );
   }
   if (status.state === "waiting") {
-    const here = status.reason === "NO_LANGUAGE" && chooseLanguages;
-    return (
-      <s-banner tone="warning" heading={t("automatic.waiting.heading")}>
-        <s-paragraph>
-          {here ? t("automatic.blocked.noLanguageHere", { scope: t("automatic.section.scope") }) : t(WAITING_TEXT[status.reason])}{" "}
-          {here ? chooseLanguages : null}
-          {status.reason === "PLAN" ? <s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link> : null}
-          {status.reason === "CONSENT" && !consentAction ? <s-link href="/app/settings?section=ai">{t("automatic.page.back")}</s-link> : null}
-        </s-paragraph>
-        {status.reason === "CONSENT" && consentAction ? consentAction : null}
-      </s-banner>
-    );
+    // The way on: the plans, the permission (granted here, else in Settings), the page's own language choice.
+    const grant = status.reason === "CONSENT" ? (consentAction ?? null) : null;
+    const here = status.reason === "NO_LANGUAGE" ? chooseLanguages : null;
+    const action =
+      status.reason === "PLAN" ? (
+        <s-link href="/app/plan">{t("automatic.upsell.cta")}</s-link>
+      ) : status.reason === "CONSENT" ? (
+        (grant ?? <s-link href="/app/settings?section=ai">{t("automatic.page.back")}</s-link>)
+      ) : (
+        here
+      );
+    // A button that says what to do ("Allow AI translation", "Choose languages") needs no line saying it again.
+    const detail = grant || here ? null : t(WAITING_NEXT[status.reason]);
+    return <StatusRow status={{ tone: "warning", title: t(WAITING_TITLE[status.reason]), detail }} action={action} />;
   }
   return null;
 }
@@ -228,7 +261,8 @@ export function sameScope(a: SmartScope, b: SmartScope): boolean {
  * and the languages itself once it is set up (`omit`); before that it shows
  * the suggestion the form holds, and what the first check may use
  * (`firstCheck`). Times are the schedule zone's, named only where it isn't
- * the store's (`shopZone`), with today and yesterday as words (`now`).
+ * the store's (`shopZone`), with today and yesterday as words (`now`). The
+ * facts shown decide the columns, so no row ends half empty.
  */
 export function SmartPreview({
   data,
@@ -250,77 +284,89 @@ export function SmartPreview({
   const config = data.config;
   const languages = config ? config.locales.map((l) => languageNames.get(l) ?? l) : [];
   const shown = (fact: PreviewFact) => !omit.includes(fact);
+  const facts = [
+    shown("schedule") ? (
+      <Fact key="schedule" icon="calendar-time" label={t("automatic.preview.schedule")}>
+        {data.scheduleNote ? <s-text tone="caution">{data.scheduleNote}</s-text> : config ? scheduleSummary(i18n, config) : t("automatic.preview.none")}
+      </Fact>
+    ) : null,
+    shown("languages") ? (
+      <Fact key="languages" icon="language" label={t("automatic.preview.languages")}>
+        {languages.length ? languageList(i18n, languages, Infinity) : t("automatic.preview.none")}
+      </Fact>
+    ) : null,
+    data.types && shown("content") ? (
+      <Fact key="content" icon="content" label={t("automatic.types.label")}>
+        {data.types.length ? languageList(i18n, data.types.map((type) => kindLabel(i18n, type)), Infinity) : t("automatic.preview.none")}
+      </Fact>
+    ) : null,
+    shown("nextCheck") ? (
+      <Fact key="nextCheck" icon="clock" label={t("automatic.preview.nextCheck")}>
+        {data.nextChecks[0] !== undefined ? whenIn(i18n, data.nextChecks[0], data.zone, now, shopZone) : t("automatic.preview.noCheck")}
+      </Fact>
+    ) : null,
+    shown("lastSuccess") ? (
+      <Fact key="lastSuccess" icon="calendar-check" label={t("automatic.preview.lastSuccess")}>
+        {data.lastSuccessAt ? whenIn(i18n, data.lastSuccessAt, data.zone, now, shopZone) : t("automatic.preview.none")}
+      </Fact>
+    ) : null,
+    shown("lastRun") ? (
+      <Fact key="lastRun" icon="search" label={t("automatic.preview.lastRun")}>
+        {data.lastRun
+          ? t("automatic.preview.found", {
+              count: data.lastRun.resourcesChanged,
+              fields: t("automatic.preview.fields", { count: data.lastRun.fieldsDetected }),
+            })
+          : t("automatic.preview.none")}
+      </Fact>
+    ) : null,
+    // Publishing in the option's own words ("Review first"), with its icon.
+    data.publishing && shown("publishing") ? (
+      <Fact key="publishing" icon={data.publishing === "AUTO_PUBLISH" ? "send" : "eye-check-mark"} label={t("automatic.preview.publishing")}>
+        {data.publishing === "AUTO_PUBLISH" ? <s-text tone="caution">{t("settings.publish.auto.title")}</s-text> : t("settings.publish.review.title")}
+      </Fact>
+    ) : null,
+    data.translating > 0 ? (
+      <Fact key="translating" icon="in-progress" label={t("automatic.preview.translating")}>
+        {t("automatic.preview.items", { count: data.translating })}
+      </Fact>
+    ) : null,
+    shown("waiting") ? (
+      <Fact key="waiting" icon="clock" label={firstCheck ? t("automatic.preview.firstCheck") : t("automatic.preview.waiting")}>
+        {data.estimate !== null ? (
+          t("automatic.preview.chars", { chars: number(data.estimate) })
+        ) : (
+          <>
+            {t(data.remeasure ? "automatic.preview.measureAgain" : "automatic.preview.notMeasured")}
+            {" · "}
+            {/* The link stays in one piece. */}
+            <span style={{ fontWeight: 400, whiteSpace: "nowrap" }}>
+              <s-link href="/app/coverage">{t("automatic.preview.measure")}</s-link>
+            </span>
+          </>
+        )}
+      </Fact>
+    ) : null,
+  ].filter((fact) => fact !== null);
+  // No half-empty row (cardColumns): four facts two by two, three or five side by side where there is room.
+  const columns = cardColumns(facts.length);
   return (
     <s-box padding="base" background="subdued" borderRadius="large-100">
       <s-query-container>
-        {/* Polaris writes each condition as its own rule: the wider one comes last so it wins. */}
-        <s-grid gridTemplateColumns="@container (inline-size > 520px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr" gap="base">
-          {shown("schedule") ? (
-            <Fact icon="calendar-time" label={t("automatic.preview.schedule")}>
-              {data.scheduleNote ? <s-text tone="caution">{data.scheduleNote}</s-text> : config ? scheduleSummary(i18n, config) : t("automatic.preview.none")}
-            </Fact>
-          ) : null}
-          {shown("languages") ? (
-            <Fact icon="language" label={t("automatic.preview.languages")}>
-              {languages.length ? languageList(i18n, languages, Infinity) : t("automatic.preview.none")}
-            </Fact>
-          ) : null}
-          {data.types && shown("content") ? (
-            <Fact icon="content" label={t("automatic.types.label")}>
-              {data.types.length ? languageList(i18n, data.types.map((type) => kindLabel(i18n, type)), Infinity) : t("automatic.preview.none")}
-            </Fact>
-          ) : null}
-          {shown("nextCheck") ? (
-            <Fact icon="clock" label={t("automatic.preview.nextCheck")}>
-              {data.nextChecks[0] !== undefined ? whenIn(i18n, data.nextChecks[0], data.zone, now, shopZone) : t("automatic.preview.noCheck")}
-            </Fact>
-          ) : null}
-          {shown("lastSuccess") ? (
-            <Fact icon="calendar-check" label={t("automatic.preview.lastSuccess")}>
-              {data.lastSuccessAt ? whenIn(i18n, data.lastSuccessAt, data.zone, now, shopZone) : t("automatic.preview.none")}
-            </Fact>
-          ) : null}
-          {shown("lastRun") ? (
-            <Fact icon="search" label={t("automatic.preview.lastRun")}>
-              {data.lastRun
-                ? t("automatic.preview.found", {
-                    count: data.lastRun.resourcesChanged,
-                    fields: t("automatic.preview.fields", { count: data.lastRun.fieldsDetected }),
-                  })
-                : t("automatic.preview.none")}
-            </Fact>
-          ) : null}
-          {/* Publishing in the option's own words ("Review first"), with its icon. */}
-          {data.publishing && shown("publishing") ? (
-            <Fact icon={data.publishing === "AUTO_PUBLISH" ? "send" : "eye-check-mark"} label={t("automatic.preview.publishing")}>
-              {data.publishing === "AUTO_PUBLISH" ? <s-text tone="caution">{t("settings.publish.auto.title")}</s-text> : t("settings.publish.review.title")}
-            </Fact>
-          ) : null}
-          {data.translating > 0 ? (
-            <Fact icon="in-progress" label={t("automatic.preview.translating")}>
-              {t("automatic.preview.items", { count: data.translating })}
-            </Fact>
-          ) : null}
-          {shown("waiting") ? (
-            <Fact icon="clock" label={firstCheck ? t("automatic.preview.firstCheck") : t("automatic.preview.waiting")}>
-              {data.estimate !== null ? (
-                t("automatic.preview.chars", { chars: number(data.estimate) })
-              ) : (
-                <>
-                  {t(data.remeasure ? "automatic.preview.measureAgain" : "automatic.preview.notMeasured")}{" "}
-                  {/* The link stays in one piece. */}
-                  <span style={{ fontWeight: 400, whiteSpace: "nowrap" }}>
-                    <s-link href="/app/coverage">{t("automatic.preview.measure")}</s-link>
-                  </span>
-                </>
-              )}
-            </Fact>
-          ) : null}
+        <s-grid gridTemplateColumns={PREVIEW_COLUMNS[columns]} gap="base">
+          {facts}
         </s-grid>
       </s-query-container>
     </s-box>
   );
 }
+
+/** The preview's columns for cardColumns' 1, 2 or 3. Polaris writes each condition as its own rule: the wider one comes last so it wins. */
+const PREVIEW_COLUMNS = {
+  1: "1fr",
+  2: "@container (inline-size > 520px) 1fr 1fr, 1fr",
+  3: "@container (inline-size > 520px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr",
+} as const;
 
 /** One choice of a set of tiles. */
 export interface ChoiceTile {

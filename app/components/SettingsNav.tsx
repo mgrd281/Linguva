@@ -3,8 +3,10 @@
  * section (its icon in a tinted square, its name, its state in a few words,
  * a dot where it needs the merchant), in two groups. On a wide container one
  * row above the section, the current one framed in blue (`aria-current`);
- * narrower, four in a row; on a phone three in a row, each opening its
- * section alone. Every tile is a link to `?section=<key>` (React Router: no
+ * narrower, four in a row; on a phone three in a row (a last one alone
+ * across the row), each opening its section alone. A tile's words start at
+ * its top, so a row's icons line up where a name wraps. Every tile is a
+ * link to `?section=<key>` (React Router: no
  * reload, and the page's data isn't loaded again); a click on the current
  * one stays. Above them the status row: all set up, or the one thing that
  * needs the merchant with its fix.
@@ -100,7 +102,11 @@ export interface StatusView {
 
 const STATUS_ICON: Record<StatusView["tone"], IconName> = { success: "check-circle-filled", warning: "alert-triangle", critical: "alert-circle" };
 
-/** The full-width row under the page's heading, tinted by its tone: a round mark, the bold line, why, and the fix (beside it where there is room). */
+/**
+ * The full-width row under the page's heading, tinted by its tone: a round mark, the bold line, why, and
+ * the fix (beside it where there is room). Inside a card the same row says a feature's state (the smart
+ * schedule paused or waiting), so one state has one look everywhere.
+ */
 export function StatusRow({ id, status, action }: { id?: string; status: StatusView; action?: ReactNode }) {
   return (
     <div id={id} className="lv-status" data-tone={status.tone}>

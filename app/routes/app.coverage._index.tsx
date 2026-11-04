@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Link, useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -6,6 +6,7 @@ import { bulkTargetOf, coverageAction, loadCoverageDashboard } from "../.server/
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { hasMessage, kindPlural } from "../i18n/labels";
+import { Card } from "../components/Card";
 import { CoverageMeter, durationText, itemsHref, percentLabel, StateBar } from "../components/Coverage";
 import { CoverageConfirm, type CoverageConfirmTarget } from "../components/CoverageConfirm";
 import { FieldStateLinks, FieldStateList } from "../components/CoverageStates";
@@ -16,7 +17,7 @@ import { SmartStateBadge, SmartStateBanner } from "../components/SmartAutoCard";
 import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
 import { Strong } from "../components/Type";
 import { bulkTypes, openTexts, type BulkTarget } from "../lib/coverage-bulk";
-import { byFieldGroup, byType, coverageNextStep, headlineByLocale, storeWide, unreadableTypes, type CoverageNextStep, type Tally } from "../lib/coverage-view";
+import { byFieldGroup, byTypeCounted, coverageNextStep, headlineByLocale, storeWide, unreadableTypes, urlsByType, type CoverageNextStep, type Tally } from "../lib/coverage-view";
 import { contentTypeName } from "../lib/content-type-names";
 import { chipName, chipOrder, switcherKind } from "../lib/content-language";
 import { inParentheses, languageList, upperFirst } from "../lib/name-lists";
@@ -73,7 +74,8 @@ function stepView(step: Step, data: Data, i18n: I18n): { text: string; action: {
       };
     case "failed":
     case "missing": {
-      const vars = { count: step.count, type: contentTypeName(i18n, step.type), language: inParentheses(name(step.locale)) };
+      // Said as the state of the type's texts, not as an order: its button opens them ("Show what's missing").
+      const vars = { count: step.count, type: contentTypeName(i18n, step.type), language: name(step.locale) };
       return step.kind === "failed"
         ? { text: t("coverage.next.failed", vars), action: { href: itemsHref({ lang: step.locale, type: step.type, state: "failed" }), label: t("coverage.next.action.failed") } }
         : { text: t("coverage.next.missing", vars), action: { href: itemsHref({ lang: step.locale, type: step.type }), label: t("coverage.next.action.missing") } };
@@ -193,7 +195,10 @@ export default function Coverage() {
   const selected = data.selected;
   const selectedTarget = data.targets.find((l) => l.locale === selected) ?? null;
   const selectedName = selected ? i18n.language(selected, data.names[selected]) : "";
-  const types = useMemo(() => (selected ? byType(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
+  // A type's row counts what the figures count (no web addresses: they are optional and have a row of their
+  // own below), so it says what its next step, its Translate and the Content page say.
+  const types = useMemo(() => (selected ? byTypeCounted(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
+  const urls = useMemo(() => (selected ? urlsByType(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
   const groups = useMemo(() => (selected ? byFieldGroup(data.counts, selected) : new Map<string, Tally>()), [data.counts, selected]);
   const segmentOf = (type: string) => data.segments.find((s) => s.locale === selected && s.resourceType === type);
   // Types the figures count that Linguva can't read: named beside the figure, never "all done".
@@ -231,75 +236,98 @@ export default function Coverage() {
     return { resourceType: target.resourceType, name: contentTypeName(i18n, target.resourceType), includeAttached: target.includeAttached, open: openTexts(data.counts, selected, bulkTypes(target)) };
   };
 
+  // Counting: the same form and button wherever they are shown.
+  const stalled = Boolean(data.report?.stalled);
+  const countOnTop = !scanned || scanning || stalled || data.report?.status === "FAILED";
+  const countForm = (children: ReactNode) => (
+    <runner.Form method="post">
+      <input type="hidden" name="intent" value="run" />
+      <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
+      {children}
+    </runner.Form>
+  );
+  const countButton = (
+    <Button
+      type="submit"
+      variant={scanned ? "secondary" : "primary"}
+      icon="chart-donut"
+      disabled={!data.jobsAvailable || scanning || data.targets.length === 0}
+      {...(runner.state !== "idle" ? { loading: true } : {})}
+    >
+      {scanned ? t("coverage.scan.again") : t("coverage.scan.first")}
+    </Button>
+  );
+  const lastCounted = data.lastFullScan ? t("coverage.scan.last", { date: i18n.dateTime(data.lastFullScan) }) : null;
+  // The card's first line names what needs the merchant; when the figures are from, quietly under it.
+  const countState = scanning
+    ? t("coverage.scan.counting")
+    : stalled && data.report
+      ? t("coverage.scan.stalled", { date: i18n.dateTime(data.report.updatedAt) })
+      : !scanned
+        ? t("coverage.scan.notYet")
+        : null;
+  const countDetail = lastCounted ?? (!scanned && !scanning ? t("coverage.scan.never") : null);
+
   return (
     <s-page heading={title}>
       <ToolsBreadcrumbSlot i18n={i18n} />
       <s-stack direction="block" gap="base">
         <ToolHeader tool="coverage" title={title} lead={t("coverage.intro")} i18n={i18n} />
 
-        {/* Counting: when it was last done, and the way to count again. */}
-        <s-section>
-          <s-stack direction="block" gap="base">
-            {actionError ? (
-              <s-banner tone="critical" heading={t("coverage.startFailed.heading")}>
-                <s-paragraph>
-                  {errorMessage(i18n, actionError) ?? t("coverage.startFailed.fallback")}
-                  {PLAN_ERRORS.has(actionError) ? (
-                    <>
-                      {" "}
-                      <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
-                    </>
-                  ) : null}
-                </s-paragraph>
-              </s-banner>
-            ) : null}
-            {data.report?.status === "FAILED" ? (
-              <s-banner tone="warning" heading={t("coverage.lastFailed.heading")}>
-                <s-paragraph>{errorMessage(i18n, data.report.errorCode) ?? t("coverage.lastFailed.fallback")}</s-paragraph>
-              </s-banner>
-            ) : null}
-            <runner.Form method="post">
-              <input type="hidden" name="intent" value="run" />
-              <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-              <s-query-container>
-                <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="base" alignItems="center">
-                  <s-stack direction="block" gap="small-500">
-                    <Strong>{scanning ? t("coverage.scan.counting") : data.lastFullScan ? t("coverage.scan.last", { date: i18n.dateTime(data.lastFullScan) }) : t("coverage.scan.notYet")}</Strong>
-                    {data.report?.stalled ? <s-text color="subdued">{t("coverage.scan.stalled", { date: i18n.dateTime(data.report.updatedAt) })}</s-text> : null}
-                    {!scanned && !scanning ? <s-text color="subdued">{t("coverage.scan.never")}</s-text> : null}
-                  </s-stack>
-                  <s-stack direction="inline">
-                    <Button
-                      type="submit"
-                      variant={scanned ? "secondary" : "primary"}
-                      icon="chart-donut"
-                      disabled={!data.jobsAvailable || scanning || data.targets.length === 0}
-                      {...(runner.state !== "idle" ? { loading: true } : {})}
-                    >
-                      {scanned ? t("coverage.scan.again") : t("coverage.scan.first")}
-                    </Button>
-                  </s-stack>
-                </s-grid>
-              </s-query-container>
-            </runner.Form>
-            {scanning && data.report ? (
-              <s-stack direction="block" gap="small-200">
-                <ProgressBar value={(data.report.progress.done / Math.max(1, data.report.progress.total)) * 100} label={t("coverage.scan.progressLabel")} />
-                <s-text color="subdued">
-                  {t("coverage.scan.running", {
-                    scanning: data.report.scanning ? `${contentTypeName(i18n, data.report.scanning.type)} · ${data.report.scanning.language}` : "",
-                    done: data.report.progress.done,
-                    total: data.report.progress.total,
-                    items: data.report.resourcesScanned,
-                  })}
-                </s-text>
-              </s-stack>
-            ) : null}
-          </s-stack>
-        </s-section>
+        {actionError ? (
+          <s-banner tone="critical" heading={t("coverage.startFailed.heading")}>
+            <s-paragraph>
+              {errorMessage(i18n, actionError) ?? t("coverage.startFailed.fallback")}
+              {PLAN_ERRORS.has(actionError) ? (
+                <>
+                  {" "}
+                  <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
+                </>
+              ) : null}
+            </s-paragraph>
+          </s-banner>
+        ) : null}
+        {data.report?.status === "FAILED" ? (
+          <s-banner tone="warning" heading={t("coverage.lastFailed.heading")}>
+            <s-paragraph>{errorMessage(i18n, data.report.errorCode) ?? t("coverage.lastFailed.fallback")}</s-paragraph>
+          </s-banner>
+        ) : null}
+
+        {/* Counting has a card of its own while it needs the merchant (never counted, counting, stuck, failed);
+            once counted, its date and button sit at the foot of "Whole store", as on the Overview. */}
+        {countOnTop ? (
+          <Card>
+            <s-stack direction="block" gap="base">
+              {countForm(
+                <s-query-container>
+                  <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="base" alignItems="center">
+                    <s-stack direction="block" gap="small-500">
+                      {countState ? <Strong>{countState}</Strong> : null}
+                      {countDetail ? <s-text color="subdued">{countDetail}</s-text> : null}
+                    </s-stack>
+                    <s-stack direction="inline">{countButton}</s-stack>
+                  </s-grid>
+                </s-query-container>,
+              )}
+              {scanning && data.report ? (
+                <s-stack direction="block" gap="small-200">
+                  <ProgressBar value={(data.report.progress.done / Math.max(1, data.report.progress.total)) * 100} label={t("coverage.scan.progressLabel")} />
+                  <s-text color="subdued">
+                    {t("coverage.scan.running", {
+                      scanning: data.report.scanning ? `${contentTypeName(i18n, data.report.scanning.type)} · ${data.report.scanning.language}` : "",
+                      done: data.report.progress.done,
+                      total: data.report.progress.total,
+                      items: data.report.resourcesScanned,
+                    })}
+                  </s-text>
+                </s-stack>
+              ) : null}
+            </s-stack>
+          </Card>
+        ) : null}
 
         {data.markets.available && data.markets.list.length > 1 ? (
-          <s-section>
+          <Card>
             <s-stack direction="block" gap="small-200">
               {/* Opens the market's languages at once: no extra button. */}
               <s-query-container>
@@ -325,11 +353,11 @@ export default function Coverage() {
                 <s-text color="subdued">{t("coverage.filter.marketNote", { market: data.markets.list.find((m) => m.id === data.markets.selected)?.name ?? "" })}</s-text>
               ) : null}
             </s-stack>
-          </s-section>
+          </Card>
         ) : null}
 
         {data.jobs.length ? (
-          <s-section heading={t("coverage.jobs.heading")}>
+          <Card heading={t("coverage.jobs.heading")}>
             <s-stack direction="block" gap="base">
               {data.jobs.map((job) => {
                 const vars = { type: contentTypeName(i18n, job.resourceType), language: languageOf(job.locale), done: i18n.number(job.done), total: i18n.number(job.total) };
@@ -352,11 +380,11 @@ export default function Coverage() {
                 );
               })}
             </s-stack>
-          </s-section>
+          </Card>
         ) : null}
 
         {data.smart ? (
-          <s-section heading={t("automatic.name")}>
+          <Card heading={t("automatic.name")}>
             <s-stack direction="block" gap="small">
               <s-stack direction="inline" gap="small" alignItems="center">
                 <SmartStateBadge status={data.smart.status} />
@@ -382,13 +410,36 @@ export default function Coverage() {
               </s-stack>
               <SmartStateBanner status={data.smart.status} zone={data.smart.zone} />
             </s-stack>
-          </s-section>
+          </Card>
         ) : null}
 
         {scanned ? (
           <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base">
-              <s-section heading={t("coverage.store.heading")}>
+            {/* Next first: on the left on a wide page, on top on a phone, as on the Overview. */}
+            <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base" alignItems="stretch">
+              <Card heading={t("coverage.next.heading")} fill>
+                <s-stack direction="block" gap="small">
+                  {step ? (
+                    <>
+                      <s-paragraph>{step.text}</s-paragraph>
+                      {/* Counting again is the page's own button. */}
+                      {step.action ? (
+                        <s-stack direction="inline">
+                          <Button href={step.action.href} variant="primary">
+                            {step.action.label}
+                          </Button>
+                        </s-stack>
+                      ) : null}
+                    </>
+                  ) : (
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <s-icon type="check-circle-filled" tone="success" size="small" />
+                      <s-text>{t("coverage.next.done")}</s-text>
+                    </s-stack>
+                  )}
+                </s-stack>
+              </Card>
+              <Card heading={t("coverage.store.heading")} fill>
                 <s-stack direction="block" gap="small">
                   <span className="lv-figure">{percentLabel(i18n, store.complete, store.total)}</span>
                   {/* No bar before a language is read in full: an empty one would read "nothing to translate". */}
@@ -417,55 +468,52 @@ export default function Coverage() {
                       <s-paragraph>{t("coverage.store.noPublished")}</s-paragraph>
                     </s-banner>
                   ) : null}
-                </s-stack>
-              </s-section>
-              <s-section heading={t("coverage.next.heading")}>
-                <s-stack direction="block" gap="small">
-                  {step ? (
-                    <>
-                      <s-paragraph>{step.text}</s-paragraph>
-                      {/* Counting again is the page's own button. */}
-                      {step.action ? (
-                        <s-stack direction="inline">
-                          <Button href={step.action.href} variant="primary">
-                            {step.action.label}
-                          </Button>
-                        </s-stack>
-                      ) : null}
-                    </>
-                  ) : (
-                    <s-stack direction="inline" gap="small-200" alignItems="center">
-                      <s-icon type="check-circle-filled" tone="success" size="small" />
-                      <s-text>{t("coverage.next.done")}</s-text>
+                  {countOnTop ? null : (
+                    // When the figures are from, quiet, beside the way to count again.
+                    <s-stack direction="block" gap="base">
+                      <s-divider />
+                      {countForm(
+                        <s-query-container>
+                          <s-grid gridTemplateColumns="@container (inline-size > 520px) 1fr auto, 1fr" gap="small-200 base" alignItems="center" justifyItems="start">
+                            {lastCounted ? <s-text color="subdued">{lastCounted}</s-text> : null}
+                            <s-stack direction="inline">{countButton}</s-stack>
+                          </s-grid>
+                        </s-query-container>,
+                      )}
                     </s-stack>
                   )}
                 </s-stack>
-              </s-section>
+              </Card>
             </s-grid>
           </s-query-container>
         ) : null}
 
         {/* One language at a time, as on the Content page: its chip, then its figure and states (each opening its texts). */}
         {scanned && data.targets.length && selectedTarget ? (
-          <s-section heading={t("coverage.languages.heading")}>
+          <Card heading={t("coverage.languages.heading")}>
             <s-stack direction="block" gap="base">
               <LanguageChips data={data} i18n={i18n} measured={measured} headline={headline} hrefFor={languageHref} />
               <s-box padding="base" border="base" borderRadius="large-100">
                 <s-stack direction="block" gap="small">
-                  <s-stack direction="inline" gap="small-200" alignItems="center">
-                    <Flag country={localeCountry(selectedTarget.locale, data.marketCountries)} fallback={selectedTarget.locale} size={20} />
-                    <h3 className="lv-h3">{upperFirst(selectedName)}</h3>
-                    {selectedTarget.published ? (
-                      <s-badge tone="success">{t("coverage.languages.published")}</s-badge>
-                    ) : (
-                      <s-badge tone="warning" icon="hide">
-                        {t("coverage.languages.unpublished")}
-                      </s-badge>
-                    )}
-                  </s-stack>
+                  {/* The chip above shows the language, whether it's hidden and its figure: the box names it for
+                      screen readers only. A select (more than six languages) is less plain, so there it stays. */}
+                  {switcherKind(data.targets.length) === "select" ? (
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <Flag country={localeCountry(selectedTarget.locale, data.marketCountries)} fallback={selectedTarget.locale} size={20} />
+                      <h3 className="lv-h3">{upperFirst(selectedName)}</h3>
+                      {selectedTarget.published ? (
+                        <s-badge tone="success">{t("coverage.languages.published")}</s-badge>
+                      ) : (
+                        <s-badge tone="warning" icon="hide">
+                          {t("coverage.languages.unpublished")}
+                        </s-badge>
+                      )}
+                    </s-stack>
+                  ) : (
+                    <h3 className="lv-sr">{upperFirst(selectedName)}</h3>
+                  )}
                   {measured.has(selectedTarget.locale) ? (
                     <>
-                      <span className="lv-figure">{percentLabel(i18n, selectedTally.complete, selectedTally.total)}</span>
                       <StateBar counts={selectedTally.counts} label={t("coverage.languages.progressLabel", { language: selectedName })} i18n={i18n} />
                       <s-text color="subdued">{t("coverage.languages.fields", { complete: i18n.number(selectedTally.complete), total: i18n.number(selectedTally.total) })}</s-text>
                     </>
@@ -481,16 +529,16 @@ export default function Coverage() {
                 </s-stack>
               </s-box>
             </s-stack>
-          </s-section>
+          </Card>
         ) : null}
         {data.markets.selected && data.targets.length === 0 ? (
-          <s-section>
+          <Card>
             <s-paragraph>{t("coverage.filter.noLanguages")}</s-paragraph>
-          </s-section>
+          </Card>
         ) : null}
 
         {scanned && selected ? (
-          <s-section heading={t("coverage.types.heading", { language: selectedName })} padding="none">
+          <Card heading={t("coverage.types.heading", { language: selectedName })} padding="none">
             <s-table>
               <s-table-header-row>
                 <s-table-header listSlot="primary">{t("coverage.types.type")}</s-table-header>
@@ -515,12 +563,15 @@ export default function Coverage() {
                           ? t("coverage.types.scanning")
                           : null;
                   const confirm = gaps > 0 ? confirmFor(type) : null;
+                  const addresses = urls.get(type)?.total ?? 0;
                   return (
                     <s-table-row key={type}>
                       <s-table-cell>
                         <s-stack direction="block" gap="small-300">
                           <s-text>{name}</s-text>
                           {excluded ? <s-text color="subdued">{t("coverage.types.excluded")}</s-text> : null}
+                          {/* Counted on their own row below, so the row's figure is the one the totals use. */}
+                          {addresses ? <s-text color="subdued">{t("coverage.types.urls", { count: addresses })}</s-text> : null}
                           {status ? <s-text color="subdued">{status}</s-text> : null}
                           {seg?.status === "DENIED" && isContentType(type) ? <s-link href={`/app/content/${CONTENT_TYPES[type].slug}`}>{t("coverage.types.allowAccess")}</s-link> : null}
                         </s-stack>
@@ -576,12 +627,12 @@ export default function Coverage() {
                 ) : null}
               </s-stack>
             </s-box>
-          </s-section>
+          </Card>
         ) : null}
 
         {/* Field groups add up every type: only for a language read in full. */}
         {scanned && selected && measured.has(selected) && groups.size ? (
-          <s-section heading={t("coverage.groups.heading", { language: selectedName })} padding="none">
+          <Card heading={t("coverage.groups.heading", { language: selectedName })} padding="none">
             <s-table>
               <s-table-header-row>
                 <s-table-header listSlot="primary">{t("coverage.groups.field")}</s-table-header>
@@ -617,11 +668,11 @@ export default function Coverage() {
                 <s-text color="subdued">{t("coverage.groups.urlNote")}</s-text>
               </s-box>
             ) : null}
-          </s-section>
+          </Card>
         ) : null}
 
         {scanned ? (
-          <s-section heading={t("coverage.seo.heading")}>
+          <Card heading={t("coverage.seo.heading")}>
             <s-stack direction="block" gap="small">
               {(() => {
                 const shown = new Set(data.targets.map((l) => l.locale));
@@ -660,10 +711,10 @@ export default function Coverage() {
                 );
               })()}
             </s-stack>
-          </s-section>
+          </Card>
         ) : null}
 
-        <s-section>
+        <Card>
           <Disclosure summary={t("coverage.rules.heading")}>
             <s-unordered-list>
               <s-list-item>{t("coverage.scan.live")}</s-list-item>
@@ -674,7 +725,7 @@ export default function Coverage() {
               <s-list-item>{t("coverage.rules.store")}</s-list-item>
             </s-unordered-list>
           </Disclosure>
-        </s-section>
+        </Card>
       </s-stack>
       <CoverageConfirm
         id={CONFIRM_ID}

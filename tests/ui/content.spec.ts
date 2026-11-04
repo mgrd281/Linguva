@@ -66,6 +66,17 @@ test("the content page shows the store area by area for one language @responsive
   expect(errors).toEqual([]);
 });
 
+test("the key names only the states the tiles draw, and an area's name has its card's size @responsive", async ({ page }) => {
+  // The visual store's German: nothing translated yet.
+  await openApp(page, "visual", "/app/content?lang=de");
+  const key = page.getByText(/^(Done|Waiting for approval|Outdated|Failed|Missing)$/).filter({ visible: true });
+  expect(await key.allInnerTexts()).toEqual(["Missing"]);
+  // The same name and size as the area's card on the language page.
+  await expect(page.locator(".lv-h3", { hasText: /^Products$/ })).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test("without ?lang the page and the lists open in a visible language, never the hidden one", async ({ page }) => {
   await openApp(page, "full", "/app/content");
   const current = page.getByRole("navigation", { name: "Choose a language" }).locator('[aria-current="page"]');
@@ -86,7 +97,7 @@ test("opened from Content, a language's page and its areas lead back here", asyn
   const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
   await expect(crumbs.getByRole("link", { name: "Content" })).toHaveAttribute("href", "/app/content?lang=de");
   await expect(crumbs.getByRole("link", { name: "Overview" })).toHaveCount(0);
-  await expect(page.locator('s-section[accessibilitylabel="Products"]').getByRole("link", { name: /^View all \d+: Products$/ })).toHaveAttribute(
+  await expect(page.getByRole("region", { name: "Products", exact: true }).getByRole("link", { name: /^View all \d+: Products$/ })).toHaveAttribute(
     "href",
     "/app/languages/de/products?from=content",
   );

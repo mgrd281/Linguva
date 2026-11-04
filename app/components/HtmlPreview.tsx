@@ -49,6 +49,9 @@ export function previewHeight(html: string): number {
   return Math.min(420, Math.max(96, 32 + lines * 21 + blocks * 6));
 }
 
+/** Nothing a reader would see: no words and no picture (the editor draws its own empty box for a text). */
+export const isEmptyHtml = (html: string) => !html.replace(/<[^>]*>/g, "").trim() && !/<img\b/i.test(html);
+
 export function HtmlPreview({
   html,
   title,
@@ -77,7 +80,7 @@ export function HtmlPreview({
   height?: number;
 }) {
   const { t } = useI18n();
-  if (!html.replace(/<[^>]*>/g, "").trim() && !/<img\b/i.test(html)) {
+  if (isEmptyHtml(html)) {
     return (
       <s-box padding="base" border="base" borderRadius="base">
         {label}

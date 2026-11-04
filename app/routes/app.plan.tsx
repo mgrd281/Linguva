@@ -16,7 +16,6 @@ import { backToJob } from "../.server/jobs/back-to-job";
 import { requireShop } from "../.server/shopify/require-shop";
 import { useResultToast } from "../components/app-bridge";
 import { BackToJob } from "../components/jobs/BackToJob";
-import { Breadcrumbs } from "../components/LanguageLayout";
 import { PageHeader } from "../components/PageHeader";
 import { PlanCards } from "../components/plan/PlanCards";
 import { PlanFaq } from "../components/plan/PlanFaq";
@@ -79,6 +78,7 @@ function HeroActions({ i18n, hero, choosePlanUrl, refresh, lead = "primary" }: {
         {kind === "change" ? t("common.action.changePlan") : t("plan.action.choose")}
       </Button>
     ) : null;
+  const plain = hero.primary === "change" || hero.primary === "choose" ? link(hero.primary, lead) : null;
   const main =
     hero.primary === "retry" ? (
       <s-stack direction="inline" gap="small-200">
@@ -94,8 +94,10 @@ function HeroActions({ i18n, hero, choosePlanUrl, refresh, lead = "primary" }: {
         {addKey}
         {hero.secondary ? link(hero.secondary, "secondary") : null}
       </s-stack>
-    ) : hero.primary ? (
-      link(hero.primary, lead)
+    ) : plain ? (
+      // In a stack of its own, as the other two: the button's own align-self (its width in a block stack)
+      // would otherwise win over the right alignment below.
+      <s-stack direction="inline">{plain}</s-stack>
     ) : null;
   const checked =
     hero.checkedAt && hero.refresh ? (
@@ -153,12 +155,12 @@ export default function Plan() {
       <s-stack direction="block" gap="large">
         {/* Back to Settings' "Plan & usage", whose "See plans" leads here: the trail on a wide page, a 44 px
             back row ("‹ Settings") on a phone, as Settings' own sections and a job's page have. */}
-        <s-query-container>
-          <s-stack direction="block" gap="base">
-            <Breadcrumbs i18n={i18n} trail={[{ href: "/app/settings?section=plan", label: t("common.nav.settings") }]} current={t("common.nav.plan")} touch />
-            <PageHeader page="plan" title={t("common.nav.plan")} lead={t("plan.page.subtitle")} />
-          </s-stack>
-        </s-query-container>
+        <PageHeader
+          page="plan"
+          title={t("common.nav.plan")}
+          lead={t("plan.page.subtitle")}
+          trail={{ i18n, links: [{ href: "/app/settings?section=plan", label: t("common.nav.settings") }] }}
+        />
         {data.welcome && data.state === "ACTIVE" ? (
           <s-banner tone="success" heading={t("plan.welcome.heading")}>
             {ownKeyMissing ? (

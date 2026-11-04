@@ -6,6 +6,7 @@ import { coverageAction, loadCoverageItemsPage } from "../.server/coverage/dashb
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
+import { Card } from "../components/Card";
 import { CoverageConfirm } from "../components/CoverageConfirm";
 import { FieldStateIcon } from "../components/CoverageStates";
 import { ToolHeader, ToolsBreadcrumbSlot, toolsTrail } from "../components/ToolHeader";
@@ -83,7 +84,7 @@ export default function CoverageItems() {
           {data.countedAt ? <s-text color="subdued">{t("coverage.scan.last", { date: i18n.dateTime(data.countedAt) })}</s-text> : null}
         </ToolHeader>
 
-        <s-section>
+        <Card>
           <Form method="get" ref={filters}>
             <s-stack direction="block" gap="base">
               <s-query-container>
@@ -122,23 +123,25 @@ export default function CoverageItems() {
                 </s-grid>
               </s-query-container>
               <s-query-container>
-                <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto auto, 1fr" gap="small-200 base" alignItems="end">
+                <s-grid gridTemplateColumns="@container (inline-size > 560px) 1fr auto, 1fr" gap="small-200 base" alignItems="end">
                   <s-search-field name="q" label={t("coverage.items.search")} placeholder={t("coverage.items.searchPlaceholder")} value={f.search} />
-                  <Button type="submit">
-                    {t("common.action.search")}
-                  </Button>
-                  <Button variant="tertiary" href={f.locale ? `/app/coverage/items?lang=${encodeURIComponent(f.locale)}` : "/app/coverage/items"}>
-                    {t("coverage.items.clear")}
-                  </Button>
+                  {/* In a stack of their own: a button's align-self (its width in a block stack) would win over the
+                      row's end alignment and lift it to the field's label. */}
+                  <s-stack direction="inline" gap="small-200 base" alignItems="center">
+                    <Button type="submit">{t("common.action.search")}</Button>
+                    <Button variant="tertiary" href={f.locale ? `/app/coverage/items?lang=${encodeURIComponent(f.locale)}` : "/app/coverage/items"}>
+                      {t("coverage.items.clear")}
+                    </Button>
+                  </s-stack>
                 </s-grid>
               </s-query-container>
               {data.searchUnavailable || (f.search && !data.searchable) ? <s-text color="subdued">{t("coverage.items.searchUnsupported")}</s-text> : null}
             </s-stack>
           </Form>
-        </s-section>
+        </Card>
 
         {f.locale ? (
-          <s-section heading={t("coverage.items.bulkHeading")}>
+          <Card heading={t("coverage.items.bulkHeading")}>
             <s-stack direction="block" gap="small">
               {error ? (
                 <s-banner tone="critical" heading={t("coverage.startFailed.heading")}>
@@ -185,10 +188,10 @@ export default function CoverageItems() {
                 <s-paragraph>{t("coverage.items.bulkNotAvailable")}</s-paragraph>
               )}
             </s-stack>
-          </s-section>
+          </Card>
         ) : null}
 
-        <s-section padding="none">
+        <Card padding="none">
           {data.items.length ? (
             <s-table>
               <s-table-header-row>
@@ -254,7 +257,7 @@ export default function CoverageItems() {
               </s-stack>
             </s-box>
           ) : null}
-        </s-section>
+        </Card>
       </s-stack>
       {f.locale && f.type && data.confirm ? (
         <CoverageConfirm

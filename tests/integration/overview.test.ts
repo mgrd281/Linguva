@@ -295,6 +295,18 @@ describe("percentages from completed measurements only", () => {
     expect(overview.next).toEqual({ id: "measure" });
   });
 
+  it("opens the first translation on the products' list of a counted language customers can choose", async () => {
+    const { store, shop, deps } = await measuredStore();
+    // A hidden language Shopify lists first: the visible one leads.
+    store.locales = [store.locales[0]!, { locale: "fr", name: "French", primary: false, published: false }, store.locales[1]!];
+    await setAiConsent({ shopId: shop.id, granted: true, actorId: "1" }, app);
+    const { report } = await createCoverageReport({ shopId: shop.id, locales: ["fr", "de"], requestedBy: null, idempotencyKey: "first" }, app);
+    let next: CoveragePagePayload | null = { shopId: shop.id, reportId: report.id, segmentIndex: 0, cursor: null };
+    while (next) next = await runCoveragePage(deps, next);
+    const overview = await loadOverview(store.asAdmin(), shop, app);
+    expect(overview.next).toEqual({ id: "first-translation", href: "/app/languages/de/products" });
+  });
+
   it("counts translations already live in the store (made anywhere) as past the first translation", async () => {
     const { store, shop, deps } = await measuredStore();
     store.translate("gid://shopify/Product/1", "de", "title", "Produkt 1 Jacke");

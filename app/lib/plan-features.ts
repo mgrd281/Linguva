@@ -55,7 +55,8 @@ export const FEATURE_ICON: Record<FeatureKey, IconType> = {
   autoPublish: "send",
   restore: "clock-revert",
   memory: "database",
-  csv: "transfer",
+  // Import & export's sign: a spreadsheet (ToolHeader's TOOL_LOOK, Settings' tools).
+  csv: "data-table",
   coverage: "chart-donut",
   markets: "globe",
 };

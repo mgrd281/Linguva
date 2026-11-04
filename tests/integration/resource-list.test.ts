@@ -1,8 +1,9 @@
 /**
  * The per-type lists (`/app/products`, `/app/content/<type>`): opened without
  * ?lang they show a visible language, never a hidden one while a visible one
- * exists; hidden languages are marked; and a type Shopify refuses although
- * its permission was granted offers no useless "Allow access".
+ * exists; hidden languages are marked; an item's count leaves its web address
+ * out; and a type Shopify refuses although its permission was granted offers
+ * no useless "Allow access".
  */
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -47,6 +48,10 @@ describe("a type's list", () => {
       { locale: "de", name: "German", published: true },
     ]);
     expect(page.items).toHaveLength(3);
+    // Name and description: the web address is left out, as the editor's count and the area lists leave it out.
+    expect(page.items.map((item) => item.total)).toEqual([2, 2, 2]);
+    // The chips' flags come from cached markets only (none read here), never from a Shopify call.
+    expect(page.marketCountries).toBeNull();
     expect((await list("de")).target?.locale).toBe("de");
     // A hidden language can still be opened on purpose.
     expect((await list("ar")).target?.locale).toBe("ar");

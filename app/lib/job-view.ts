@@ -628,14 +628,16 @@ export function ringFigure(i18n: Pick<I18n, "number" | "percent">, groups: JobGr
 
 /**
  * The figure's size by its length in characters (a no-break space counts:
- * "62 %" has 4), so a longer figure stays inside the ring: 28 px up to 3
- * characters, 24 px for 4, 22 px from 5 in a ring of 112 px or more; 22, 20
- * and 18 px in a smaller one. CoverageRing draws every ring's figure with it.
+ * "62 %" has 4), so a longer figure keeps clear of the ring: the caption
+ * under it lifts the figure to where the hole narrows. In a ring of 112 px or
+ * more 28 px up to 2 characters ("0%", "—"), 24 px for 3 ("75%"), 20 px for 4
+ * ("100%", "62 %"), 18 px from 5; 22, 20, 17 and 15 px in a smaller one.
+ * CoverageRing draws every ring's figure with it.
  */
 export function ringFigureSize(figure: string, size: number): number {
   const length = [...figure].length;
-  const [short, four, long] = size >= 112 ? [28, 24, 22] : [22, 20, 18];
-  return length <= 3 ? short : length === 4 ? four : long;
+  const [two, three, four, more] = size >= 112 ? [28, 24, 20, 18] : [22, 20, 17, 15];
+  return length <= 2 ? two : length === 3 ? three : length === 4 ? four : more;
 }
 
 // ─── Stop texts ──────────────────────────────────────────────────────────────
@@ -1108,7 +1110,7 @@ function finishStep(job: HeroJob, count: number, href: string | null): StepDraft
   return {
     id: "finish",
     title: { key: "jobs.next.finish.title", vars: { count, items: { items: count, type: job.resourceType } } },
-    text: [{ key: "jobs.next.finish.text" }],
+    text: [{ key: "jobs.next.finish.text", vars: { count } }],
     action,
     mayLead: true,
   };
@@ -1359,7 +1361,8 @@ export function problemsHeading(job: Pick<JobFields, "status" | "resourceType">,
   else return null;
   const ok = endedWell(groups);
   const text: JobText[] = ACTIVE.has(job.status) ? [] : [{ key: "jobs.problems.rest", vars: { count: ok, ok, total: groups.total } }];
-  text.push({ key: "jobs.problems.open" });
+  // What a row does, on every device (no "click"): finish it, or only look while the schedule translates it again.
+  text.push({ key: work > 0 ? "jobs.problems.open" : "jobs.problems.openSelf" });
   return { heading, text };
 }
 

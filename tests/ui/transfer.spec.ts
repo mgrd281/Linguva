@@ -2,7 +2,9 @@
  * Translation import and export in three steps: the CSV comes from the real
  * export route (session token via fetch) in the language chosen, its next
  * part only for the choice it continues, a filled row comes back as a draft
- * on Review, rows that can't be trusted are listed with their line.
+ * on Review, rows that can't be trusted are listed with their line. Step 1
+ * says "export" as the Glossary does; importing without a file is answered
+ * on the file's field at once.
  */
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
@@ -12,19 +14,28 @@ test("exports what's missing, imports translations as drafts and lists skipped r
   await openApp(page, "owner", "/app/translations");
   await expect(page.getByRole("heading", { level: 1, name: "Import & export" })).toBeVisible();
   await expect(page.getByText(/Imported translations wait on Review; nothing goes live until you approve it/)).toBeVisible();
-  // Three numbered steps: download, fill in, import.
-  for (const step of ["Download what to translate", "Fill in the translations", "Import the file"]) await expect(page.getByRole("heading", { level: 2, name: step })).toBeVisible();
+  // Three numbered steps: export, fill in, import, each a card named by its step.
+  for (const step of ["Export what to translate", "Fill in the translations", "Import the file"]) await expect(page.getByRole("region", { name: step, exact: true }).getByRole("heading", { level: 2, name: step })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download CSV" }).click();
+  await page.getByRole("button", { name: "Export CSV" }).click();
   const csv = (await readFile((await (await download).path())!, "utf8")).replace(/^\uFEFF/, "");
   const [header, ...rows] = csv.trim().split("\r\n");
   expect(header).toBe("resource_id,content_type,field,language,source_digest,original,translation,status");
   // 5 products × title, description, URL handle: all missing.
   expect(rows).toHaveLength(15);
-  await expect(page.getByText("Downloaded 15 texts to translate into German.")).toBeVisible();
+  await expect(page.getByText("Exported 15 texts to translate into German.")).toBeVisible();
+
+  // No file chosen yet: the import isn't the step's main button, and pressing it says so on the field at once,
+  // without a trip to the server (whose answer would be a banner).
+  const zone = page.locator('s-drop-zone[name="file"]');
+  const importButton = page.getByRole("button", { name: "Import as drafts" });
+  await expect(importButton).toHaveAttribute("data-variant", "secondary");
+  await importButton.click();
+  await expect(zone).toHaveAttribute("error", "Choose a CSV file first.");
+  await expect(page.locator("s-banner", { hasText: "Choose a CSV file first." })).toHaveCount(0);
 
   // Fill one title; change another row's digest (as if the original had changed since).
   const title = rows.findIndex((r) => r.startsWith("gid://shopify/Product/1,PRODUCT,title,"));
@@ -36,9 +47,13 @@ test("exports what's missing, imports translations as drafts and lists skipped r
     mimeType: "text/csv",
     buffer: Buffer.from([header, ...filled].join("\r\n")),
   });
-  await page.getByRole("button", { name: "Import as drafts" }).click();
+  // Chosen: its name under the field, the error gone, and the import the step's main button.
+  await expect(page.getByText("Chosen: translations.csv")).toBeVisible();
+  await expect(zone).not.toHaveAttribute("error");
+  await expect(importButton).toHaveAttribute("data-variant", "primary");
+  await importButton.click();
   await expect(page.getByText("1 translation waits on Review.")).toBeVisible();
-  const skipped = page.locator('s-section[heading="Skipped rows"]');
+  const skipped = page.getByRole("region", { name: "Skipped rows", exact: true });
   await expect(skipped.locator("s-table-row", { hasText: `Line ${stale + 2}` })).toContainText("The original changed since the export");
   await expect(skipped.locator("s-table-row", { hasText: "No translation filled in." }).first()).toBeVisible();
   await expectAccessible(page);
@@ -57,7 +72,7 @@ test("the export is in the language chosen, not the list's first one, and says s
   await openApp(page, "full", "/app/translations");
   await page.getByRole("combobox", { name: "Language" }).selectOption({ label: "French" });
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download CSV" }).click();
+  await page.getByRole("button", { name: "Export CSV" }).click();
   const file = await download;
   expect(file.suggestedFilename()).toBe("linguva-product-fr.csv");
   const csv = (await readFile((await file.path())!, "utf8")).replace(/^\uFEFF/, "");
@@ -65,7 +80,7 @@ test("the export is in the language chosen, not the list's first one, and says s
   expect(rows.length).toBeGreaterThan(0);
   // The language column (the fourth: id, type and field have no commas).
   expect(new Set(rows.map((r) => r.split(",")[3]))).toEqual(new Set(["fr"]));
-  await expect(page.getByText(/^Downloaded \d+ texts? to translate into French\.$/)).toBeVisible();
+  await expect(page.getByText(/^Exported \d+ texts? to translate into French\.$/)).toBeVisible();
 });
 
 test("the next part is offered only for the language, content and choice of the part downloaded", async ({ page }) => {
@@ -86,14 +101,14 @@ test("the next part is offered only for the language, content and choice of the 
   const language = page.getByRole("combobox", { name: "Language" });
   const content = page.getByRole("combobox", { name: "Content" });
   const gaps = page.getByRole("checkbox", { name: "Only missing and outdated texts" });
-  const next = page.getByRole("button", { name: "Download the next part" });
+  const next = page.getByRole("button", { name: "Export the next part" });
 
   // German chosen, whichever language the list starts with.
   await language.selectOption({ label: "German" });
   const answered = page.waitForResponse(/\/app\/translations\/export\?/);
-  await page.getByRole("button", { name: "Download CSV" }).click();
+  await page.getByRole("button", { name: "Export CSV" }).click();
   expect(new URL((await answered).url()).searchParams.get("lang")).toBe("de");
-  await expect(page.getByText("Downloaded 3 texts to translate into German.")).toBeVisible();
+  await expect(page.getByText("Exported 3 texts to translate into German.")).toBeVisible();
   await expect(next).toBeVisible();
   // German's cursor would start French after German's first part: French starts with its own first part.
   await language.selectOption({ label: "French" });
@@ -116,16 +131,16 @@ test("the next part is offered only for the language, content and choice of the 
   // Another language starts at its first part, with a next part of its own.
   await language.selectOption({ label: "French" });
   const first = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download CSV" }).click();
+  await page.getByRole("button", { name: "Export CSV" }).click();
   expect((await first).suggestedFilename()).toBe("linguva-product-fr.csv");
   expect(asked[2]).toEqual({ lang: "fr", type: "PRODUCT", gaps: "1" });
-  await expect(page.getByText("Downloaded 3 texts to translate into French.")).toBeVisible();
+  await expect(page.getByText("Exported 3 texts to translate into French.")).toBeVisible();
   await expect(next).toBeVisible();
 });
 
 test("the import and export page is German for a German admin user", async ({ page }) => {
   await openApp(page, "owner", "/app/translations", { locale: "de" });
-  await expect(page.getByRole("button", { name: "CSV herunterladen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "CSV exportieren" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Als Entwürfe importieren" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Übersetzungen eintragen" })).toBeVisible();
   await expectAccessible(page);

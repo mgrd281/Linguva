@@ -20,6 +20,7 @@ import type { CountryCoverage, CountryLanguage } from "../lib/country-coverage";
 import { localeCountry } from "../lib/flags";
 import { languagePath } from "../lib/language-categories";
 import { languageList, upperFirst } from "../lib/name-lists";
+import { cardGrid } from "./CategoryCard";
 import { percentLabel } from "./Coverage";
 import { CARD } from "./ContentTiles";
 import { Flag } from "./Flag";
@@ -62,7 +63,16 @@ const LANGUAGE_SETTINGS = "shopify://admin/settings/languages";
 /** Narrow (a phone): one compact row per card; wide: figure and bar below the name. */
 const COMPACT = "@container (inline-size > 640px) none, auto";
 const WIDE = "@container (inline-size > 640px) auto, none";
-const CARD_GRID = "@container (inline-size > 560px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr";
+
+/**
+ * Columns for the cards: up to four fill their rows as Content's and a language's cards do (cardGrid: one
+ * the full width, two side by side, four as two by two), never two beside an empty third column. Five and
+ * more keep three in a row on a wide page: its last row may end short, but two columns would make a store
+ * selling to many countries half as long again.
+ */
+export function placeGrid(count: number): string {
+  return count <= 4 ? cardGrid(count) : "@container (inline-size > 560px) 1fr 1fr, (inline-size > 860px) 1fr 1fr 1fr, 1fr";
+}
 
 const counted = (language: PlaceLanguage | undefined): language is PlaceLanguage & { counts: StateCounts } =>
   Boolean(language && language.measured && language.total > 0 && language.counts);
@@ -415,7 +425,7 @@ export function CountryCards(props: PlacesProps & { countries: readonly CountryC
     <s-stack direction="block" gap="base">
       {missing.length ? <MissingCard countries={missing} ctx={ctx} free={props.freeLanguages} max={props.maxLanguages} offered={props.languageFixOffered ?? false} /> : null}
       {cards.length ? (
-        <s-grid gridTemplateColumns={CARD_GRID} gap="@container (inline-size > 640px) base, small-200" alignItems="start">
+        <s-grid gridTemplateColumns={placeGrid(cards.length)} gap="@container (inline-size > 640px) base, small-200" alignItems="start">
           {cards.map((card) => {
             if (card.kind === "several") return <SeveralLanguagesCard key={card.country.code} country={card.country} ctx={ctx} />;
             const language = ctx.languages.get(card.entry.locale);
@@ -456,7 +466,7 @@ export function LanguageCards(props: PlacesProps & { countriesOf: ReadonlyMap<st
       title(a).localeCompare(title(b), i18n.locale),
   );
   return (
-    <s-grid gridTemplateColumns={CARD_GRID} gap="@container (inline-size > 640px) base, small-200" alignItems="start">
+    <s-grid gridTemplateColumns={placeGrid(cards.length)} gap="@container (inline-size > 640px) base, small-200" alignItems="start">
       {cards.map((language) => {
         const countries = props.countriesOf.get(language.locale) ?? [];
         return (

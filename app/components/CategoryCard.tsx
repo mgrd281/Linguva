@@ -20,6 +20,7 @@ import { CATEGORIES, withOrigin, type CategoryId, type Origin } from "../lib/lan
 import { kindWord } from "./CategoryList";
 import { percentLabel, TRACK_COLOUR } from "./Coverage";
 import { StateCountList, StateIcon, StateMarker, TextStateBar } from "./ItemStates";
+import { CARD } from "./LanguageLayout";
 import { ProgressBar } from "./ProgressBar";
 import { Button } from "./Button";
 import { IconSquare, type Tint } from "./IconSquare";
@@ -312,84 +313,87 @@ export function CategoryCard({ category, i18n, locale, primaryName, preview, fea
   const all = category.items ? t("language.card.allCount", { count: category.items }) : t("language.card.all");
   const href = withOrigin(category.href, origin);
   const examples = <Preview category={category.id} preview={preview} featured={featured} i18n={i18n} locale={locale} primaryName={primaryName} />;
+  const headingId = `area-${category.id}`;
   return (
-    <s-section accessibilityLabel={name}>
-      <s-stack direction="block" gap="base">
-        <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="start">
-          <AreaIcon id={category.id} />
-          {/* The name, drawn as the card's heading: the section's label is its heading for assistive
-              technology (Polaris adds it), so the visible name isn't a second one. "View all" below is its one link. */}
-          <s-stack direction="block" gap="small-500">
-            <span className="lv-h3" aria-hidden="true">
-              {name}
-            </span>
-            {detail ? <s-text color="subdued">{detail}</s-text> : null}
-          </s-stack>
-          <s-stack direction="block" alignItems="end">
-            <span style={BIG_FIGURE}>{figure}</span>
-            {tally.total > 0 && state.kind !== "no-access" ? (
-              <s-text color="subdued">{t("language.card.figure", { complete: tally.complete, total: tally.total, count: tally.total })}</s-text>
-            ) : null}
-          </s-stack>
-        </s-grid>
+    // A native section with the card's edge (Polaris draws its sections flat on a phone), named by its heading.
+    <section aria-labelledby={headingId}>
+      <s-box {...CARD} padding="base">
+        <s-stack direction="block" gap="base">
+          <s-grid gridTemplateColumns="auto minmax(0, 1fr) auto" gap="base" alignItems="start">
+            <AreaIcon id={category.id} />
+            {/* The card's one heading, under its tier's; "View all" below is its one link. */}
+            <s-stack direction="block" gap="small-500">
+              <h4 id={headingId} className="lv-h3">
+                {name}
+              </h4>
+              {detail ? <s-text color="subdued">{detail}</s-text> : null}
+            </s-stack>
+            <s-stack direction="block" alignItems="end">
+              <span style={BIG_FIGURE}>{figure}</span>
+              {tally.total > 0 && state.kind !== "no-access" ? (
+                <s-text color="subdued">{t("language.card.figure", { complete: tally.complete, total: tally.total, count: tally.total })}</s-text>
+              ) : null}
+            </s-stack>
+          </s-grid>
 
-        {tally.total > 0 && state.kind !== "no-access" ? <TextStateBar counts={tally.counts} label={name} i18n={i18n} /> : null}
-        {state.kind === "no-access" ? (
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <s-icon type="lock" color="subdued" size="small" />
-            <s-text color="subdued">{t("language.card.noAccess")}</s-text>
-            {state.href ? <s-link href={state.href}>{t("coverage.types.allowAccess")}</s-link> : null}
-          </s-stack>
-        ) : state.kind === "counting" ? (
-          <s-text color="subdued">{t("language.card.counting")}</s-text>
-        ) : state.kind === "incomplete" ? (
-          <s-text color="subdued">{t("language.card.incomplete")}</s-text>
-        ) : null}
-        {state.kind !== "no-access" ? <StateCountList counts={tally.counts} i18n={i18n} /> : null}
-
-        {tally.total > 0 ? featured ? examples : <s-box display={WIDE}>{examples}</s-box> : null}
-
-        {category.id === "checkout" && category.textTypes.includes("SHOP_POLICY") ? <s-text color="subdued">{t("language.card.legal")}</s-text> : null}
-        {/* Image descriptions and custom fields are translated with their products (bulkTypesOf). */}
-        {(category.id === "images" || category.id === "customFields") && open > 0 ? <s-text color="subdued">{t("language.card.withOwners")}</s-text> : null}
-        {category.automatic ? (
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <s-icon type="calendar-time" color="subdued" size="small" />
-            <s-text color="subdued">{t("language.card.automatic")}</s-text>
-          </s-stack>
-        ) : null}
-        {category.job ? <JobProgress job={category.job} name={name} i18n={i18n} /> : null}
-
-        <s-divider />
-        <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
-          <s-stack direction="inline" gap="small-100 base" alignItems="center">
-            <s-link href={href} accessibilityLabel={`${all}: ${name}`}>
-              {all}
-              <span style={INLINE_ICON}>
-                <s-icon type="chevron-right" size="small" />
-              </span>
-            </s-link>
-            {category.review ? (
-              <s-link href={category.review.href} accessibilityLabel={`${t("language.card.review", { count: category.review.count })}: ${name}`}>
-                {t("language.card.review", { count: category.review.count })}
-              </s-link>
-            ) : null}
-            {category.job ? <s-link href={category.job.href}>{t("language.card.jobOpen")}</s-link> : null}
-          </s-stack>
-          {translate && !category.job ? (
-            <Button
-              icon="wand"
-              commandFor={translate.modalId}
-              command="--show"
-              onClick={translate.onOpen}
-              accessibilityLabel={`${t("language.action.translate")}: ${name}`}
-              {...(translate.loading ? { loading: true } : {})}
-            >
-              {t("language.action.translate")}
-            </Button>
+          {tally.total > 0 && state.kind !== "no-access" ? <TextStateBar counts={tally.counts} label={name} i18n={i18n} /> : null}
+          {state.kind === "no-access" ? (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-icon type="lock" color="subdued" size="small" />
+              <s-text color="subdued">{t("language.card.noAccess")}</s-text>
+              {state.href ? <s-link href={state.href}>{t("coverage.types.allowAccess")}</s-link> : null}
+            </s-stack>
+          ) : state.kind === "counting" ? (
+            <s-text color="subdued">{t("language.card.counting")}</s-text>
+          ) : state.kind === "incomplete" ? (
+            <s-text color="subdued">{t("language.card.incomplete")}</s-text>
           ) : null}
-        </s-grid>
-      </s-stack>
-    </s-section>
+          {state.kind !== "no-access" ? <StateCountList counts={tally.counts} i18n={i18n} /> : null}
+
+          {tally.total > 0 ? featured ? examples : <s-box display={WIDE}>{examples}</s-box> : null}
+
+          {category.id === "checkout" && category.textTypes.includes("SHOP_POLICY") ? <s-text color="subdued">{t("language.card.legal")}</s-text> : null}
+          {/* Image descriptions and custom fields are translated with their products (bulkTypesOf). */}
+          {(category.id === "images" || category.id === "customFields") && open > 0 ? <s-text color="subdued">{t("language.card.withOwners")}</s-text> : null}
+          {category.automatic ? (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-icon type="calendar-time" color="subdued" size="small" />
+              <s-text color="subdued">{t("language.card.automatic")}</s-text>
+            </s-stack>
+          ) : null}
+          {category.job ? <JobProgress job={category.job} name={name} i18n={i18n} /> : null}
+
+          <s-divider />
+          <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
+            <s-stack direction="inline" gap="small-100 base" alignItems="center">
+              <s-link href={href} accessibilityLabel={`${all}: ${name}`}>
+                {all}
+                <span style={INLINE_ICON}>
+                  <s-icon type="chevron-right" size="small" />
+                </span>
+              </s-link>
+              {category.review ? (
+                <s-link href={category.review.href} accessibilityLabel={`${t("language.card.review", { count: category.review.count })}: ${name}`}>
+                  {t("language.card.review", { count: category.review.count })}
+                </s-link>
+              ) : null}
+              {category.job ? <s-link href={category.job.href}>{t("language.card.jobOpen")}</s-link> : null}
+            </s-stack>
+            {translate && !category.job ? (
+              <Button
+                icon="wand"
+                commandFor={translate.modalId}
+                command="--show"
+                onClick={translate.onOpen}
+                accessibilityLabel={`${t("language.action.translate")}: ${name}`}
+                {...(translate.loading ? { loading: true } : {})}
+              >
+                {t("language.action.translate")}
+              </Button>
+            ) : null}
+          </s-grid>
+        </s-stack>
+      </s-box>
+    </section>
   );
 }

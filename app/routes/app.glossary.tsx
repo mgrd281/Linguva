@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { ZodError } from "zod";
@@ -23,6 +23,7 @@ import {
 import type { I18n, MessageRef } from "../i18n/i18n";
 import { hasMessage } from "../i18n/labels";
 import { showToast, useResultToast } from "../components/app-bridge";
+import { Card } from "../components/Card";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Disclosure } from "../components/Disclosure";
 import { IconSquare } from "../components/IconSquare";
@@ -188,44 +189,53 @@ async function downloadCsv(): Promise<boolean> {
 
 type Data = ReturnType<typeof useLoaderData<typeof loader>>;
 
-/** "Never translate · Always translate as · Never use" as equal tiles with their icon, one native radio each (the arrow keys move between them). */
+/**
+ * "Never translate · Always translate as · Never use" as equal tiles with their icon, one native radio each (the
+ * arrow keys move between them). The legend is a field's label, as "Term" and "Language" under it. On a narrow
+ * card the three stay side by side as their sign, radio and name (ui.css, .lv-tools-rules__tiles), so the term
+ * field is on the first screen; the chosen rule's sentence is then one line under them.
+ */
 function RuleTiles({ value, onChange, disabled, i18n }: { value: GlossaryRule; onChange: (rule: GlossaryRule) => void; disabled: boolean; i18n: I18n }) {
   const { t } = i18n;
   const id = useId();
   return (
     <fieldset className="lv-tools-rules" disabled={disabled}>
-      <legend className="lv-tools-rules__legend">
-        <Strong>{t("glossary.field.rule")}</Strong>
-      </legend>
-      <div className="lv-options" style={{ "--lv-min": "200px" } as CSSProperties}>
-        {GLOSSARY_RULES.map((rule) => {
-          const look = RULE_LOOK[rule];
-          const checked = rule === value;
-          return (
-            <label key={rule} className={["lv-option", "lv-tools-rule", checked ? "lv-option--current" : null].filter(Boolean).join(" ")}>
-              <span className="lv-option__top">
-                <IconSquare icon={look.icon} tint={look.tint} />
-                <input
-                  type="radio"
-                  name="rule"
-                  value={rule}
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={() => onChange(rule)}
-                  className="lv-tools-rule__radio"
-                  aria-labelledby={`${id}-${rule}`}
-                  aria-describedby={`${id}-${rule}-help`}
-                />
-              </span>
-              <span id={`${id}-${rule}`} className="lv-option__title">
-                {ruleLabel(i18n, rule)}
-              </span>
-              <span id={`${id}-${rule}-help`} className="lv-option__body">
-                {t(look.help)}
-              </span>
-            </label>
-          );
-        })}
+      <legend className="lv-tools-rules__legend">{t("glossary.field.rule")}</legend>
+      <div className="lv-tools-rules__tiles">
+        <div className="lv-options">
+          {GLOSSARY_RULES.map((rule) => {
+            const look = RULE_LOOK[rule];
+            const checked = rule === value;
+            return (
+              <label key={rule} className={["lv-option", "lv-tools-rule", checked ? "lv-option--current" : null].filter(Boolean).join(" ")}>
+                <span className="lv-option__top">
+                  <IconSquare icon={look.icon} tint={look.tint} />
+                  <input
+                    type="radio"
+                    name="rule"
+                    value={rule}
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => onChange(rule)}
+                    className="lv-tools-rule__radio"
+                    aria-labelledby={`${id}-${rule}`}
+                    aria-describedby={`${id}-${rule}-help`}
+                  />
+                </span>
+                <span id={`${id}-${rule}`} className="lv-option__title">
+                  {ruleLabel(i18n, rule)}
+                </span>
+                <span id={`${id}-${rule}-help`} className="lv-option__body">
+                  {t(look.help)}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {/* Seen on a narrow card only, where the tiles' sentences are hidden; screen readers hear each tile's own. */}
+        <p className="lv-tools-rules__help" aria-hidden="true">
+          {t(RULE_LOOK[value].help)}
+        </p>
       </div>
     </fieldset>
   );
@@ -300,7 +310,7 @@ export default function GlossaryPage() {
       <s-stack direction="block" gap="base">
         <ToolHeader tool="glossary" title={t("common.nav.glossary")} lead={t("glossary.page.lead")} i18n={i18n} />
 
-        <s-section heading={t("glossary.add.heading")}>
+        <Card heading={t("glossary.add.heading")}>
           <s-stack direction="block" gap="base">
             {locked ? <LockLine plan="Pro" text={t("glossary.error.notOnPlan")} link={{ href: "/app/plan", label: t("common.action.seePlans") }} /> : null}
             <addFetcher.Form method="post" id="glossary-add" key={formRound}>
@@ -351,11 +361,11 @@ export default function GlossaryPage() {
               </s-banner>
             ) : null}
           </s-stack>
-        </s-section>
+        </Card>
 
-        <s-section heading={t("glossary.terms.heading", { count: terms.length })} padding="none">
+        <Card heading={t("glossary.terms.heading", { count: terms.length })} padding="none">
           {terms.length === 0 ? (
-            <s-box padding="base">
+            <s-box padding="small-200 base base">
               <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
                 <s-icon type="book-open" color="subdued" />
                 <s-text color="subdued">{t("glossary.terms.empty")}</s-text>
@@ -364,7 +374,7 @@ export default function GlossaryPage() {
           ) : (
             <s-stack direction="block">
               {searchable ? (
-                <s-box padding="base base none base">
+                <s-box padding="small-200 base none">
                   <s-search-field label={t("glossary.search.label")} placeholder={t("glossary.search.placeholder")} onInput={(e) => setQuery(e.currentTarget.value)} />
                 </s-box>
               ) : null}
@@ -426,9 +436,9 @@ export default function GlossaryPage() {
               ) : null}
             </s-stack>
           )}
-        </s-section>
+        </Card>
 
-        <s-section heading={t("glossary.csv.heading")}>
+        <Card heading={t("glossary.csv.heading")}>
           <s-stack direction="block" gap="base">
             <s-text color="subdued">{t("glossary.csv.lead")}</s-text>
             <importFetcher.Form method="post" encType="multipart/form-data" ref={importForm}>
@@ -500,7 +510,7 @@ export default function GlossaryPage() {
               <s-text color="subdued">{t("glossary.file.invalid")}</s-text>
             </Disclosure>
           </s-stack>
-        </s-section>
+        </Card>
       </s-stack>
       <ConfirmModal
         id="glossary-delete"

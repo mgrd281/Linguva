@@ -200,13 +200,22 @@ test.describe("a job's page", () => {
     await expect(page.getByRole("heading", { level: 1, name: "French · Products" })).toBeVisible();
     await expect(page.locator("s-badge", { hasText: "Translating" })).toBeVisible();
     await expect(page.getByText(/^Started today at .+ · by you$/)).toBeVisible();
+    // The language's flag beside the h1, as the Jobs list's row shows the job.
+    await expect(page.locator('.lv-icon-square img[src="/flags/FR.svg"]')).toBeVisible();
 
-    const hero = page.locator('s-section[accessibilitylabel="French · Products: summary"]');
+    // The hero is a card on a phone too (a named region, not a Polaris section drawn flat there).
+    const hero = page.getByRole("region", { name: "French · Products: summary" });
     await expect(hero.getByRole("img", { name: /^52% done\. Products: 21 of 40 done\./ })).toBeVisible();
     await expect(hero.getByRole("heading", { level: 2, name: "Products: 21 of 40 done" })).toBeVisible();
     const legend = hero.getByRole("list", { name: "Results" });
     await expect(legend.locator("li")).toHaveText(["17 wait for your approval", "4 were already up to date", "1 incomplete", "2 failed", "16 still to do"]);
+    // Each line's key is its arc's colour: "already up to date" has its pale green beside the same check as "translated".
+    const keys = await legend.locator("li > s-stack > span[aria-hidden='true']").evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+    expect(keys).toEqual(["rgb(0, 148, 213)", "rgb(159, 200, 181)", "rgb(185, 137, 0)", "rgb(199, 10, 36)", "rgb(235, 235, 235)"]);
     // Next: approve first (the page's one primary button), then the one item a new try can fix; cancel in the foot.
+    // Two steps: numbered, their order matters.
+    await expect(hero.getByRole("heading", { level: 2, name: "Next", exact: true })).toBeVisible();
+    await expect(hero.locator("ol")).toHaveCount(1);
     await expect(hero.getByText("Approve 17 translations")).toBeVisible();
     await expect(hero.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
     await expect(hero.locator('[data-button][data-variant="primary"]')).toHaveAttribute("href", `/app/review?job=${ids.running}`);
@@ -245,7 +254,7 @@ test.describe("a job's page", () => {
     await openApp(page, "jobs", `/app/jobs/${ids.stopped}`);
     await expect(page.getByRole("heading", { level: 1, name: "German · Collections" })).toBeVisible();
     await expect(page.locator("s-badge", { hasText: "Stopped" })).toBeVisible();
-    const hero = page.locator('s-section[accessibilitylabel="German · Collections: summary"]');
+    const hero = page.getByRole("region", { name: "German · Collections: summary" });
     await expect(hero.getByText("Linguva needs your permission for AI translation.")).toBeVisible();
     await expect(hero.getByText("What is translated stays. Nothing is lost.")).toBeVisible();
     await expect(hero.getByText("How to continue", { exact: true })).toBeVisible();
@@ -263,12 +272,16 @@ test.describe("a job's page", () => {
     // Yesterday, or two days ago in the store's zone shortly after midnight.
     await expect(page.getByText(/^Started (yesterday|on .+) at .+ · by your team$/)).toBeVisible();
     // The one page only the editor finishes: its step opens that page's editor (the page's one primary button).
-    const hero = page.locator('s-section[accessibilitylabel="French · Pages: summary"]');
+    const hero = page.getByRole("region", { name: "French · Pages: summary" });
     await expect(hero.getByText("Finish 1 page in the editor")).toBeVisible();
+    // A lone step has no number (numbers only where order matters), and its reason never says "done".
+    await expect(hero.locator("ol")).toHaveCount(0);
+    await expect(hero.getByText("Trying again won't help here – finish it yourself in the editor.")).toBeVisible();
     await expect(hero.locator('[data-button][data-variant="primary"]')).toHaveCount(1);
     await expect(hero.locator('[data-button][data-variant="primary"]', { hasText: "Open in editor" })).toHaveAttribute("href", "/app/pages/4?lang=fr");
     await expect(page.getByRole("heading", { level: 2, name: "1 page needs your attention" })).toBeVisible();
-    await expect(page.getByText("3 of 4 are fine.")).toBeVisible();
+    // What a row does, on a phone too (no "click").
+    await expect(page.getByText("3 of 4 are fine. Open one to finish it in the editor.")).toBeVisible();
     // Shopify has no name for it: its kind and number.
     await expect(page.getByRole("list", { name: "1 page needs your attention" }).getByText("Page 4", { exact: true })).toBeVisible();
     // The report and the reference in view, the table folded.

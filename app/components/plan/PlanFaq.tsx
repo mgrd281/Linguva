@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { INTL_LOCALE, type I18n } from "../../i18n/i18n";
 import { yearlyHandles } from "../../lib/plan-prices";
 import { planName } from "../../lib/plan-view";
+import { Card } from "../Card";
 import { Disclosure } from "../Disclosure";
 
 /** One question: its row in semibold, 44 px high, the answer under it (app/styles/ui.css, .lv-plan-fold). */
@@ -29,7 +30,7 @@ export function PlanFaq({ i18n, canChange, ownKeyPlan }: { i18n: I18n; canChange
   const { t } = i18n;
   const yearly = yearlyHandles();
   return (
-    <s-section heading={t("plan.faq.heading")}>
+    <Card heading={t("plan.faq.heading")}>
       <s-stack direction="block" gap="none">
         <Question question={t("plan.faq.downgrade.q")}>
           <s-paragraph>{t("plan.faq.downgrade.a")}</s-paragraph>
@@ -80,6 +81,6 @@ export function PlanFaq({ i18n, canChange, ownKeyPlan }: { i18n: I18n; canChange
           </>
         ) : null}
       </s-stack>
-    </s-section>
+    </Card>
   );
 }

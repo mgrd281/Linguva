@@ -135,7 +135,7 @@ export default function ContentPage() {
           {data.nothing ? (
             <NothingCard i18n={i18n} />
           ) : (
-            <Areas areas={data.areas} i18n={i18n} picturesOf={picturesOf} withKey={data.language !== null} />
+            <Areas areas={data.areas} i18n={i18n} picturesOf={picturesOf} withKey={data.language !== null} extras={data.extras} />
           )}
           <MoreTexts key={`${locale}|${data.open}`} extras={data.extras} open={data.open} i18n={i18n} />
           <Folds empty={data.empty} unavailable={data.unavailable} i18n={i18n} />

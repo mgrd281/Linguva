@@ -377,7 +377,7 @@ The attention card and the way back to a job are drawn as Settings' tinted statu
 |---|---|---|
 | Each page its own top | `ToolHeader`: the trail Settings › Tools (a 44 px "‹ Tools" row on a phone), the tool's icon in its Settings tile's tint, the h1 and one line on what the page is for | Every tool opens the same way |
 | Free and Starter filled the glossary's form and learned at "Add" that it is Pro's | The lock first (Pro and Business, "See plans"), every control disabled; the three rules as tiles with their icons; the form starts over after adding, with a toast; a search from 8 terms; one "As a CSV file" card, replacing every term only after a critical question with the count | No work that can't be saved |
-| German "prüfen" for counting and for approving | Counting is "zählen" everywhere ("Shop zählen", "Zuletzt gezählt"), "prüfen" only for approving | One word, one meaning |
+| German "prüfen" for counting and for approving | Counting is "zählen" everywhere ("Übersetzungen zählen", "Zuletzt gezählt"), "prüfen" only for approving | One word, one meaning |
 | Coverage's "Translate" started a job at once | It asks first (what gets translated by state, approval or live, own translations stay, the AI characters left; `CoverageConfirm`), as the language page does | No surprise jobs |
 | Markets: the markets first, the checks at the end, emoji flags; the export's language select ignored (always the first language) | The checks first with their fix, flags, the markets folded; the select reacts (**bug fixed**, React 18 sends no `onChange` for a web component); import & export as three numbered steps | What needs the merchant first |
 

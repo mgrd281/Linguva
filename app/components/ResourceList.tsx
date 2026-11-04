@@ -1,19 +1,29 @@
 /**
  * List of translatable resources (products, collections) with coverage
  * per language and bulk translation. See .server/translation/resource-list.
- * Titled as the Content page names the type ("Buttons & fixed texts"), each
- * item's state as the area lists show it (an icon and the same word).
+ * It opens as every page does: the way back (a 44 px back row on a phone),
+ * the area's sign and the list's name, then the languages as Content's
+ * chips. Titled as the Content page names the type ("Buttons & fixed
+ * texts"), each item's state as the area lists show it (an icon and the
+ * same word), the whole row opening the item.
  */
-import { useFetcher, useLoaderData } from "react-router";
+import { Form, Link, useFetcher, useLoaderData } from "react-router";
 import type { loadResourceList, runResourceListAction } from "../.server/translation/resource-list";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
 import { kindLabel, kindPlural, kindSingular } from "../i18n/labels";
 import { isHubType } from "../lib/content-areas";
-import type { ItemState } from "../lib/language-categories";
+import { chipName, chipOrder, switcherKind } from "../lib/content-language";
+import { LIST_ORIGIN } from "../lib/editor-view";
+import { localeCountry } from "../lib/flags";
+import { categoryOf, EXTRAS, isCategoryId, type ItemState } from "../lib/language-categories";
+import { AreaIcon } from "./CategoryCard";
+import { Flag } from "./Flag";
+import { IconSquare } from "./IconSquare";
 import { ITEM_STATE_LOOK } from "./ItemStates";
 import { Breadcrumbs } from "./LanguageLayout";
 import { Button } from "./Button";
+import { Strong } from "./Type";
 
 type ListLoader = () => ReturnType<typeof loadResourceList>;
 type ListAction = () => ReturnType<typeof runResourceListAction>;
@@ -24,6 +34,85 @@ const contentHref = (locale: string | null) => (locale ? `/app/content?lang=${en
 /** The list's title: the Content page's name for the type, so its row and this page say the same. */
 function listTitle(i18n: I18n, type: string): string {
   return isHubType(type) ? i18n.t(`content.part.${type}.name`) : kindLabel(i18n, type);
+}
+
+/** The list's sign: its area's icon in the area's tint (the area list's header), else the theme's or the notifications'. */
+function ListIcon({ type }: { type: string }) {
+  const area = categoryOf(type);
+  if (area && isCategoryId(area)) return <AreaIcon id={area} />;
+  return <IconSquare icon={area === "theme" || area === "notifications" ? EXTRAS[area].icon : "text-block"} />;
+}
+
+type ListData = ReturnType<typeof useLoaderData<ListLoader>>;
+
+/**
+ * The languages to translate into as Content's chips (ui.css .lv-lang): visible ones first, each with its
+ * flag, the current one not a link and in the chosen look; a hidden one says so. More than six: one
+ * select with "Show", as on Content.
+ */
+function TargetChips({ data, current, i18n }: { data: ListData; current: string; i18n: I18n }) {
+  const { t } = i18n;
+  const ordered = chipOrder(i18n, data.targets);
+  const href = (locale: string) => `${data.kind.path}?lang=${encodeURIComponent(locale)}`;
+  // A hidden language says so: customers can't choose it yet.
+  const label = (l: (typeof ordered)[number]) => (l.published ? chipName(i18n, l) : t("resources.hiddenLanguage", { language: chipName(i18n, l) }));
+  if (switcherKind(ordered.length) === "select") {
+    return (
+      <nav aria-label={t("resources.translateInto")}>
+        <Form method="get" action={data.kind.path}>
+          <s-grid gridTemplateColumns="@container (inline-size > 640px) 360px auto 1fr, 1fr auto" gap="small-200" alignItems="end">
+            <s-select name="lang" label={t("resources.translateInto")} value={current}>
+              {ordered.map((l) => (
+                <s-option key={l.locale} value={l.locale}>
+                  {label(l)}
+                </s-option>
+              ))}
+            </s-select>
+            <Button type="submit">{t("content.language.show")}</Button>
+          </s-grid>
+        </Form>
+      </nav>
+    );
+  }
+  const body = (l: (typeof ordered)[number], chosen: boolean) => (
+    <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="center">
+      <Flag country={localeCountry(l.locale, data.marketCountries)} fallback={l.locale} size={20} />
+      <s-stack direction="block">
+        {chosen ? <Strong>{chipName(i18n, l)}</Strong> : <s-text>{chipName(i18n, l)}</s-text>}
+        {l.published ? null : (
+          <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-400" alignItems="center">
+            <s-icon type="hide" size="small" color="subdued" />
+            <s-text color="subdued">{t("content.language.hidden")}</s-text>
+          </s-grid>
+        )}
+      </s-stack>
+    </s-grid>
+  );
+  return (
+    <nav aria-label={t("resources.translateInto")}>
+      <s-grid gridTemplateColumns="@container (inline-size > 640px) auto 1fr, 1fr" gap="small-200 base" alignItems="center">
+        <Strong>{t("resources.translateInto")}</Strong>
+        <ul className="lv-langs">
+          {ordered.map((l) => (
+            <li key={l.locale} className="lv-langs__item">
+              {l.locale === current ? (
+                <span className="lv-lang" aria-current="page">
+                  <span className="lv-sr">{label(l)}</span>
+                  <span aria-hidden="true">{body(l, true)}</span>
+                </span>
+              ) : (
+                // The link's own text is its name for screen readers; the words inside are hidden from them (nothing read twice).
+                <Link className="lv-lang" to={href(l.locale)}>
+                  <span className="lv-sr">{label(l)}</span>
+                  <span aria-hidden="true">{body(l, false)}</span>
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      </s-grid>
+    </nav>
+  );
 }
 
 /** An item's state badge, in the area lists' words and icons: outdated, done, or still missing (also in part). */
@@ -42,7 +131,7 @@ export function ResourceList() {
   const bulk = useFetcher<ListAction>();
   const permission = useFetcher();
   const i18n = useI18n();
-  const { t, number } = i18n;
+  const { t } = i18n;
   const label = listTitle(i18n, data.kind.type);
   const plural = kindPlural(i18n, data.kind.type);
 
@@ -94,88 +183,86 @@ export function ResourceList() {
       <s-link slot="breadcrumb-actions" href={back}>
         {t("common.nav.content")}
       </s-link>
-      <Breadcrumbs i18n={i18n} trail={[{ href: back, label: t("common.nav.content") }]} current={label} />
-      {data.bulk.available && !data.bulk.consent ? (
-        <s-banner tone="info" heading={t("resources.consent.heading")}>
-          <s-paragraph>
-            {t("resources.consent.before")}
-            <s-link href="/app/settings?section=ai">{t("common.nav.settings")}</s-link>
-            {t("resources.consent.after")}
-          </s-paragraph>
-        </s-banner>
-      ) : null}
-      {bulkError ? (
-        <s-banner tone="critical" heading={t("resources.bulkError.heading")}>
-          <s-paragraph>
-            {bulkError === "JOBS_UNAVAILABLE"
-              ? t("resources.bulkError.JOBS_UNAVAILABLE")
-              : bulkError === "PLAN_BULK" || bulkError === "PLAN_LANGUAGE"
-                ? t("resources.bulkError.plan")
-                : t("resources.bulkError.generic")}
-          </s-paragraph>
-        </s-banner>
-      ) : null}
-      {!data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale ? (
-        <s-banner
-          tone="info"
-          heading={
-            !data.bulk.planAllowsBulk
-              ? t("resources.plan.bulkHeading")
-              : t("resources.plan.localeHeading", { language: i18n.language(data.target.locale, data.target.name) })
-          }
-        >
-          <s-paragraph>
-            {t("resources.plan.body", { plural })} <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
-          </s-paragraph>
-        </s-banner>
-      ) : null}
-      {data.kind.caution ? (
-        <s-banner
-          tone="warning"
-          heading={data.kind.caution === "legal" ? t("resources.caution.legalHeading") : t("resources.caution.liquidHeading")}
-        >
-          <s-paragraph>
-            {data.kind.caution === "legal" ? t("resources.caution.legalBody") : t("resources.caution.liquidBody")}
-          </s-paragraph>
-        </s-banner>
-      ) : null}
-      <s-section>
-        <s-stack direction="inline" gap="small" alignItems="center">
-          <s-text>{t("resources.translateInto")}</s-text>
-          {data.targets.map((target) => {
-            // Hidden languages say so: customers can't choose them yet.
-            const name = target.published ? i18n.language(target.locale, target.name) : t("resources.hiddenLanguage", { language: i18n.language(target.locale, target.name) });
-            return target.locale === locale ? (
-              <s-badge key={target.locale} tone="info">
-                {name}
-              </s-badge>
-            ) : (
-              <s-link key={target.locale} href={`${data.kind.path}?lang=${encodeURIComponent(target.locale)}`}>
-                {name}
-              </s-link>
-            );
-          })}
-        </s-stack>
-      </s-section>
-
-      {data.kind.bulk ? (
-        <s-section heading={t("resources.bulk.heading", { plural })}>
+      {/* One stack for the page, as on every page: s-page spaces only its own sections, so the header and the chips would touch them. */}
+      <s-stack direction="block" gap="base">
+        <s-query-container>
           <s-stack direction="block" gap="base">
+            <s-stack direction="block" gap="small-200">
+              {/* On a phone the trail is one 44 px back row ("‹ Content"), as on the editor and the area lists. */}
+              <Breadcrumbs i18n={i18n} trail={[{ href: back, label: t("common.nav.content") }]} current={label} touch />
+              <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
+                <ListIcon type={data.kind.type} />
+                <h1 className="lv-h1">{label}</h1>
+              </s-grid>
+            </s-stack>
+            <TargetChips data={data} current={locale} i18n={i18n} />
+          </s-stack>
+        </s-query-container>
+        {data.bulk.available && !data.bulk.consent ? (
+          <s-banner tone="info" heading={t("resources.consent.heading")}>
             <s-paragraph>
-              {t("resources.bulk.intro")}{" "}
-              {data.bulk.publishMode === "AUTO_PUBLISH" ? t("resources.bulk.autoPublish") : t("resources.bulk.review")}
+              {t("resources.consent.before")}
+              <s-link href="/app/settings?section=ai">{t("common.nav.settings")}</s-link>
+              {t("resources.consent.after")}
             </s-paragraph>
-            <bulk.Form method="post">
-              <input type="hidden" name="intent" value="bulk-translate" />
-              <input type="hidden" name="locale" value={locale} />
-              <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
-              <s-stack direction="block" gap="base">
-                <s-query-container>
-                  <s-grid gridTemplateColumns="@container (inline-size > 640px) 1fr 1fr, 1fr" gap="base" alignItems="end">
+          </s-banner>
+        ) : null}
+        {bulkError ? (
+          <s-banner tone="critical" heading={t("resources.bulkError.heading")}>
+            <s-paragraph>
+              {bulkError === "JOBS_UNAVAILABLE"
+                ? t("resources.bulkError.JOBS_UNAVAILABLE")
+                : bulkError === "PLAN_BULK" || bulkError === "PLAN_LANGUAGE"
+                  ? t("resources.bulkError.plan")
+                  : t("resources.bulkError.generic")}
+            </s-paragraph>
+          </s-banner>
+        ) : null}
+        {!data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale ? (
+          <s-banner
+            tone="info"
+            heading={
+              !data.bulk.planAllowsBulk
+                ? t("resources.plan.bulkHeading")
+                : t("resources.plan.localeHeading", { language: i18n.language(data.target.locale, data.target.name) })
+            }
+          >
+            <s-paragraph>
+              {t("resources.plan.body", { plural })} <s-link href="/app/plan">{t("common.action.seePlans")}</s-link>
+            </s-paragraph>
+          </s-banner>
+        ) : null}
+        {data.kind.caution ? (
+          <s-banner
+            tone="warning"
+            heading={data.kind.caution === "legal" ? t("resources.caution.legalHeading") : t("resources.caution.liquidHeading")}
+          >
+            <s-paragraph>
+              {data.kind.caution === "legal" ? t("resources.caution.legalBody") : t("resources.caution.liquidBody")}
+            </s-paragraph>
+          </s-banner>
+        ) : null}
+
+        {data.kind.bulk ? (
+          <s-section heading={t("resources.bulk.heading", { plural })}>
+            <s-stack direction="block" gap="base">
+              <s-paragraph>
+                {t("resources.bulk.intro")}{" "}
+                {data.bulk.publishMode === "AUTO_PUBLISH" ? t("resources.bulk.autoPublish") : t("resources.bulk.review")}
+              </s-paragraph>
+              <bulk.Form method="post">
+                <input type="hidden" name="intent" value="bulk-translate" />
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="idempotencyKey" value={data.bulk.idempotencyKey} />
+                {/* One column: the choice, then its options one under the other, then the button. */}
+                <s-stack direction="block" gap="base">
+                  <s-box maxInlineSize="400px">
                     <s-select name="fieldScope" label={t("resources.bulk.scopeLabel")}>
                       <s-option value="ALL">{t("resources.bulk.scopeAll")}</s-option>
                       <s-option value="SEO">{t("resources.bulk.scopeSeo")}</s-option>
                     </s-select>
+                  </s-box>
+                  <s-stack direction="block" gap="small-200">
                     <s-checkbox name="overwriteProtected" label={t("resources.bulk.overwrite")} />
                     {data.bulk.attached ? (
                       <s-checkbox
@@ -184,72 +271,72 @@ export function ResourceList() {
                         details={t("resources.bulk.attachedDetails", { singular: kindSingular(i18n, data.kind.type) })}
                       />
                     ) : null}
-                  </s-grid>
-                </s-query-container>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
-                  {...(bulk.state !== "idle" ? { loading: true } : {})}
-                >
-                  {t("resources.bulk.submit", { language: i18n.language(data.target.locale, data.target.name) })}
-                </Button>
-              </s-stack>
-            </bulk.Form>
-          </s-stack>
-        </s-section>
-      ) : null}
-      <s-section padding="none">
-        {data.items.length === 0 ? (
-          <s-box padding="large">
-            <s-stack direction="block" gap="small" alignItems="center">
-              <s-heading>{t("resources.empty.heading", { plural })}</s-heading>
-              <s-paragraph>
-                {t("resources.empty.body", {
-                  label,
-                  language: data.targets.some((l) => l.locale === locale) ? i18n.language(locale, data.targets.find((l) => l.locale === locale)?.name) : t("resources.empty.yourLanguages"),
-                })}
-              </s-paragraph>
+                  </s-stack>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={!data.bulk.available || !data.bulk.consent || !data.bulk.planAllowsBulk || !data.bulk.planAllowsLocale}
+                    {...(bulk.state !== "idle" ? { loading: true } : {})}
+                  >
+                    {t("resources.bulk.submit", { language: i18n.language(data.target.locale, data.target.name) })}
+                  </Button>
+                </s-stack>
+              </bulk.Form>
             </s-stack>
-          </s-box>
-        ) : (
-          <s-table>
-            <s-table-header-row>
-              <s-table-header listSlot="primary">{label}</s-table-header>
-              <s-table-header>{t("common.status")}</s-table-header>
-              <s-table-header format="numeric">{t("resources.table.translatedFields")}</s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {data.items.map((p) => (
-                <s-table-row key={p.id}>
-                  <s-table-cell>
-                    <s-link href={`${data.kind.path}/${p.id}?lang=${encodeURIComponent(locale)}`}>
-                      {p.title}
-                    </s-link>
-                  </s-table-cell>
-                  <s-table-cell>
-                    <StateBadge state={p.outdated > 0 ? "outdated" : p.translated === p.total ? "complete" : "missing"} i18n={i18n} />
-                  </s-table-cell>
-                  <s-table-cell>
-                    {number(p.translated)} / {number(p.total)}
-                  </s-table-cell>
-                </s-table-row>
-              ))}
-            </s-table-body>
-          </s-table>
-        )}
-      </s-section>
-
-      <s-stack direction="inline" gap="base">
-        {!data.isFirstPage ? (
-          <Button href={`${data.kind.path}?lang=${encodeURIComponent(locale)}`}>{t("language.list.page.first")}</Button>
+          </s-section>
         ) : null}
-        {data.nextCursor ? (
-          <Button
-            href={`${data.kind.path}?lang=${encodeURIComponent(locale)}&after=${encodeURIComponent(data.nextCursor)}`}
-          >
-            {t("language.list.page.next")}
-          </Button>
+        <s-section padding="none">
+          {data.items.length === 0 ? (
+            <s-box padding="large">
+              <s-stack direction="block" gap="small" alignItems="center">
+                <s-heading>{t("resources.empty.heading", { plural })}</s-heading>
+                <s-paragraph>
+                  {t("resources.empty.body", {
+                    label,
+                    language: data.targets.some((l) => l.locale === locale) ? i18n.language(locale, data.targets.find((l) => l.locale === locale)?.name) : t("resources.empty.yourLanguages"),
+                  })}
+                </s-paragraph>
+              </s-stack>
+            </s-box>
+          ) : (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">{label}</s-table-header>
+                <s-table-header>{t("common.status")}</s-table-header>
+                <s-table-header format="numeric">{t("language.state.complete")}</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {data.items.map((p) => {
+                  // The whole row opens the item (its name is the link keyboards and screen readers use).
+                  const linkId = `resource-row-${p.id}`;
+                  return (
+                    <s-table-row key={p.id} clickDelegate={linkId}>
+                      <s-table-cell>
+                        {/* The editor leads back here (not to the area list, which has no rows before the language is counted). */}
+                        <s-link id={linkId} href={`${data.kind.path}/${p.id}?lang=${encodeURIComponent(locale)}&from=${LIST_ORIGIN}`}>
+                          {p.title}
+                        </s-link>
+                      </s-table-cell>
+                      <s-table-cell>
+                        <StateBadge state={p.outdated > 0 ? "outdated" : p.translated === p.total ? "complete" : "missing"} i18n={i18n} />
+                      </s-table-cell>
+                      {/* In words, as the area cards say it: the figure reads alone in a phone's list too. */}
+                      <s-table-cell>{t("language.card.figure", { complete: p.translated, total: p.total, count: p.total })}</s-table-cell>
+                    </s-table-row>
+                  );
+                })}
+              </s-table-body>
+            </s-table>
+          )}
+        </s-section>
+
+        {!data.isFirstPage || data.nextCursor ? (
+          <s-stack direction="inline" gap="base">
+            {!data.isFirstPage ? <Button href={`${data.kind.path}?lang=${encodeURIComponent(locale)}`}>{t("language.list.page.first")}</Button> : null}
+            {data.nextCursor ? (
+              <Button href={`${data.kind.path}?lang=${encodeURIComponent(locale)}&after=${encodeURIComponent(data.nextCursor)}`}>{t("language.list.page.next")}</Button>
+            ) : null}
+          </s-stack>
         ) : null}
       </s-stack>
     </s-page>

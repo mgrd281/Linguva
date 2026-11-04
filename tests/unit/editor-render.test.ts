@@ -129,6 +129,14 @@ describe("the editor's page", () => {
     expect(paged).toContain('<input type="hidden" name="from" value="content"/>');
   });
 
+  it("opened from its type's own list, leads back there: a language not counted yet has no rows in the area list", async () => {
+    const html = await render(product(), "en", "http://localhost/app/products/2?lang=de&from=list");
+    expect(html).toContain('<s-link slot="breadcrumb-actions" href="/app/products?lang=de">Products</s-link>');
+    expect(html).toContain('<s-link href="/app/content?lang=de">Content</s-link>');
+    expect(html).toContain('<s-link href="/app/products?lang=de">Products</s-link>');
+    expect(html).not.toContain("/app/languages/de/products");
+  });
+
   it("says it in German for a German admin user", async () => {
     const html = await render(product(), "de");
     expect(html).toContain('href="/app/languages/de/products">Produkte auf Deutsch</s-link>');
@@ -261,6 +269,52 @@ describe("the editor's page", () => {
     expect(html).toContain('<input type="hidden" name="value:body_html" value="&lt;p&gt;Warme &lt;b&gt;Jacke&lt;/b&gt; Nummer 2.&lt;/p&gt;"/>');
     expect(tags(html, "s-text-area").filter((tag) => attr(tag, "name") === "value:body_html")).toHaveLength(0);
     expect(html).toMatch(/<span class="lv-btn__label">Edit HTML<\/span>/);
+  });
+
+  it("says how to fill an empty HTML text, as high as its original, and opens its code from there", async () => {
+    const empty = product({ fields: [field("title", "SINGLE_LINE_TEXT_FIELD", "Product 2 jacket", "Produkt 2 Jacke"), field("body_html", "HTML", "<p>Very warm <b>jacket</b> number 2.</p>")] });
+    const html = await render(empty);
+    // Not a passive "the preview appears here" box under the language's label: a button that says what to do.
+    expect(html).toContain('<button type="button" class="lv-ed-empty" style="min-height:96px">Nothing in German yet – translate it with AI above, or write it here.</button>');
+    expect(html).not.toContain("The preview appears here once there is a translation.");
+    expect(tags(html, "iframe").map((tag) => attr(tag, "title"))).toEqual(["Description, English original"]);
+    // The form still sends the (empty) text; "Edit HTML" stays under it (the box's name doesn't repeat it, so each button has its own).
+    expect(html).toContain('<input type="hidden" name="value:body_html" value=""/>');
+    expect(html).toMatch(/<span class="lv-btn__label">Edit HTML<\/span>/);
+    // Without AI (not allowed yet, or no key): only what the merchant can do.
+    const manual = await render(product({ ...empty, ai: { ...product().ai, consent: false } }));
+    expect(manual).toContain(">Nothing in German yet – write it here.</button>");
+    expect(await render(empty, "de")).toContain(">Noch nichts auf Deutsch – übersetze es oben mit KI oder schreib es hier.</button>");
+  });
+
+  it("labels the translation as its original: the language above both, the field's own label for screen readers only", async () => {
+    const html = await render(product());
+    expect(html).toContain('<s-text color="subdued">English (original)</s-text><s-box padding="small-300 small" background="subdued" borderRadius="base"><s-paragraph>Product 2 jacket</s-paragraph></s-box>');
+    expect(html).toContain('<s-text color="subdued">German</s-text><div lang="de"><s-text-field name="value:title" label="German" labelAccessibilityVisibility="exclusive" value="Produkt 2 Jacke"></s-text-field></div>');
+    // The web address too, with what it does under the field.
+    expect(html).toMatch(/<s-text-field name="value:handle" label="German" labelAccessibilityVisibility="exclusive" value="produkt-2" details="Optional\. A new web address/);
+    // A long text keeps the box's own padding beside its text area.
+    const long = await render(product({ fields: [field("title", "SINGLE_LINE_TEXT_FIELD", "A".repeat(130), "B".repeat(130))] }));
+    expect(long).toContain('<s-box padding="base" background="subdued" borderRadius="base"><s-paragraph>');
+    expect(long).toMatch(/<s-text-area name="value:title" label="German" labelAccessibilityVisibility="exclusive"/);
+  });
+
+  it("calls a web address nobody wrote yet optional, never “Not translated” beside the texts the count includes", async () => {
+    const written = [field("title", "SINGLE_LINE_TEXT_FIELD", "Product 2 jacket", "Produkt 2 Jacke"), field("body_html", "HTML", "<p>Warm.</p>", "<p>Warm.</p>")];
+    const none = { available: true, imagesWithoutAlt: 0, unsupported: 0, items: [] };
+    const html = await render(product({ fields: [...written, field("handle", "URI", "product-2")], attached: none }));
+    expect(html).toContain("In German · all 2 texts are translated");
+    expect(html).toContain("Nothing is missing or outdated: every text is translated.");
+    expect(html).toContain('<s-badge icon="minus-circle">Optional</s-badge><s-badge icon="edit">Manual only</s-badge>');
+    expect(html).not.toContain("Not translated");
+    const tiles = [...html.matchAll(/class="lv-tile lv-ed-tile" data-state="([^"]+)"/g)].map((m) => m[1]);
+    expect(tiles).toEqual(["translated", "translated", "optional"]);
+    expect(html).toContain('<span class="lv-sr">Web address: Optional</span>');
+    expect(await render(product({ fields: [...written, field("handle", "URI", "product-2")], attached: none }), "de")).toContain('<s-badge icon="minus-circle">Freiwillig</s-badge>');
+    // Written, it has a text's own state.
+    const translated = await render(product({ fields: [...written, field("handle", "URI", "product-2", "produkt-2")], attached: none }));
+    expect([...translated.matchAll(/class="lv-tile lv-ed-tile" data-state="([^"]+)"/g)].map((m) => m[1])).toEqual(["translated", "translated", "translated"]);
+    expect(translated).not.toContain("Optional</s-badge>");
   });
 
   it("publishes everything with one button and the admin's save bar; removing is a quiet icon", async () => {

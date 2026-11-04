@@ -1,8 +1,9 @@
 /**
  * The editor shows each text's state beside its name: translated, outdated
- * or not translated, so a merchant sees what needs work without reading
- * every input; one square tile per text says the same and leads to it. The
- * texts come in Review's order, and the original description shows in full.
+ * or not translated (a web address nobody wrote yet is optional), so a
+ * merchant sees what needs work without reading every input; one square tile
+ * per text says the same and leads to it. The texts come in Review's order,
+ * and the original description shows in full.
  * The way back leads to the area list the item is opened from, as that list
  * was opened (from Content: its trail starts there).
  */
@@ -48,6 +49,35 @@ test("each text starts with its state, in Review's order, and its tile leads to 
   const clientHeight = await frame.evaluate((f: HTMLIFrameElement) => f.clientHeight);
   const contentHeight = await (await frame.elementHandle())!.contentFrame().then((f) => f!.evaluate(() => document.documentElement.scrollHeight));
   expect(contentHeight).toBeLessThanOrEqual(clientHeight);
+  await expectAccessible(page);
+});
+
+test("a new item: its web address is optional, both columns are labelled alike, the empty description says how to fill it @responsive", async ({ page }) => {
+  // The reviewed screen (the visual store, only read here): nothing of the jacket is in German yet.
+  await openApp(page, "visual", "/app/products/2?lang=de");
+  const text = (name: string) => page.locator(`s-section[data-text="${name}"]`);
+  await expect(page.getByText("In German · 2 of 2 texts to translate")).toBeVisible();
+  // The count leaves the web address out, so it never says "Not translated" beside the two texts it counts.
+  await expect(text("Web address").locator("s-badge").first()).toHaveText("Optional");
+  await expect(text("Web address").locator("s-badge", { hasText: "Manual only" })).toBeVisible();
+  const tiles = page.getByRole("navigation", { name: "Texts" }).getByRole("link");
+  await expect(tiles.locator(".lv-sr")).toHaveText(["Name: Not translated", "Description: Not translated", "Web address: Optional"]);
+
+  // The language above the field, as above the original (not Polaris' label inside the empty field on a phone); the field keeps it as its name.
+  const name = text("Name");
+  await expect(name.getByText("English (original)")).toBeVisible();
+  const field = name.locator('s-text-field[name="value:title"]');
+  expect(await field.evaluate((el) => el.parentElement?.previousElementSibling?.textContent)).toBe("German");
+  await expect(field).toHaveAttribute("labelAccessibilityVisibility", "exclusive");
+  await expect(name.getByRole("textbox", { name: "German" })).toBeVisible();
+
+  // The empty description isn't a passive box: it says what to do, and writing it opens its code.
+  const empty = text("Description").getByRole("button", { name: "Nothing in German yet – translate it with AI above, or write it here." });
+  await expect(empty).toBeVisible();
+  await expect(text("Description").getByText("The preview appears here once there is a translation.")).toHaveCount(0);
+  await empty.click();
+  await expect(page.locator('s-text-area[name="value:body_html"] textarea')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("name"))).toBe("value:body_html");
   await expectAccessible(page);
 });
 

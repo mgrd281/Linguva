@@ -134,13 +134,24 @@ describe("the Overview page", () => {
 
   it("keeps the store's figure in a card with its count and the button that counts again, without repeating what approving brings", async () => {
     const store = section(await render(demo()), 'aria-label="Your store"');
-    expect(store).toContain('<s-box background="base" border="base" borderRadius="large-100" padding="base">');
+    expect(store).toContain('<s-box background="base" border="base" borderRadius="large-100" padding="base" blockSize="100%">');
     expect(store).toContain('<h2 class="lv-h2">Your store in 1 other language</h2>');
     expect(store).not.toContain("Once you approve");
     expect(store).toContain("Last counted: Oct 30, 2026, 12:53 AM UTC. New translations count right away.");
     expect(store).toMatch(/<button type="submit" class="lv-btn lv-btn--secondary"[^>]*><span class="lv-btn__icon" aria-hidden="true"><s-icon type="chart-donut" size="small"><\/s-icon><\/span><span class="lv-btn__label">Count translations again<\/span>/);
     // Its live region is ready before a count starts (it takes the focus once the button is gone).
     expect(store).toContain('<div role="status" tabindex="-1" class="lv-ov-status">');
+  });
+
+  it("keeps the other pages' width, its top row's two cards ending on one line", async () => {
+    const html = await render(demo());
+    // Not "large": Content and the language pages are as wide.
+    expect(html).toMatch(/<s-page heading="Overview">/);
+    expect(html).toContain('<s-grid gridTemplateColumns="@container (inline-size &gt; 760px) 1fr 1fr, 1fr" gap="base" alignItems="stretch">');
+    // Each stretched section is a grid, so its card fills it: no gap under the shorter card.
+    for (const attribute of ['id="overview-next"', 'aria-label="Your store"']) {
+      expect(section(html, attribute), attribute).toMatch(/^<section [^>]*style="display:grid"><s-box background="base" border="base" borderRadius="large-100" padding="base" blockSize="100%">/);
+    }
   });
 
   it("shows what approving brings under the figure when approving isn't the next step", async () => {
@@ -163,6 +174,12 @@ describe("the Overview page", () => {
     expect(html.replace(/<s-text type="strong">\d+<\/s-text>/g, "")).not.toContain('type="strong"');
     // The page's foot: the AI characters with their icon.
     expect(html).toContain('<s-icon type="gauge" color="subdued" size="small"></s-icon></span><s-text color="subdued">AI translation this month: 0 of 1,200,000 characters</s-text>');
+  });
+
+  it("says in the languages view what choosing a card opens, as the countries view does", async () => {
+    const html = await render(demo({ countries: { access: false } }));
+    expect(html).toContain('<h2 id="overview-places-heading" class="lv-h2">Your languages</h2>');
+    expect(html).toContain("A translation counts for every country where customers read that language – the least translated first. Choose one to see every area with pictures and percentages.");
   });
 
   it("marks the running jobs' section with its state's icon", async () => {

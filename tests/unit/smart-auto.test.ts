@@ -11,7 +11,7 @@ import { BudgetMeter, budgetMeter, ChoiceTiles, DayToggles, failedAction, sameSc
 import { APP_LOCALES, translator, type AppLocale } from "../../app/i18n/i18n";
 import { I18nProvider } from "../../app/i18n/react";
 import { PLANS } from "../../app/lib/plans";
-import { attachedOwner, budgetWindows, checkSpec, pauseLiftsAt, smartCoverageTypes, smartStatus } from "../../app/lib/smart-auto";
+import { attachedOwner, budgetWindows, checkSpec, pauseLiftsAt, SMART_PAUSE_REASONS, smartCoverageTypes, smartStatus } from "../../app/lib/smart-auto";
 import { nextOccurrence } from "../../app/lib/schedule";
 import { waitsForSmartCheck } from "../../app/.server/smart/panel";
 
@@ -344,21 +344,76 @@ describe("the smart page's words for alt text and custom fields", () => {
   });
 });
 
-describe("the smart schedule's banner", () => {
+describe("the smart schedule's state row", () => {
   const waiting = { state: "waiting", reason: "NO_LANGUAGE" } as const;
+  /** The row's bold title and the line under it (null without one), as read (React writes ' and & as entities). */
+  const text = (html?: string) => (html === undefined ? null : html.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+  const row = (markup: string) => ({
+    title: text(markup.match(/<strong class="lv-status__title">([^<]*)<\/strong>/)?.[1]),
+    detail: text(markup.match(/<s-text color="subdued">([^<]*)<\/s-text>/)?.[1]),
+  });
 
-  it("waits with its own heading, and sends a missing language to Settings' button elsewhere", () => {
+  it("is Settings' status row, not a banner: the reason as its title, what to do under it, a missing language sent to Settings' button elsewhere", () => {
     const markup = html(createElement(SmartStateBanner, { status: waiting, zone: "Europe/Berlin" }));
-    expect(markup).toContain('heading="Smart schedule is waiting"');
-    expect(markup).toContain("Choose languages under Schedule and options.");
+    expect(markup).toContain('<div class="lv-status" data-tone="warning">');
+    expect(markup).not.toContain("<s-banner");
+    expect(row(markup)).toEqual({ title: "No chosen language is in your plan", detail: "Choose languages under Schedule and options." });
     expect(markup).not.toContain("#smart-scope");
   });
 
-  it("on the smart page leads to the page's own language choice", () => {
+  it("on the smart page leads to the page's own language choice, whose link needs no line saying it again", () => {
     const markup = html(createElement(SmartStateBanner, { status: waiting, zone: "Europe/Berlin", onChooseLanguages: () => undefined }), "de");
-    expect(markup).toContain('heading="Der intelligente Zeitplan wartet"');
-    expect(markup).toContain("Wähle unter „Was übersetzt wird“ mindestens eine Sprache.");
+    expect(row(markup)).toEqual({ title: "Keine gewählte Sprache ist in deinem Tarif", detail: null });
     expect(markup).toContain('<s-link href="#smart-scope">Sprachen wählen</s-link>');
+  });
+
+  it("names a stopped background service once: the title, then what happens next", () => {
+    const markup = html(createElement(SmartStateBanner, { status: { state: "waiting", reason: "WORKER" }, zone: "Europe/Berlin" }));
+    expect(row(markup)).toEqual({ title: "Linguva's background service isn't running", detail: "Checks start again by themselves once it's back." });
+    expect(markup.match(/background service/g)).toHaveLength(1);
+  });
+
+  it("waiting for the permission: the grant button beside it in place of a line; without one, the way to Settings", () => {
+    const consent = { state: "waiting", reason: "CONSENT" } as const;
+    const grant = createElement("button", { type: "submit" }, "Allow AI translation");
+    const here = html(createElement(SmartStateBanner, { status: consent, zone: "UTC", consentAction: grant }));
+    expect(row(here)).toEqual({ title: "Waiting for your permission", detail: null });
+    expect(here).toContain('<button type="submit">Allow AI translation</button>');
+    const elsewhere = html(createElement(SmartStateBanner, { status: consent, zone: "UTC" }));
+    expect(row(elsewhere)).toEqual({ title: "Waiting for your permission", detail: "Allow AI translation first." });
+    expect(elsewhere).toContain('<s-link href="/app/settings?section=ai">Settings</s-link>');
+  });
+
+  it("paused: Settings' few words for the reason, then when it continues by itself (the zone named)", () => {
+    const until = at("2026-11-03T23:00:00Z");
+    const budget = row(html(createElement(SmartStateBanner, { status: { state: "paused", reason: "BUDGET_DAILY", until }, zone: "Europe/Berlin" })));
+    expect(budget.title).toBe("Today's budget used up");
+    expect(budget.detail).toMatch(/^The smart schedule continues by itself from .+ \(Europe\/Berlin\)\. Whatever is still missing then is translated by the next check\.$/);
+    // Paused by the merchant: no date and no second "paused".
+    expect(row(html(createElement(SmartStateBanner, { status: { state: "paused", reason: "MANUAL", until: null }, zone: "UTC" }), "de"))).toEqual({
+      title: "Von dir pausiert",
+      detail: "Bis du fortsetzt, wird nichts abgeglichen oder übersetzt.",
+    });
+    // A changed main language: the page's own language choice beside it.
+    const language = html(createElement(SmartStateBanner, { status: { state: "paused", reason: "PRIMARY_LANGUAGE", until: null }, zone: "UTC", onChooseLanguages: () => undefined }));
+    expect(row(language).title).toBe("Main language changed");
+    expect(language).toContain('<s-link href="#smart-scope">Choose languages</s-link>');
+  });
+
+  it("never says its title again in the line under it, for every reason in every language", () => {
+    const until = at("2026-11-03T23:00:00Z");
+    const statuses = [
+      ...SMART_PAUSE_REASONS.map((reason) => ({ state: "paused" as const, reason, until })),
+      ...(["PLAN", "CONSENT", "UNAVAILABLE", "WORKER", "NO_LANGUAGE"] as const).map((reason) => ({ state: "waiting" as const, reason })),
+    ];
+    for (const locale of APP_LOCALES) {
+      for (const status of statuses) {
+        const { title, detail } = row(html(createElement(SmartStateBanner, { status, zone: "Europe/Berlin" }), locale));
+        expect(title, `${locale} ${status.state} ${status.reason}`).toBeTruthy();
+        expect(detail, `${locale} ${status.state} ${status.reason}`).toBeTruthy();
+        expect(detail!.toLocaleLowerCase(), `${locale} ${status.state} ${status.reason}`).not.toContain(title!.toLocaleLowerCase());
+      }
+    }
   });
 });
 
@@ -415,8 +470,29 @@ describe("the summary before setup", () => {
       }),
     );
     expect(markup).toContain('<s-text tone="caution">Checks need to be at least an hour apart.</s-text>');
-    expect(markup).toContain("Not counted yet");
-    expect(markup).toContain(">Count store</s-link>");
+    // The state and its link apart: "Not counted yet · Count translations".
+    expect(markup).toMatch(/Not counted yet · <span style="font-weight:400;white-space:nowrap"><s-link href="\/app\/coverage">Count translations<\/s-link><\/span>/);
+  });
+
+  it("picks its columns by the facts it shows, so no row ends half empty (cardColumns)", () => {
+    const shown = (translating: number) =>
+      html(
+        createElement(SmartPreview, {
+          data: { ...empty, zone: "UTC", config: null, lastSuccessAt: "2026-11-02T09:00:00.000Z", lastRun: { resourcesChanged: 3, fieldsDetected: 12 }, translating, estimate: null, publishing: "DRAFT" },
+          languageNames: new Map(),
+          omit: ["languages", "schedule", "content", "nextCheck"],
+          now: at("2026-11-03T15:00:00Z"),
+          shopZone: "UTC",
+        }),
+      );
+    const columns = (markup: string) => markup.match(/<s-grid gridTemplateColumns="([^"]*)"/)![1];
+    // Set up: the last complete check, what it found, publishing and the next check's characters, two by two.
+    expect(columns(shown(0))).toBe("@container (inline-size &gt; 520px) 1fr 1fr, 1fr");
+    expect(shown(0).match(/<s-icon type=/g)).toHaveLength(4);
+    // Translating too: five, three in a row where there is room.
+    expect(columns(shown(4))).toBe("@container (inline-size &gt; 520px) 1fr 1fr, (inline-size &gt; 860px) 1fr 1fr 1fr, 1fr");
+    // The next check's figure in words that aren't the state's ("Waiting").
+    expect(shown(0)).toContain(">For the next check</s-text>");
   });
 
   it("knows the scope the first check's figure was counted for, and no other", () => {

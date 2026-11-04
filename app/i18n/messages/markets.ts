@@ -4,9 +4,12 @@ import type { Message, Translation } from "./define";
 export const en = {
   "markets.page.lead": "Which language your customers read in each country, and what stops them from seeing your translations.",
   "markets.access.heading": "See your languages per market",
-  "markets.access.body":
-    "Linguva can show which languages each of your markets offers, under which web address, and what stops customers from seeing your translations. For this, Linguva needs permission to read your markets. It never changes them.",
-  "markets.access.allow": "Allow reading markets",
+  "markets.access.body": "To show this, Linguva needs to read your markets: their languages and web addresses. It never changes them.",
+  "markets.access.list": "What you see with it",
+  "markets.access.shows.languages": "Languages per market",
+  "markets.access.shows.addresses": "Web addresses",
+  "markets.access.shows.hidden": "What hides a translation",
+  "markets.access.allow": "Allow access to markets",
 
   "markets.checks.heading": "Checks",
   "markets.checks.none": "No problems found",
@@ -50,9 +53,12 @@ export const en = {
 export const de: Translation<typeof en> = {
   "markets.page.lead": "Welche Sprache deine Kundschaft in jedem Land liest und was sie daran hindert, deine Übersetzungen zu sehen.",
   "markets.access.heading": "Deine Sprachen pro Markt ansehen",
-  "markets.access.body":
-    "Linguva kann zeigen, welche Sprachen jeder deiner Märkte anbietet, unter welcher Webadresse und was Kunden daran hindert, deine Übersetzungen zu sehen. Dafür braucht Linguva die Berechtigung, deine Märkte zu lesen. Linguva ändert sie nie.",
-  "markets.access.allow": "Lesen der Märkte erlauben",
+  "markets.access.body": "Dafür muss Linguva deine Märkte lesen dürfen: ihre Sprachen und Webadressen. Linguva ändert sie nie.",
+  "markets.access.list": "Was du damit siehst",
+  "markets.access.shows.languages": "Sprachen pro Markt",
+  "markets.access.shows.addresses": "Webadressen",
+  "markets.access.shows.hidden": "Was eine Übersetzung versteckt",
+  "markets.access.allow": "Zugriff auf Märkte erlauben",
 
   "markets.checks.heading": "Hinweise",
   "markets.checks.none": "Keine Probleme gefunden",
@@ -96,9 +102,12 @@ export const de: Translation<typeof en> = {
 export const fr: Translation<typeof en> = {
   "markets.page.lead": "La langue que lit votre clientèle dans chaque pays, et ce qui l'empêche de voir vos traductions.",
   "markets.access.heading": "Voir vos langues par marché",
-  "markets.access.body":
-    "Linguva peut afficher les langues proposées par chacun de vos marchés, sous quelle adresse web, et ce qui empêche les clients de voir vos traductions. Pour cela, Linguva a besoin de l'autorisation de lire vos marchés. Linguva ne les modifie jamais.",
-  "markets.access.allow": "Autoriser la lecture des marchés",
+  "markets.access.body": "Pour cela, Linguva doit pouvoir lire vos marchés : leurs langues et leurs adresses web. Linguva ne les modifie jamais.",
+  "markets.access.list": "Ce que vous voyez ainsi",
+  "markets.access.shows.languages": "Langues par marché",
+  "markets.access.shows.addresses": "Adresses web",
+  "markets.access.shows.hidden": "Ce qui masque une traduction",
+  "markets.access.allow": "Autoriser l'accès aux marchés",
 
   "markets.checks.heading": "Vérifications",
   "markets.checks.none": "Aucun problème détecté",
@@ -142,9 +151,12 @@ export const fr: Translation<typeof en> = {
 export const es: Translation<typeof en> = {
   "markets.page.lead": "Qué idioma lee tu clientela en cada país y qué le impide ver tus traducciones.",
   "markets.access.heading": "Ver tus idiomas por mercado",
-  "markets.access.body":
-    "Linguva puede mostrar qué idiomas ofrece cada uno de tus mercados, en qué dirección web y qué impide que los clientes vean tus traducciones. Para ello, Linguva necesita permiso para leer tus mercados. Linguva nunca los modifica.",
-  "markets.access.allow": "Permitir la lectura de mercados",
+  "markets.access.body": "Para ello, Linguva necesita leer tus mercados: sus idiomas y direcciones web. Linguva nunca los modifica.",
+  "markets.access.list": "Lo que ves con ello",
+  "markets.access.shows.languages": "Idiomas por mercado",
+  "markets.access.shows.addresses": "Direcciones web",
+  "markets.access.shows.hidden": "Lo que oculta una traducción",
+  "markets.access.allow": "Permitir acceso a los mercados",
 
   "markets.checks.heading": "Verificaciones",
   "markets.checks.none": "No se encontraron problemas",

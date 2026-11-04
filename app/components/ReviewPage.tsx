@@ -15,6 +15,7 @@ import type { ReviewPreviews } from "../.server/review/previews";
 import type { clientLoader as previewsLoader } from "../routes/app.review_.previews";
 import { useI18n } from "../i18n/react";
 import type { I18n } from "../i18n/i18n";
+import { cardColumns } from "../lib/content-areas";
 import { localeCountry } from "../lib/flags";
 import { validateHandle } from "../lib/handles";
 import { languagePath } from "../lib/language-categories";
@@ -623,12 +624,13 @@ function AllReviewed({ data, i18n }: { data: ReviewPageData; i18n: I18n }) {
         }
       />
       {languages.length ? (
-        <section aria-labelledby="review-languages-heading">
+        <section aria-labelledby="review-languages-heading" className="lv-review-languages">
           <s-stack direction="block" gap="small-200">
             <h2 id="review-languages-heading" className="lv-h3">
               {t("review.empty.languages")}
             </h2>
-            <ul className="lv-links">
+            {/* Rows always full (cardColumns): two languages side by side, three in a row, four two by two. */}
+            <ul className="lv-links" data-columns={cardColumns(languages.length)}>
               {languages.map((language) => (
                 <LanguageTile key={language.locale} language={language} data={data} i18n={i18n} />
               ))}

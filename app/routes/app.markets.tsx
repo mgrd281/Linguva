@@ -8,10 +8,12 @@ import { analyzeMarkets, fetchMarkets, MARKETS_SCOPE, MarketsAccessError, type M
 import { loadMarketCountries } from "../.server/markets/countries";
 import { loadCoverageSummary } from "../.server/coverage/summary";
 import { requireShop } from "../.server/shopify/require-shop";
+import { Card } from "../components/Card";
 import { CountryStatusBar } from "../components/CountryStatus";
 import { Disclosure } from "../components/Disclosure";
 import { Flag } from "../components/Flag";
 import { PLAIN_LIST } from "../components/LanguageLayout";
+import { PermissionCard } from "../components/PermissionCard";
 import { StatusRow } from "../components/SettingsNav";
 import { ToolHeader, ToolsBreadcrumbSlot } from "../components/ToolHeader";
 import { Strong } from "../components/Type";
@@ -129,21 +131,31 @@ export default function Markets() {
   const header = <ToolHeader tool="markets" title={title} lead={t("markets.page.lead")} i18n={i18n} />;
 
   if (!data.access) {
+    // The same card as the Content page's permission (AccessCard): what the permission shows, and one button.
     return (
       <s-page heading={title}>
         <ToolsBreadcrumbSlot i18n={i18n} />
         <s-stack direction="block" gap="base">
           {header}
-          <s-section heading={t("markets.access.heading")}>
-            <s-stack direction="block" gap="base">
-              <s-paragraph>{t("markets.access.body")}</s-paragraph>
+          <PermissionCard
+            id="markets-access"
+            heading={t("markets.access.heading")}
+            body={t("markets.access.body")}
+            itemsLabel={t("markets.access.list")}
+            items={[
+              { icon: "language", label: t("markets.access.shows.languages") },
+              { icon: "domain", label: t("markets.access.shows.addresses") },
+              { icon: "hide", label: t("markets.access.shows.hidden") },
+            ]}
+            action={
               <fetcher.Form method="post">
                 <Button type="submit" variant="primary" {...(fetcher.state !== "idle" ? { loading: true } : {})}>
                   {t("markets.access.allow")}
                 </Button>
               </fetcher.Form>
-            </s-stack>
-          </s-section>
+            }
+            note={t("content.access.once")}
+          />
         </s-stack>
       </s-page>
     );
@@ -158,7 +170,7 @@ export default function Markets() {
         {header}
 
         {/* The checks first: what stops customers from seeing a translation, each with its fix. */}
-        <s-section heading={t("markets.checks.heading")}>
+        <Card heading={t("markets.checks.heading")}>
           <s-stack direction="block" gap="base">
             {data.findings.length ? (
               <ul style={{ ...PLAIN_LIST, display: "grid", gap: 12 }}>
@@ -189,9 +201,9 @@ export default function Markets() {
               {t("markets.checks.coverageAfter")}
             </s-text>
           </s-stack>
-        </s-section>
+        </Card>
 
-        <s-section heading={t("markets.countries.heading")}>
+        <Card heading={t("markets.countries.heading")}>
           <s-stack direction="block" gap="base">
             <s-text color="subdued">{t("markets.countries.intro")}</s-text>
             {!data.countries ? (
@@ -239,10 +251,10 @@ export default function Markets() {
               </>
             )}
           </s-stack>
-        </s-section>
+        </Card>
 
         {data.markets.length ? (
-          <s-section>
+          <Card>
             <Disclosure summary={t("markets.details.summary", { count: data.markets.length })}>
               <s-stack direction="block" gap="base">
                 {data.markets.map((market) => (
@@ -294,7 +306,7 @@ export default function Markets() {
                 ))}
               </s-stack>
             </Disclosure>
-          </s-section>
+          </Card>
         ) : null}
       </s-stack>
     </s-page>

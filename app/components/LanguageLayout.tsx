@@ -1,8 +1,8 @@
 /**
  * What a language's page and its area lists share: the breadcrumb drawn in
- * the page (the admin's title bar shows only the page's heading), the
- * numbered "Next" steps whose first button is the page's one primary
- * button, and an action's error in words.
+ * the page (the admin's title bar shows only the page's heading), the card's
+ * look, the numbered "Next" steps whose first button is the page's one
+ * primary button, and an action's error in words.
  */
 import type { ReactNode } from "react";
 import type { I18n } from "../i18n/i18n";
@@ -11,6 +11,11 @@ import { hasMessage } from "../i18n/labels";
 export const BIG_HEADING = { margin: 0, fontSize: 22, lineHeight: "28px", fontWeight: 700 } as const;
 /** A native list without bullets: Polaris' list roles fail the accessibility check. */
 export const PLAIN_LIST = { listStyle: "none", margin: 0, padding: 0 } as const;
+/**
+ * A card: on a phone too (Polaris draws sections flat there). Every page's cards take it (ContentTiles
+ * passes it on); it lives here, where the area cards and lists can import it without a cycle.
+ */
+export const CARD = { background: "base", border: "base", borderRadius: "large-100" } as const;
 
 /** An action's error in words: the language pages' own codes, then the Coverage page's. */
 export function languageErrorText(i18n: I18n, code: string): string {
@@ -117,10 +122,10 @@ export interface StepView {
   icon?: ReactNode;
 }
 
-/** A step's title given as text: semibold, since Polaris draws s-text type="strong" at the body weight (450). */
-const STEP_TITLE = { fontWeight: 600 } as const;
-
-/** Up to three numbered steps, each with what to do, why, and its button. */
+/**
+ * Up to three numbered steps, each with what to do, why, and its button. A title given as text takes the
+ * type scale's step title (.lv-h3, as the Overview's step), not a heading: the steps are a list.
+ */
 export function NumberedSteps({ steps }: { steps: StepView[] }) {
   return (
     <ol style={{ ...PLAIN_LIST, display: "grid", gap: 16 }}>
@@ -132,7 +137,7 @@ export function NumberedSteps({ steps }: { steps: StepView[] }) {
               {step.icon !== undefined ? step.icon : <StepNumber n={i + 1} first={i === 0} />}
               <s-stack direction="block" gap="small-200">
                 <s-stack direction="block" gap="small-500">
-                  {typeof step.title === "string" ? <strong style={STEP_TITLE}>{step.title}</strong> : step.title}
+                  {typeof step.title === "string" ? <strong className="lv-h3">{step.title}</strong> : step.title}
                   {step.detail ? <s-text color="subdued">{step.detail}</s-text> : null}
                 </s-stack>
                 {step.action ? <s-stack direction="inline">{step.action}</s-stack> : null}

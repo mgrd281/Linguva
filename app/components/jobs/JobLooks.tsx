@@ -191,7 +191,13 @@ export function StatusPanel({
   );
 }
 
-/** The legend: one line per group with items, its icon and figure with words. */
+/**
+ * A legend line's key: the group's colour in the ring, so every arc has its match (the icon shows only its
+ * tone: "already up to date" is the same green as "translated"). A hairline keeps the track's light grey visible.
+ */
+const legendKey = (colour: string) => ({ width: 10, height: 10, borderRadius: 3, background: colour, boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.08)", flex: "none" }) as const;
+
+/** The legend: one line per group with items, its colour as in the ring, its icon and figure with words. */
 export function Legend({ lines, words, label }: { lines: readonly LegendLine[]; words: JobWords; label: string }) {
   if (!lines.length) return null;
   return (
@@ -199,6 +205,7 @@ export function Legend({ lines, words, label }: { lines: readonly LegendLine[]; 
       {lines.map((line) => (
         <li key={line.group}>
           <s-stack direction="inline" gap="small-200" alignItems="center">
+            <span aria-hidden="true" style={legendKey(GROUP_LOOK[line.group].colour)} />
             <GroupIcon group={line.group} />
             <s-text>{words.say(line.text)}</s-text>
           </s-stack>

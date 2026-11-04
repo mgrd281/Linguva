@@ -2,10 +2,13 @@
  * Settings (app/routes/app.settings.tsx) rendered on the server with
  * fictional loader data, as the browser first receives it: the sections'
  * tiles say a section's state in their own few words where an option's name
- * doesn't fit a phone's tile (automatic publishing in French and Spanish),
- * and German "KI-" compounds in an option's text keep their non-breaking
- * hyphen, so no line ends in "KI-". (tests/ui/settings.spec.ts checks the
- * page with Polaris drawn, the lines a tile takes included.)
+ * doesn't fit a phone's tile (automatic publishing in French and Spanish)
+ * or would say a choice's label out of context (the usual form of address),
+ * German "KI-" compounds in an option's text keep their non-breaking
+ * hyphen, so no line ends in "KI-", how AI writes heads both its topics and
+ * draws the glossary's link blue, and the Business lock says its plan once.
+ * (tests/ui/settings.spec.ts checks the page with Polaris drawn, the lines a
+ * tile takes included.)
  */
 import { createElement, type ComponentProps } from "react";
 import { renderToString } from "react-dom/server";
@@ -54,11 +57,21 @@ async function render(data: Record<string, unknown>, locale: AppLocale, path = "
   return renderToString(createElement(I18nProvider, { locale, timeZone: "UTC" } as ComponentProps<typeof I18nProvider>, createElement(StaticRouterProvider, { router, context, hydrate: false })));
 }
 
+/** Text as read: React writes ' and & as entities. */
+const decoded = (text: string) => text.replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
+
 /** The state a section's tile shows (one tile per section: with a section shown, only the wide row is drawn). */
 function tileState(html: string, key: string): string {
   const tiles = [...html.matchAll(new RegExp(`<a [^>]*data-section="${key}"[^>]*>([\\s\\S]*?)</a>`, "g"))];
   expect(tiles, key).toHaveLength(1);
-  return tiles[0][1].match(/<span class="lv-tile__state">([^<]*)<\/span>/)![1];
+  return decoded(tiles[0][1].match(/<span class="lv-tile__state">([^<]*)<\/span>/)![1]);
+}
+
+/** A section's markup, by its element id. */
+function sectionHtml(html: string, id: string): string {
+  const start = html.indexOf(`<section id="${id}"`);
+  expect(start, id).toBeGreaterThanOrEqual(0);
+  return html.slice(start, html.indexOf("</section>", start));
 }
 
 /** An option's body text, by the id of its title. */
@@ -85,6 +98,44 @@ describe("the section tiles' few words", () => {
     // The option itself keeps its own name.
     expect(await render(store(), "fr")).toContain(">Publier automatiquement<");
     expect(await render(store(), "es")).toContain(">Publicar automáticamente<");
+  });
+
+  it("name the usual form of address as the setting, not as the choice's label: the tile has no hint beside it", async () => {
+    const expected: Record<AppLocale, string> = { en: "Usual form of address", de: "Übliche Anrede", fr: "Forme d'adresse habituelle", es: "Tratamiento habitual" };
+    for (const [locale, words] of Object.entries(expected) as Array<[AppLocale, string]>) {
+      expect(tileState(await render(store(), locale), "style"), locale).toBe(words);
+    }
+    // The choice itself keeps its label, explained by the hint beside it.
+    const style = sectionHtml(await render(store(), "en", "/app/settings?section=style"), "settings-style");
+    expect(style).toContain(">DeepL decides<");
+    expect(decoded(style)).toContain("“DeepL decides” uses the usual form for each language.");
+  });
+});
+
+describe("how AI writes", () => {
+  it("heads its two topics alike: the store's description under its own heading, its field's label kept for screen readers", async () => {
+    const style = sectionHtml(await render(store(), "en", "/app/settings?section=style"), "settings-style");
+    expect([...style.matchAll(/<h3[^>]*>([^<]*)<\/h3>/g)].map((m) => m[1])).toEqual(["Form of address", "About your store"]);
+    expect(style.indexOf("<s-divider>")).toBeLessThan(style.indexOf(">About your store</h3>"));
+    const area = style.match(/<s-text-area [^>]*>/)![0];
+    expect(area).toContain('label="About your store"');
+    expect(area).toContain('labelAccessibilityVisibility="exclusive"');
+    // An example, said as one (the field is empty: a full sentence in grey read as a saved value).
+    expect(area).toContain('placeholder="e.g. outdoor clothing for families, friendly and simple"');
+  });
+
+  it("draws the glossary's link as a link: outside the line's s-text, after a middle dot", async () => {
+    const style = sectionHtml(await render(store({ glossaryTerms: 3 }), "en", "/app/settings?section=style"), "settings-style");
+    expect(style).toContain('<span><s-text>Fixed terms in the glossary: 3</s-text> · <s-link href="/app/glossary">Edit glossary</s-link></span>');
+  });
+});
+
+describe("the Business lock", () => {
+  it("is its badge and the plans link on one line: no sentence repeating the plan's name", async () => {
+    const html = await render(store(), "en", "/app/settings?section=changes");
+    const smart = html.slice(html.indexOf('data-option="settings-changes-smart"'));
+    expect(smart).toContain('<div class="lv-option__foot"><s-stack direction="inline" gap="small-200" alignItems="center"><s-badge icon="lock">Business</s-badge><s-link href="/app/plan">See plans</s-link></s-stack></div>');
+    expect(html).not.toContain("In the Business plan.");
   });
 });
 

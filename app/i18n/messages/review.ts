@@ -141,10 +141,9 @@ export const en = {
   "review.result.error": "That didn't work. Reload the page and try again.",
 
   "review.empty.heading": "All reviewed",
-  "review.empty.body":
-    "No translation is waiting for you right now. AI translations and imports wait here until you approve them. With automatic publishing on, only texts with notes come here.",
+  "review.empty.body": "No translation is waiting for you right now. Imports and AI translations that aren't published automatically wait here until you approve them.",
   "review.empty.languages": "Your languages",
-  "review.empty.percent": "{percent} translated",
+  "review.empty.percent": "{percent} done",
   "review.empty.continue": "Continue translating {language}",
   "review.filtered.none": "No translations for this selection.",
 
@@ -309,10 +308,9 @@ export const de: Translation<typeof en> = {
   "review.result.error": "Das hat nicht geklappt. Lade die Seite neu und versuch es noch einmal.",
 
   "review.empty.heading": "Alles geprüft",
-  "review.empty.body":
-    "Gerade wartet keine Übersetzung auf dich. KI‑Übersetzungen und Importe warten hier, bis du sie freigibst. Ist automatisches Veröffentlichen an, kommen nur Texte mit Hinweisen hierher.",
+  "review.empty.body": "Gerade wartet keine Übersetzung auf dich. Importe und KI‑Übersetzungen, die nicht automatisch veröffentlicht werden, warten hier, bis du sie freigibst.",
   "review.empty.languages": "Deine Sprachen",
-  "review.empty.percent": "{percent} übersetzt",
+  "review.empty.percent": "{percent} fertig",
   "review.empty.continue": "{language} weiter übersetzen",
   "review.filtered.none": "Keine Übersetzungen für diese Auswahl.",
 
@@ -483,10 +481,9 @@ export const fr: Translation<typeof en> = {
   "review.result.error": "Cela n'a pas fonctionné. Rechargez la page et réessayez.",
 
   "review.empty.heading": "Tout est vérifié",
-  "review.empty.body":
-    "Aucune traduction ne vous attend pour le moment. Les traductions IA et les imports attendent ici jusqu'à votre approbation. Si la publication automatique est activée, seuls les textes avec des remarques arrivent ici.",
+  "review.empty.body": "Aucune traduction ne vous attend pour le moment. Les imports et les traductions IA qui ne sont pas publiés automatiquement attendent ici jusqu'à votre approbation.",
   "review.empty.languages": "Vos langues",
-  "review.empty.percent": "{percent} traduit",
+  "review.empty.percent": "{percent} terminé",
   "review.empty.continue": "Continuer la traduction en {language}",
   "review.filtered.none": "Aucune traduction pour cette sélection.",
 
@@ -654,10 +651,9 @@ export const es: Translation<typeof en> = {
   "review.result.error": "No funcionó. Vuelve a cargar la página e inténtalo de nuevo.",
 
   "review.empty.heading": "Todo revisado",
-  "review.empty.body":
-    "Ahora mismo no te espera ninguna traducción. Las traducciones con IA y las importaciones esperan aquí hasta que las apruebes. Si la publicación automática está activada, solo llegan aquí los textos con avisos.",
+  "review.empty.body": "Ahora mismo no te espera ninguna traducción. Las importaciones y las traducciones con IA que no se publican automáticamente esperan aquí hasta que las apruebes.",
   "review.empty.languages": "Tus idiomas",
-  "review.empty.percent": "{percent} traducido",
+  "review.empty.percent": "{percent} listo",
   "review.empty.continue": "Seguir traduciendo al {language}",
   "review.filtered.none": "No hay traducciones para esta selección.",
 

@@ -26,8 +26,8 @@ import { CategoryList, type ListNames } from "../components/CategoryList";
 import { percentLabel } from "../components/Coverage";
 import { CoverageRing } from "../components/CoverageRing";
 import { Flag } from "../components/Flag";
-import { StateCountList } from "../components/ItemStates";
-import { Breadcrumbs, languageErrorText, NumberedSteps, type StepView } from "../components/LanguageLayout";
+import { StateLines } from "../components/ItemStates";
+import { Breadcrumbs, CARD, languageErrorText, NumberedSteps, type StepView } from "../components/LanguageLayout";
 import { accessTitle, STEP_ICON_SIZE, STEP_LOOK, StepIcon, unlockStep } from "../components/LanguageSteps";
 import { ProgressBar } from "../components/ProgressBar";
 import { TranslateConfirm, translateWhat } from "../components/TranslateConfirm";
@@ -140,16 +140,19 @@ function Header({ data, i18n, names, origin }: { data: Data; i18n: I18n; names: 
     .filter(Boolean)
     .join(" · ");
   return (
-    <s-stack direction="block" gap="small-200">
-      <Breadcrumbs i18n={i18n} trail={trail(i18n, data, names, origin)} current={names.category} />
-      <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
-        <AreaIcon id={data.category.id} size={44} />
-        <s-stack direction="block" gap="small-500">
-          <h1 className="lv-h1">{t("language.list.heading", { category: names.category, language: names.language })}</h1>
-          {line ? <s-text color="subdued">{line}</s-text> : null}
-        </s-stack>
-      </s-grid>
-    </s-stack>
+    // On a phone the trail is one 44 px back row ("‹ German"), as on the job, Plan, tool and editor pages.
+    <s-query-container>
+      <s-stack direction="block" gap="small-200">
+        <Breadcrumbs i18n={i18n} trail={trail(i18n, data, names, origin)} current={names.category} touch />
+        <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="base" alignItems="center">
+          <AreaIcon id={data.category.id} />
+          <s-stack direction="block" gap="small-500">
+            <h1 className="lv-h1">{t("language.list.heading", { category: names.category, language: names.language })}</h1>
+            {line ? <s-text color="subdued">{line}</s-text> : null}
+          </s-stack>
+        </s-grid>
+      </s-stack>
+    </s-query-container>
   );
 }
 
@@ -162,7 +165,7 @@ function Figure({ data, i18n }: { data: Data; i18n: I18n }) {
     <s-grid gridTemplateColumns="auto 1fr" gap="large" alignItems="center">
       <CoverageRing counts={emptyCounts()} figure="—" caption={t("language.hero.translated")} label={title} size={112} />
       <s-stack direction="block" gap="small-200">
-        <s-heading>{title}</s-heading>
+        <h2 className="lv-h2">{title}</h2>
         <s-text color="subdued">{help}</s-text>
         {data.scanning && m.state === "running" ? (
           <s-stack direction="block" gap="small-300">
@@ -195,12 +198,13 @@ function Figure({ data, i18n }: { data: Data; i18n: I18n }) {
           size={112}
         />
         <s-stack direction="block" gap="small-300">
-          <s-heading>{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</s-heading>
+          <h2 className="lv-h2">{t("language.hero.figure", { complete: figure.complete, total: figure.total, count: figure.total })}</h2>
           {/* In items: the filters below count items, the figure counts texts. */}
           {!data.filter.q && data.counts.all ? <s-text color="subdued">{t(nouns.done, { done: data.counts.complete, count: data.counts.all })}</s-text> : null}
         </s-stack>
       </s-grid>
-      <StateCountList counts={figure.counts} i18n={i18n} />
+      {/* Each state in the language page's words, its figure semibold ("12 still missing"). */}
+      <StateLines counts={figure.counts} i18n={i18n} strong />
       {category.state.kind === "counting" ? <s-text color="subdued">{t("language.card.counting")}</s-text> : null}
       {category.state.kind === "incomplete" ? <s-text color="subdued">{t("language.card.incomplete")}</s-text> : null}
       {category.payoff !== null && waiting > 0 ? (
@@ -420,7 +424,7 @@ function NextSteps(ctx: StepContext) {
   const empty = !data.measured ? (data.measurement.state === "unavailable" ? t("coverage.error.JOBS_UNAVAILABLE") : t("language.next.counting")) : t("language.next.empty");
   return (
     <s-stack direction="block" gap="base">
-      <s-heading>{t("language.next.heading")}</s-heading>
+      <h2 className="lv-h2">{t("language.next.heading")}</h2>
       {steps.length ? <NumberedSteps steps={steps} /> : <s-text color="subdued">{empty}</s-text>}
       {blocked ? <s-text color="subdued">{languageErrorText(i18n, blocked)}</s-text> : null}
     </s-stack>
@@ -478,18 +482,21 @@ export default function CategoryPage() {
           </s-banner>
         ) : null}
 
-        <s-section padding="none" accessibilityLabel={t("language.list.hero.label", { category: areaNames.category })}>
-          <s-query-container>
-            <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr">
-              <s-box padding="large">
-                <Figure data={data} i18n={i18n} />
-              </s-box>
-              <s-box padding="large" background="subdued">
-                <NextSteps {...ctx} />
-              </s-box>
-            </s-grid>
-          </s-query-container>
-        </s-section>
+        {/* One card on a phone too (Polaris draws sections flat there): the grey Next half takes its corners. */}
+        <section aria-label={t("language.list.hero.label", { category: areaNames.category })}>
+          <s-box {...CARD} padding="none" overflow="hidden">
+            <s-query-container>
+              <s-grid gridTemplateColumns="@container (inline-size > 720px) 1fr 1fr, 1fr">
+                <s-box padding="large">
+                  <Figure data={data} i18n={i18n} />
+                </s-box>
+                <s-box padding="large" background="subdued">
+                  <NextSteps {...ctx} />
+                </s-box>
+              </s-grid>
+            </s-query-container>
+          </s-box>
+        </section>
 
         {listed ? <CategoryList data={data} i18n={i18n} names={areaNames} origin={origin} /> : null}
       </s-stack>

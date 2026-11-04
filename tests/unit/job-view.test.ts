@@ -691,13 +691,15 @@ describe("the ring's figure", () => {
     expect(ringFigure(translator("de"), rowCounts(job({ totalItems: 0 }))).figure).toBe("—");
   });
 
-  it("sizes the figure by its length, a no-break space included", () => {
-    expect([ringFigureSize("62%", 112), ringFigureSize("62%", 96)]).toEqual([28, 22]);
-    expect([ringFigureSize("62 %", 112), ringFigureSize("62 %", 96)]).toEqual([24, 20]);
-    expect([ringFigureSize("100 %", 112), ringFigureSize("100 %", 96)]).toEqual([22, 18]);
-    expect(ringFigure(translator("en"), share(62, 100)).fontSize).toEqual({ wide: 28, narrow: 22 });
-    expect(ringFigure(translator("de"), share(62, 100)).fontSize).toEqual({ wide: 24, narrow: 20 });
-    expect(ringFigure(translator("de"), share(100, 100)).fontSize).toEqual({ wide: 22, narrow: 18 });
+  it("sizes the figure by its length, a no-break space included, so it keeps clear of the ring", () => {
+    expect([ringFigureSize("0%", 112), ringFigureSize("0%", 96)]).toEqual([28, 22]);
+    expect([ringFigureSize("62%", 112), ringFigureSize("62%", 96)]).toEqual([24, 20]);
+    expect([ringFigureSize("62 %", 112), ringFigureSize("62 %", 96)]).toEqual([20, 17]);
+    expect([ringFigureSize("100%", 112), ringFigureSize("100%", 96)]).toEqual([20, 17]);
+    expect([ringFigureSize("100 %", 112), ringFigureSize("100 %", 96)]).toEqual([18, 15]);
+    expect(ringFigure(translator("en"), share(62, 100)).fontSize).toEqual({ wide: 24, narrow: 20 });
+    expect(ringFigure(translator("de"), share(62, 100)).fontSize).toEqual({ wide: 20, narrow: 17 });
+    expect(ringFigure(translator("de"), share(100, 100)).fontSize).toEqual({ wide: 18, narrow: 15 });
     // One rule: the ring component draws its figure with this very function.
     expect(coverageRingFigureSize).toBe(ringFigureSize);
   });
@@ -1060,9 +1062,10 @@ describe("heroModel", () => {
     expect(steps("en", model).map((s) => s[1])).toEqual(["Approve 140 translations", "Try 1 product again", "Finish 4 products in the editor"]);
     const problems = problemsHeading(J07, groups)!;
     expect(say("de", problems.heading)).toBe("5 Produkte brauchen deine Aufmerksamkeit");
-    expect(sayAll("de", problems.text)).toBe("83 von 89 sind in Ordnung. Ein Klick auf eine Zeile öffnet den Editor.");
+    expect(sayAll("de", problems.text)).toBe("83 von 89 sind in Ordnung. Öffne eine Zeile, um sie im Editor fertig zu übersetzen.");
     expect(say("en", problems.heading)).toBe("5 products need your attention");
-    expect(sayAll("en", problems.text)).toBe("83 of 89 are fine. Click a row to open it in the editor.");
+    // What a row does on every device (a phone has no click); "done" stays the state's word.
+    expect(sayAll("en", problems.text)).toBe("83 of 89 are fine. Open one to finish it in the editor.");
     // Without drafts the retry leads.
     expect(steps("en", hero(J07, outcomeGroups(O07, 0, J07))).map((s) => [s[0], s[4]])).toEqual([
       ["retry", "primary"],
@@ -1084,6 +1087,9 @@ describe("heroModel", () => {
     const one = hero(pages, groups, NONE, null, { finishHref: href });
     expect(steps("de", one)).toEqual([["finish", "1 Seite im Editor fertig übersetzen", "Ein neuer Versuch hilft hier nicht; das geht nur im Editor.", `Im Editor öffnen → ${editor}`, "primary"]]);
     expect(steps("en", one)[0]![3]).toBe(`Open in editor → ${editor}`);
+    // Beside "75% done", the reason never says "done": the merchant finishes it.
+    expect(steps("en", one)[0]![2]).toBe("Trying again won't help here – finish it yourself in the editor.");
+    expect(steps("en", hero(J07, outcomeGroups(O07, 0, J07)))[1]![2]).toBe("Trying again won't help here – finish them yourself in the editor.");
     expect(one.panel!.steps[0]!.action).toMatchObject({ kind: "link", icon: "edit" });
     // Without its editor's address (Shopify's list too long, or no editor for the kind): the list below.
     expect(steps("en", hero(pages, groups, NONE, null, { finishHref: null }))[0]![3]).toBe("Show items → #problems-heading");
@@ -1285,10 +1291,13 @@ describe("problemsHeading and cancelBody", () => {
     const running = problemsHeading(J01, outcomeGroups(O01, P01.items, J01))!;
     expect(say("de", running.heading)).toBe("6 Produkte brauchen deine Aufmerksamkeit");
     // While the job runs, how many are fine isn't said yet.
-    expect(sayAll("de", running.text)).toBe("Ein Klick auf eine Zeile öffnet den Editor.");
+    expect(sayAll("de", running.text)).toBe("Öffne eine Zeile, um sie im Editor fertig zu übersetzen.");
     const smart = job({ requestedBy: SMART, smartRunId: "run-8", totalItems: 31, skippedItems: 31 });
     const self = problemsHeading(smart, outcomeGroups([{ status: "SKIPPED", code: "UP_TO_DATE", count: 30 }, { status: "SKIPPED", code: "SOURCE_CHANGED", count: 1 }], 0, smart))!;
     expect(say("de", self.heading)).toBe("Der Zeitplan übersetzt 1 Produkt neu");
+    // The schedule translates it again: its row is there to look at, not to finish.
+    expect(self.text.at(-1)).toEqual({ key: "jobs.problems.openSelf" });
+    expect(say("en", self.text.at(-1)!)).toBe("Open one to see it in the editor.");
     expect(problemsHeading(J13, rowCounts(J13))).toBeNull();
     // French and Spanish put the subject first.
     expect(say("fr", problemsHeading(J07, outcomeGroups(O07, P07.items, J07))!.heading)).toBe("5 produits demandent votre attention");

@@ -41,8 +41,6 @@ export function StateBadge({ state }: { state: SettingState }) {
 
 /** An option's or a tile's name: the meters' label size (13/20, semibold). */
 export const SETTING_NAME = { ...METER_LABEL, display: "block" } as const;
-/** A Settings section's heading: the Content page's areas heading (17/24, semibold). */
-const SECTION_HEADING = { margin: 0, fontSize: 17, lineHeight: "24px", fontWeight: 650 } as const;
 /** A heading moved to by script: no ring for a mouse click (the browser still shows it for the keyboard). */
 const FOCUS_TARGET = { outline: "none" } as const;
 
@@ -87,10 +85,13 @@ export function useFreshResult<T>(fetcher: { state: string; data?: T }, onResult
 }
 
 /**
- * A section of the Settings page, shown one at a time: its heading (h2,
- * focusable: switching sections moves there) with its state, one short
- * lead, an optional card above the content (the way back to a stopped
- * job), then its content in one card.
+ * A section of the Settings page, shown one at a time: its tile's icon and
+ * its heading (h2, focusable: switching sections moves there) with its
+ * state, one short lead, an optional card above the content (the way back
+ * to a stopped job), then its content in one card. On a phone, where the
+ * section is shown alone, the icon stays and the heading takes the page's
+ * size (ui.css, .lv-section-heading), as every screen opened from Settings
+ * starts.
  */
 export function SettingSection({
   id,
@@ -104,7 +105,7 @@ export function SettingSection({
   children,
 }: {
   id: string;
-  /** Its tile's icon and colour, beside the heading (hidden on a narrow screen). */
+  /** Its tile's icon and colour, beside the heading. */
   icon?: IconName;
   tint?: Tint;
   heading: string;
@@ -119,16 +120,13 @@ export function SettingSection({
   return (
     <section id={id} aria-labelledby={`${id}-heading`} style={{ scrollMarginTop: 16 }}>
       <s-stack direction="block" gap="base">
-        <s-query-container>
-          <s-grid gridTemplateColumns={icon ? "@container (inline-size > 520px) auto 1fr, 1fr" : "1fr"} gap="small-200 base" alignItems="center">
-            {icon ? (
-              <s-box display="@container (inline-size > 520px) auto, none">
-                <IconSquare icon={icon} tint={tint} />
-              </s-box>
-            ) : null}
+        {/* Its sign level with the heading on a phone, as a page's header (ui.css .lv-page-head). */}
+        <div className={icon && lead ? "lv-section-head lv-page-head" : "lv-section-head"}>
+          <s-grid gridTemplateColumns={icon ? "auto minmax(0, 1fr)" : "1fr"} gap="small-200 base" alignItems="center">
+            {icon ? <IconSquare icon={icon} tint={tint} /> : null}
             <s-stack direction="block" gap="small-500">
               <s-stack direction="inline" gap="small-200" alignItems="center">
-                <h2 id={`${id}-heading`} tabIndex={-1} style={{ ...SECTION_HEADING, ...FOCUS_TARGET }}>
+                <h2 id={`${id}-heading`} tabIndex={-1} className="lv-section-heading" style={FOCUS_TARGET}>
                   {heading}
                 </h2>
                 {state ? <StateBadge state={state} /> : null}
@@ -137,7 +135,7 @@ export function SettingSection({
               {lead ? <s-text color="subdued">{lead}</s-text> : null}
             </s-stack>
           </s-grid>
-        </s-query-container>
+        </div>
         {top}
         {Children.toArray(children).length ? (
           <s-box {...CARD} padding="base">
@@ -344,23 +342,41 @@ export function OptionPanel({ id, label, icon, tint = "grey", title, children }:
   );
 }
 
-/** The one lock: the plan's name with a lock, one line, and the way to the plans (left out where several would repeat it). */
-export function LockLine({ plan, text, link }: { plan: string; text: string; link?: { href: string; label: string } }) {
+/**
+ * The one lock: the plan's name with a lock, one line, and the way to the plans (left out where several
+ * would repeat it). No line where it would only repeat the badge (the one plan that has it).
+ */
+export function LockLine({ plan, text, link }: { plan: string; text?: string; link?: { href: string; label: string } }) {
   return (
     <s-stack direction="inline" gap="small-200" alignItems="center">
       <s-badge icon="lock">{plan}</s-badge>
-      <s-text color="subdued">{text}</s-text>
+      {text ? <s-text color="subdued">{text}</s-text> : null}
       {link ? <s-link href={link.href}>{link.label}</s-link> : null}
     </s-stack>
   );
 }
 
-/** A state line: its icon and one sentence (with its reason and time). */
-export function StateLine({ icon, tone, children }: { icon: IconName; tone?: "critical" | "caution"; children: ReactNode }) {
+/**
+ * A state line: its icon and one sentence (with its reason and time), and its way on (`action`, a link).
+ * The link stays outside the sentence's s-text, which would draw it in the text's colour: links are blue
+ * everywhere. After a fact it follows a middle dot ("Fixed terms in the glossary: 0 · Edit glossary"),
+ * after a full sentence a space.
+ */
+export function StateLine({ icon, tone, children, action }: { icon: IconName; tone?: "critical" | "caution"; children?: ReactNode; action?: ReactNode }) {
+  const text = Children.toArray(children).length ? <s-text {...(tone ? { tone } : {})}>{children}</s-text> : null;
+  const join = typeof children === "string" && /[.!?]$/.test(children) ? " " : " · ";
   return (
     <s-grid gridTemplateColumns="auto minmax(0, 1fr)" gap="small-200" alignItems="start">
       <s-icon type={icon} {...(tone ? { tone } : { color: "subdued" })} />
-      <s-text {...(tone ? { tone } : {})}>{children}</s-text>
+      {action ? (
+        <span>
+          {text}
+          {text ? join : null}
+          {action}
+        </span>
+      ) : (
+        text
+      )}
     </s-grid>
   );
 }

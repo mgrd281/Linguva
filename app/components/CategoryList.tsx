@@ -1,12 +1,13 @@
 /**
- * An area's items in a language (the list on /app/languages/:locale/:category):
- * filters by each item's one state that add up to "All" (the shown one in
- * the app's chosen look), a name search where Shopify can search, then the
- * items in groups by state, open work first, each group saying in one line
- * what its state means. A row shows the item's picture, its name, what
- * customers see in the language, and each of its texts as an icon and a
- * word; the whole row opens the editor (its name is the link, stretched over
- * the row, so what the row says stays readable), 50 a page.
+ * An area's items in a language (the list on /app/languages/:locale/:category),
+ * one card: filters by each item's one state that add up to "All" (the shown
+ * one in the app's chosen look; none while every item has the same state), a
+ * name search where Shopify can search, then the items in groups by state,
+ * open work first, each group saying in one line what its state means. A row
+ * shows the item's picture, its name, what customers see in the language,
+ * and each of its texts as an icon and a word; the whole row opens the
+ * editor (its name is the link, stretched over the row, so what the row says
+ * stays readable), 50 a page.
  */
 import { Form, Link } from "react-router";
 import type { CategoryItems, CategoryRow, ListState } from "../.server/languages/language-page";
@@ -15,7 +16,7 @@ import { itemErrorMessage, itemKindLabel, jobErrorMessage } from "../i18n/labels
 import { isMetafieldCoverageType, type FieldGroup } from "../lib/coverage-rules";
 import { CATEGORIES, categoryPath, ITEM_STATES, withOrigin, type CategoryId, type ItemState, type Origin } from "../lib/language-categories";
 import { TRACK_COLOUR } from "./Coverage";
-import { PLAIN_LIST } from "./LanguageLayout";
+import { CARD, PLAIN_LIST } from "./LanguageLayout";
 import { StateIcon } from "./ItemStates";
 import { Button } from "./Button";
 import { Strong } from "./Type";
@@ -271,6 +272,9 @@ function Filters({ data, i18n, origin }: { data: CategoryItems; i18n: I18n; orig
   const { t } = i18n;
   const { locale } = data.language;
   const chosen = data.filter.state;
+  // Items of one state: "All" and that state would show the same items, and its group heading names it.
+  // A chosen state keeps the row, as the way back to All.
+  if (chosen === "all" && ITEM_STATES.filter((s) => data.counts[s] > 0).length < 2) return null;
   const options: Array<{ state: ListState; label: string; count: number }> = [
     { state: "all", label: t("language.list.filter.all"), count: data.counts.all },
     // States without items are left out, unless chosen.
@@ -335,70 +339,80 @@ export function CategoryList({ data, i18n, names, origin = null }: { data: Categ
   }
   const { page } = data;
   return (
-    <s-section padding="none" heading={t("language.list.rows.heading")}>
-      <s-box padding="none base base">
-        <s-stack direction="block" gap="base">
-          <s-text color="subdued">{t("language.list.rows.intro")}</s-text>
-          {data.category.searchable ? <Search data={data} i18n={i18n} origin={from} /> : null}
-          {query ? (
-            <s-stack direction="inline" gap="small-200 base" alignItems="center">
-              <s-text>
-                {data.counts.all ? t("language.list.search.results", { count: data.counts.all, query: quotedQuery }) : t("language.list.search.none", { query: quotedQuery })}
-              </s-text>
-              <s-link href={listHref(locale, id, { state: data.filter.state, from })}>{t("language.list.search.clear")}</s-link>
-            </s-stack>
-          ) : null}
-          {data.counts.all ? <Filters data={data} i18n={i18n} origin={from} /> : null}
-          {data.titlesUnavailable ? <s-text color="subdued">{i18n.t("language.card.previewError")}</s-text> : null}
-        </s-stack>
-      </s-box>
-
-      {groups.map((group) => (
-        <s-stack key={`${group.state}-${group.rows[0]!.id}`} direction="block">
-          <GroupHeading state={group.state} count={data.counts[group.state]} data={data} i18n={i18n} names={names} />
-          <ul style={PLAIN_LIST}>
-            {group.rows.map((row, i) => (
-              <li key={row.id}>
-                {i > 0 ? <s-divider /> : null}
-                <ItemRow row={row} data={data} i18n={i18n} names={names} origin={from} />
-              </li>
-            ))}
-          </ul>
-          {/* The whole group is on its own filter when this page shows only part of it. */}
-          {data.filter.state === "all" && group.rows.length < data.counts[group.state] ? (
-            <s-box padding="none base base">
-              <s-link href={listHref(locale, id, { state: group.state, q: query, from })}>
-                {t("language.card.allCount", { count: data.counts[group.state] })}
-                <span style={INLINE_ICON}>
-                  <s-icon type="chevron-right" size="small" />
-                </span>
-              </s-link>
-            </s-box>
-          ) : null}
-        </s-stack>
-      ))}
-      {!data.rows.length && data.counts.all ? (
+    // A native section with the card's edge (Polaris draws its sections flat on a phone); its heading in the
+    // type scale, as the language page's "Area by area".
+    <section aria-labelledby="list-heading">
+      <s-box {...CARD} padding="none" overflow="hidden">
         <s-box padding="base">
-          <s-text color="subdued">{t("language.list.groupEmpty")}</s-text>
-        </s-box>
-      ) : null}
-
-      {page.nextCursor || page.number > 1 ? (
-        <>
-          <s-divider />
-          <s-box padding="base">
-            <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
-              <s-text color="subdued">{t("language.list.page.position", { page: page.number, from: page.from, to: page.to, total: page.total })}</s-text>
-              <s-stack direction="inline" gap="small-200">
-                {page.number > 1 ? <Button href={listHref(locale, id, { state: data.filter.state, q: query, from })}>{t("language.list.page.first")}</Button> : null}
-                {page.nextCursor ? (
-                  <Button href={listHref(locale, id, { state: data.filter.state, q: query, after: page.nextCursor, from })}>{t("language.list.page.next")}</Button>
-                ) : null}
+          <s-stack direction="block" gap="base">
+            <s-stack direction="block" gap="small-500">
+              <h2 id="list-heading" className="lv-h2">
+                {t("language.list.rows.heading")}
+              </h2>
+              <s-text color="subdued">{t("language.list.rows.intro")}</s-text>
+            </s-stack>
+            {data.category.searchable ? <Search data={data} i18n={i18n} origin={from} /> : null}
+            {query ? (
+              <s-stack direction="inline" gap="small-200 base" alignItems="center">
+                <s-text>
+                  {data.counts.all ? t("language.list.search.results", { count: data.counts.all, query: quotedQuery }) : t("language.list.search.none", { query: quotedQuery })}
+                </s-text>
+                <s-link href={listHref(locale, id, { state: data.filter.state, from })}>{t("language.list.search.clear")}</s-link>
               </s-stack>
-            </s-grid>
+            ) : null}
+            {data.counts.all ? <Filters data={data} i18n={i18n} origin={from} /> : null}
+            {data.titlesUnavailable ? <s-text color="subdued">{i18n.t("language.card.previewError")}</s-text> : null}
+          </s-stack>
+        </s-box>
+
+        {groups.map((group) => (
+          <s-stack key={`${group.state}-${group.rows[0]!.id}`} direction="block">
+            <GroupHeading state={group.state} count={data.counts[group.state]} data={data} i18n={i18n} names={names} />
+            <ul style={PLAIN_LIST}>
+              {group.rows.map((row, i) => (
+                <li key={row.id}>
+                  {i > 0 ? <s-divider /> : null}
+                  <ItemRow row={row} data={data} i18n={i18n} names={names} origin={from} />
+                </li>
+              ))}
+            </ul>
+            {/* The whole group is on its own filter when this page shows only part of it; a group of every item
+                goes on with the pages below (its filter would list the same items). */}
+            {data.filter.state === "all" && group.rows.length < data.counts[group.state] && data.counts[group.state] < data.counts.all ? (
+              <s-box padding="none base base">
+                <s-link href={listHref(locale, id, { state: group.state, q: query, from })}>
+                  {t("language.card.allCount", { count: data.counts[group.state] })}
+                  <span style={INLINE_ICON}>
+                    <s-icon type="chevron-right" size="small" />
+                  </span>
+                </s-link>
+              </s-box>
+            ) : null}
+          </s-stack>
+        ))}
+        {!data.rows.length && data.counts.all ? (
+          <s-box padding="base">
+            <s-text color="subdued">{t("language.list.groupEmpty")}</s-text>
           </s-box>
-        </>
-      ) : null}
-    </s-section>
+        ) : null}
+
+        {page.nextCursor || page.number > 1 ? (
+          <>
+            <s-divider />
+            <s-box padding="base">
+              <s-grid gridTemplateColumns="minmax(0, 1fr) auto" gap="base" alignItems="center">
+                <s-text color="subdued">{t("language.list.page.position", { page: page.number, from: page.from, to: page.to, total: page.total })}</s-text>
+                <s-stack direction="inline" gap="small-200">
+                  {page.number > 1 ? <Button href={listHref(locale, id, { state: data.filter.state, q: query, from })}>{t("language.list.page.first")}</Button> : null}
+                  {page.nextCursor ? (
+                    <Button href={listHref(locale, id, { state: data.filter.state, q: query, after: page.nextCursor, from })}>{t("language.list.page.next")}</Button>
+                  ) : null}
+                </s-stack>
+              </s-grid>
+            </s-box>
+          </>
+        ) : null}
+      </s-box>
+    </section>
   );
 }

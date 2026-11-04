@@ -15,8 +15,8 @@ import { languageList } from "../lib/name-lists";
 import { Button } from "./Button";
 import { IconSquare, type Tint } from "./IconSquare";
 
-/** A step's icon square: a little smaller than a card's, beside a two-line title. */
-export const STEP_ICON_SIZE = 36;
+/** A step's icon square: a card's size, as the Overview's next step has it. */
+export const STEP_ICON_SIZE = 40;
 
 export function StepIcon({ icon, tint }: { icon: IconName; tint: Tint }) {
   return <IconSquare icon={icon} tint={tint} size={STEP_ICON_SIZE} />;

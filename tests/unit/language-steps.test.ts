@@ -109,10 +109,14 @@ describe("steps with icons", () => {
       }),
     );
     expect(markup.match(/<li>/g)).toHaveLength(2);
-    expect(markup).toContain('<span class="lv-icon-square" data-tint="violet" aria-hidden="true" style="width:36px;height:36px;border-radius:11px"><s-icon type="eye-check-mark"');
+    // A card's size (40 px, as the Overview's next step): the square needs no size of its own.
+    expect(markup).toContain('<span class="lv-icon-square" data-tint="violet" aria-hidden="true"><s-icon type="eye-check-mark"');
     expect(markup).toContain('data-tint="green"');
     // No number circles beside the icons.
     expect(markup).not.toContain('borderRadius="large-200"');
+    // Each title in the type scale's step title (the Overview's), not a heading: the steps are a list.
+    expect(markup).toContain('<strong class="lv-h3">2 Übersetzungen freigeben</strong>');
+    expect(markup).not.toMatch(/<h\d/);
   });
 
   it("set the hero's figures in semibold when asked, the Overview's unchanged", () => {

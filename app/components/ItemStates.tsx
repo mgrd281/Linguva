@@ -162,11 +162,17 @@ export function StateMarker({ state }: { state: ItemState }) {
   );
 }
 
-/** The key to bars and markers: each state's icon and word. */
-export function StateKey({ i18n }: { i18n: I18n }) {
+/**
+ * The key to bars and markers: each state's icon and word. Given the texts the page draws (`counts`), only
+ * their states, none without texts: a key to colours that aren't there is only more to read.
+ */
+export function StateKey({ i18n, counts }: { i18n: I18n; counts?: StateCounts | null }) {
+  const texts = counts ? textCounts(counts) : null;
+  const shown = texts ? SHOWN_STATES.filter((s) => texts[s] > 0) : SHOWN_STATES;
+  if (!shown.length) return null;
   return (
     <s-stack direction="inline" gap="small-100 base" alignItems="center">
-      {SHOWN_STATES.map((s) => (
+      {shown.map((s) => (
         <s-stack key={s} direction="inline" gap="small-300" alignItems="center">
           <StateIcon state={s} size="small" />
           <s-text color="subdued">{i18n.t(`language.state.${s}`)}</s-text>

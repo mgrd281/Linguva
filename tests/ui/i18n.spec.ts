@@ -88,7 +88,8 @@ test("navigation, product list and editor are German; merchant content stays as 
   await expect(page.getByRole("link", { name: "Öffnen: Product 1 jacket" })).toBeVisible();
   // Language names in German, not Shopify's English names.
   await expect(page.locator('.lv-lang[aria-current="page"]', { hasText: "Französisch" })).toBeVisible();
-  await expect(page.locator("[data-button]", { hasText: /^Übersetzen$/ })).toBeVisible();
+  // The area's next step has one button, in German whichever step comes first (translate, count, approve).
+  await expect(page.locator("[data-button]", { hasText: /^(Übersetzen|Jetzt zählen|Jetzt freigeben)$/ }).first()).toBeVisible();
   await page.getByRole("link", { name: "Öffnen: Product 1 jacket" }).click();
   await expect(page).toHaveURL(/\/app\/products\/1\?lang=fr/);
   // The interface stays German after moving inside the app (no `locale` on in-app links).

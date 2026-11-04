@@ -1073,6 +1073,10 @@
   max-width: none;
 }
 .lv-lang {
+  /* The chip is the containing block of its screen-reader name (.lv-sr is absolute): in a swipe row, the names of
+     the chips scrolled out of view would otherwise sit beyond the window's edge and widen the page (a phone then
+     zooms out, and every tap lands beside its target). */
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;

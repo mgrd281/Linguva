@@ -230,7 +230,8 @@ test("Countries & markets: the checks first, each with its fix, in the interface
   await expect(details.getByRole("heading", { name: "North America" })).toBeVisible();
   // One market after the other, a line between them (no box in the card), each language visible or hidden in
   // the language page's words.
-  await expect(details.locator("s-box[border]")).toHaveCount(0);
+  // (Counted in the page's own markup: Playwright's CSS reaches into the shadow of Polaris' table, which draws its own frame.)
+  expect(await details.evaluate((el) => el.querySelectorAll("s-box[border]").length)).toBe(0);
   await expect(details.locator("s-divider")).toHaveCount(2);
   await expect(details.locator("s-badge", { hasText: /^(Sichtbar|Versteckt)$/ }).first()).toBeVisible();
   await expectAccessible(page);

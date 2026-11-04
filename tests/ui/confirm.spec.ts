@@ -19,7 +19,7 @@ test("rejecting asks first: Cancel keeps every text, one text is rejected after 
   // "12 translations on this page", after the first decision "11 of 12 still open".
   const summary = reviewStrip(page).getByText(/^\d+ (translations? on this page|of \d+ still open)/);
   const before = Number((await summary.innerText()).match(/\d+/)![0]);
-  const allTab = page.getByRole("navigation", { name: "Languages" }).locator('[aria-current="true"]');
+  const allTab = page.getByRole("navigation", { name: "Languages" }).locator('[aria-current="page"]');
   await expect(allTab).toContainText(String(before));
 
   await reviewStrip(page).locator("[data-button]", { hasText: "Reject all" }).click();
@@ -83,11 +83,11 @@ test("choosing a language tab and then All again shows every language", async ({
   await expect(tabs.getByRole("link", { name: /^Arabic hidden \d+$/ })).toBeVisible();
   await tabs.getByRole("link", { name: /^French \d+$/ }).click();
   await expect(page).toHaveURL(/lang=fr/);
-  await expect(tabs.locator('[aria-current="true"]')).toContainText("French");
+  await expect(tabs.locator('[aria-current="page"]')).toContainText("French");
   await tabs.getByRole("link", { name: /^All \d+$/ }).click();
   await expect(page).not.toHaveURL(/lang=/);
-  await expect(tabs.locator('[aria-current="true"]')).toContainText("All");
-  const all = Number(((await tabs.locator('[aria-current="true"]').textContent()) ?? "").match(/\d+/)![0]);
+  await expect(tabs.locator('[aria-current="page"]')).toContainText("All");
+  const all = Number(((await tabs.locator('[aria-current="page"]').textContent()) ?? "").match(/\d+/)![0]);
   await expect(reviewStrip(page).getByText(new RegExp(`^${all} translations on this page`))).toBeVisible();
 });
 

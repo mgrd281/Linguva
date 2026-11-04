@@ -84,7 +84,8 @@ test("without ?lang the page and the lists open in a visible language, never the
   await expect(current).not.toHaveText(/Arabic/);
 
   await openApp(page, "full", "/app/content/menus");
-  await expect(page.locator('s-badge[tone="info"]')).toHaveText("French");
+  // The list's current language is Content's chip in the chosen look.
+  await expect(page.locator('.lv-lang[aria-current="page"]', { hasText: "French" })).toBeVisible();
   // The hidden language is marked; the way back keeps the list's language.
   await expect(page.getByRole("link", { name: "Arabic (hidden)" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Content" })).toHaveAttribute("href", "/app/content?lang=fr");

@@ -31,7 +31,7 @@ function page(overrides: Record<string, unknown> = {}) {
     ],
     nextCursor: null,
     isFirstPage: true,
-    bulk: { publishMode: "REVIEW", idempotencyKey: "key-12345678", available: true, consent: true, planAllowsBulk: true, planAllowsLocale: true, attached: true },
+    bulk: { publishMode: "REVIEW", idempotencyKey: "test-run", available: true, consent: true, planAllowsBulk: true, planAllowsLocale: true, attached: true },
     denied: null,
     ...overrides,
   };
